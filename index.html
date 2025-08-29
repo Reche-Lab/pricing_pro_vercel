@@ -50,7 +50,7 @@
         <div class="flex flex-col md:flex-row gap-8">
           <div class="md:w-1/2">
             <div class="flex items-center gap-3 mb-4">
-              <img id="logoInline" src="logo.jpeg" alt="Ground Shop" class="h-12 w-12 rounded-md object-cover border border-zinc-200 dark:border-zinc-800" onerror="this.style.display='none'">
+              <img id="logoInline" src="/logo.jpeg" alt="Ground Shop" class="h-12 w-12 rounded-md object-cover border border-zinc-200 dark:border-zinc-800" onerror="this.style.display='none'">
               <div>
                 <h1 class="text-2xl md:text-3xl font-bold tracking-tight">Precificador de Botton</h1>
                 <p class="text-zinc-600 dark:text-zinc-300">Área PRO com login ✨ e modo DEMO sem login.</p>
@@ -466,7 +466,7 @@ let BOX_ROWS=[]; let BOX_CSV_OK=false;
 async function loadBoxesCSV(){
   BOX_CSV_OK = false;
   try{
-    const resp = await fetch('boxes.csv', { cache: 'no-cache' });
+    const resp = await fetch('/boxes.csv', { cache: 'no-cache' });
     if(!resp.ok) throw new Error('boxes.csv não encontrado');
 
     const txt = await resp.text();
@@ -631,7 +631,7 @@ async function exportPDF(){ try{ const { jsPDF }=window.jspdf; const doc=new jsP
   let fBase; if(MODE==='simplificado'){ fBase=(qq)=>priceLogistic(qq, safe(simpMin.value,0), safe(simpBase.value,0), safe(simpQ0.value,50), safe(simpN.value,1.5)); } else { let a=readAnchorsFromUI(); if(chkAutoInt&&chkAutoInt.checked) a=recomputeIntermediates(a); fBase=(qq)=>priceAnchors(qq,a); }
   const baseUnit1=(MODE==='simplificado')?safe(simpBase.value,0):safe(advQ1.value,0); const baseTotal=baseUnit1*q; const baseAtQ=fBase(q); const finalUnit=finalUnitPriceForQty(q, baseAtQ); const finalTotal=finalUnit*q; const desconto=Math.max(0, baseTotal-finalTotal);
   const incluirFrete= chkFreteCliente.checked && safe(freteEstimado.value,0)>0; const totalGeral=incluirFrete? finalTotal + safe(freteEstimado.value,0) : finalTotal;
-  async function getLogoDataURL(){ const logoHeader=document.getElementById('logoHeader'); if(logoHeader && !logoHeader.classList.contains('hidden')){ try{ const canvas=document.createElement('canvas'); canvas.width=logoHeader.naturalWidth; canvas.height=logoHeader.naturalHeight; const ctx=canvas.getContext('2d'); ctx.drawImage(logoHeader,0,0); return canvas.toDataURL('image/jpeg',0.92);}catch(e){} } try{ const resp=await fetch('logo.jpeg',{cache:'no-cache'}); if(!resp.ok) return null; const blob=await resp.blob(); return await new Promise((resolve)=>{ const reader=new FileReader(); reader.onload=()=>resolve(reader.result); reader.readAsDataURL(blob); }); }catch(e){ return null; } }
+  async function getLogoDataURL(){ const logoHeader=document.getElementById('logoHeader'); if(logoHeader && !logoHeader.classList.contains('hidden')){ try{ const canvas=document.createElement('canvas'); canvas.width=logoHeader.naturalWidth; canvas.height=logoHeader.naturalHeight; const ctx=canvas.getContext('2d'); ctx.drawImage(logoHeader,0,0); return canvas.toDataURL('image/jpeg',0.92);}catch(e){} } try{ const resp=await fetch('/logo.jpeg',{cache:'no-cache'}); if(!resp.ok) return null; const blob=await resp.blob(); return await new Promise((resolve)=>{ const reader=new FileReader(); reader.onload=()=>resolve(reader.result); reader.readAsDataURL(blob); }); }catch(e){ return null; } }
   const logoData=await getLogoDataURL(); const headerY=margin; if(logoData){ doc.addImage(logoData,'JPEG', margin, headerY, 80,80); }
   doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.text('Proposta Comercial', logoData? margin+100:margin, headerY+24);
   if(IS_PRO){ doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.text(`${COMPANY.name || ''} • Tel: ${COMPANY.phone || ''} • ${COMPANY.site || ''}`, logoData? margin+100:margin, headerY+42); }
