@@ -426,16 +426,160 @@ function refreshChartAndKpis(){ try{
   tiersBody.innerHTML=rows.join('');
 } catch(e){ showError('Erro no cálculo: '+(e.message||e)); }}
 
+function normalizeFieldName(s){
+  return String(s)
+    .toLowerCase().trim()
+    .replace(/\./g, '_')        // 2.5 -> 2_5
+    .replace(/\s+/g, '_')       // espaços -> _
+    .replace(/[^\w]+/g, '_')    // só [a-z0-9_]
+    .replace(/_+/g, '_')        // colapsa __ -> _
+    .replace(/^_|_$/g, '');     // remove _ nas pontas
+}
+function parseNum(v){
+  if (v == null) return 0;
+  const s = String(v).trim().replace(/\./g,'.').replace(',', '.');
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
+function detectDelimiter(line){
+  const cComma = (line.match(/,/g)||[]).length;
+  const cSemi  = (line.match(/;/g)||[]).length;
+  return cSemi > cComma ? ';' : ',';
+}
+function parseCSVLine(line, delim){
+  const out=[]; let cur=''; let inQ=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(ch === '"'){
+      if(inQ && line[i+1] === '"'){ cur += '"'; i++; }
+      else { inQ = !inQ; }
+    } else if(ch === delim && !inQ){
+      out.push(cur); cur='';
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out.map(s=>s.trim());
+}
 let BOX_ROWS=[]; let BOX_CSV_OK=false;
-function normalizeFieldName(s){ return s.toLowerCase().trim().replace(/\s+/g,'_').replace(/[^\w.]+/g,'_'); }
-async function loadBoxesCSV(){ BOX_CSV_OK=false; try{ const resp=await fetch('boxes.csv',{cache:'no-cache'}); if(!resp.ok) throw new Error('boxes.csv não encontrado'); const txt=await resp.text(); parseBoxesCSV(txt); BOX_CSV_OK=true; }catch(e){ if(!document.getElementById('boxesUpload')){ const wrap=document.createElement('div'); wrap.className='mt-2 text-xs text-zinc-500'; wrap.innerHTML=`<p>Não consegui carregar <code>boxes.csv</code> automaticamente. Faça upload manual:</p><input id="boxesUpload" type="file" accept=".csv" class="mt-2 text-sm">`; document.querySelector('footer').insertAdjacentElement('beforebegin', wrap); document.getElementById('boxesUpload').addEventListener('change', async(ev)=>{ const file=ev.target.files?.[0]; if(!file) return; const txt=await file.text(); parseBoxesCSV(txt); BOX_CSV_OK=true; }); } } }
-function parseBoxesCSV(text){ const lines=text.split(/\r?\n/).filter(l=>l.trim().length>0); if(lines.length<2) return; const rawHeader=lines[0].split(',').map(h=>normalizeFieldName(h)); for(let i=1;i<lines.length;i++){ const cols=lines[i].split(','); if(cols.length!=rawHeader.length) continue; const obj={}; for(let j=0;j<cols.length;j++){ obj[rawHeader[j]]=cols[j].trim(); } ['altura_embalagem','largura_embalagem','comprimento_embalagem','area_embalagem','peso_embalagem',
-    'botton_2.5_quantity','botton_3.5_quantity','botton_4.5_quantity','botton_5.5_quantity'].forEach(k=>{ if(obj[k]!==undefined) obj[k]=parseFloat(obj[k]); }); BOX_ROWS.push(obj);} }
-function getCapKey(row,sizeKey){ const candidates={ "2.5":['botton_2.5_quantity','botton_2.5__quantity','botton_2_5_quantity'], "3.5":['botton_3.5_quantity','botton_3.5__quantity','botton_3_5_quantity'], "4.5":['botton_4.5_quantity','botton_4.5__quantity','botton_4_5_quantity'], "5.5":['botton_5.5_quantity','botton_5.5__quantity','botton_5_5_quantity'] }; for(const k of candidates[sizeKey]) if(row[k]!==undefined) return k; return null; }
-function findBestBox(sizeKey, qty){ if(!BOX_ROWS||BOX_ROWS.length===0) return null; const suitable=[]; for(const r of BOX_ROWS){ const k=getCapKey(r,sizeKey); if(!k) continue; const cap=parseFloat(r[k]||0); if(cap>=qty) suitable.push({row:r,cap}); }
-  if(suitable.length>0){ suitable.sort((a,b)=> (parseFloat(a.row.area_embalagem||0)-parseFloat(b.row.area_embalagem||0))); const pick=suitable[0]; return {...pick.row, capacity: pick.cap, boxesNeeded: 1}; }
-  const withCap=[]; for(const r of BOX_ROWS){ const k=getCapKey(r,sizeKey); if(!k) continue; const cap=parseFloat(r[k]||0); if(cap>0) withCap.push({row:r,cap}); }
-  if(withCap.length===0) return null; withCap.sort((a,b)=> (b.cap - a.cap)); const best=withCap[0]; const boxesNeeded=Math.ceil(qty / best.cap); return {...best.row, capacity: best.cap, boxesNeeded}; }
+async function loadBoxesCSV(){
+  BOX_CSV_OK = false;
+  try{
+    const resp = await fetch('boxes.csv', { cache: 'no-cache' });
+    if(!resp.ok) throw new Error('boxes.csv não encontrado');
+
+    const txt = await resp.text();
+    parseBoxesCSV(txt);
+    BOX_CSV_OK = BOX_ROWS.length > 0;
+
+    // DEBUG opcional
+    console.log('BOX_ROWS:', BOX_ROWS.length);
+    if (BOX_ROWS.length) console.log('Cols exemplo:', Object.keys(BOX_ROWS[0]));
+  } catch(e){
+    // fallback com upload (o seu bloco antigo pode ficar)
+    if(!document.getElementById('boxesUpload')){
+      const wrap=document.createElement('div');
+      wrap.className='mt-2 text-xs text-zinc-500';
+      wrap.innerHTML=`<p>Não consegui carregar <code>boxes.csv</code> automaticamente. Faça upload manual:</p><input id="boxesUpload" type="file" accept=".csv" class="mt-2 text-sm">`;
+      document.querySelector('footer').insertAdjacentElement('beforebegin', wrap);
+      document.getElementById('boxesUpload').addEventListener('change', async(ev)=>{
+        const file=ev.target.files?.[0]; if(!file) return;
+        const txt=await file.text(); parseBoxesCSV(txt); BOX_CSV_OK = BOX_ROWS.length > 0;
+      });
+    }
+  }
+}
+
+function parseBoxesCSV(text){
+  BOX_ROWS = []; // zera antes
+  const rawLines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if(!rawLines.length) return;
+
+  const delim = detectDelimiter(rawLines[0]);
+  const headerRaw = parseCSVLine(rawLines[0], delim);
+  const header = headerRaw.map(normalizeFieldName);
+
+  for(let i=1;i<rawLines.length;i++){
+    const cols = parseCSVLine(rawLines[i], delim);
+    if(cols.length !== header.length) continue;
+
+    const obj = {};
+    for(let j=0;j<cols.length;j++){
+      obj[header[j]] = cols[j];
+    }
+
+    // converte números
+    [
+      'altura_embalagem','largura_embalagem','comprimento_embalagem',
+      'area_embalagem','peso_embalagem',
+      'botton_2_5_quantity','botton_3_5_quantity','botton_4_5_quantity','botton_5_5_quantity'
+    ].forEach(k => { if (obj[k] !== undefined) obj[k] = parseNum(obj[k]); });
+
+    // se area não existir, use largura*comprimento como critério
+    if (!(obj.area_embalagem > 0)){
+      const L = obj.largura_embalagem || 0;
+      const C = obj.comprimento_embalagem || 0;
+      obj.area_embalagem = L * C;
+    }
+
+    BOX_ROWS.push(obj);
+  }
+}
+function getCapKey(row, sizeKey){
+  // "2.5" -> "2_5"
+  const sizeNorm = String(sizeKey).replace('.', '_');
+  const target   = `botton_${sizeNorm}_quantity`;
+
+  const keys = Object.keys(row);
+  // 1) match exato já normalizado
+  if (keys.includes(target)) return target;
+
+  // 2) tenta matches por regex tolerante: 2_5 ou 2.5, com ou sem underscores extras
+  const rx = new RegExp(`^botton[_\\s]*${sizeNorm.replace('_','[._ ]?')}[_\\s]*quantity$`);
+  for (const k of keys){
+    const nk = normalizeFieldName(k);
+    if (nk === target) return k;
+    if (rx.test(k) || rx.test(nk)) return k;
+  }
+  return null;
+}
+
+function findBestBox(sizeKey, qty){
+  if (!BOX_ROWS || BOX_ROWS.length === 0) return null;
+
+  const suitable = [];
+  for (const r of BOX_ROWS){
+    const k = getCapKey(r, sizeKey);
+    if (!k) continue;
+    const cap = parseNum(r[k]);
+    if (Number.isFinite(cap) && cap >= qty){
+      suitable.push({ row: r, cap });
+    }
+  }
+
+  if (suitable.length > 0){
+    // pega a menor área (ou a que tiver area calculada)
+    suitable.sort((a,b) => parseNum(a.row.area_embalagem) - parseNum(b.row.area_embalagem));
+    const pick = suitable[0];
+    return { ...pick.row, capacity: pick.cap, boxesNeeded: 1 };
+  }
+
+  // caso não caiba em 1 caixa, usa a de maior capacidade e divide
+  const withCap = [];
+  for (const r of BOX_ROWS){
+    const k = getCapKey(r, sizeKey);
+    if (!k) continue;
+    const cap = parseNum(r[k]);
+    if (Number.isFinite(cap) && cap > 0) withCap.push({ row: r, cap });
+  }
+  if (withCap.length === 0) return null;
+
+  withCap.sort((a,b) => b.cap - a.cap);
+  const best = withCap[0];
+  const boxesNeeded = Math.ceil(qty / best.cap);
+  return { ...best.row, capacity: best.cap, boxesNeeded };
+}
 
 function sanitizeCEP(s){ return (s||'').replace(/\D/g,''); }
 async function requestCorreios(params){ const qs=new URLSearchParams(params).toString(); const url=PROXY_URL + '?' + qs; const resp=await fetch(url); if(!resp.ok) return null; const xml=await resp.text(); const parser=new DOMParser(); const doc=parser.parseFromString(xml,"application/xml"); const servico=doc.querySelector('cServico'); if(!servico) return null; const get=(tag)=> (servico.querySelector(tag)?.textContent||'').trim(); return { Valor:get('Valor'), PrazoEntrega:get('PrazoEntrega'), Erro:get('Erro'), MsgErro:get('MsgErro') }; }
