@@ -12,7 +12,7 @@ export default async function handler(req, res) {
     name: process.env.COMPANY_NAME || 'Ground Shop',
     phone: process.env.COMPANY_PHONE || '(12) 9119-7234',
     site: process.env.COMPANY_SITE || 'https://www.groundshop.com.br/',
-    logo: process.env.LOGO_URL || '/logo.jpeg',
+    logo: process.env.LOGO_URL || './logo.jpeg',
   };
   res.status(200).json(cfg);
 }
