@@ -367,7 +367,20 @@ function buildQuoteText(){
   const incluir = chkFreteCliente.checked && safe(freteEstimado.value,0)>0; const cep=(cepDestino.value||'').trim();
   const freteTxt = incluir ? `\n*Frete (${serviceName()}${cep?` para ${formatCEP(cep)}`:''}):* ${brl(safe(freteEstimado.value,0))}` : '';
   const totalGeral = incluir ? finalTotal + safe(freteEstimado.value,0) : finalTotal;
-  return ["🧾 ORÇAMENTO GROUNDSHOP", `*Produto:* Botton ${label}`, `*Quantidade:* ${q}`, `*Preço Base unit.:* ${brl(baseUnit1)}`, `*Preço Base Total:* ${brl(baseTotal)}`, `*Desconto Total concedido:* ${brl(desconto)}`, `*Preço Final unit.:* ${brl(finalUnit)}`,`---------------------`,`*Preço Final Total:* ${brl(finalTotal)}`, freteTxt, incluir?`\n*TOTAL GERAL (com frete):* ${brl(totalGeral)}`:"", "", "*Proposta válida por 7 dias"].join("\n");
+  return [
+    "🧾 ORÇAMENTO GROUNDSHOP", 
+    `*Produto:* Botton ${label}`, 
+    `*Quantidade:* ${q}`, 
+    // `*Preço Base unit.:* ${brl(baseUnit1)}`, 
+    // `*Preço Base Total:* ${brl(baseTotal)}`, 
+    // `*Desconto Total concedido:* ${brl(desconto)}`, 
+    `*Preço Final unit.:* ${brl(finalUnit)}`,
+    `---------------------`,
+    `*Preço Final Total:* ${brl(finalTotal)}`, 
+    freteTxt, 
+    incluir?`\n*TOTAL GERAL (com frete):* ${brl(totalGeral)}`:"", 
+    "", 
+    "*Proposta válida por 7 dias"].join("\n");
 }
 async function copyQuote(){
   if(!IS_PRO){
