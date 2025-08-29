@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ground Shop – Precificação de Bottons (PRO/Demo)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.1/dist/jspdf.plugin.autotable.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: light dark; }
+    html, body { min-height: 100%; }
+    body { font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, 'Helvetica Neue', Arial; }
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"]::-webkit-outer-spin-button
+    .card { background: color-mix(in oklab, white 80%, transparent); border-radius: 1rem; box-shadow: 0 10px 30px rgb(0 0 0 / 0.06); border: 1px solid rgb(24 24 27 / 0.08); }
+    @media (prefers-color-scheme: dark) { .card { background: color-mix(in oklab, rgb(24 24 27) 85%, transparent); border-color: rgb(39 39 42); } }
+    .btn { padding: .55rem .8rem; border-radius: .75rem; font-weight: 500; border: 1px solid rgb(212 212 216); }
+    @media (prefers-color-scheme: dark) { .btn { border-color: rgb(63 63 70); } }
+    .btn:hover { background: rgb(250 250 250); } @media (prefers-color-scheme: dark) { .btn:hover { background: rgb(39 39 42); } }
+    .tab { padding: .5rem .75rem; border-radius: .75rem; font-weight: 600; border: 1px solid rgb(212 212 216); }
+    @media (prefers-color-scheme: dark) { .tab { border-color: rgb(63 63 70); } }
+    .tab-active { background: black; color: white; border: none; }
+    @media (prefers-color-scheme: dark) { .tab-active { background: white; color: black; } }
+    .label { font-size: .85rem; color: rgb(82 82 91); } @media (prefers-color-scheme: dark) { .label { color: rgb(212 212 216); } }
+    .input { width: 100%; padding: .55rem .75rem; border-radius: .75rem; border: 1px solid rgb(212 212 216); background: white; }
+    @media (prefers-color-scheme: dark) { .input { border-color: rgb(63 63 70); background: rgb(24 24 27); color: white; } }
+    .kpi { font-size: 1.9rem; font-weight: 600; letter-spacing: -0.02em; }
+    #chartWrap { height: 420px; max-height: 460px; width: 100%; }
+    @media (min-width: 1024px) { #chartWrap { height: 460px; } }
+    #priceChart { width: 100% !important; height: 100% !important; display: block; }
+    details[hidden] { display: none; }
+    details > summary { cursor: pointer; list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
+    .toast { position: fixed; right: 1rem; bottom: 1rem; background: #111827; color: white; padding: .75rem 1rem; border-radius: .75rem; box-shadow: 0 14px 40px rgba(0,0,0,.20); }
+    .toast a { text-decoration: underline; }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-zinc-50 via-white to-zinc-100 dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900">
+  <!-- Landing/Login Overlay -->
+  <div id="authOverlay" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-gradient-to-br from-zinc-100/95 to-white/95 dark:from-zinc-900/95 dark:to-zinc-950/95"></div>
+    <div class="relative z-10 max-w-4xl mx-auto p-4 md:p-8">
+      <div class="card p-6 md:p-8">
+        <div class="flex flex-col md:flex-row gap-8">
+          <div class="md:w-1/2">
+            <div class="flex items-center gap-3 mb-4">
+              <img id="logoInline" src="logo.jpeg" alt="Ground Shop" class="h-12 w-12 rounded-md object-cover border border-zinc-200 dark:border-zinc-800" onerror="this.style.display='none'">
+              <div>
+                <h1 class="text-2xl md:text-3xl font-bold tracking-tight">Ground Shop — Precificador</h1>
+                <p class="text-zinc-600 dark:text-zinc-300">Área PRO com login ✨ e modo DEMO sem login.</p>
+              </div>
+            </div>
+            <ul class="list-disc pl-5 text-sm text-zinc-600 dark:text-zinc-300">
+              <li class="mb-1">Curva de preços por quantidade e diâmetro</li>
+              <li class="mb-1">Custos por plataforma (ML, Shopee, Nuvem)</li>
+              <li class="mb-1"><b>PRO:</b> Cálculo de frete (Correios) + dados da sua empresa</li>
+              <li class="mb-1">Exportar PDF/CSV e orçamento para WhatsApp</li>
+            </ul>
+          </div>
+          <div class="md:w-1/2">
+            <div class="mb-3">
+              <label class="label">Usuário</label>
+              <input id="loginUser" class="input" autocomplete="username">
+            </div>
+            <div class="mb-3">
+              <label class="label">Senha</label>
+              <input id="loginPass" class="input" type="password" autocomplete="current-password">
+            </div>
+            <div class="flex gap-2">
+              <button id="btnDoLogin" class="btn">Entrar</button>
+              <button id="btnDemo" class="btn">Continuar sem login (Demo)</button>
+            </div>
+            <p id="loginMsg" class="mt-3 text-sm text-red-600 dark:text-red-300"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="max-w-6xl mx-auto p-4 md:p-8">
+    <div id="appErrors" class="hidden mb-4 p-3 rounded-lg border border-red-200 text-sm text-red-800 bg-red-50 dark:bg-red-900/20 dark:border-red-900 dark:text-red-200"></div>
+
+    <header class="mb-6 md:mb-8">
+      <div class="flex items-start md:items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <img id="logoHeader" src="" alt="" class="h-12 w-12 rounded-md object-cover border border-zinc-200 dark:border-zinc-800 hidden">
+          <div>
+            <h1 class="text-2xl md:text-3xl font-bold tracking-tight">Precificação de Bottons</h1>
+            <p id="companyLine" class="text-zinc-600 dark:text-zinc-300"></p>
+          </div>
+        </div>
+        <div class="hidden md:flex items-center gap-2">
+          <button id="btnResetAll" class="btn" title="Restaurar valores padrão">Reset</button>
+          <button id="btnCopyQuote" class="btn">Copiar orçamento (WhatsApp)</button>
+          <button id="btnExportCSV" class="btn">Exportar CSV (1..1000)</button>
+          <button id="btnExportPDF" class="btn">Exportar Proposta (PDF)</button>
+          <button id="btnLogout" class="btn hidden">Sair</button>
+        </div>
+      </div>
+    </header>
+
+    <section class="card p-5 md:p-6 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="flex flex-col gap-1">
+          <label class="label">Tamanho do botton</label>
+          <select id="sizeSelect" class="input">
+            <option value="2.5">2,5 cm</option>
+            <option value="3.5">3,5 cm</option>
+            <option value="4.5">4,5 cm</option>
+            <option value="5.5">5,5 cm</option>
+          </select>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="label">Quantidade</label>
+          <input id="qtyInput" type="number" min="1" max="50000" value="1" class="input">
+          <input id="qtyRange" type="range" min="1" max="1000" value="1" class="w-full mt-2">
+          <div class="flex justify-between text-xs text-zinc-500"><span>1</span><span>1000</span></div>
+        </div>
+
+        <!-- Bloco de plataforma + custos -->
+        <div class="flex flex-col gap-1">
+          <label class="label">Plataforma</label>
+          <select id="platformSelect" class="input">
+            <option value="nuvem">Nuvem Shop (site)</option>
+            <option value="ml_classic">Mercado Livre — Clássico</option>
+            <option value="ml_premium">Mercado Livre — Premium</option>
+            <option value="shopee_std">Shopee — Padrão</option>
+            <option value="shopee_free">Shopee — Frete grátis</option>
+          </select>
+          <div class="grid grid-cols-3 gap-2 mt-2">
+            <label class="flex items-center gap-2 text-xs"><input id="chkCommission" type="checkbox" class="scale-110" checked> Comissão</label>
+            <label class="flex items-center gap-2 text-xs"><input id="chkFee" type="checkbox" class="scale-110" checked> Taxa</label>
+            <label class="flex items-center gap-2 text-xs"><input id="chkShipping" type="checkbox" class="scale-110" checked> Frete</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="mt-6">
+        <div class="flex gap-2">
+          <button id="tabSimplified" class="tab">Simplificado</button>
+          <button id="tabAdvanced" class="tab tab-active">Avançado</button>
+        </div>
+        <div id="panelSimplified" class="hidden mt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="flex flex-col gap-1"><label class="label">Preço base (q=1)</label><input id="simpBase" type="number" step="0.01" class="input"></div>
+          <div class="flex flex-col gap-1"><label class="label">Preço mínimo (q≥1000)</label><input id="simpMin" type="number" step="0.01" class="input"></div>
+          <div class="flex flex-col gap-1"><label class="label">Ponto de inflexão (q₀)</label><input id="simpQ0" type="number" step="1" min="5" max="200" class="input"></div>
+          <div class="flex flex-col gap-1"><label class="label">Inclinação (n)</label><input id="simpN" type="number" step="0.1" min="0.5" max="4" class="input"></div>
+        </div>
+        <div id="panelAdvanced" class="mt-4">
+          <div class="flex items-center gap-3 mb-3">
+            <label class="flex items-center gap-2 text-sm"><input id="autoIntermediate" type="checkbox" class="scale-110" checked> Recalcular 10/50/100/500 automaticamente (entre Base e Mínimo)</label>
+            <button id="btnAdvReset" class="btn ml-auto">Reset deste tamanho</button>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+            <div class="flex flex-col gap-1"><label class="label">q=1</label><input id="advQ1" type="number" step="0.01" class="input"></div>
+            <div class="flex flex-col gap-1"><label class="label">q=10</label><input id="advQ10" type="number" step="0.01" class="input"></div>
+            <div class="flex flex-col gap-1"><label class="label">q=50</label><input id="advQ50" type="number" step="0.01" class="input"></div>
+            <div class="flex flex-col gap-1"><label class="label">q=100</label><input id="advQ100" type="number" step="0.01" class="input"></div>
+            <div class="flex flex-col gap-1"><label class="label">q=500</label><input id="advQ500" type="number" step="0.01" class="input"></div>
+            <div class="flex flex-col gap-1"><label class="label">q=1000</label><input id="advQ1000" type="number" step="0.01" class="input"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Custos plataforma -->
+      <div class="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="flex flex-col gap-1"><label class="label">Comissão (%)</label><input id="inputCommission" type="number" step="0.1" min="0" max="50" class="input"></div>
+        <div class="flex flex-col gap-1"><label class="label">Taxa fixa por venda (R$)</label><input id="inputFixedFee" type="number" step="0.01" min="0" class="input"></div>
+        <div class="flex flex-col gap-1"><label class="label">Custo de frete (R$)</label><input id="inputShipping" type="number" step="0.01" min="0" class="input"></div>
+        <div class="flex flex-col gap-1"><label class="label">Frete por conta do vendedor a partir de (R$)</label><input id="inputShipThreshold" type="number" step="0.01" min="0" class="input"></div>
+      </div>
+
+      <!-- Frete (Correios / Outros) -->
+      <details id="freteDetails" class="mt-8 open">
+        <summary class="flex items-center justify-between cursor-pointer px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
+          <span class="font-medium">Frete (Correios / Outros)</span>
+          <span class="text-xs text-zinc-500">Clique para expandir/recolher</span>
+        </summary>
+        <div id="freteSection" class="mt-4">
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div class="flex flex-col gap-1"><label class="label">CEP de destino (cliente)</label><input id="cepDestino" type="text" placeholder="00000-000" class="input"></div>
+            <div class="flex flex-col gap-1"><label class="label">CEP de origem (sua loja)</label><input id="cepOrigem" type="text" placeholder="00000-000" class="input"><span class="text-xs text-zinc-500">Se vazio, usa padrão configurado.</span></div>
+            <div class="flex flex-col gap-1">
+              <label class="label">Serviço</label>
+              <select id="servicoCorreios" class="input">
+                <option value="04014">SEDEX (padrão)</option>
+                <option value="04510">PAC</option>
+                <option value="outros">Outros (manual)</option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-1"><label class="label">Frete estimado (R$) — editável</label><input id="freteEstimado" type="number" step="0.01" min="0" class="input" placeholder="0,00"></div>
+            <div class="flex flex-col gap-1">
+              <label class="label">Incluir frete no orçamento</label>
+              <label class="flex items-center gap-2 text-sm"><input id="chkFreteCliente" type="checkbox" class="scale-110" /><span>Somar frete ao orçamento do cliente</span></label>
+              <button id="btnCalcularFrete" class="btn mt-2">Calcular frete</button>
+            </div>
+          </div>
+          <div id="freteInfo" class="mt-3 text-sm text-zinc-600 dark:text-zinc-300"></div>
+          <div id="embalagemInfo" class="mt-1 text-xs text-zinc-500"></div>
+        </div>
+      </details>
+
+      <!-- KPIs -->
+      <div class="mt-6 grid grid-cols-1 sm:grid-cols-5 gap-4">
+        <div class="card p-4"><div class="text-sm text-zinc-500">Preço unitário (final)</div><div id="kpiUnitPrice" class="kpi">R$ 0,00</div></div>
+        <div class="card p-4"><div class="text-sm text-zinc-500">Preço Total (final)</div><div id="kpiTotalFinal" class="kpi">R$ 0,00</div></div>
+        <div class="card p-4"><div class="text-sm text-zinc-500">Margem Líquida (R$)</div><div id="kpiProfit" class="kpi">R$ 0,00</div></div>
+        <div class="card p-4"><div class="text-sm text-zinc-500">Custo Total</div><div id="kpiCostTotal" class="kpi">R$ 0,00</div></div>
+        <div class="card p-4"><div class="text-sm text-zinc-500">Margem líquida (%)</div><div id="kpiMarginPct" class="kpi">0%</div></div>
+      </div>
+
+      <div class="mt-4 md:hidden flex items-center justify-end gap-2">
+        <button id="btnCopyQuote_mobile" class="btn">Copiar orçamento</button>
+        <button id="btnExportCSV_mobile" class="btn">Exportar CSV</button>
+        <button id="btnExportPDF_mobile" class="btn">Exportar PDF</button>
+        <button id="btnLogout_mobile" class="btn hidden">Sair</button>
+      </div>
+    </section>
+
+    <!-- Gráfico e tabela -->
+    <section class="card p-5 md:p-6">
+      <h3 class="font-medium mb-2">Curvas (1 → 1000)</h3>
+      <div id="chartWrap"><canvas id="priceChart"></canvas></div>
+      <p class="mt-2 text-xs text-zinc-500">Linha sólida: preço base (curva). Linha pontilhada: preço final com custos de plataforma.</p>
+      <div class="mt-4 overflow-auto">
+        <table class="w-full text-sm">
+          <thead><tr class="text-left text-zinc-500"><th class="py-2 pr-3">Qtd</th><th class="py-2 pr-3">Base</th><th class="py-2 pr-3">Final</th><th class="py-2 pr-3">Comissão</th><th class="py-2 pr-3">Taxa</th><th class="py-2 pr-3">Frete</th></tr></thead>
+          <tbody id="tiersBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="mt-6 text-xs text-zinc-500">
+      <p>Idealizado e criado por <b>Bruno Reche</b> — email: <a href="mailto:reche.dev.lab@gmail.com">reche.dev.lab@gmail.com</a></p>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+    <script>
+const showError = (msg) => { const box=document.getElementById('appErrors'); if(!box) return; box.classList.remove('hidden'); box.textContent=msg; };
+window.addEventListener('error', (e) => showError(e.message || 'Erro de script.'));
+const brl = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((isFinite(v) ? v : 0) ?? 0);
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+const safe = (x, d=0) => { const v = parseFloat(x); return isFinite(v) ? v : d; };
+const sleep = (ms) => new Promise(r=>setTimeout(r,ms));
+function toast(msg, ms=2500){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'), ms); }
+function qs(sel){ return document.querySelector(sel); }
+function el(id){ return document.getElementById(id); }
+
+let IS_PRO=false;
+let COMPANY={ name:'', phone:'', site:'', logo:'' };
+
+async function fetchConfig(){
+  try{
+    const r = await fetch('/api/config');
+    if(!r.ok) throw 0;
+    const cfg = await r.json();
+    IS_PRO = true;
+    COMPANY = cfg || {};
+    applyCompanyBrand();
+    el('btnLogout').classList.remove('hidden');
+    el('btnLogout_mobile').classList.remove('hidden');
+    hideAuthOverlay();
+  } catch(e){
+    IS_PRO = false;
+    showAuthOverlay();
+    applyCompanyBrand(true);
+  } finally {
+    bootApp();
+  }
+}
+
+function applyCompanyBrand(demo=false){
+  const line = el('companyLine');
+  const logo = el('logoHeader');
+  if (IS_PRO && COMPANY){
+    line.textContent = `${COMPANY.name || 'Ground Shop'} • Tel: ${COMPANY.phone || ''} • ${COMPANY.site || ''}`.trim();
+    if (COMPANY.logo){ logo.src = COMPANY.logo; logo.classList.remove('hidden'); }
+  } else {
+    line.textContent = demo ? 'Demo — faça login para liberar dados da empresa e cálculo de frete (Correios).' : '';
+    logo.classList.add('hidden');
+    logo.src='';
+  }
+}
+
+function showAuthOverlay(){ el('authOverlay').classList.remove('hidden'); }
+function hideAuthOverlay(){ el('authOverlay').classList.add('hidden'); }
+
+async function doLogin(){
+  const user = el('loginUser').value.trim();
+  const pass = el('loginPass').value;
+  el('loginMsg').textContent='';
+  const r = await fetch('/api/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ user, pass }) });
+  if (!r.ok){ el('loginMsg').textContent='Usuário ou senha inválidos.'; return; }
+  await sleep(150);
+  location.reload();
+}
+async function doLogout(){
+  await fetch('/api/logout', { method:'POST' });
+  await sleep(150);
+  location.reload();
+}
+
+const PROXY_URL = '/api/correios';
+
+const DEFAULT_DATA = {
+  "2.5": { label: "2,5 cm", cost: 0.67, anchors: {1:8.00, 10:3.80, 50:2.78, 100:2.49, 500:2.30, 1000:1.99}, simp: { q0: 50, n: 1.5 }, unitWeightKg: 0.004 },
+  "3.5": { label: "3,5 cm", cost: 0.80, anchors: {1:10.00,10:3.90,50:2.98,100:2.67,500:2.45,1000:2.20}, simp: { q0: 50, n: 1.6 }, unitWeightKg: 0.006 },
+  "4.5": { label: "4,5 cm", cost: 0.90, anchors: {1:12.50,10:4.20,50:3.20,100:2.99,500:2.75,1000:2.30}, simp: { q0: 55, n: 1.65 }, unitWeightKg: 0.008 },
+  "5.5": { label: "5,5 cm", cost: 1.22, anchors: {1:15.00,10:4.50,50:3.80,100:3.60,500:3.10,1000:2.70}, simp: { q0: 60, n: 1.7 }, unitWeightKg: 0.010 },
+};
+const PLATFORM_PRESETS = {
+  nuvem:       { commission: 0.00, fee: 0.00, shipping: 0.00, threshold: 0.00 },
+  ml_classic:  { commission: 0.14, fee: 6.75, shipping: 21.45, threshold: 79.00 },
+  ml_premium:  { commission: 0.19, fee: 6.50, shipping: 21.45, threshold: 79.00 },
+  shopee_std:  { commission: 0.14, fee: 4.00, shipping: 0.00, threshold: 0.00 },
+  shopee_free: { commission: 0.20, fee: 4.00, shipping: 0.00, threshold: 0.00 },
+};
+const STATE = JSON.parse(JSON.stringify(DEFAULT_DATA));
+let MODE = 'avancado';
+
+const sizeSelect = el('sizeSelect'); const qtyInput=el('qtyInput'); const qtyRange=el('qtyRange');
+const tabSimplified=el('tabSimplified'); const tabAdvanced=el('tabAdvanced'); const panelSimplified=el('panelSimplified'); const panelAdvanced=el('panelAdvanced');
+const simpBase=el('simpBase'); const simpMin=el('simpMin'); const simpQ0=el('simpQ0'); const simpN=el('simpN'); const chkAutoInt=el('autoIntermediate');
+const advQ1=el('advQ1'); const advQ10=el('advQ10'); const advQ50=el('advQ50'); const advQ100=el('advQ100'); const advQ500=el('advQ500'); const advQ1000=el('advQ1000'); const btnAdvReset=el('btnAdvReset');
+const platformSelect=el('platformSelect'); const chkCommission=el('chkCommission'); const chkFee=el('chkFee'); const chkShipping=el('chkShipping');
+const inputCommission=el('inputCommission'); const inputFixedFee=el('inputFixedFee'); const inputShipping=el('inputShipping'); const inputShipThreshold=el('inputShipThreshold');
+
+const freteDetails=el('freteDetails'); const freteSection=el('freteSection');
+const cepDestino=el('cepDestino'); const cepOrigem=el('cepOrigem'); const servicoCorreios=el('servicoCorreios');
+const freteEstimado=el('freteEstimado'); const chkFreteCliente=el('chkFreteCliente'); const btnCalcularFrete=el('btnCalcularFrete'); const freteInfo=el('freteInfo'); const embalagemInfo=el('embalagemInfo');
+
+const kpiUnitPrice=el('kpiUnitPrice'); const kpiTotalFinal=el('kpiTotalFinal'); const kpiProfit=el('kpiProfit'); const kpiCostTotal=el('kpiCostTotal'); const kpiMarginPct=el('kpiMarginPct');
+const btnResetAll=el('btnResetAll'); const btnExportCSV=el('btnExportCSV'); const btnExportCSV_mobile=el('btnExportCSV_mobile');
+const btnExportPDF=el('btnExportPDF'); const btnExportPDF_mobile=el('btnExportPDF_mobile');
+const btnCopyQuote=el('btnCopyQuote'); const btnCopyQuote_mobile=el('btnCopyQuote_mobile');
+const btnLogout=el('btnLogout'); const btnLogout_mobile=el('btnLogout_mobile');
+const tiersBody=el('tiersBody');
+
+function priceLogistic(q, pmin, pmax, q0, n){ if(q>=1000) return pmin; const denom=1+Math.pow(q/q0,n); return pmin+(pmax-pmin)/denom; }
+function priceGeomBetween(q, q1,p1,q2,p2){ const t=(Math.log(q)-Math.log(q1))/(Math.log(q2)-Math.log(q1)); return p1*Math.pow(p2/p1,t); }
+function priceAnchors(q, anchors){ const A=[1,10,50,100,500,1000]; if(q<=1) return anchors[1]; if(q>=1000) return anchors[1000]; for(let i=0;i<A.length-1;i++){const q1=A[i],q2=A[i+1]; if(q>=q1&&q<=q2) return priceGeomBetween(q,q1,anchors[q1],q2,anchors[q2]);} return anchors[1000]; }
+function recomputeIntermediates(anchors){ const base=anchors[1],min=anchors[1000]; const out={...anchors}; const lnDen=Math.log(1000)-Math.log(1); for(const q of [10,50,100,500]){ const w=(Math.log(q)-Math.log(1))/lnDen; out[q]=base*Math.pow(min/base,w);} return out; }
+function getSelectedSizeKey(){ return sizeSelect.value; }
+function getPlatformPreset(){ return PLATFORM_PRESETS[platformSelect.value]; }
+function setTabs(mode){ MODE=mode; const simp=mode==='simplificado'; tabSimplified?.classList.toggle('tab-active', simp); tabAdvanced?.classList.toggle('tab-active', !simp); panelSimplified?.classList.toggle('hidden', !simp); panelAdvanced?.classList.toggle('hidden', simp); }
+function loadControlsForSize(sizeKey){ const s=STATE[sizeKey]; if(!s) return; simpBase.value=s.anchors[1].toFixed(2); simpMin.value=s.anchors[1000].toFixed(2); simpQ0.value=s.simp.q0; simpN.value=s.simp.n; chkAutoInt&&(chkAutoInt.checked=true);
+  advQ1.value=s.anchors[1].toFixed(2); advQ10.value=s.anchors[10].toFixed(2); advQ50.value=s.anchors[50].toFixed(2); advQ100.value=s.anchors[100].toFixed(2); advQ500.value=s.anchors[500].toFixed(2); advQ1000.value=s.anchors[1000].toFixed(2); }
+function loadPlatformDefaults(){ const p=getPlatformPreset(); inputCommission.value=(p.commission*100).toFixed(1); inputFixedFee.value=p.fee.toFixed(2); inputShipping.value=p.shipping.toFixed(2); inputShipThreshold.value=p.threshold.toFixed(2);
+  chkCommission.checked=p.commission>0; chkFee.checked=p.fee>0; chkShipping.checked=p.shipping>0||p.threshold>0; }
+
+function serviceName(){ const v=servicoCorreios.value; return v==='04014'?'SEDEX':(v==='04510'?'PAC':'Outros'); }
+function formatCEP(s){ return s ? s.replace(/\D/g,'').replace(/(\d{5})(\d{3})/,'$1-$2') : ''; }
+function buildQuoteText(){
+  const sizeKey=getSelectedSizeKey(); const label=STATE[sizeKey].label; const q=clamp(parseInt(qtyInput.value||1,10),1,50000);
+  let fBase; if(MODE==='simplificado'){ fBase=(qq)=>priceLogistic(qq, safe(simpMin.value,0), safe(simpBase.value,0), safe(simpQ0.value,50), safe(simpN.value,1.5)); } else { let a=readAnchorsFromUI(); if(chkAutoInt&&chkAutoInt.checked) a=recomputeIntermediates(a); fBase=(qq)=>priceAnchors(qq,a); }
+  const baseUnit1=(MODE==='simplificado')?safe(simpBase.value,0):safe(advQ1.value,0); const baseTotal=baseUnit1*q; const baseAtQ=fBase(q);
+  const finalUnit=finalUnitPriceForQty(q, baseAtQ); const finalTotal=finalUnit*q; const desconto=Math.max(0, baseTotal-finalTotal);
+  const incluir = chkFreteCliente.checked && safe(freteEstimado.value,0)>0; const cep=(cepDestino.value||'').trim();
+  const freteTxt = incluir ? `\n*Frete (${serviceName()}${cep?` para ${formatCEP(cep)}`:''}):* ${brl(safe(freteEstimado.value,0))}` : '';
+  const totalGeral = incluir ? finalTotal + safe(freteEstimado.value,0) : finalTotal;
+  return ["🧾 ORÇAMENTO GROUNDSHOP", `*Produto:* Botton ${label}`, `*Quantidade:* ${q}`, `*Preço Base unit.:* ${brl(baseUnit1)} — *Preço Base Total:* ${brl(baseTotal)}`, `*Desconto Total concedido:* ${brl(desconto)}`, `*Preço Final unit.:* ${brl(finalUnit)} — Preço Final Total: ${brl(finalTotal)}`, freteTxt, incluir?`\n*TOTAL GERAL (com frete):* ${brl(totalGeral)}`:"", "", "*Proposta válida por 7 dias"].join("\n");
+}
+async function copyQuote(){
+  if(!IS_PRO){
+    toast("🔒 Disponível somente no plano PRO. Entre em contato para uma versão personalizada: reche.dev.lab@gmail.com");
+    return;
+  }
+  const text=buildQuoteText();
+  try{ await navigator.clipboard.writeText(text); const btn=btnCopyQuote||btnCopyQuote_mobile; if(btn){ const t=btn.textContent; btn.textContent="✅ Copiado!"; setTimeout(()=>btn.textContent=t,1400);} }catch(e){ const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);}
+}
+
+function readAnchorsFromUI(){ return {1:safe(advQ1.value,0),10:safe(advQ10.value,0),50:safe(advQ50.value,0),100:safe(advQ100.value,0),500:safe(advQ500.value,0),1000:safe(advQ1000.value,0)}; }
+function writeAnchorsToUI(a){ advQ1.value=a[1].toFixed(2); advQ10.value=a[10].toFixed(2); advQ50.value=a[50].toFixed(2); advQ100.value=a[100].toFixed(2); advQ500.value=a[500].toFixed(2); advQ1000.value=a[1000].toFixed(2); }
+
+function finalUnitPriceForQty(q, baseUnitPrice) {
+  const commission = chkCommission.checked ? (safe(inputCommission.value,0) / 100) : 0;
+  const fixedFee   = chkFee.checked ? safe(inputFixedFee.value,0) : 0;
+  const shipCost   = chkShipping.checked ? safe(inputShipping.value,0) : 0;
+  const shipThresh = chkShipping.checked ? safe(inputShipThreshold.value,0) : 0;
+  const F0=fixedFee; const P0=(baseUnitPrice + F0/q)/Math.max(1 - commission, 0.0001);
+  let includeShip=false; if(shipCost>0){ if(shipThresh>0){ const orderTotal0=P0*q; if(orderTotal0>=shipThresh) includeShip=true; } else includeShip=true; }
+  if(includeShip){ const F=fixedFee+shipCost; return (baseUnitPrice + F/q)/Math.max(1 - commission, 0.0001); }
+  return P0;
+}
+
+function platformCostsForKPI(orderTotal) {
+  const commissionRate=safe(inputCommission.value,0)/100; const fee=safe(inputFixedFee.value,0); const ship=safe(inputShipping.value,0); const threshold=safe(inputShipThreshold.value,0);
+  const commissionTotal=commissionRate>0?commissionRate*orderTotal:0; const feeTotal=fee>0?fee:0; const shippingTotal=ship>0?(threshold>0?(orderTotal>=threshold?ship:0):ship):0;
+  return { commissionTotal, feeTotal, shippingTotal };
+}
+
+let chart;
+function initChart(){ const ctx=document.getElementById('priceChart'); if(!ctx) return;
+  chart=new Chart(ctx,{ type:'line', data:{ labels:[], datasets:[
+      { label:'Base', data:[], tension:0.25, pointRadius:0, borderWidth:2, borderColor:'#2563eb' },
+      { label:'Final (com custos)', data:[], tension:0.25, pointRadius:0, borderWidth:2, borderDash:[6,4], borderColor:'#16a34a' },
+      { label:'Âncoras', data:[], type:'scatter', pointRadius:4, showLine:false, backgroundColor:'#c27121', parsing:{xAxisKey:'x', yAxisKey:'y'} }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, devicePixelRatio:Math.min(window.devicePixelRatio||1,2), normalized:true, animation:false,
+      scales:{ x:{ title:{text:'Quantidade', display:true}, grid:{display:false} }, y:{ title:{text:'Preço (R$)', display:true} } },
+      plugins:{ legend:{display:true, position:'bottom'}, tooltip:{ callbacks:{ label:(ctx)=>`${ctx.dataset.label}: ${brl(ctx.parsed.y)}` } } }
+    }
+  });
+}
+function refreshChartAndKpis(){ try{
+  const sizeKey=getSelectedSizeKey(); const s=STATE[sizeKey]; const q=clamp(parseInt(qtyInput.value||1,10),1,50000); qtyInput.value=q; qtyRange.value=clamp(q,1,1000);
+  let fBase, anchorsUsed; if(MODE==='simplificado'){ const pmax=safe(simpBase.value,0), pmin=safe(simpMin.value,0), q0=safe(simpQ0.value,50), n=safe(simpN.value,1.5); fBase=(qq)=>priceLogistic(qq,pmin,pmax,q0,n); anchorsUsed={...s.anchors,1:pmax,1000:pmin}; } else {
+    let a=readAnchorsFromUI(); if(chkAutoInt&&chkAutoInt.checked){ a=recomputeIntermediates(a); writeAnchorsToUI(a); } anchorsUsed=a; fBase=(qq)=>priceAnchors(qq,anchorsUsed); }
+  const xs=[], ysBase=[], ysFinal=[]; for(let i=1;i<=1000;i++){ const base=fBase(i); const fin=finalUnitPriceForQty(i,base); xs.push(i); ysBase.push(base); ysFinal.push(fin); }
+  if(chart){ chart.data.labels=xs; chart.data.datasets[0].data=ysBase; chart.data.datasets[1].data=ysFinal; chart.data.datasets[2].data=[1,10,50,100,500,1000].map(qq=>({x:qq,y:anchorsUsed[qq]})); chart.update('none'); }
+  const baseQ=fBase(q); const finalQ=finalUnitPriceForQty(q, baseQ); const orderTotal=finalQ*q;
+  const {commissionTotal, feeTotal, shippingTotal} = platformCostsForKPI(orderTotal);
+  const cogsTotal=s.cost*q; const custoTotal=cogsTotal+commissionTotal+feeTotal+shippingTotal; const profitTotal=orderTotal-custoTotal; const marginPct=(profitTotal/Math.max(orderTotal,0.0001))*100;
+  kpiUnitPrice.textContent=brl(finalQ); kpiTotalFinal.textContent=brl(orderTotal); kpiProfit.textContent=brl(profitTotal); kpiCostTotal.textContent=brl(custoTotal); kpiMarginPct.textContent=`${isFinite(marginPct)?marginPct.toFixed(1):'0.0'}%`;
+  const tiersQ=[1,10,50,100,500,1000]; const rows=[]; for(const tq of tiersQ){ const base=fBase(tq); const fin=finalUnitPriceForQty(tq, base); const ord=fin*tq; const cKPI=platformCostsForKPI(ord);
+    rows.push(`<tr class="border-t border-zinc-200/60 dark:border-zinc-800"><td class="py-2 pr-3">${tq}</td><td class="py-2 pr-3">${brl(base)}</td><td class="py-2 pr-3">${brl(fin)}</td><td class="py-2 pr-3">${brl(cKPI.commissionTotal)}</td><td class="py-2 pr-3">${brl(cKPI.feeTotal)}</td><td class="py-2 pr-3">${brl(cKPI.shippingTotal)}</td></tr>`); }
+  tiersBody.innerHTML=rows.join('');
+} catch(e){ showError('Erro no cálculo: '+(e.message||e)); }}
+
+let BOX_ROWS=[]; let BOX_CSV_OK=false;
+function normalizeFieldName(s){ return s.toLowerCase().trim().replace(/\s+/g,'_').replace(/[^\w.]+/g,'_'); }
+async function loadBoxesCSV(){ BOX_CSV_OK=false; try{ const resp=await fetch('boxes.csv',{cache:'no-cache'}); if(!resp.ok) throw new Error('boxes.csv não encontrado'); const txt=await resp.text(); parseBoxesCSV(txt); BOX_CSV_OK=true; }catch(e){ if(!document.getElementById('boxesUpload')){ const wrap=document.createElement('div'); wrap.className='mt-2 text-xs text-zinc-500'; wrap.innerHTML=`<p>Não consegui carregar <code>boxes.csv</code> automaticamente. Faça upload manual:</p><input id="boxesUpload" type="file" accept=".csv" class="mt-2 text-sm">`; document.querySelector('footer').insertAdjacentElement('beforebegin', wrap); document.getElementById('boxesUpload').addEventListener('change', async(ev)=>{ const file=ev.target.files?.[0]; if(!file) return; const txt=await file.text(); parseBoxesCSV(txt); BOX_CSV_OK=true; }); } } }
+function parseBoxesCSV(text){ const lines=text.split(/\r?\n/).filter(l=>l.trim().length>0); if(lines.length<2) return; const rawHeader=lines[0].split(',').map(h=>normalizeFieldName(h)); for(let i=1;i<lines.length;i++){ const cols=lines[i].split(','); if(cols.length!=rawHeader.length) continue; const obj={}; for(let j=0;j<cols.length;j++){ obj[rawHeader[j]]=cols[j].trim(); } ['altura_embalagem','largura_embalagem','comprimento_embalagem','area_embalagem','peso_embalagem',
+    'botton_2.5_quantity','botton_3.5_quantity','botton_4.5_quantity','botton_5.5_quantity','botton_2.5__quantity','botton_3.5__quantity','botton_4.5__quantity','botton_5.5__quantity','botton_2_5_quantity','botton_3_5_quantity','botton_4_5_quantity','botton_5_5_quantity'
+  ].forEach(k=>{ if(obj[k]!==undefined) obj[k]=parseFloat(obj[k]); }); BOX_ROWS.push(obj);} }
+function getCapKey(row,sizeKey){ const candidates={ "2.5":['botton_2.5_quantity','botton_2.5__quantity','botton_2_5_quantity'], "3.5":['botton_3.5_quantity','botton_3.5__quantity','botton_3_5_quantity'], "4.5":['botton_4.5_quantity','botton_4.5__quantity','botton_4_5_quantity'], "5.5":['botton_5.5_quantity','botton_5.5__quantity','botton_5_5_quantity'] }; for(const k of candidates[sizeKey]) if(row[k]!==undefined) return k; return null; }
+function findBestBox(sizeKey, qty){ if(!BOX_ROWS||BOX_ROWS.length===0) return null; const suitable=[]; for(const r of BOX_ROWS){ const k=getCapKey(r,sizeKey); if(!k) continue; const cap=parseFloat(r[k]||0); if(cap>=qty) suitable.push({row:r,cap}); }
+  if(suitable.length>0){ suitable.sort((a,b)=> (parseFloat(a.row.area_embalagem||0)-parseFloat(b.row.area_embalagem||0))); const pick=suitable[0]; return {...pick.row, capacity: pick.cap, boxesNeeded: 1}; }
+  const withCap=[]; for(const r of BOX_ROWS){ const k=getCapKey(r,sizeKey); if(!k) continue; const cap=parseFloat(r[k]||0); if(cap>0) withCap.push({row:r,cap}); }
+  if(withCap.length===0) return null; withCap.sort((a,b)=> (b.cap - a.cap)); const best=withCap[0]; const boxesNeeded=Math.ceil(qty / best.cap); return {...best.row, capacity: best.cap, boxesNeeded}; }
+
+function sanitizeCEP(s){ return (s||'').replace(/\D/g,''); }
+async function requestCorreios(params){ const qs=new URLSearchParams(params).toString(); const url=PROXY_URL + '?' + qs; const resp=await fetch(url); if(!resp.ok) return null; const xml=await resp.text(); const parser=new DOMParser(); const doc=parser.parseFromString(xml,"application/xml"); const servico=doc.querySelector('cServico'); if(!servico) return null; const get=(tag)=> (servico.querySelector(tag)?.textContent||'').trim(); return { Valor:get('Valor'), PrazoEntrega:get('PrazoEntrega'), Erro:get('Erro'), MsgErro:get('MsgErro') }; }
+async function calcularFrete(){
+  if(!IS_PRO){ freteInfo.textContent='Disponível somente no plano PRO.'; return; }
+  try{
+    freteInfo.textContent='Calculando frete...'; embalagemInfo.textContent='';
+    const sizeKey=getSelectedSizeKey(); const q=clamp(parseInt(qtyInput.value||1,10),1,50000); const s=STATE[sizeKey];
+    if(!BOX_CSV_OK) await loadBoxesCSV(); if(!BOX_ROWS||BOX_ROWS.length===0){ freteInfo.textContent='Não foi possível ler boxes.csv. Faça upload manual e tente novamente.'; return; }
+    const box=findBestBox(sizeKey, q); if(!box){ freteInfo.textContent='Não há caixa compatível na planilha.'; return; }
+    const unitW=s.unitWeightKg||0; const pesoLiquido=unitW*q; const caixas=box.boxesNeeded||1; const cap=box.capacity||q;
+    const pesoBrutoPorCaixa=(units)=> (unitW*units) + (safe(box.peso_embalagem,0)||0);
+    const altura=Math.max(2, safe(box.altura_embalagem,0)); const largura=Math.max(11, safe(box.largura_embalagem,0)); const comprimento=Math.max(16, safe(box.comprimento_embalagem,0));
+    const servCode=servicoCorreios.value||'04014';
+    if(servCode==='outros'){ freteInfo.textContent = 'Frete (Outros) — informe o valor no campo acima.'; embalagemInfo.textContent = `Dimensões por caixa: ${altura}×${largura}×${comprimento} cm • Peso líquido: ${pesoLiquido.toFixed(3)} kg`; chkFreteCliente.checked = true; return; }
+    const cepDest = sanitizeCEP(cepDestino.value); if(!cepDest){ freteInfo.textContent='Informe o CEP de destino para calcular.'; return; }
+    const cepOrig = sanitizeCEP(cepOrigem.value || '');
+    const results=[]; let remaining=q;
+    for(let i=0;i<caixas;i++){
+      const unitsThis=Math.min(cap, remaining); remaining-=unitsThis;
+      const pesoCaixaKg=Math.max(0.3, pesoBrutoPorCaixa(unitsThis));
+      const params={ nCdEmpresa:'', sDsSenha:'', sCepOrigem: cepOrig, sCepDestino: cepDest, nVlPeso: pesoCaixaKg.toFixed(3).replace('.',','), nCdFormato:1,
+        nVlComprimento: comprimento.toFixed(2).replace('.',','), nVlAltura: altura.toFixed(2).replace('.',','), nVlLargura: largura.toFixed(2).replace('.',','),
+        nVlDiametro:'0', sCdMaoPropria:'N', nVlValorDeclarado:'0', sCdAvisoRecebimento:'N', nCdServico: servCode, StrRetorno:'xml'
+      };
+      const ok = await requestCorreios(params);
+      if(!ok || ok.Erro){ freteInfo.textContent = `Erro nos Correios: ${ok?.MsgErro || 'falha no cálculo'}`; return; }
+      results.push(ok);
+    }
+    const totalFrete = results.reduce((acc,r)=> acc + (parseFloat(r.Valor.replace(',','.'))||0), 0);
+    const prazoMax = Math.max(...results.map(r => parseInt(r.PrazoEntrega||'0',10) || 0));
+    freteEstimado.value = totalFrete.toFixed(2);
+    embalagemInfo.textContent = `${caixas} caixa(s) • ${altura}×${largura}×${comprimento} cm • peso líquido ${pesoLiquido.toFixed(3)} kg`;
+    freteInfo.textContent = `Frete (${servCode==='04014'?'SEDEX':'PAC'}) estimado: ${brl(totalFrete)} • prazo ${prazoMax} dia(s) úteis.`;
+    chkFreteCliente.checked = true;
+  }catch(e){ freteInfo.textContent='Falha ao calcular frete: '+(e.message||e); }
+}
+
+function exportCSV(){ try{ const sizeKey=getSelectedSizeKey(); const label=STATE[sizeKey].label; let fBase; if(MODE==='simplificado'){ fBase=(qq)=>priceLogistic(qq, safe(simpMin.value,0), safe(simpBase.value,0), safe(simpQ0.value,50), safe(simpN.value,1.5)); } else { let a=readAnchorsFromUI(); if(chkAutoInt&&chkAutoInt.checked) a=recomputeIntermediates(a); fBase=(qq)=>priceAnchors(qq,a); }
+  const costPerUnit=STATE[sizeKey].cost; let csv="produto;quantidade;preco_unitario;preco_total;taxa;comissao;frete;margem_liquida_reais\n";
+  for(let q=1;q<=1000;q++){ const base=fBase(q); const unitFinal=finalUnitPriceForQty(q, base); const orderTotal=unitFinal*q; const cKPI=platformCostsForKPI(orderTotal); const cogsTotal=costPerUnit*q; const profitTotal=orderTotal-cogsTotal-cKPI.feeTotal-cKPI.commissionTotal-cKPI.shippingTotal;
+    csv += `${label.replace(',', '.')};${q};${unitFinal.toFixed(2).replace('.', ',')};${orderTotal.toFixed(2).replace('.', ',')};${cKPI.feeTotal.toFixed(2).replace('.', ',')};${cKPI.commissionTotal.toFixed(2).replace('.', ',')};${cKPI.shippingTotal.toFixed(2).replace('.', ',')};${profitTotal.toFixed(2).replace('.', ',')}\n`; }
+  const blob=new Blob([csv], {type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`precos_${label.replace(',', '_')}_${platformSelect.value}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+} catch(e){ showError('Falha ao exportar CSV: '+(e.message||e)); } }
+async function exportPDF(){ try{ const { jsPDF }=window.jspdf; const doc=new jsPDF({unit:'pt', format:'a4'}); const margin=40; const pageWidth=doc.internal.pageSize.getWidth();
+  const dataAtual=new Date(); const dataValidade=new Date(); dataValidade.setDate(dataValidade.getDate()+7); const pad2=(n)=>String(n).padStart(2,'0');
+  const formatarData=(d)=>`${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`; const formatarDataFile=(d)=>`${pad2(d.getDate())}-${pad2(d.getMonth()+1)}-${d.getFullYear()}`;
+  const sizeKey=getSelectedSizeKey(); const label=STATE[sizeKey].label; const q=clamp(parseInt(qtyInput.value||1,10),1,50000);
+  let fBase; if(MODE==='simplificado'){ fBase=(qq)=>priceLogistic(qq, safe(simpMin.value,0), safe(simpBase.value,0), safe(simpQ0.value,50), safe(simpN.value,1.5)); } else { let a=readAnchorsFromUI(); if(chkAutoInt&&chkAutoInt.checked) a=recomputeIntermediates(a); fBase=(qq)=>priceAnchors(qq,a); }
+  const baseUnit1=(MODE==='simplificado')?safe(simpBase.value,0):safe(advQ1.value,0); const baseTotal=baseUnit1*q; const baseAtQ=fBase(q); const finalUnit=finalUnitPriceForQty(q, baseAtQ); const finalTotal=finalUnit*q; const desconto=Math.max(0, baseTotal-finalTotal);
+  const incluirFrete= chkFreteCliente.checked && safe(freteEstimado.value,0)>0; const totalGeral=incluirFrete? finalTotal + safe(freteEstimado.value,0) : finalTotal;
+  async function getLogoDataURL(){ const logoHeader=document.getElementById('logoHeader'); if(logoHeader && !logoHeader.classList.contains('hidden')){ try{ const canvas=document.createElement('canvas'); canvas.width=logoHeader.naturalWidth; canvas.height=logoHeader.naturalHeight; const ctx=canvas.getContext('2d'); ctx.drawImage(logoHeader,0,0); return canvas.toDataURL('image/jpeg',0.92);}catch(e){} } try{ const resp=await fetch('logo.jpeg',{cache:'no-cache'}); if(!resp.ok) return null; const blob=await resp.blob(); return await new Promise((resolve)=>{ const reader=new FileReader(); reader.onload=()=>resolve(reader.result); reader.readAsDataURL(blob); }); }catch(e){ return null; } }
+  const logoData=await getLogoDataURL(); const headerY=margin; if(logoData){ doc.addImage(logoData,'JPEG', margin, headerY, 80,80); }
+  doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.text('Proposta Comercial – Ground Shop', logoData? margin+100:margin, headerY+24);
+  if(IS_PRO){ doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.text(`${COMPANY.name || ''} • Tel: ${COMPANY.phone || ''} • ${COMPANY.site || ''}`, logoData? margin+100:margin, headerY+42); }
+  doc.setDrawColor(200); doc.line(margin, headerY+60, pageWidth-margin, headerY+60);
+  let y=headerY+88; doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text('Detalhes da Proposta', margin, y); y+=16;
+  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.text(`Data: ${formatarData(dataAtual)} — Válida até: ${formatarData(dataValidade)}`, margin, y); y+=16;
+  doc.text(`Produto: Botton ${label}`, margin, y); y+=16; doc.text(`Quantidade: ${q}`, margin, y); y+=16; doc.text(`Preço Base unit.: ${brl(baseUnit1)} — Preço Base Total: ${brl(baseTotal)}`, margin, y); y+=16; doc.text(`Desconto concedido: ${brl(desconto)}`, margin, y); y+=16;
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text(`Preço Final unit.: ${brl(finalUnit)} — Preço Final Total: ${brl(finalTotal)}`, margin, y); y+=20;
+  const bodyRows=[ ['Produto', `Botton ${label}`], ['Quantidade', `${q}`], ['Base Total', `${brl(baseTotal)}`], ['Desconto concedido', `${brl(desconto)}`], ['Preço Final Total', `${brl(finalTotal)}`] ];
+  if(incluirFrete){ bodyRows.push(['Frete', `${brl(safe(freteEstimado.value,0))}`]); bodyRows.push(['TOTAL GERAL', `${brl(totalGeral)}`]); }
+  doc.autoTable({ startY:y, styles:{fontSize:10, cellPadding:6}, head:[['Item','Valor']], body: bodyRows, didParseCell: function(data){ if(incluirFrete && data.row.index===bodyRows.length-1){ data.cell.styles.fontStyle='bold'; } } });
+  if(!IS_PRO){ doc.setTextColor(180,0,0); doc.setFontSize(48); doc.text('DEMONSTRAÇÃO', pageWidth/2, 620, { align: 'center', angle: 0 }); doc.setTextColor(0); }
+  const footerY=doc.internal.pageSize.getHeight()-40; doc.setFontSize(9); doc.setTextColor(120); doc.text('Proposta válida por 7 dias. Valores sujeitos a alterações conforme condições de venda e frete.', 40, footerY);
+  doc.save(`Proposta_GroundShop_Botton_${label.replace(',', '_')}_q${q}_${formatarDataFile(dataAtual)}.pdf`);
+} catch(e){ showError('Falha ao gerar PDF: '+(e.message||e)); } }
+
+function toggleFreteVisibility(){ const isNuvem = platformSelect.value==='nuvem'; if(isNuvem){ freteDetails.setAttribute('open',''); } else { freteDetails.removeAttribute('open'); chkFreteCliente.checked=false; } }
+function applyProRestrictions(){
+  if(!IS_PRO){
+    servicoCorreios.value='outros';
+    for(const opt of servicoCorreios.querySelectorAll('option')){
+      if(opt.value!=='outros'){ opt.disabled=true; } else { opt.disabled=false; }
+    }
+    btnCalcularFrete.disabled=true;
+    freteInfo.textContent='Frete (Correios) disponível somente no plano PRO.';
+  } else {
+    for(const opt of servicoCorreios.querySelectorAll('option')) opt.disabled=false;
+    btnCalcularFrete.disabled=false;
+    freteInfo.textContent='';
+  }
+}
+function bindEvents(){
+  el('btnDoLogin').addEventListener('click', doLogin);
+  el('btnDemo').addEventListener('click', ()=>{ hideAuthOverlay(); IS_PRO=false; applyCompanyBrand(true); applyProRestrictions(); });
+  el('btnLogout').addEventListener('click', doLogout);
+  el('btnLogout_mobile').addEventListener('click', doLogout);
+
+  sizeSelect?.addEventListener('change', ()=>{ loadControlsForSize(getSelectedSizeKey()); refreshChartAndKpis(); });
+  qtyInput?.addEventListener('input', ()=>{ qtyRange.value=clamp(parseInt(qtyInput.value||1,10),1,1000); refreshChartAndKpis(); });
+  qtyRange?.addEventListener('input', ()=>{ qtyInput.value=qtyRange.value; refreshChartAndKpis(); });
+  tabSimplified?.addEventListener('click', ()=>{ setTabs('simplificado'); refreshChartAndKpis(); });
+  tabAdvanced?.addEventListener('click', ()=>{ setTabs('avancado'); refreshChartAndKpis(); });
+  [simpBase,simpMin,simpQ0,simpN].forEach(elm=>elm?.addEventListener('input', refreshChartAndKpis));
+  [advQ1,advQ10,advQ50,advQ100,advQ500,advQ1000].forEach(elm=>elm?.addEventListener('input', ()=>{ if(chkAutoInt && [advQ10,advQ50,advQ100,advQ500].includes(elm)) chkAutoInt.checked=false; refreshChartAndKpis(); }));
+  chkAutoInt && chkAutoInt.addEventListener('change', refreshChartAndKpis);
+  btnAdvReset && btnAdvReset.addEventListener('click', ()=>{ const k=getSelectedSizeKey(); STATE[k]=JSON.parse(JSON.stringify(DEFAULT_DATA[k])); loadControlsForSize(k); setTabs('avancado'); refreshChartAndKpis(); });
+  function onPlatformChange(){ loadPlatformDefaults(); refreshChartAndKpis(); toggleFreteVisibility(); }
+  platformSelect?.addEventListener('change', onPlatformChange);
+  [chkCommission,chkFee,chkShipping,inputCommission,inputFixedFee,inputShipping,inputShipThreshold].forEach(elm=>elm?.addEventListener('input', refreshChartAndKpis));
+  btnResetAll?.addEventListener('click', ()=>{ for(const k of Object.keys(STATE)) STATE[k]=JSON.parse(JSON.stringify(DEFAULT_DATA[k])); sizeSelect.value="2.5"; loadControlsForSize("2.5"); platformSelect.value="nuvem"; loadPlatformDefaults(); setTabs('avancado'); qtyInput.value=1; qtyRange.value=1; cepDestino.value=''; freteEstimado.value=''; chkFreteCliente.checked=false; toggleFreteVisibility(); refreshChartAndKpis(); });
+  btnExportCSV?.addEventListener('click', exportCSV); btnExportCSV_mobile && btnExportCSV_mobile.addEventListener('click', exportCSV);
+  btnExportPDF?.addEventListener('click', exportPDF); btnExportPDF_mobile && btnExportPDF_mobile.addEventListener('click', exportPDF);
+  btnCopyQuote && btnCopyQuote.addEventListener('click', copyQuote); btnCopyQuote_mobile && btnCopyQuote_mobile.addEventListener('click', copyQuote);
+  btnCalcularFrete?.addEventListener('click', calcularFrete);
+  cepDestino?.addEventListener('input', ()=>{ const hasVal=(cepDestino.value||'').trim().length>=8; if(hasVal) chkFreteCliente.checked=true; });
+  servicoCorreios?.addEventListener('change', ()=>{ const isOutros=servicoCorreios.value==='outros'; btnCalcularFrete.disabled=isOutros || !IS_PRO; if(isOutros){ freteInfo.textContent='Informe o valor manual do frete (Outros).'; } else { freteInfo.textContent= IS_PRO ? '' : 'Frete (Correios) disponível somente no plano PRO.'; } });
+}
+function bootApp(){
+  try{ loadControlsForSize("2.5"); initChart(); bindEvents(); platformSelect.value="nuvem"; loadPlatformDefaults(); setTabs('avancado'); toggleFreteVisibility(); applyProRestrictions(); refreshChartAndKpis(); loadBoxesCSV(); } catch(e){ showError('Falha na inicialização: '+(e.message||e)); }
+}
+
+fetchConfig();
+  </script>
+</body>
+</html>
