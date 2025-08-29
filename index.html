@@ -203,7 +203,7 @@
             </div>
           </div>
           <div id="freteInfo" class="mt-3 text-sm text-zinc-600 dark:text-zinc-300"></div>
-          <div id="embalagemInfo" class="mt-1 text-xs text-zinc-500"></div>
+          <div id="embalagemInfo" class="mt-1 text-m text-zinc-500"></div>
         </div>
       </details>
 
@@ -498,7 +498,7 @@ async function loadBoxesCSV(){
       document.querySelector('footer').insertAdjacentElement('beforebegin', wrap);
       document.getElementById('boxesUpload').addEventListener('change', async(ev)=>{
         const file=ev.target.files?.[0]; if(!file) return;
-        const txt=await file.text(); parseBoxesCSV(txt); BOX_CSV_OK = BOX_ROWS.length > 0;
+        const txt=await file.text(); parseBoxesCSV(txt); BOX_CSV_OK = BOX_ROWS.length > 0; updatePackagingInfo();
       });
     }
   }
@@ -593,6 +593,63 @@ function findBestBox(sizeKey, qty){
   const boxesNeeded = Math.ceil(qty / best.cap);
   return { ...best.row, capacity: best.cap, boxesNeeded };
 }
+
+async function updatePackagingInfo(){
+  try{
+    const sizeKey = getSelectedSizeKey();
+    const q = clamp(parseInt(qtyInput.value || 1, 10), 1, 50000);
+    const s = STATE[sizeKey];
+
+    // garante CSV carregado (sem travar se já estiver)
+    if (!BOX_CSV_OK) { await loadBoxesCSV(); }
+
+    if (!BOX_ROWS || BOX_ROWS.length === 0){
+      embalagemInfo.textContent = 'Anexe o arquivo boxes.csv para estimar dimensões e pesos.';
+      return;
+    }
+
+    const box = findBestBox(sizeKey, q);
+    if (!box){
+      embalagemInfo.textContent = 'Não há caixa compatível na planilha para esta quantidade/tamanho.';
+      return;
+    }
+
+    // dimensões e peso da caixa (vindos do CSV)
+    const altura       = parseNum(box.altura_embalagem);
+    const largura      = parseNum(box.largura_embalagem);
+    const comprimento  = parseNum(box.comprimento_embalagem);
+    const pesoCaixaKg  = parseNum(box.peso_embalagem);
+
+    // capacidade + número de caixas
+    const cap     = parseNum(box.capacity || 0);
+    const caixas  = Math.max(1, parseNum(box.boxesNeeded || Math.ceil(q / Math.max(cap,1))));
+
+    // pesos
+    const unitW   = s.unitWeightKg || 0;
+    const pesoLiquidoTotal = unitW * q;
+
+    // distribui itens pelas caixas para calcular peso bruto total
+    let restante = q, brutoTotal = 0;
+    for (let i=0; i<caixas; i++){
+      const unidades = cap > 0 ? Math.min(cap, restante) : 0;
+      restante -= unidades;
+      const pesoBrutoCaixa = (unitW * unidades) + pesoCaixaKg;
+      brutoTotal += pesoBrutoCaixa;
+    }
+
+    // Mostra as infos (sem depender do cálculo de frete)
+    // exemplo: "2 caixa(s) • 4×11×17 cm • Peso líquido: 0,420 kg • Peso bruto: 0,950 kg (≈ 0,475 kg/caixa)"
+    const perBox = caixas > 0 ? (brutoTotal/caixas) : 0;
+    embalagemInfo.textContent =
+      `${caixas} caixa(s) • ${altura}×${largura}×${comprimento} cm • ` +
+      `Peso líquido: ${pesoLiquidoTotal.toFixed(3).replace('.',',')} kg • ` +
+      `Peso bruto: ${brutoTotal.toFixed(3).replace('.',',')} kg `;
+
+  } catch(e){
+    embalagemInfo.textContent = 'Falha ao estimar embalagem: ' + (e.message || e);
+  }
+}
+
 
 function sanitizeCEP(s){ return (s||'').replace(/\D/g,''); }
 async function requestCorreios(params){ const qs=new URLSearchParams(params).toString(); const url=PROXY_URL + '?' + qs; const resp=await fetch(url); if(!resp.ok) return null; const xml=await resp.text(); const parser=new DOMParser(); const doc=parser.parseFromString(xml,"application/xml"); const servico=doc.querySelector('cServico'); if(!servico) return null; const get=(tag)=> (servico.querySelector(tag)?.textContent||'').trim(); return { Valor:get('Valor'), PrazoEntrega:get('PrazoEntrega'), Erro:get('Erro'), MsgErro:get('MsgErro') }; }
@@ -690,15 +747,15 @@ function bindEvents(){
   el('btnLogout').addEventListener('click', doLogout);
   el('btnLogout_mobile').addEventListener('click', doLogout);
 
-  sizeSelect?.addEventListener('change', ()=>{ loadControlsForSize(getSelectedSizeKey()); refreshChartAndKpis(); });
-  qtyInput?.addEventListener('input', ()=>{ qtyRange.value=clamp(parseInt(qtyInput.value||1,10),1,1000); refreshChartAndKpis(); });
-  qtyRange?.addEventListener('input', ()=>{ qtyInput.value=qtyRange.value; refreshChartAndKpis(); });
+  sizeSelect?.addEventListener('change', ()=>{ loadControlsForSize(getSelectedSizeKey()); refreshChartAndKpis(); updatePackagingInfo(); });
+  qtyInput?.addEventListener('input', ()=>{ qtyRange.value=clamp(parseInt(qtyInput.value||1,10),1,1000); refreshChartAndKpis(); updatePackagingInfo(); });
+  qtyRange?.addEventListener('input', ()=>{ qtyInput.value=qtyRange.value; refreshChartAndKpis(); updatePackagingInfo(); });
   tabSimplified?.addEventListener('click', ()=>{ setTabs('simplificado'); refreshChartAndKpis(); });
   tabAdvanced?.addEventListener('click', ()=>{ setTabs('avancado'); refreshChartAndKpis(); });
   [simpBase,simpMin,simpQ0,simpN].forEach(elm=>elm?.addEventListener('input', refreshChartAndKpis));
   [advQ1,advQ10,advQ50,advQ100,advQ500,advQ1000].forEach(elm=>elm?.addEventListener('input', ()=>{ if(chkAutoInt && [advQ10,advQ50,advQ100,advQ500].includes(elm)) chkAutoInt.checked=false; refreshChartAndKpis(); }));
   chkAutoInt && chkAutoInt.addEventListener('change', refreshChartAndKpis);
-  btnAdvReset && btnAdvReset.addEventListener('click', ()=>{ const k=getSelectedSizeKey(); STATE[k]=JSON.parse(JSON.stringify(DEFAULT_DATA[k])); loadControlsForSize(k); setTabs('avancado'); refreshChartAndKpis(); });
+  btnAdvReset && btnAdvReset.addEventListener('click', ()=>{ const k=getSelectedSizeKey(); STATE[k]=JSON.parse(JSON.stringify(DEFAULT_DATA[k])); loadControlsForSize(k); setTabs('avancado'); refreshChartAndKpis(); updatePackagingInfo(); });
   function onPlatformChange(){ loadPlatformDefaults(); refreshChartAndKpis(); toggleFreteVisibility(); }
   platformSelect?.addEventListener('change', onPlatformChange);
   [chkCommission,chkFee,chkShipping,inputCommission,inputFixedFee,inputShipping,inputShipThreshold].forEach(elm=>elm?.addEventListener('input', refreshChartAndKpis));
@@ -711,7 +768,7 @@ function bindEvents(){
   servicoCorreios?.addEventListener('change', ()=>{ const isOutros=servicoCorreios.value==='outros'; btnCalcularFrete.disabled=isOutros || !IS_PRO; if(isOutros){ freteInfo.textContent='Informe o valor manual do frete (Outros).'; } else { freteInfo.textContent= IS_PRO ? '' : 'Frete (Correios) disponível somente no plano PRO.'; } });
 }
 function bootApp(){
-  try{ loadControlsForSize("2.5"); initChart(); bindEvents(); platformSelect.value="nuvem"; loadPlatformDefaults(); setTabs('avancado'); toggleFreteVisibility(); applyProRestrictions(); refreshChartAndKpis(); loadBoxesCSV(); } catch(e){ showError('Falha na inicialização: '+(e.message||e)); }
+  try{ loadControlsForSize("2.5"); initChart(); bindEvents(); platformSelect.value="nuvem"; loadPlatformDefaults(); setTabs('avancado'); toggleFreteVisibility(); applyProRestrictions(); refreshChartAndKpis(); loadBoxesCSV(); updatePackagingInfo(); } catch(e){ showError('Falha na inicialização: '+(e.message||e)); }
 }
 
 fetchConfig();
