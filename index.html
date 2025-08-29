@@ -632,15 +632,23 @@ async function exportPDF(){ try{ const { jsPDF }=window.jspdf; const doc=new jsP
   const baseUnit1=(MODE==='simplificado')?safe(simpBase.value,0):safe(advQ1.value,0); const baseTotal=baseUnit1*q; const baseAtQ=fBase(q); const finalUnit=finalUnitPriceForQty(q, baseAtQ); const finalTotal=finalUnit*q; const desconto=Math.max(0, baseTotal-finalTotal);
   const incluirFrete= chkFreteCliente.checked && safe(freteEstimado.value,0)>0; const totalGeral=incluirFrete? finalTotal + safe(freteEstimado.value,0) : finalTotal;
   async function getLogoDataURL(){ const logoHeader=document.getElementById('logoHeader'); if(logoHeader && !logoHeader.classList.contains('hidden')){ try{ const canvas=document.createElement('canvas'); canvas.width=logoHeader.naturalWidth; canvas.height=logoHeader.naturalHeight; const ctx=canvas.getContext('2d'); ctx.drawImage(logoHeader,0,0); return canvas.toDataURL('image/jpeg',0.92);}catch(e){} } try{ const resp=await fetch('/logo.jpeg',{cache:'no-cache'}); if(!resp.ok) return null; const blob=await resp.blob(); return await new Promise((resolve)=>{ const reader=new FileReader(); reader.onload=()=>resolve(reader.result); reader.readAsDataURL(blob); }); }catch(e){ return null; } }
-  const logoData=await getLogoDataURL(); const headerY=margin; if(logoData){ doc.addImage(logoData,'JPEG', margin, headerY, 80,80); }
+  const logoData=await getLogoDataURL(); const headerY=margin; if(logoData){ doc.addImage(logoData,'JPEG', margin, headerY, 50,50); }
   doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.text('Proposta Comercial', logoData? margin+100:margin, headerY+24);
   if(IS_PRO){ doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.text(`${COMPANY.name || ''} • Tel: ${COMPANY.phone || ''} • ${COMPANY.site || ''}`, logoData? margin+100:margin, headerY+42); }
   doc.setDrawColor(200); doc.line(margin, headerY+60, pageWidth-margin, headerY+60);
   let y=headerY+88; doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text('Detalhes da Proposta', margin, y); y+=16;
   doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.text(`Data: ${formatarData(dataAtual)} — Válida até: ${formatarData(dataValidade)}`, margin, y); y+=16;
-  doc.text(`Produto: Botton ${label}`, margin, y); y+=16; doc.text(`Quantidade: ${q}`, margin, y); y+=16; doc.text(`Preço Base unit.: ${brl(baseUnit1)} — Preço Base Total: ${brl(baseTotal)}`, margin, y); y+=16; doc.text(`Desconto concedido: ${brl(desconto)}`, margin, y); y+=16;
-  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text(`Preço Final unit.: ${brl(finalUnit)} — Preço Final Total: ${brl(finalTotal)}`, margin, y); y+=20;
-  const bodyRows=[ ['Produto', `Botton ${label}`], ['Quantidade', `${q}`], ['Base Total', `${brl(baseTotal)}`], ['Desconto concedido', `- ${brl(desconto)}`], ['Preço Final', `${brl(finalTotal)}`] ];
+  doc.text(`Produto: Botton ${label}`, margin, y); y+=16; 
+  doc.text(`Quantidade: ${q}`, margin, y); y+=16; 
+  // doc.text(`Preço Base unit.: ${brl(baseUnit1)} — Preço Base Total: ${brl(baseTotal)}`, margin, y); y+=16; 
+  // doc.text(`Desconto concedido: ${brl(desconto)}`, margin, y); y+=16;
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text(`Preço unit.: ${brl(finalUnit)} — Preço Final: ${brl(finalTotal)}`, margin, y); y+=20;
+  const bodyRows=[ 
+    ['Produto', `Botton ${label}`], 
+    ['Quantidade', `${q}`], 
+    // ['Base Total', `${brl(baseTotal)}`], 
+    // ['Desconto concedido', `- ${brl(desconto)}`], 
+    ['Preço Final', `${brl(finalTotal)}`] ];
   if(incluirFrete){ bodyRows.push(['Frete', `${brl(safe(freteEstimado.value,0))}`]); bodyRows.push(['TOTAL GERAL', `${brl(totalGeral)}`]); }
   doc.autoTable({ startY:y, styles:{fontSize:10, cellPadding:6}, head:[['Item','Valor']], body: bodyRows, didParseCell: function(data){ if(incluirFrete && data.row.index===bodyRows.length-1){ data.cell.styles.fontStyle='bold'; } } });
   if(!IS_PRO){ doc.setTextColor(180,0,0); doc.setFontSize(48); doc.text('DEMONSTRAÇÃO', pageWidth/2, 520, { align: 'center', angle: 45 }); doc.setTextColor(0); }
