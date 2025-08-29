@@ -8,8 +8,8 @@ export default async function handler(req, res) {
   if (req.method!=='POST') return res.status(405).json({error:'Method not allowed'});
 
   const { user, pass } = req.body || {};
-  const U = process.env.ADMIN_USER || 'admin';
-  const P = process.env.ADMIN_PASS || 'admin';
+  const U = process.env.ADMIN_USER || 'ground';
+  const P = process.env.ADMIN_PASS || 'shop';
   if (user!==U || pass!==P) return res.status(401).json({ ok:false });
 
   const secret = process.env.JWT_SECRET || 'dev-secret';
