@@ -652,40 +652,123 @@ async function updatePackagingInfo(){
 
 
 function sanitizeCEP(s){ return (s||'').replace(/\D/g,''); }
-async function requestCorreios(params){ const qs=new URLSearchParams(params).toString(); const url=PROXY_URL + '?' + qs; const resp=await fetch(url); if(!resp.ok) return null; const xml=await resp.text(); const parser=new DOMParser(); const doc=parser.parseFromString(xml,"application/xml"); const servico=doc.querySelector('cServico'); if(!servico) return null; const get=(tag)=> (servico.querySelector(tag)?.textContent||'').trim(); return { Valor:get('Valor'), PrazoEntrega:get('PrazoEntrega'), Erro:get('Erro'), MsgErro:get('MsgErro') }; }
+
+async function requestCorreiosREST(payload){
+  const resp = await fetch(PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await resp.json().catch(()=> ({}));
+  if (!resp.ok || data?.ok === false){
+    const msg = (data && (data.error || (data.msgs && data.msgs[0]) || data.causa)) || 'Falha no cálculo de frete';
+    throw new Error(msg);
+  }
+  // Esperado do backend que te enviei: { ok:true, totalFrete:number, itens:[...] }
+  return data;
+}
 async function calcularFrete(){
   if(!IS_PRO){ freteInfo.textContent='Disponível somente no plano PRO.'; return; }
+
   try{
-    freteInfo.textContent='Calculando frete...'; embalagemInfo.textContent='';
-    const sizeKey=getSelectedSizeKey(); const q=clamp(parseInt(qtyInput.value||1,10),1,50000); const s=STATE[sizeKey];
-    if(!BOX_CSV_OK) await loadBoxesCSV(); if(!BOX_ROWS||BOX_ROWS.length===0){ freteInfo.textContent='Não foi possível ler boxes.csv. Faça upload manual e tente novamente.'; return; }
-    const box=findBestBox(sizeKey, q); if(!box){ freteInfo.textContent='Não há caixa compatível na planilha.'; return; }
-    const unitW=s.unitWeightKg||0; const pesoLiquido=unitW*q; const caixas=box.boxesNeeded||1; const cap=box.capacity||q;
-    const pesoBrutoPorCaixa=(units)=> (unitW*units) + (safe(box.peso_embalagem,0)||0);
-    const altura=Math.max(2, safe(box.altura_embalagem,0)); const largura=Math.max(11, safe(box.largura_embalagem,0)); const comprimento=Math.max(16, safe(box.comprimento_embalagem,0));
-    const servCode=servicoCorreios.value||'04014';
-    if(servCode==='outros'){ freteInfo.textContent = 'Frete (Outros) — informe o valor no campo acima.'; embalagemInfo.textContent = `Dimensões por caixa: ${altura}×${largura}×${comprimento} cm • Peso líquido: ${pesoLiquido.toFixed(3)} kg`; chkFreteCliente.checked = true; return; }
-    const cepDest = sanitizeCEP(cepDestino.value); if(!cepDest){ freteInfo.textContent='Informe o CEP de destino para calcular.'; return; }
-    const cepOrig = sanitizeCEP(cepOrigem.value || '11696-208');
-    const results=[]; let remaining=q;
-    for(let i=0;i<caixas;i++){
-      const unitsThis=Math.min(cap, remaining); remaining-=unitsThis;
-      const pesoCaixaKg=Math.max(0.3, pesoBrutoPorCaixa(unitsThis));
-      const params={ nCdEmpresa:'', sDsSenha:'', sCepOrigem: cepOrig, sCepDestino: cepDest, nVlPeso: pesoCaixaKg.toFixed(3).replace('.',','), nCdFormato:1,
-        nVlComprimento: comprimento.toFixed(2).replace('.',','), nVlAltura: altura.toFixed(2).replace('.',','), nVlLargura: largura.toFixed(2).replace('.',','),
-        nVlDiametro:'0', sCdMaoPropria:'N', nVlValorDeclarado:'0', sCdAvisoRecebimento:'N', nCdServico: servCode, StrRetorno:'xml'
-      };
-      const ok = await requestCorreios(params);
-      if(!ok || ok.Erro){ freteInfo.textContent = `Erro nos Correios: ${ok?.MsgErro || 'falha no cálculo'}`; return; }
-      results.push(ok);
+    freteInfo.textContent='Calculando frete...';
+    embalagemInfo.textContent='';
+
+    const sizeKey = getSelectedSizeKey();
+    const q       = clamp(parseInt(qtyInput.value||1,10),1,50000);
+    const s       = STATE[sizeKey];
+
+    // Garante CSV de caixas
+    if(!BOX_CSV_OK) await loadBoxesCSV();
+    if(!BOX_ROWS || BOX_ROWS.length===0){
+      freteInfo.textContent='Não foi possível ler boxes.csv. Faça upload manual e tente novamente.';
+      return;
     }
-    const totalFrete = results.reduce((acc,r)=> acc + (parseFloat(r.Valor.replace(',','.'))||0), 0);
-    const prazoMax = Math.max(...results.map(r => parseInt(r.PrazoEntrega||'0',10) || 0));
+
+    // Seleciona caixa + distribui quantidade
+    const box = findBestBox(sizeKey, q);
+    if(!box){ freteInfo.textContent='Não há caixa compatível na planilha.'; return; }
+
+    const unitW = s.unitWeightKg || 0;         // kg por botton
+    const pesoLiquido = unitW * q;             // kg total
+    const caixas      = box.boxesNeeded || 1;
+    const cap         = box.capacity || q;
+
+    // Dimensões (aplique mínimos operacionais se desejar)
+    const altura      = Math.max(2,  safe(box.altura_embalagem,0));
+    const largura     = Math.max(11, safe(box.largura_embalagem,0));
+    const comprimento = Math.max(16, safe(box.comprimento_embalagem,0));
+    const pesoCaixaKg = safe(box.peso_embalagem,0); // kg
+
+    // Atualiza info de embalagem (mostra mesmo antes do frete)
+    const brutoEstimado = pesoLiquido + caixas*pesoCaixaKg;
+    const porCaixa      = brutoEstimado/caixas;
+    embalagemInfo.textContent =
+      `${caixas} caixa(s) • ${altura}×${largura}×${comprimento} cm • ` +
+      `Peso líquido: ${pesoLiquido.toFixed(3)} kg • ` +
+      `Peso bruto: ${brutoEstimado.toFixed(3)} kg (≈ ${porCaixa.toFixed(3)} kg/caixa)`;
+
+    // Serviço escolhido
+    const servCode = servicoCorreios.value || '04014';
+    if (servCode === 'outros'){
+      freteInfo.textContent = 'Frete (Outros) — informe o valor manual no campo acima.';
+      chkFreteCliente.checked = true;
+      return;
+    }
+
+    // CEPs (somente dígitos)
+    const cepDest = sanitizeCEP(cepDestino.value);
+    if(!cepDest){ freteInfo.textContent='Informe o CEP de destino para calcular.'; return; }
+    const cepOrig = sanitizeCEP(cepOrigem.value || '11696208');
+
+    // coProduto (mapeado)
+    const CO_PRODUTO_MAP = {
+      '04014': '04162', // SEDEX (exemplo comum)
+      '04510': '04669', // PAC   (exemplo comum)
+      'outros': 'OUTROS'
+    };
+
+    const coProduto = CO_PRODUTO_MAP[servCode] || '04162'; // ajuste conforme seu contrato
+
+    // Monte os "pacotes" — um por caixa
+    // A API REST recebe psObjeto em GRAMAS (string). Usamos peso bruto de cada caixa.
+    const pacotes = [];
+    let remaining = q;
+    for (let i=0; i<caixas; i++){
+      const unitsThis   = Math.min(cap, remaining); remaining -= unitsThis;
+      const pesoBrutoKg = (unitW * unitsThis) + pesoCaixaKg;           // kg por caixa
+      const pesoMinKg   = Math.max(0.3, pesoBrutoKg);                   // aplica 300g mínimo (opcional)
+      pacotes.push({
+        // O handler do /api/correios converte pesoKg→psObjeto (gramas) e demais campos p/ strings
+        pesoKg:      pesoMinKg,
+        comprimento: comprimento,
+        largura:     largura,
+        altura:      altura,
+        diametro:    0
+      });
+    }
+
+    // Payload esperado pelo seu /api/correios (handler que te passei)
+    const payload = {
+      coProduto,           // ex.: "04162" (SEDEX do seu contrato)
+      cepOrigem: cepOrig,
+      cepDestino: cepDest,
+      pacotes              // [{ pesoKg, comprimento, largura, altura, diametro }, ...]
+    };
+
+    const result = await requestCorreiosREST(payload);
+    const totalFrete = Number(result?.totalFrete || 0);
     freteEstimado.value = totalFrete.toFixed(2);
-    embalagemInfo.textContent = `${caixas} caixa(s) • ${altura}×${largura}×${comprimento} cm • peso líquido ${pesoLiquido.toFixed(3)} kg`;
-    freteInfo.textContent = `Frete (${servCode==='04014'?'SEDEX':'PAC'}) estimado: ${brl(totalFrete)} • prazo ${prazoMax} dia(s) úteis.`;
+
+    freteInfo.textContent =
+      `Frete (${servCode==='04014'?'SEDEX':'PAC'}) estimado: ${brl(totalFrete)} ` +
+      (Array.isArray(result?.itens) && result.itens.length ? '• cotação OK.' : '');
+
     chkFreteCliente.checked = true;
-  }catch(e){ freteInfo.textContent='Falha ao calcular frete: '+(e.message||e); }
+
+  } catch(e){
+    freteInfo.textContent = 'Erro nos Correios: ' + (e.message || e);
+  }
 }
 
 function exportCSV(){ try{ const sizeKey=getSelectedSizeKey(); const label=STATE[sizeKey].label; let fBase; if(MODE==='simplificado'){ fBase=(qq)=>priceLogistic(qq, safe(simpMin.value,0), safe(simpBase.value,0), safe(simpQ0.value,50), safe(simpN.value,1.5)); } else { let a=readAnchorsFromUI(); if(chkAutoInt&&chkAutoInt.checked) a=recomputeIntermediates(a); fBase=(qq)=>priceAnchors(qq,a); }
