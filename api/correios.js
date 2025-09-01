@@ -4,7 +4,7 @@
 
 const API_URL = 'https://api.correios.com.br/preco/v1/nacional/';
 const TOKEN   = process.env.CORREIOS_API_TOKEN || '';
-const NUMERO_CONTRATO = process.env.CONTRATO_CORREIOS || '';
+const NUMERO_CONTRATO = process.env.CONTRATO_CORREIOS || '9912434308';
 
 /**
  * Util: converte qualquer número/str em string, sem formatação BR.
@@ -73,7 +73,7 @@ function buildPayload(body) {
   const cepOrigem = asStr(body.cepOrigem || '');
   const cepDestino= asStr(body.cepDestino || '');
   const nuContrato= asStr(body.nuContrato || '');
-  const nuDR      = body.nuDR ?? 47;
+  const nuDR      = body.nuDR ?? 74;
 
   const pacotes = Array.isArray(body.pacotes) ? body.pacotes : [];
 
@@ -145,6 +145,8 @@ module.exports = async (req, res) => {
 
     const body = req.body || {};
     const payload = buildPayload(body);
+
+    console.log(payload)
 
     // Validações mínimas
     if (!payload?.parametrosProduto?.length) {
