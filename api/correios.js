@@ -2,8 +2,9 @@
 // Node 18+ (Vercel) — usa fetch nativo
 // .env: defina CORREIOS_API_TOKEN com seu Bearer token oficial dos Correios
 
-const API_URL = process.env.CORREIOS_API_BASE || 'https://api.correios.com.br/preco/v1/nacional/';
+const API_URL = 'https://api.correios.com.br/preco/v1/nacional/';
 const TOKEN   = process.env.CORREIOS_API_TOKEN || '';
+const NUMERO_CONTRATO = process.env.CONTRATO_CORREIOS || '';
 
 /**
  * Util: converte qualquer número/str em string, sem formatação BR.
@@ -42,8 +43,8 @@ function buildPayload(body) {
       parametrosProduto: body.parametrosProduto.map((p, i) => ({
         coProduto:  asStr(p.coProduto),            // ex: "04162" (SEDEX), "04669" (PAC) — confirme com seu contrato
         nuRequisicao: asStr(p.nuRequisicao || `${Date.now()}_${i}`),
-        nuContrato:  asStr(p.nuContrato || ''),
-        nuDR:        p.nuDR ?? 0,
+        nuContrato:  asStr(NUMERO_CONTRATO),
+        nuDR:        74,
         cepOrigem:   asStr(p.cepOrigem || body.cepOrigem || ''),
         cepDestino:  asStr(p.cepDestino || body.cepDestino || ''),
         psObjeto:    asStr(p.psObjeto),            // em gramas (string)
@@ -55,7 +56,7 @@ function buildPayload(body) {
         psCubico:    asStr(p.psCubico || ''),
         servicosAdicionais: Array.isArray(p.servicosAdicionais) ? p.servicosAdicionais : [],
         criterios:   Array.isArray(p.criterios) ? p.criterios : [],
-        vlDeclarado: asStr(p.vlDeclarado || ''),
+        vlDeclarado: asStr(p.vlDeclarado || '0'),
         dtEvento:    asStr(p.dtEvento || ''),
         coUnidadeOrigem: asStr(p.coUnidadeOrigem || ''),
         dtArmazenagem:   asStr(p.dtArmazenagem || ''),
@@ -72,7 +73,7 @@ function buildPayload(body) {
   const cepOrigem = asStr(body.cepOrigem || '');
   const cepDestino= asStr(body.cepDestino || '');
   const nuContrato= asStr(body.nuContrato || '');
-  const nuDR      = body.nuDR ?? 0;
+  const nuDR      = body.nuDR ?? 47;
 
   const pacotes = Array.isArray(body.pacotes) ? body.pacotes : [];
 
