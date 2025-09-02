@@ -1190,7 +1190,7 @@
 
       }
       function bootApp(){
-        try{ loadControlsForSize("2.5"); initChart(); bindEvents(); platformSelect.value="nuvem"; loadPlatformDefaults(); setTabs('avancado'); toggleFreteVisibility(); applyProRestrictions(); refreshChartAndKpis(); loadBoxesCSV(); updatePackagingInfo(); } catch(e){ showError('Falha na inicialização: '+(e.message||e)); }
+        try{ loadControlsForSize("2.5"); initChart(); bindEvents(); platformSelect.value="nuvem"; loadPlatformDefaults(); setTabs('avancado'); /*toggleFreteVisibility();*/ applyProRestrictions(); refreshChartAndKpis(); loadBoxesCSV(); updatePackagingInfo(); } catch(e){ showError('Falha na inicialização: '+(e.message||e)); }
       }
 
       fetchConfig();
