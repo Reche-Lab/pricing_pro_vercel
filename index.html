@@ -142,45 +142,32 @@
       </div>
 
       <!-- Tabs -->
-      <div class="mt-6">
-        <div class="flex gap-2">
-          <button id="tabSimplified" class="tab">Simplificado</button>
-          <button id="tabAdvanced" class="tab tab-active">Avançado</button>
-        </div>
-        <div id="panelSimplified" class="hidden mt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div class="flex flex-col gap-1"><label class="label">Preço base (q=1)</label><input id="simpBase" type="number" step="0.01" class="input"></div>
-          <div class="flex flex-col gap-1"><label class="label">Preço mínimo (q≥1000)</label><input id="simpMin" type="number" step="0.01" class="input"></div>
-          <div class="flex flex-col gap-1"><label class="label">Ponto de inflexão (q₀)</label><input id="simpQ0" type="number" step="1" min="5" max="200" class="input"></div>
-          <div class="flex flex-col gap-1"><label class="label">Inclinação (n)</label><input id="simpN" type="number" step="0.1" min="0.5" max="4" class="input"></div>
-        </div>
-        <div id="panelAdvanced" class="mt-4">
-          <div class="flex items-center gap-3 mb-3">
-            <label class="flex items-center gap-2 text-sm"><input id="autoIntermediate" type="checkbox" class="scale-110"> Recalcular 10/50/100/500 automaticamente (entre Base e Mínimo)</label>
-            <button id="btnAdvReset" class="btn ml-auto">Reset deste tamanho</button>
+
+      <!-- Dados do Cliente -->
+      <details id="clientDetails" class="mt-8 open">
+        <summary class="flex items-center justify-between cursor-pointer px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-800">
+          <span class="font-medium text-amber-400">Informações do Cliente</span>
+          <span class="text-xs text-zinc-500">Clique para expandir/recolher</span>
+        </summary>
+        <div id="clientSection" class="mt-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="flex flex-col gap-1"><label class="label">Nome (cliente)</label><input id="clientName" type="text" placeholder="Insira o nome do cliente" class="input"></div>
+            <div class="flex flex-col gap-1"><label class="label">CPF/CNPJ</label><input id="cpfCnpj" type="text" placeholder="000.000.000-00 ou 00.000.000/0000-0" class="input"></div>
           </div>
-          <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
-            <div class="flex flex-col gap-1"><label class="label">q=1</label><input id="advQ1" type="number" step="0.01" class="input"></div>
-            <div class="flex flex-col gap-1"><label class="label">q=10</label><input id="advQ10" type="number" step="0.01" class="input"></div>
-            <div class="flex flex-col gap-1"><label class="label">q=50</label><input id="advQ50" type="number" step="0.01" class="input"></div>
-            <div class="flex flex-col gap-1"><label class="label">q=100</label><input id="advQ100" type="number" step="0.01" class="input"></div>
-            <div class="flex flex-col gap-1"><label class="label">q=500</label><input id="advQ500" type="number" step="0.01" class="input"></div>
-            <div class="flex flex-col gap-1"><label class="label">q=1000</label><input id="advQ1000" type="number" step="0.01" class="input"></div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="flex flex-col gap-1"><label class="label">Email</label><input id="clientEmail" type="text" placeholder="Email do cliente" class="input"></div>
+            <div class="flex flex-col gap-1"><label class="label">Telefone</label><input id="clientPhone" type="text" placeholder="Telefone do cliente" class="input"></div>
           </div>
         </div>
-      </div>
-
-      <!-- Custos plataforma -->
-      <div class="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div class="flex flex-col gap-1"><label class="label">Comissão (%)</label><input id="inputCommission" type="number" step="0.1" min="0" max="50" class="input"></div>
-        <div class="flex flex-col gap-1"><label class="label">Taxa fixa por venda (R$)</label><input id="inputFixedFee" type="number" step="0.01" min="0" class="input"></div>
-        <div class="flex flex-col gap-1"><label class="label">Custo de frete (R$)</label><input id="inputShipping" type="number" step="0.01" min="0" class="input"></div>
-        <div class="flex flex-col gap-1"><label class="label">Frete por conta do vendedor a partir de (R$)</label><input id="inputShipThreshold" type="number" step="0.01" min="0" class="input"></div>
-      </div>
-
+        <span class="text-xs text-zinc-500">*Se vazio, não inclui no orçamento.</span>
+      </details>
+      <!-- Dados do Cliente -->
+      
+      
       <!-- Frete (Correios / Outros) -->
       <details id="freteDetails" class="mt-8 open">
-        <summary class="flex items-center justify-between cursor-pointer px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
-          <span class="font-medium">Frete (Correios / Outros)</span>
+        <summary class="flex items-center justify-between cursor-pointer px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-800">
+          <span class="font-medium text-amber-400">Frete (Correios / Outros)</span>
           <span class="text-xs text-zinc-500">Clique para expandir/recolher</span>
         </summary>
         <div id="freteSection" class="mt-4">
@@ -206,6 +193,53 @@
           <div id="embalagemInfo" class="mt-1 text-m text-zinc-500"></div>
         </div>
       </details>
+      <!-- Frete (Correios / Outros) -->
+      
+      <!-- Curva de preços e custos -->
+      <details id="priceCostDetails" class="mt-8 open">
+        <summary class="flex items-center justify-between cursor-pointer px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-800">
+          <span class="font-medium text-amber-400">Ancoragem de preços & Custos</span>
+          <span class="text-xs text-zinc-500">Clique para expandir/recolher</span>
+        </summary>
+
+        <div class="mt-6">
+
+          <div class="flex gap-2 mt-4">
+            <button id="tabSimplified" class="tab">Simplificado</button>
+            <button id="tabAdvanced" class="tab tab-active">Avançado</button>
+          </div>
+          <div id="panelSimplified" class="hidden mt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="flex flex-col gap-1"><label class="label">Preço base (q=1)</label><input id="simpBase" type="number" step="0.01" class="input"></div>
+            <div class="flex flex-col gap-1"><label class="label">Preço mínimo (q≥1000)</label><input id="simpMin" type="number" step="0.01" class="input"></div>
+            <div class="flex flex-col gap-1"><label class="label">Ponto de inflexão (q₀)</label><input id="simpQ0" type="number" step="1" min="5" max="200" class="input"></div>
+            <div class="flex flex-col gap-1"><label class="label">Inclinação (n)</label><input id="simpN" type="number" step="0.1" min="0.5" max="4" class="input"></div>
+          </div>
+          <div id="panelAdvanced" class="mt-4">
+            <div class="flex items-center gap-3 mb-3">
+              <label class="flex items-center gap-2 text-sm"><input id="autoIntermediate" type="checkbox" class="scale-110"> Recalcular 10/50/100/500 automaticamente (entre Base e Mínimo)</label>
+              <button id="btnAdvReset" class="btn ml-auto">Reset deste tamanho</button>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+              <div class="flex flex-col gap-1"><label class="label">q=1</label><input id="advQ1" type="number" step="0.01" class="input"></div>
+              <div class="flex flex-col gap-1"><label class="label">q=10</label><input id="advQ10" type="number" step="0.01" class="input"></div>
+              <div class="flex flex-col gap-1"><label class="label">q=50</label><input id="advQ50" type="number" step="0.01" class="input"></div>
+              <div class="flex flex-col gap-1"><label class="label">q=100</label><input id="advQ100" type="number" step="0.01" class="input"></div>
+              <div class="flex flex-col gap-1"><label class="label">q=500</label><input id="advQ500" type="number" step="0.01" class="input"></div>
+              <div class="flex flex-col gap-1"><label class="label">q=1000</label><input id="advQ1000" type="number" step="0.01" class="input"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Custos plataforma -->
+        <div class="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="flex flex-col gap-1"><label class="label">Comissão (%)</label><input id="inputCommission" type="number" step="0.1" min="0" max="50" class="input"></div>
+          <div class="flex flex-col gap-1"><label class="label">Taxa fixa por venda (R$)</label><input id="inputFixedFee" type="number" step="0.01" min="0" class="input"></div>
+          <div class="flex flex-col gap-1"><label class="label">Custo de frete (R$)</label><input id="inputShipping" type="number" step="0.01" min="0" class="input"></div>
+          <div class="flex flex-col gap-1"><label class="label">Frete por conta do vendedor a partir de (R$)</label><input id="inputShipThreshold" type="number" step="0.01" min="0" class="input"></div>
+        </div>
+
+      </details>
+      <!-- Curva de preços e custos -->
 
       <!-- KPIs -->
       <div class="mt-6 grid grid-cols-1 sm:grid-cols-5 gap-4">
@@ -327,16 +361,19 @@ const PLATFORM_PRESETS = {
 const STATE = JSON.parse(JSON.stringify(DEFAULT_DATA));
 let MODE = 'avancado';
 
+const clientName=el('clientName'); const cpfCnpj=el('cpfCnpj'); const clientDetails=el('clientDetails'); const clientSection=el('clientSection');
+const clientEmail=el('clientEmail'); const clientPhone=el('clientPhone');
+
+const freteDetails=el('freteDetails'); const freteSection=el('freteSection');
+const cepDestino=el('cepDestino'); const cepOrigem=el('cepOrigem'); const servicoCorreios=el('servicoCorreios');
+const freteEstimado=el('freteEstimado'); const chkFreteCliente=el('chkFreteCliente'); const btnCalcularFrete=el('btnCalcularFrete'); const freteInfo=el('freteInfo'); const embalagemInfo=el('embalagemInfo');
+
 const sizeSelect = el('sizeSelect'); const qtyInput=el('qtyInput'); const qtyRange=el('qtyRange');
 const tabSimplified=el('tabSimplified'); const tabAdvanced=el('tabAdvanced'); const panelSimplified=el('panelSimplified'); const panelAdvanced=el('panelAdvanced');
 const simpBase=el('simpBase'); const simpMin=el('simpMin'); const simpQ0=el('simpQ0'); const simpN=el('simpN'); const chkAutoInt=el('autoIntermediate');
 const advQ1=el('advQ1'); const advQ10=el('advQ10'); const advQ50=el('advQ50'); const advQ100=el('advQ100'); const advQ500=el('advQ500'); const advQ1000=el('advQ1000'); const btnAdvReset=el('btnAdvReset');
 const platformSelect=el('platformSelect'); const chkCommission=el('chkCommission'); const chkFee=el('chkFee'); const chkShipping=el('chkShipping');
 const inputCommission=el('inputCommission'); const inputFixedFee=el('inputFixedFee'); const inputShipping=el('inputShipping'); const inputShipThreshold=el('inputShipThreshold');
-
-const freteDetails=el('freteDetails'); const freteSection=el('freteSection');
-const cepDestino=el('cepDestino'); const cepOrigem=el('cepOrigem'); const servicoCorreios=el('servicoCorreios');
-const freteEstimado=el('freteEstimado'); const chkFreteCliente=el('chkFreteCliente'); const btnCalcularFrete=el('btnCalcularFrete'); const freteInfo=el('freteInfo'); const embalagemInfo=el('embalagemInfo');
 
 const kpiUnitPrice=el('kpiUnitPrice'); const kpiTotalFinal=el('kpiTotalFinal'); const kpiProfit=el('kpiProfit'); const kpiCostTotal=el('kpiCostTotal'); const kpiMarginPct=el('kpiMarginPct');
 const btnResetAll=el('btnResetAll'); const btnExportCSV=el('btnExportCSV'); const btnExportCSV_mobile=el('btnExportCSV_mobile');
@@ -777,39 +814,236 @@ function exportCSV(){ try{ const sizeKey=getSelectedSizeKey(); const label=STATE
     csv += `${label.replace(',', '.')};${q};${unitFinal.toFixed(2).replace('.', ',')};${orderTotal.toFixed(2).replace('.', ',')};${cKPI.feeTotal.toFixed(2).replace('.', ',')};${cKPI.commissionTotal.toFixed(2).replace('.', ',')};${cKPI.shippingTotal.toFixed(2).replace('.', ',')};${profitTotal.toFixed(2).replace('.', ',')}\n`; }
   const blob=new Blob([csv], {type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`precos_${label.replace(',', '_')}_${platformSelect.value}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 } catch(e){ showError('Falha ao exportar CSV: '+(e.message||e)); } }
-async function exportPDF(){ try{ const { jsPDF }=window.jspdf; const doc=new jsPDF({unit:'pt', format:'a4'}); const margin=40; const pageWidth=doc.internal.pageSize.getWidth();
-  const dataAtual=new Date(); const dataValidade=new Date(); dataValidade.setDate(dataValidade.getDate()+7); const pad2=(n)=>String(n).padStart(2,'0');
-  const formatarData=(d)=>`${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`; const formatarDataFile=(d)=>`${pad2(d.getDate())}-${pad2(d.getMonth()+1)}-${d.getFullYear()}`;
-  const sizeKey=getSelectedSizeKey(); const label=STATE[sizeKey].label; const q=clamp(parseInt(qtyInput.value||1,10),1,50000);
-  let fBase; if(MODE==='simplificado'){ fBase=(qq)=>priceLogistic(qq, safe(simpMin.value,0), safe(simpBase.value,0), safe(simpQ0.value,50), safe(simpN.value,1.5)); } else { let a=readAnchorsFromUI(); if(chkAutoInt&&chkAutoInt.checked) a=recomputeIntermediates(a); fBase=(qq)=>priceAnchors(qq,a); }
-  const baseUnit1=(MODE==='simplificado')?safe(simpBase.value,0):safe(advQ1.value,0); const baseTotal=baseUnit1*q; const baseAtQ=fBase(q); const finalUnit=finalUnitPriceForQty(q, baseAtQ); const finalTotal=finalUnit*q; const desconto=Math.max(0, baseTotal-finalTotal);
-  const incluirFrete= chkFreteCliente.checked && safe(freteEstimado.value,0)>0; const totalGeral=incluirFrete? finalTotal + safe(freteEstimado.value,0) : finalTotal;
-  async function getLogoDataURL(){ const logoHeader=document.getElementById('logoHeader'); if(logoHeader && !logoHeader.classList.contains('hidden')){ try{ const canvas=document.createElement('canvas'); canvas.width=logoHeader.naturalWidth; canvas.height=logoHeader.naturalHeight; const ctx=canvas.getContext('2d'); ctx.drawImage(logoHeader,0,0); return canvas.toDataURL('image/jpeg',0.92);}catch(e){} } try{ const resp=await fetch('/logo.jpeg',{cache:'no-cache'}); if(!resp.ok) return null; const blob=await resp.blob(); return await new Promise((resolve)=>{ const reader=new FileReader(); reader.onload=()=>resolve(reader.result); reader.readAsDataURL(blob); }); }catch(e){ return null; } }
-  const logoData=await getLogoDataURL(); const headerY=margin; if(logoData){ doc.addImage(logoData,'JPEG', margin, headerY, 50,50); }
-  doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.text('Proposta Comercial', logoData? margin+100:margin, headerY+24);
-  if(IS_PRO){ doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.text(`${COMPANY.name || ''} • Tel: ${COMPANY.phone || ''} • ${COMPANY.site || ''}`, logoData? margin+100:margin, headerY+42); }
-  doc.setDrawColor(200); doc.line(margin, headerY+60, pageWidth-margin, headerY+60);
-  let y=headerY+88; doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text('Detalhes da Proposta', margin, y); y+=16;
-  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.text(`Data: ${formatarData(dataAtual)} — Válida até: ${formatarData(dataValidade)}`, margin, y); y+=16;
-  doc.text(`Produto: Botton ${label}`, margin, y); y+=16; 
-  doc.text(`Quantidade: ${q}`, margin, y); y+=16; 
-  // doc.text(`Preço Base unit.: ${brl(baseUnit1)} — Preço Base Total: ${brl(baseTotal)}`, margin, y); y+=16; 
-  // doc.text(`Desconto concedido: ${brl(desconto)}`, margin, y); y+=16;
-  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text(`Preço unit.: ${brl(finalUnit)} — Preço Final: ${brl(finalTotal)}`, margin, y); y+=20;
-  const bodyRows=[ 
-    ['Produto', `Botton ${label}`], 
-    ['Quantidade', `${q}`], 
-    // ['Base Total', `${brl(baseTotal)}`], 
-    // ['Desconto concedido', `- ${brl(desconto)}`], 
-    ['Preço Final', `${brl(finalTotal)}`] ];
-  if(incluirFrete){ bodyRows.push(['Frete', `${brl(safe(freteEstimado.value,0))}`]); bodyRows.push(['TOTAL GERAL', `${brl(totalGeral)}`]); }
-  doc.autoTable({ startY:y, styles:{fontSize:10, cellPadding:6}, head:[['Item','Valor']], body: bodyRows, didParseCell: function(data){ if(incluirFrete && data.row.index===bodyRows.length-1){ data.cell.styles.fontStyle='bold'; } } });
-  if(!IS_PRO){ doc.setTextColor(180,0,0); doc.setFontSize(48); doc.text('DEMONSTRAÇÃO', pageWidth/2, 520, { align: 'center', angle: 45 }); doc.setTextColor(0); }
-  const footerY=doc.internal.pageSize.getHeight()-40; doc.setFontSize(9); doc.setTextColor(120); doc.text('Proposta válida por 7 dias. Valores sujeitos a alterações conforme condições de venda e frete.', 40, footerY);
-  doc.save(`Proposta_GroundShop_Botton_${label.replace(',', '_')}_q${q}_${formatarDataFile(dataAtual)}.pdf`);
-} catch(e){ showError('Falha ao gerar PDF: '+(e.message||e)); } }
+
+async function exportPDF(){
+  try{
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit:'pt', format:'a4' });
+    const margin = 40;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const maxTextWidth = pageWidth - margin*2; // <- para wraps controlados
+
+    // Datas
+    const dataAtual = new Date();
+    const dataValidade = new Date();
+    dataValidade.setDate(dataValidade.getDate()+7);
+    const pad2 = (n)=> String(n).padStart(2,'0');
+    const formatarData = (d)=> `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`;
+    const formatarDataFile = (d)=> `${pad2(d.getDate())}-${pad2(d.getMonth()+1)}-${d.getFullYear()}`;
+
+    // Seleção / preços
+    const sizeKey = getSelectedSizeKey();
+    const label = STATE[sizeKey].label;
+    const q = clamp(parseInt(qtyInput.value||1,10),1,50000);
+
+    let fBase;
+    if (MODE==='simplificado'){
+      fBase = (qq)=> priceLogistic(
+        qq,
+        safe(simpMin.value,0),
+        safe(simpBase.value,0),
+        safe(simpQ0.value,50),
+        safe(simpN.value,1.5)
+      );
+    } else {
+      let a = readAnchorsFromUI();
+      if (chkAutoInt && chkAutoInt.checked) a = recomputeIntermediates(a);
+      fBase = (qq)=> priceAnchors(qq, a);
+    }
+
+    const baseUnit1  = (MODE==='simplificado') ? safe(simpBase.value,0) : safe(advQ1.value,0);
+    const baseTotal  = baseUnit1 * q;
+    const baseAtQ    = fBase(q);
+    const finalUnit  = finalUnitPriceForQty(q, baseAtQ);
+    const finalTotal = finalUnit * q;
+    const desconto   = Math.max(0, baseTotal - finalTotal);
+
+    const incluirFrete = chkFreteCliente.checked && safe(freteEstimado.value,0) > 0;
+    const totalGeral   = incluirFrete ? finalTotal + safe(freteEstimado.value,0) : finalTotal;
+
+    // LOGO (header)
+    async function getLogoDataURL(){
+      const logoHeader = document.getElementById('logoHeader');
+      if (logoHeader && !logoHeader.classList.contains('hidden')){
+        try{
+          const canvas=document.createElement('canvas');
+          canvas.width=logoHeader.naturalWidth; canvas.height=logoHeader.naturalHeight;
+          const ctx=canvas.getContext('2d'); ctx.drawImage(logoHeader,0,0);
+          return canvas.toDataURL('image/jpeg',0.92);
+        }catch(e){}
+      }
+      try{
+        const resp=await fetch('/logo.jpeg',{cache:'no-cache'});
+        if(!resp.ok) return null;
+        const blob=await resp.blob();
+        return await new Promise((resolve)=>{
+          const reader=new FileReader(); reader.onload=()=>resolve(reader.result); reader.readAsDataURL(blob);
+        });
+      }catch(e){ return null; }
+    }
+
+    const logoData = await getLogoDataURL();
+    const headerY  = margin;
+    if (logoData){ doc.addImage(logoData, 'JPEG', margin, headerY, 50, 50); }
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(18);
+    doc.text('Proposta Comercial', logoData ? margin+100 : margin, headerY+24);
+
+    if (IS_PRO){
+      doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      doc.text(`${COMPANY.name || ''} • Tel: ${COMPANY.phone || ''} • ${COMPANY.site || ''}`,
+               logoData ? margin+100 : margin, headerY+42);
+    }
+
+    doc.setDrawColor(200);
+    doc.line(margin, headerY+60, pageWidth-margin, headerY+60);
+
+    // =========================
+    //  DETALHES DA PROPOSTA
+    // =========================
+    let y = headerY + 88;
+
+    // ---- Linha do cliente (sem tabela), com wrap dentro das margens
+    const cName  = (clientName?.value || '').trim();
+    const cDoc   = (cpfCnpj?.value || '').trim();
+    const cEmail = (clientEmail?.value || '').trim();
+    const cPhone = (clientPhone?.value || '').trim();
+
+    const parts = [];
+    if (cName)  parts.push(`Aos cuidados de ${cName}`);
+    if (cDoc)   parts.push(`CPF/CNPJ: ${cDoc}`);
+    if (cEmail) parts.push(`email: ${cEmail}`);
+    if (cPhone) parts.push(`telefone: ${cPhone}`);
+
+    if (parts.length){
+      doc.setFont('helvetica','normal'); doc.setFontSize(11);
+      // Junta tudo numa sentença e faz wrap
+      const clientLine = parts.join(', ');
+      const clientWrapped = doc.splitTextToSize(clientLine, maxTextWidth);
+      doc.text(clientWrapped, margin, y);
+      y += 14 + (clientWrapped.length-1)*12; // avança respeitando as linhas quebradas
+      y += 14;
+    }
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(12);
+    doc.text('Detalhes da Proposta', margin, y); y += 16;
+
+    // Datas e itens principais
+    doc.setFont('helvetica','normal'); doc.setFontSize(11);
+    doc.text(`Data: ${formatarData(dataAtual)} — Válida até: ${formatarData(dataValidade)}`, margin, y); y += 16;
+    doc.text(`Produto: Botton ${label}`, margin, y); y += 16;
+    doc.text(`Quantidade: ${q}`, margin, y); y += 14;
+
+    // Preço destaque
+    doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    doc.text(`Preço unit.: ${brl(finalUnit)} — Preço Final: ${brl(finalTotal)}`, margin, y); 
+    y += 18;
+
+    // =========================
+    //  Embalagem e Pesos (depois do preço, antes da tabela)
+    // =========================
+    // try{
+    //   if(!BOX_CSV_OK) await loadBoxesCSV();
+    //   if(BOX_ROWS && BOX_ROWS.length){
+    //     const box = findBestBox(sizeKey, q);
+    //     if (box){
+    //       // Reset de qualquer espaçamento estranho (se plugin estiver presente)
+    //       if (typeof doc.setCharSpace === 'function') doc.setCharSpace(0);
+
+    //       const unitW = STATE[sizeKey].unitWeightKg || 0;  // kg/un
+    //       const cap   = Number(box.capacity) || q;
+    //       const caixas= Math.max(1, Number(box.boxesNeeded || Math.ceil(q/Math.max(cap,1))));
+
+    //       const altura      = Math.max(2,  safe(box.altura_embalagem,0));
+    //       const largura     = Math.max(11, safe(box.largura_embalagem,0));
+    //       const comprimento = Math.max(16, safe(box.comprimento_embalagem,0));
+    //       const pesoCaixaKg = safe(box.peso_embalagem,0);
+
+    //       const pesoLiquidoTotal = unitW * q;
+    //       let restante = q, brutoTotal = 0;
+    //       for (let i=0;i<caixas;i++){
+    //         const unidades = Math.min(cap, restante); restante -= unidades;
+    //         const pesoBrutoCaixa = (unitW * unidades) + pesoCaixaKg;
+    //         brutoTotal += pesoBrutoCaixa;
+    //       }
+    //       const perBox = brutoTotal / caixas;
+
+    //       doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    //       doc.text('Embalagem e Pesos', margin, y); y += 14;
+
+    //       doc.setFont('helvetica','normal'); doc.setFontSize(11);
+    //       // Quebra controlada para evitar overflow se alguém usar números longos
+    //       const line1 = `${caixas} caixa(s) • ${altura}×${largura}×${comprimento} cm`;
+    //       const line2 = `Peso líquido: ${pesoLiquidoTotal.toFixed(3)} kg — Peso bruto: ${brutoTotal.toFixed(3)} kg (≈ ${perBox.toFixed(3)} kg/caixa)`;
+    //       const l1 = doc.splitTextToSize(line1, maxTextWidth);
+    //       const l2 = doc.splitTextToSize(line2, maxTextWidth);
+    //       doc.text(l1, margin, y); y += 14 + (l1.length-1)*12;
+    //       doc.text(l2, margin, y); y += 16 + (l2.length-1)*12;
+    //     }
+    //   }
+    // } catch(_) { /* silencioso */ }
+
+    // Tabela principal (itens/valores)
+    const bodyRows = [
+      ['Produto', `Botton ${label}`],
+      ['Quantidade', `${q}`],
+      ['Preço Final', `${brl(finalTotal)}`]
+    ];
+    if (incluirFrete){
+      bodyRows.push(['Frete', `${brl(safe(freteEstimado.value,0))}`]);
+      bodyRows.push(['TOTAL GERAL', `${brl(totalGeral)}`]);
+    }
+
+    doc.autoTable({
+      startY: y,
+      styles: { fontSize: 10, cellPadding: 6 },
+      head: [['Item','Valor']],
+      body: bodyRows,
+      didParseCell: function(data){
+        if (incluirFrete && data.row.index === bodyRows.length-1){
+          data.cell.styles.fontStyle='bold';
+        }
+      }
+    });
+
+    // Observação sobre o frete e CEP (apenas se frete incluso)
+    if (incluirFrete){
+      const digits = (sanitizeCEP(cepDestino?.value) || '');
+      const formatCEP = (s)=> s && s.length===8 ? `${s.slice(0,5)}-${s.slice(5)}` : s;
+      const cepFmt = formatCEP(digits);
+
+      let note = '* O frete é válido somente para o CEP';
+      if (cepFmt) note += ` ${cepFmt}`;
+      note += ', podendo sofrer pequenas variações até o aceite da proposta.';
+
+      const yNote = (doc.lastAutoTable && doc.lastAutoTable.finalY ? doc.lastAutoTable.finalY : y) + 14;
+      doc.setFont('helvetica','italic'); doc.setFontSize(10);
+      doc.text(doc.splitTextToSize(note, maxTextWidth), margin, yNote);
+    }
+
+    // Marca d'água para plano não PRO
+    if (!IS_PRO){
+      doc.setTextColor(180,0,0);
+      doc.setFontSize(48);
+      doc.text('DEMONSTRAÇÃO', pageWidth/2, 520, { align: 'center', angle: 45 });
+      doc.setTextColor(0);
+    }
+
+    // Rodapé
+    const footerY = doc.internal.pageSize.getHeight() - 40;
+    doc.setFontSize(9); doc.setTextColor(120);
+    doc.text('Proposta válida por 7 dias. Valores sujeitos a alterações conforme condições de venda e frete.', 40, footerY);
+
+    // Nome do arquivo
+    doc.save(`Proposta_GroundShop_Botton_${label.replace(',', '_')}_q${q}_${formatarDataFile(dataAtual)}.pdf`);
+
+  } catch(e){
+    showError('Falha ao gerar PDF: ' + (e.message || e));
+  }
+}
 
 function toggleFreteVisibility(){ const isNuvem = platformSelect.value==='nuvem'; if(isNuvem){ freteDetails.setAttribute('open',''); } else { freteDetails.removeAttribute('open'); chkFreteCliente.checked=false; } }
+function togglePriceCostVisibility(){ const isNuvem = platformSelect.value==='nuvem'; if(isNuvem){ priceCostDetails.setAttribute('open',''); } else { priceCostDetails.removeAttribute('open'); } }
 function applyProRestrictions(){
   if(!IS_PRO){
     servicoCorreios.value='outros';
