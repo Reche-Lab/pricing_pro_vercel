@@ -279,892 +279,816 @@
   <div id="toast" class="toast hidden"></div>
 
     <script>
-const showError = (msg) => { const box=document.getElementById('appErrors'); if(!box) return; box.classList.remove('hidden'); box.textContent=msg; };
-window.addEventListener('error', (e) => showError(e.message || 'Erro de script.'));
-const brl = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((isFinite(v) ? v : 0) ?? 0);
-const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-const safe = (x, d=0) => { const v = parseFloat(x); return isFinite(v) ? v : d; };
-const sleep = (ms) => new Promise(r=>setTimeout(r,ms));
-function toast(msg, ms=2500){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'), ms); }
-function qs(sel){ return document.querySelector(sel); }
-function el(id){ return document.getElementById(id); }
-
-let IS_PRO=false;
-let COMPANY={ name:'', phone:'', site:'', logo:'' };
-
-async function fetchConfig(){
-  try{
-    const r = await fetch('/api/config');
-    if(!r.ok) throw 0;
-    const cfg = await r.json();
-    IS_PRO = true;
-    COMPANY = cfg || {};
-    applyCompanyBrand();
-    el('btnLogout').classList.remove('hidden');
-    el('btnLogout_mobile').classList.remove('hidden');
-    hideAuthOverlay();
-  } catch(e){
-    IS_PRO = false;
-    showAuthOverlay();
-    applyCompanyBrand(true);
-  } finally {
-    bootApp();
-  }
-}
-
-function applyCompanyBrand(demo=false){
-  const line = el('companyLine');
-  const logo = el('logoHeader');
-  if (IS_PRO && COMPANY){
-    line.textContent = `${COMPANY.name || 'Ground Shop'} • Tel: ${COMPANY.phone || ''} • ${COMPANY.site || ''}`.trim();
-    if (COMPANY.logo){ logo.src = COMPANY.logo; logo.classList.remove('hidden'); }
-  } else {
-    line.textContent = demo ? 'Demo — faça login para liberar dados da empresa e cálculo de frete (Correios).' : '';
-    logo.classList.add('hidden');
-    logo.src='';
-  }
-}
-
-function showAuthOverlay(){ el('authOverlay').classList.remove('hidden'); }
-function hideAuthOverlay(){ el('authOverlay').classList.add('hidden'); }
-
-async function doLogin(){
-  const user = el('loginUser').value.trim();
-  const pass = el('loginPass').value;
-  el('loginMsg').textContent='';
-  const r = await fetch('/api/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ user, pass }) });
-  if (!r.ok){ el('loginMsg').textContent='Usuário ou senha inválidos.'; return; }
-  await sleep(150);
-  location.reload();
-}
-async function doLogout(){
-  await fetch('/api/logout', { method:'POST' });
-  await sleep(150);
-  location.reload();
-}
-
-const PROXY_URL = '/api/correios';
-
-const DEFAULT_DATA = {
-  "2.5": { label: "2,5 cm", cost: 0.67, anchors: {1:8.00, 10:3.80, 50:2.78, 100:2.49, 500:2.30, 1000:1.99}, simp: { q0: 50, n: 1.5 }, unitWeightKg: 0.004 },
-  "3.5": { label: "3,5 cm", cost: 0.80, anchors: {1:10.00,10:3.90,50:2.98,100:2.67,500:2.45,1000:2.20}, simp: { q0: 50, n: 1.6 }, unitWeightKg: 0.006 },
-  "4.5": { label: "4,5 cm", cost: 0.90, anchors: {1:12.50,10:4.20,50:3.20,100:2.99,500:2.75,1000:2.30}, simp: { q0: 55, n: 1.65 }, unitWeightKg: 0.008 },
-  "5.5": { label: "5,5 cm", cost: 1.22, anchors: {1:15.00,10:4.50,50:3.80,100:3.60,500:3.10,1000:2.70}, simp: { q0: 60, n: 1.7 }, unitWeightKg: 0.010 },
-};
-const PLATFORM_PRESETS = {
-  nuvem:       { commission: 0.00, fee: 0.00, shipping: 0.00, threshold: 0.00 },
-  ml_classic:  { commission: 0.14, fee: 6.75, shipping: 21.45, threshold: 79.00 },
-  ml_premium:  { commission: 0.19, fee: 6.50, shipping: 21.45, threshold: 79.00 },
-  shopee_std:  { commission: 0.14, fee: 4.00, shipping: 0.00, threshold: 0.00 },
-  shopee_free: { commission: 0.20, fee: 4.00, shipping: 0.00, threshold: 0.00 },
-};
-const STATE = JSON.parse(JSON.stringify(DEFAULT_DATA));
-let MODE = 'avancado';
-
-const clientName=el('clientName'); const cpfCnpj=el('cpfCnpj'); const clientDetails=el('clientDetails'); const clientSection=el('clientSection');
-const clientEmail=el('clientEmail'); const clientPhone=el('clientPhone');
-
-const freteDetails=el('freteDetails'); const freteSection=el('freteSection');
-const cepDestino=el('cepDestino'); const cepOrigem=el('cepOrigem'); const servicoCorreios=el('servicoCorreios');
-const freteEstimado=el('freteEstimado'); const chkFreteCliente=el('chkFreteCliente'); const btnCalcularFrete=el('btnCalcularFrete'); const freteInfo=el('freteInfo'); const embalagemInfo=el('embalagemInfo');
-
-const sizeSelect = el('sizeSelect'); const qtyInput=el('qtyInput'); const qtyRange=el('qtyRange');
-const tabSimplified=el('tabSimplified'); const tabAdvanced=el('tabAdvanced'); const panelSimplified=el('panelSimplified'); const panelAdvanced=el('panelAdvanced');
-const simpBase=el('simpBase'); const simpMin=el('simpMin'); const simpQ0=el('simpQ0'); const simpN=el('simpN'); const chkAutoInt=el('autoIntermediate');
-const advQ1=el('advQ1'); const advQ10=el('advQ10'); const advQ50=el('advQ50'); const advQ100=el('advQ100'); const advQ500=el('advQ500'); const advQ1000=el('advQ1000'); const btnAdvReset=el('btnAdvReset');
-const platformSelect=el('platformSelect'); const chkCommission=el('chkCommission'); const chkFee=el('chkFee'); const chkShipping=el('chkShipping');
-const inputCommission=el('inputCommission'); const inputFixedFee=el('inputFixedFee'); const inputShipping=el('inputShipping'); const inputShipThreshold=el('inputShipThreshold');
-
-const kpiUnitPrice=el('kpiUnitPrice'); const kpiTotalFinal=el('kpiTotalFinal'); const kpiProfit=el('kpiProfit'); const kpiCostTotal=el('kpiCostTotal'); const kpiMarginPct=el('kpiMarginPct');
-const btnResetAll=el('btnResetAll'); const btnExportCSV=el('btnExportCSV'); const btnExportCSV_mobile=el('btnExportCSV_mobile');
-const btnExportPDF=el('btnExportPDF'); const btnExportPDF_mobile=el('btnExportPDF_mobile');
-const btnCopyQuote=el('btnCopyQuote'); const btnCopyQuote_mobile=el('btnCopyQuote_mobile');
-const btnLogout=el('btnLogout'); const btnLogout_mobile=el('btnLogout_mobile');
-const tiersBody=el('tiersBody');
-
-// --- utils para CPF/CNPJ ---
-function onlyDigits(s){ return (s || '').replace(/\D/g, ''); }
-
-// CPF: 11 dígitos, dois dígitos verificadores
-function isValidCPF(cpf){
-  const s = onlyDigits(cpf);
-  if (s.length !== 11) return false;
-  if (/^(\d)\1{10}$/.test(s)) return false; // todos iguais
-
-  let sum = 0;
-  for (let i=0;i<9;i++) sum += parseInt(s[i]) * (10 - i);
-  let d1 = (sum * 10) % 11; if (d1 === 10) d1 = 0;
-  if (d1 !== parseInt(s[9])) return false;
-
-  sum = 0;
-  for (let i=0;i<10;i++) sum += parseInt(s[i]) * (11 - i);
-  let d2 = (sum * 10) % 11; if (d2 === 10) d2 = 0;
-  return d2 === parseInt(s[10]);
-}
-
-// CNPJ: 14 dígitos, dois dígitos verificadores
-function isValidCNPJ(cnpj){
-  const s = onlyDigits(cnpj);
-  if (s.length !== 14) return false;
-  if (/^(\d)\1{13}$/.test(s)) return false; // todos iguais
-
-  // dígito 1
-  const w1 = [5,4,3,2,9,8,7,6,5,4,3,2];
-  let sum = 0;
-  for (let i=0;i<w1.length;i++) sum += parseInt(s[i]) * w1[i];
-  let rest = sum % 11;
-  const d1 = rest < 2 ? 0 : 11 - rest;
-  if (d1 !== parseInt(s[12])) return false;
-
-  // dígito 2
-  const w2 = [6,5,4,3,2,9,8,7,6,5,4,3,2];
-  sum = 0;
-  for (let i=0;i<w2.length;i++) sum += parseInt(s[i]) * w2[i];
-  rest = sum % 11;
-  const d2 = rest < 2 ? 0 : 11 - rest;
-  return d2 === parseInt(s[13]);
-}
-
-// Decide com base na quantidade de dígitos (<=11 -> CPF, >11 -> CNPJ)
-function validateCpfCnpj(value){
-  const d = onlyDigits(value);
-  if (!d) return true; // vazio = ok (você disse que é opcional)
-  return d.length <= 11 ? isValidCPF(d) : isValidCNPJ(d);
-}
-
-// (opcional) máscara bonitinha enquanto digita
-function formatCpfCnpj(value){
-  const d = onlyDigits(value).slice(0,14);
-  if (d.length <= 11){
-    // CPF: 000.000.000-00
-    return d
-      .replace(/^(\d{3})(\d)/, '$1.$2')
-      .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
-      .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4');
-  }
-  // CNPJ: 00.000.000/0000-00
-  return d
-    .replace(/^(\d{2})(\d)/, '$1.$2')
-    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
-    .replace(/^(\d{2})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3/$4')
-    .replace(/^(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, '$1.$2.$3/$4-$5');
-}
-
-function markInvalid(el, invalid){
-  if (!el) return;
-  el.classList.toggle('ring-2', invalid);
-  el.classList.toggle('ring-red-500', invalid);
-  el.classList.toggle('ring-offset-1', invalid);
-}
-
-
-function priceLogistic(q, pmin, pmax, q0, n){ if(q>=1000) return pmin; const denom=1+Math.pow(q/q0,n); return pmin+(pmax-pmin)/denom; }
-function priceGeomBetween(q, q1,p1,q2,p2){ const t=(Math.log(q)-Math.log(q1))/(Math.log(q2)-Math.log(q1)); return p1*Math.pow(p2/p1,t); }
-function priceAnchors(q, anchors){ const A=[1,10,50,100,500,1000]; if(q<=1) return anchors[1]; if(q>=1000) return anchors[1000]; for(let i=0;i<A.length-1;i++){const q1=A[i],q2=A[i+1]; if(q>=q1&&q<=q2) return priceGeomBetween(q,q1,anchors[q1],q2,anchors[q2]);} return anchors[1000]; }
-function recomputeIntermediates(anchors){ const base=anchors[1],min=anchors[1000]; const out={...anchors}; const lnDen=Math.log(1000)-Math.log(1); for(const q of [10,50,100,500]){ const w=(Math.log(q)-Math.log(1))/lnDen; out[q]=base*Math.pow(min/base,w);} return out; }
-function getSelectedSizeKey(){ return sizeSelect.value; }
-function getPlatformPreset(){ return PLATFORM_PRESETS[platformSelect.value]; }
-function setTabs(mode){ MODE=mode; const simp=mode==='simplificado'; tabSimplified?.classList.toggle('tab-active', simp); tabAdvanced?.classList.toggle('tab-active', !simp); panelSimplified?.classList.toggle('hidden', !simp); panelAdvanced?.classList.toggle('hidden', simp); }
-function loadControlsForSize(sizeKey){ const s=STATE[sizeKey]; if(!s) return; simpBase.value=s.anchors[1].toFixed(2); simpMin.value=s.anchors[1000].toFixed(2); simpQ0.value=s.simp.q0; simpN.value=s.simp.n; chkAutoInt&&(chkAutoInt.checked=false);
-  advQ1.value=s.anchors[1].toFixed(2); advQ10.value=s.anchors[10].toFixed(2); advQ50.value=s.anchors[50].toFixed(2); advQ100.value=s.anchors[100].toFixed(2); advQ500.value=s.anchors[500].toFixed(2); advQ1000.value=s.anchors[1000].toFixed(2); }
-function loadPlatformDefaults(){ const p=getPlatformPreset(); inputCommission.value=(p.commission*100).toFixed(1); inputFixedFee.value=p.fee.toFixed(2); inputShipping.value=p.shipping.toFixed(2); inputShipThreshold.value=p.threshold.toFixed(2);
-  chkCommission.checked=p.commission>0; chkFee.checked=p.fee>0; chkShipping.checked=p.shipping>0||p.threshold>0; }
-
-function serviceName(){ const v=servicoCorreios.value; return v==='04014'?'SEDEX':(v==='04510'?'PAC':'Outros'); }
-function formatCEP(s){ return s ? s.replace(/\D/g,'').replace(/(\d{5})(\d{3})/,'$1-$2') : ''; }
-function buildQuoteText(){
-  const sizeKey=getSelectedSizeKey(); const label=STATE[sizeKey].label; const q=clamp(parseInt(qtyInput.value||1,10),1,50000);
-  let fBase; if(MODE==='simplificado'){ fBase=(qq)=>priceLogistic(qq, safe(simpMin.value,0), safe(simpBase.value,0), safe(simpQ0.value,50), safe(simpN.value,1.5)); } else { let a=readAnchorsFromUI(); if(chkAutoInt&&chkAutoInt.checked) a=recomputeIntermediates(a); fBase=(qq)=>priceAnchors(qq,a); }
-  const baseUnit1=(MODE==='simplificado')?safe(simpBase.value,0):safe(advQ1.value,0); const baseTotal=baseUnit1*q; const baseAtQ=fBase(q);
-  const finalUnit=finalUnitPriceForQty(q, baseAtQ); const finalTotal=finalUnit*q; const desconto=Math.max(0, baseTotal-finalTotal);
-  const incluir = chkFreteCliente.checked && safe(freteEstimado.value,0)>0; const cep=(cepDestino.value||'').trim();
-  const freteTxt = incluir ? `\n*Frete (${serviceName()}${cep?` para ${formatCEP(cep)}`:''}):* ${brl(safe(freteEstimado.value,0))}` : '';
-  const totalGeral = incluir ? finalTotal + safe(freteEstimado.value,0) : finalTotal;
-  return [
-    "🧾 ORÇAMENTO GROUNDSHOP", 
-    `*Produto:* Botton ${label}`, 
-    `*Quantidade:* ${q}`, 
-    // `*Preço Base unit.:* ${brl(baseUnit1)}`, 
-    // `*Preço Base Total:* ${brl(baseTotal)}`, 
-    // `*Desconto Total concedido:* ${brl(desconto)}`, 
-    `*Preço Final unit.:* ${brl(finalUnit)}`,
-    // `---------------------`,
-    `*Preço Final Total:* ${brl(finalTotal)}`, 
-    freteTxt, 
-    incluir?`\n*TOTAL GERAL (com frete):* ${brl(totalGeral)}`:"", 
-    "", 
-    "*Proposta válida por 7 dias"].join("\n");
-}
-async function copyQuote(){
-  if(!IS_PRO){
-    toast("🔒 Disponível somente no plano PRO. Entre em contato para uma versão personalizada: reche.dev.lab@gmail.com");
-    return;
-  }
-  const text=buildQuoteText();
-  try{ await navigator.clipboard.writeText(text); const btn=btnCopyQuote||btnCopyQuote_mobile; if(btn){ const t=btn.textContent; btn.textContent="✅ Copiado!"; setTimeout(()=>btn.textContent=t,1400);} }catch(e){ const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);}
-}
-
-function readAnchorsFromUI(){ return {1:safe(advQ1.value,0),10:safe(advQ10.value,0),50:safe(advQ50.value,0),100:safe(advQ100.value,0),500:safe(advQ500.value,0),1000:safe(advQ1000.value,0)}; }
-function writeAnchorsToUI(a){ advQ1.value=a[1].toFixed(2); advQ10.value=a[10].toFixed(2); advQ50.value=a[50].toFixed(2); advQ100.value=a[100].toFixed(2); advQ500.value=a[500].toFixed(2); advQ1000.value=a[1000].toFixed(2); }
-
-function finalUnitPriceForQty(q, baseUnitPrice) {
-  const commission = chkCommission.checked ? (safe(inputCommission.value,0) / 100) : 0;
-  const fixedFee   = chkFee.checked ? safe(inputFixedFee.value,0) : 0;
-  const shipCost   = chkShipping.checked ? safe(inputShipping.value,0) : 0;
-  const shipThresh = chkShipping.checked ? safe(inputShipThreshold.value,0) : 0;
-  const F0=fixedFee; const P0=(baseUnitPrice + F0/q)/Math.max(1 - commission, 0.0001);
-  let includeShip=false; if(shipCost>0){ if(shipThresh>0){ const orderTotal0=P0*q; if(orderTotal0>=shipThresh) includeShip=true; } else includeShip=true; }
-  if(includeShip){ const F=fixedFee+shipCost; return (baseUnitPrice + F/q)/Math.max(1 - commission, 0.0001); }
-  return P0;
-}
-
-function platformCostsForKPI(orderTotal) {
-  const commissionRate=safe(inputCommission.value,0)/100; const fee=safe(inputFixedFee.value,0); const ship=safe(inputShipping.value,0); const threshold=safe(inputShipThreshold.value,0);
-  const commissionTotal=commissionRate>0?commissionRate*orderTotal:0; const feeTotal=fee>0?fee:0; const shippingTotal=ship>0?(threshold>0?(orderTotal>=threshold?ship:0):ship):0;
-  return { commissionTotal, feeTotal, shippingTotal };
-}
-
-let chart;
-function initChart(){ const ctx=document.getElementById('priceChart'); if(!ctx) return;
-  chart=new Chart(ctx,{ type:'line', data:{ labels:[], datasets:[
-      { label:'Base', data:[], tension:0.25, pointRadius:0, borderWidth:2, borderColor:'#2563eb' },
-      { label:'Final (com custos)', data:[], tension:0.25, pointRadius:0, borderWidth:2, borderDash:[6,4], borderColor:'#16a34a' },
-      { label:'Âncoras', data:[], type:'scatter', pointRadius:4, showLine:false, backgroundColor:'#c27121', parsing:{xAxisKey:'x', yAxisKey:'y'} }
-    ]},
-    options:{ responsive:true, maintainAspectRatio:false, devicePixelRatio:Math.min(window.devicePixelRatio||1,2), normalized:true, animation:false,
-      scales:{ x:{ title:{text:'Quantidade', display:true}, grid:{display:false} }, y:{ title:{text:'Preço (R$)', display:true} } },
-      plugins:{ legend:{display:true, position:'bottom'}, tooltip:{ callbacks:{ label:(ctx)=>`${ctx.dataset.label}: ${brl(ctx.parsed.y)}` } } }
-    }
-  });
-}
-function refreshChartAndKpis(){ try{
-  const sizeKey=getSelectedSizeKey(); const s=STATE[sizeKey]; const q=clamp(parseInt(qtyInput.value||1,10),1,50000); qtyInput.value=q; qtyRange.value=clamp(q,1,1000);
-  let fBase, anchorsUsed; if(MODE==='simplificado'){ const pmax=safe(simpBase.value,0), pmin=safe(simpMin.value,0), q0=safe(simpQ0.value,50), n=safe(simpN.value,1.5); fBase=(qq)=>priceLogistic(qq,pmin,pmax,q0,n); anchorsUsed={...s.anchors,1:pmax,1000:pmin}; } else {
-    let a=readAnchorsFromUI(); if(chkAutoInt&&chkAutoInt.checked){ a=recomputeIntermediates(a); writeAnchorsToUI(a); } anchorsUsed=a; fBase=(qq)=>priceAnchors(qq,anchorsUsed); }
-  const xs=[], ysBase=[], ysFinal=[]; for(let i=1;i<=1000;i++){ const base=fBase(i); const fin=finalUnitPriceForQty(i,base); xs.push(i); ysBase.push(base); ysFinal.push(fin); }
-  if(chart){ chart.data.labels=xs; chart.data.datasets[0].data=ysBase; chart.data.datasets[1].data=ysFinal; chart.data.datasets[2].data=[1,10,50,100,500,1000].map(qq=>({x:qq,y:anchorsUsed[qq]})); chart.update('none'); }
-  const baseQ=fBase(q); const finalQ=finalUnitPriceForQty(q, baseQ); const orderTotal=finalQ*q;
-  const {commissionTotal, feeTotal, shippingTotal} = platformCostsForKPI(orderTotal);
-  const cogsTotal=s.cost*q; const custoTotal=cogsTotal+commissionTotal+feeTotal+shippingTotal; const profitTotal=orderTotal-custoTotal; const marginPct=(profitTotal/Math.max(orderTotal,0.0001))*100;
-  kpiUnitPrice.textContent=brl(finalQ); kpiTotalFinal.textContent=brl(orderTotal); kpiProfit.textContent=brl(profitTotal); kpiCostTotal.textContent=brl(custoTotal); kpiMarginPct.textContent=`${isFinite(marginPct)?marginPct.toFixed(1):'0.0'}%`;
-  const tiersQ=[1,10,50,100,500,1000]; const rows=[]; for(const tq of tiersQ){ const base=fBase(tq); const fin=finalUnitPriceForQty(tq, base); const ord=fin*tq; const cKPI=platformCostsForKPI(ord);
-    rows.push(`<tr class="border-t border-zinc-200/60 dark:border-zinc-800"><td class="py-2 pr-3">${tq}</td><td class="py-2 pr-3">${brl(base)}</td><td class="py-2 pr-3">${brl(fin)}</td><td class="py-2 pr-3">${brl(cKPI.commissionTotal)}</td><td class="py-2 pr-3">${brl(cKPI.feeTotal)}</td><td class="py-2 pr-3">${brl(cKPI.shippingTotal)}</td></tr>`); }
-  tiersBody.innerHTML=rows.join('');
-} catch(e){ showError('Erro no cálculo: '+(e.message||e)); }}
-
-function normalizeFieldName(s){
-  return String(s)
-    .toLowerCase().trim()
-    .replace(/\./g, '_')        // 2.5 -> 2_5
-    .replace(/\s+/g, '_')       // espaços -> _
-    .replace(/[^\w]+/g, '_')    // só [a-z0-9_]
-    .replace(/_+/g, '_')        // colapsa __ -> _
-    .replace(/^_|_$/g, '');     // remove _ nas pontas
-}
-function parseNum(v){
-  if (v == null) return 0;
-  const s = String(v).trim().replace(/\./g,'.').replace(',', '.');
-  const n = parseFloat(s);
-  return Number.isFinite(n) ? n : 0;
-}
-function detectDelimiter(line){
-  const cComma = (line.match(/,/g)||[]).length;
-  const cSemi  = (line.match(/;/g)||[]).length;
-  return cSemi > cComma ? ';' : ',';
-}
-function parseCSVLine(line, delim){
-  const out=[]; let cur=''; let inQ=false;
-  for(let i=0;i<line.length;i++){
-    const ch=line[i];
-    if(ch === '"'){
-      if(inQ && line[i+1] === '"'){ cur += '"'; i++; }
-      else { inQ = !inQ; }
-    } else if(ch === delim && !inQ){
-      out.push(cur); cur='';
-    } else {
-      cur += ch;
-    }
-  }
-  out.push(cur);
-  return out.map(s=>s.trim());
-}
-let BOX_ROWS=[]; let BOX_CSV_OK=false;
-async function loadBoxesCSV(){
-  BOX_CSV_OK = false;
-  try{
-    const resp = await fetch('/boxes.csv', { cache: 'no-cache' });
-    if(!resp.ok) throw new Error('boxes.csv não encontrado');
-
-    const txt = await resp.text();
-    parseBoxesCSV(txt);
-    BOX_CSV_OK = BOX_ROWS.length > 0;
-
-    // DEBUG opcional
-    console.log('BOX_ROWS:', BOX_ROWS.length);
-    if (BOX_ROWS.length) console.log('Cols exemplo:', Object.keys(BOX_ROWS[0]));
-  } catch(e){
-    // fallback com upload (o seu bloco antigo pode ficar)
-    if(!document.getElementById('boxesUpload')){
-      const wrap=document.createElement('div');
-      wrap.className='mt-2 text-xs text-zinc-500';
-      wrap.innerHTML=`<p>Não consegui carregar <code>boxes.csv</code> automaticamente. Faça upload manual:</p><input id="boxesUpload" type="file" accept=".csv" class="mt-2 text-sm">`;
-      document.querySelector('footer').insertAdjacentElement('beforebegin', wrap);
-      document.getElementById('boxesUpload').addEventListener('change', async(ev)=>{
-        const file=ev.target.files?.[0]; if(!file) return;
-        const txt=await file.text(); parseBoxesCSV(txt); BOX_CSV_OK = BOX_ROWS.length > 0; updatePackagingInfo();
-      });
-    }
-  }
-}
-
-function parseBoxesCSV(text){
-  BOX_ROWS = []; // zera antes
-  const rawLines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
-  if(!rawLines.length) return;
-
-  const delim = detectDelimiter(rawLines[0]);
-  const headerRaw = parseCSVLine(rawLines[0], delim);
-  const header = headerRaw.map(normalizeFieldName);
-
-  for(let i=1;i<rawLines.length;i++){
-    const cols = parseCSVLine(rawLines[i], delim);
-    if(cols.length !== header.length) continue;
-
-    const obj = {};
-    for(let j=0;j<cols.length;j++){
-      obj[header[j]] = cols[j];
-    }
-
-    // converte números
-    [
-      'altura_embalagem','largura_embalagem','comprimento_embalagem',
-      'area_embalagem','peso_embalagem',
-      'botton_2_5_quantity','botton_3_5_quantity','botton_4_5_quantity','botton_5_5_quantity'
-    ].forEach(k => { if (obj[k] !== undefined) obj[k] = parseNum(obj[k]); });
-
-    // se area não existir, use largura*comprimento como critério
-    if (!(obj.area_embalagem > 0)){
-      const L = obj.largura_embalagem || 0;
-      const C = obj.comprimento_embalagem || 0;
-      obj.area_embalagem = L * C;
-    }
-
-    BOX_ROWS.push(obj);
-  }
-}
-function getCapKey(row, sizeKey){
-  // "2.5" -> "2_5"
-  const sizeNorm = String(sizeKey).replace('.', '_');
-  const target   = `botton_${sizeNorm}_quantity`;
-
-  const keys = Object.keys(row);
-  // 1) match exato já normalizado
-  if (keys.includes(target)) return target;
-
-  // 2) tenta matches por regex tolerante: 2_5 ou 2.5, com ou sem underscores extras
-  const rx = new RegExp(`^botton[_\\s]*${sizeNorm.replace('_','[._ ]?')}[_\\s]*quantity$`);
-  for (const k of keys){
-    const nk = normalizeFieldName(k);
-    if (nk === target) return k;
-    if (rx.test(k) || rx.test(nk)) return k;
-  }
-  return null;
-}
-
-function findBestBox(sizeKey, qty){
-  if (!BOX_ROWS || BOX_ROWS.length === 0) return null;
-
-  const suitable = [];
-  for (const r of BOX_ROWS){
-    const k = getCapKey(r, sizeKey);
-    if (!k) continue;
-    const cap = parseNum(r[k]);
-    if (Number.isFinite(cap) && cap >= qty){
-      suitable.push({ row: r, cap });
-    }
-  }
-
-  if (suitable.length > 0){
-    // pega a menor área (ou a que tiver area calculada)
-    suitable.sort((a,b) => parseNum(a.row.area_embalagem) - parseNum(b.row.area_embalagem));
-    const pick = suitable[0];
-    return { ...pick.row, capacity: pick.cap, boxesNeeded: 1 };
-  }
-
-  // caso não caiba em 1 caixa, usa a de maior capacidade e divide
-  const withCap = [];
-  for (const r of BOX_ROWS){
-    const k = getCapKey(r, sizeKey);
-    if (!k) continue;
-    const cap = parseNum(r[k]);
-    if (Number.isFinite(cap) && cap > 0) withCap.push({ row: r, cap });
-  }
-  if (withCap.length === 0) return null;
-
-  withCap.sort((a,b) => b.cap - a.cap);
-  const best = withCap[0];
-  const boxesNeeded = Math.ceil(qty / best.cap);
-  return { ...best.row, capacity: best.cap, boxesNeeded };
-}
-
-async function updatePackagingInfo(){
-  try{
-    const sizeKey = getSelectedSizeKey();
-    const q = clamp(parseInt(qtyInput.value || 1, 10), 1, 50000);
-    const s = STATE[sizeKey];
-
-    // garante CSV carregado (sem travar se já estiver)
-    if (!BOX_CSV_OK) { await loadBoxesCSV(); }
-
-    if (!BOX_ROWS || BOX_ROWS.length === 0){
-      embalagemInfo.textContent = 'Anexe o arquivo boxes.csv para estimar dimensões e pesos.';
-      return;
-    }
-
-    const box = findBestBox(sizeKey, q);
-    if (!box){
-      embalagemInfo.textContent = 'Não há caixa compatível na planilha para esta quantidade/tamanho.';
-      return;
-    }
-
-    // dimensões e peso da caixa (vindos do CSV)
-    const altura       = parseNum(box.altura_embalagem);
-    const largura      = parseNum(box.largura_embalagem);
-    const comprimento  = parseNum(box.comprimento_embalagem);
-    const pesoCaixaKg  = parseNum(box.peso_embalagem);
-
-    // capacidade + número de caixas
-    const cap     = parseNum(box.capacity || 0);
-    const caixas  = Math.max(1, parseNum(box.boxesNeeded || Math.ceil(q / Math.max(cap,1))));
-
-    // pesos
-    const unitW   = s.unitWeightKg || 0;
-    const pesoLiquidoTotal = unitW * q;
-
-    // distribui itens pelas caixas para calcular peso bruto total
-    let restante = q, brutoTotal = 0;
-    for (let i=0; i<caixas; i++){
-      const unidades = cap > 0 ? Math.min(cap, restante) : 0;
-      restante -= unidades;
-      const pesoBrutoCaixa = (unitW * unidades) + pesoCaixaKg;
-      brutoTotal += pesoBrutoCaixa;
-    }
-
-    // Mostra as infos (sem depender do cálculo de frete)
-    // exemplo: "2 caixa(s) • 4×11×17 cm • Peso líquido: 0,420 kg • Peso bruto: 0,950 kg (≈ 0,475 kg/caixa)"
-    const perBox = caixas > 0 ? (brutoTotal/caixas) : 0;
-    embalagemInfo.textContent =
-      `${caixas} caixa(s) • ${altura}×${largura}×${comprimento} cm • ` +
-      `Peso líquido: ${pesoLiquidoTotal.toFixed(3).replace('.',',')} kg • ` +
-      `Peso bruto: ${brutoTotal.toFixed(3).replace('.',',')} kg `;
-
-  } catch(e){
-    embalagemInfo.textContent = 'Falha ao estimar embalagem: ' + (e.message || e);
-  }
-}
-
-
-function sanitizeCEP(s){ return (s||'').replace(/\D/g,''); }
-
-async function requestCorreiosREST(payload){
-  const resp = await fetch(PROXY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type':'application/json' },
-    body: JSON.stringify(payload)
-  });
-  const data = await resp.json().catch(()=> ({}));
-  if (!resp.ok || data?.ok === false){
-    const msg = (data && (data.error || (data.msgs && data.msgs[0]) || data.causa)) || 'Falha no cálculo de frete';
-    throw new Error(msg);
-  }
-  // Esperado do backend que te enviei: { ok:true, totalFrete:number, itens:[...] }
-  return data;
-}
-async function calcularFrete(){
-  if(!IS_PRO){ freteInfo.textContent='Disponível somente no plano PRO.'; return; }
-
-  try{
-    freteInfo.textContent='Calculando frete...';
-    embalagemInfo.textContent='';
-
-    const sizeKey = getSelectedSizeKey();
-    const q       = clamp(parseInt(qtyInput.value||1,10),1,50000);
-    const s       = STATE[sizeKey];
-
-    // Garante CSV de caixas
-    if(!BOX_CSV_OK) await loadBoxesCSV();
-    if(!BOX_ROWS || BOX_ROWS.length===0){
-      freteInfo.textContent='Não foi possível ler boxes.csv. Faça upload manual e tente novamente.';
-      return;
-    }
-
-    // Seleciona caixa + distribui quantidade
-    const box = findBestBox(sizeKey, q);
-    if(!box){ freteInfo.textContent='Não há caixa compatível na planilha.'; return; }
-
-    const unitW = s.unitWeightKg || 0;         // kg por botton
-    const pesoLiquido = unitW * q;             // kg total
-    const caixas      = box.boxesNeeded || 1;
-    const cap         = box.capacity || q;
-
-    // Dimensões (aplique mínimos operacionais se desejar)
-    const altura      = Math.max(2,  safe(box.altura_embalagem,0));
-    const largura     = Math.max(11, safe(box.largura_embalagem,0));
-    const comprimento = Math.max(16, safe(box.comprimento_embalagem,0));
-    const pesoCaixaKg = safe(box.peso_embalagem,0); // kg
-
-    // Atualiza info de embalagem (mostra mesmo antes do frete)
-    const brutoEstimado = pesoLiquido + caixas*pesoCaixaKg;
-    const porCaixa      = brutoEstimado/caixas;
-    embalagemInfo.textContent =
-      `${caixas} caixa(s) • ${altura}×${largura}×${comprimento} cm • ` +
-      `Peso líquido: ${pesoLiquido.toFixed(3)} kg • ` +
-      `Peso bruto: ${brutoEstimado.toFixed(3)} kg (≈ ${porCaixa.toFixed(3)} kg/caixa)`;
-
-    // Serviço escolhido
-    const servCode = servicoCorreios.value || '04014';
-    if (servCode === 'outros'){
-      freteInfo.textContent = 'Frete (Outros) — informe o valor manual no campo acima.';
-      chkFreteCliente.checked = true;
-      return;
-    }
-
-    // CEPs (somente dígitos)
-    const cepDest = sanitizeCEP(cepDestino.value);
-    if(!cepDest){ freteInfo.textContent='Informe o CEP de destino para calcular.'; return; }
-    const cepOrig = sanitizeCEP(cepOrigem.value || '11696208');
-
-    // coProduto (mapeado)
-    const CO_PRODUTO_MAP = {
-      '04014': '04162', // SEDEX (exemplo comum)
-      '04510': '04669', // PAC   (exemplo comum)
-      'outros': 'OUTROS'
-    };
-
-    const coProduto = CO_PRODUTO_MAP[servCode] || '04162'; // ajuste conforme seu contrato
-
-    // Monte os "pacotes" — um por caixa
-    // A API REST recebe psObjeto em GRAMAS (string). Usamos peso bruto de cada caixa.
-    const pacotes = [];
-    let remaining = q;
-    for (let i=0; i<caixas; i++){
-      const unitsThis   = Math.min(cap, remaining); remaining -= unitsThis;
-      const pesoBrutoKg = (unitW * unitsThis) + pesoCaixaKg;           // kg por caixa
-      const pesoMinKg   = Math.max(0.3, pesoBrutoKg);                   // aplica 300g mínimo (opcional)
-      pacotes.push({
-        // O handler do /api/correios converte pesoKg→psObjeto (gramas) e demais campos p/ strings
-        pesoKg:      pesoMinKg,
-        comprimento: comprimento,
-        largura:     largura,
-        altura:      altura,
-        diametro:    0
-      });
-    }
-
-    // Payload esperado pelo seu /api/correios (handler que te passei)
-    const payload = {
-      coProduto,           // ex.: "04162" (SEDEX do seu contrato)
-      cepOrigem: cepOrig,
-      cepDestino: cepDest,
-      pacotes              // [{ pesoKg, comprimento, largura, altura, diametro }, ...]
-    };
-
-    const result = await requestCorreiosREST(payload);
-    const totalFrete = Number(result?.totalFrete || 0);
-    freteEstimado.value = totalFrete.toFixed(2);
-
-    freteInfo.textContent =
-      `Frete (${servCode==='04014'?'SEDEX':'PAC'}) estimado: ${brl(totalFrete)} ` +
-      (Array.isArray(result?.itens) && result.itens.length ? '• cotação OK.' : '');
-
-    chkFreteCliente.checked = true;
-
-  } catch(e){
-    freteInfo.textContent = 'Erro nos Correios: ' + (e.message || e);
-  }
-}
-
-function exportCSV(){ try{ const sizeKey=getSelectedSizeKey(); const label=STATE[sizeKey].label; let fBase; if(MODE==='simplificado'){ fBase=(qq)=>priceLogistic(qq, safe(simpMin.value,0), safe(simpBase.value,0), safe(simpQ0.value,50), safe(simpN.value,1.5)); } else { let a=readAnchorsFromUI(); if(chkAutoInt&&chkAutoInt.checked) a=recomputeIntermediates(a); fBase=(qq)=>priceAnchors(qq,a); }
-  const costPerUnit=STATE[sizeKey].cost; let csv="produto;quantidade;preco_unitario;preco_total;taxa;comissao;frete;margem_liquida_reais\n";
-  for(let q=1;q<=1000;q++){ const base=fBase(q); const unitFinal=finalUnitPriceForQty(q, base); const orderTotal=unitFinal*q; const cKPI=platformCostsForKPI(orderTotal); const cogsTotal=costPerUnit*q; const profitTotal=orderTotal-cogsTotal-cKPI.feeTotal-cKPI.commissionTotal-cKPI.shippingTotal;
-    csv += `${label.replace(',', '.')};${q};${unitFinal.toFixed(2).replace('.', ',')};${orderTotal.toFixed(2).replace('.', ',')};${cKPI.feeTotal.toFixed(2).replace('.', ',')};${cKPI.commissionTotal.toFixed(2).replace('.', ',')};${cKPI.shippingTotal.toFixed(2).replace('.', ',')};${profitTotal.toFixed(2).replace('.', ',')}\n`; }
-  const blob=new Blob([csv], {type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`precos_${label.replace(',', '_')}_${platformSelect.value}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-} catch(e){ showError('Falha ao exportar CSV: '+(e.message||e)); } }
-
-async function exportPDF(){
-  try{
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit:'pt', format:'a4' });
-    const margin = 40;
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const maxTextWidth = pageWidth - margin*2; // <- para wraps controlados
-
-    // Datas
-    const dataAtual = new Date();
-    const dataValidade = new Date();
-    dataValidade.setDate(dataValidade.getDate()+7);
-    const pad2 = (n)=> String(n).padStart(2,'0');
-    const formatarData = (d)=> `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`;
-    const formatarDataFile = (d)=> `${pad2(d.getDate())}-${pad2(d.getMonth()+1)}-${d.getFullYear()}`;
-
-    // Seleção / preços
-    const sizeKey = getSelectedSizeKey();
-    const label = STATE[sizeKey].label;
-    const q = clamp(parseInt(qtyInput.value||1,10),1,50000);
-
-    let fBase;
-    if (MODE==='simplificado'){
-      fBase = (qq)=> priceLogistic(
-        qq,
-        safe(simpMin.value,0),
-        safe(simpBase.value,0),
-        safe(simpQ0.value,50),
-        safe(simpN.value,1.5)
-      );
-    } else {
-      let a = readAnchorsFromUI();
-      if (chkAutoInt && chkAutoInt.checked) a = recomputeIntermediates(a);
-      fBase = (qq)=> priceAnchors(qq, a);
-    }
-
-    const baseUnit1  = (MODE==='simplificado') ? safe(simpBase.value,0) : safe(advQ1.value,0);
-    const baseTotal  = baseUnit1 * q;
-    const baseAtQ    = fBase(q);
-    const finalUnit  = finalUnitPriceForQty(q, baseAtQ);
-    const finalTotal = finalUnit * q;
-    const desconto   = Math.max(0, baseTotal - finalTotal);
-
-    const incluirFrete = chkFreteCliente.checked && safe(freteEstimado.value,0) > 0;
-    const totalGeral   = incluirFrete ? finalTotal + safe(freteEstimado.value,0) : finalTotal;
-
-    // LOGO (header)
-    async function getLogoDataURL(){
-      const logoHeader = document.getElementById('logoHeader');
-      if (logoHeader && !logoHeader.classList.contains('hidden')){
+      const showError = (msg) => { const box=document.getElementById('appErrors'); if(!box) return; box.classList.remove('hidden'); box.textContent=msg; };
+      window.addEventListener('error', (e) => showError(e.message || 'Erro de script.'));
+      const brl = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((isFinite(v) ? v : 0) ?? 0);
+      const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+      const safe = (x, d=0) => { const v = parseFloat(x); return isFinite(v) ? v : d; };
+      const sleep = (ms) => new Promise(r=>setTimeout(r,ms));
+      function toast(msg, ms=2500){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'), ms); }
+      function qs(sel){ return document.querySelector(sel); }
+      function el(id){ return document.getElementById(id); }
+
+      let IS_PRO=false;
+      let COMPANY={ name:'', phone:'', site:'', logo:'' };
+
+      async function fetchConfig(){
         try{
-          const canvas=document.createElement('canvas');
-          canvas.width=logoHeader.naturalWidth; canvas.height=logoHeader.naturalHeight;
-          const ctx=canvas.getContext('2d'); ctx.drawImage(logoHeader,0,0);
-          return canvas.toDataURL('image/jpeg',0.92);
-        }catch(e){}
-      }
-      try{
-        const resp=await fetch('/logo.jpeg',{cache:'no-cache'});
-        if(!resp.ok) return null;
-        const blob=await resp.blob();
-        return await new Promise((resolve)=>{
-          const reader=new FileReader(); reader.onload=()=>resolve(reader.result); reader.readAsDataURL(blob);
-        });
-      }catch(e){ return null; }
-    }
-
-    const logoData = await getLogoDataURL();
-    const headerY  = margin;
-    if (logoData){ doc.addImage(logoData, 'JPEG', margin, headerY, 50, 50); }
-
-    doc.setFont('helvetica','bold'); doc.setFontSize(18);
-    doc.text('Proposta Comercial', logoData ? margin+100 : margin, headerY+24);
-
-    if (IS_PRO){
-      doc.setFont('helvetica','normal'); doc.setFontSize(9);
-      doc.text(`${COMPANY.name || ''} • Tel: ${COMPANY.phone || ''} • ${COMPANY.site || ''}`,
-               logoData ? margin+100 : margin, headerY+42);
-    }
-
-    doc.setDrawColor(200);
-    doc.line(margin, headerY+60, pageWidth-margin, headerY+60);
-
-    // =========================
-    //  DETALHES DA PROPOSTA
-    // =========================
-    let y = headerY + 88;
-
-    // ---- Linha do cliente (sem tabela), com wrap dentro das margens
-    const cName  = (clientName?.value || '').trim();
-    const cDoc   = (cpfCnpj?.value || '').trim();
-    const cEmail = (clientEmail?.value || '').trim();
-    const cPhone = (clientPhone?.value || '').trim();
-
-    const parts = [];
-    if (cName)  parts.push(`Aos cuidados de ${cName}`);
-    if (cDoc)   parts.push(`CPF/CNPJ: ${cDoc}`);
-    if (cEmail) parts.push(`email: ${cEmail}`);
-    if (cPhone) parts.push(`telefone: ${cPhone}`);
-
-    if (parts.length){
-      doc.setFont('helvetica','normal'); doc.setFontSize(11);
-      // Junta tudo numa sentença e faz wrap
-      const clientLine = parts.join(', ');
-      const clientWrapped = doc.splitTextToSize(clientLine, maxTextWidth);
-      doc.text(clientWrapped, margin, y);
-      y += 14 + (clientWrapped.length-1)*12; // avança respeitando as linhas quebradas
-      y += 14;
-    }
-
-    doc.setFont('helvetica','bold'); doc.setFontSize(12);
-    doc.text('Detalhes da Proposta', margin, y); y += 16;
-
-    // Datas e itens principais
-    doc.setFont('helvetica','normal'); doc.setFontSize(11);
-    doc.text(`Data: ${formatarData(dataAtual)} — Válida até: ${formatarData(dataValidade)}`, margin, y); y += 16;
-    doc.text(`Produto: Botton ${label}`, margin, y); y += 16;
-    doc.text(`Quantidade: ${q}`, margin, y); y += 14;
-
-    // Preço destaque
-    doc.setFont('helvetica','bold'); doc.setFontSize(11);
-    doc.text(`Preço unit.: ${brl(finalUnit)} — Preço Final: ${brl(finalTotal)}`, margin, y); 
-    y += 18;
-
-    // =========================
-    //  Embalagem e Pesos (depois do preço, antes da tabela)
-    // =========================
-    // try{
-    //   if(!BOX_CSV_OK) await loadBoxesCSV();
-    //   if(BOX_ROWS && BOX_ROWS.length){
-    //     const box = findBestBox(sizeKey, q);
-    //     if (box){
-    //       // Reset de qualquer espaçamento estranho (se plugin estiver presente)
-    //       if (typeof doc.setCharSpace === 'function') doc.setCharSpace(0);
-
-    //       const unitW = STATE[sizeKey].unitWeightKg || 0;  // kg/un
-    //       const cap   = Number(box.capacity) || q;
-    //       const caixas= Math.max(1, Number(box.boxesNeeded || Math.ceil(q/Math.max(cap,1))));
-
-    //       const altura      = Math.max(2,  safe(box.altura_embalagem,0));
-    //       const largura     = Math.max(11, safe(box.largura_embalagem,0));
-    //       const comprimento = Math.max(16, safe(box.comprimento_embalagem,0));
-    //       const pesoCaixaKg = safe(box.peso_embalagem,0);
-
-    //       const pesoLiquidoTotal = unitW * q;
-    //       let restante = q, brutoTotal = 0;
-    //       for (let i=0;i<caixas;i++){
-    //         const unidades = Math.min(cap, restante); restante -= unidades;
-    //         const pesoBrutoCaixa = (unitW * unidades) + pesoCaixaKg;
-    //         brutoTotal += pesoBrutoCaixa;
-    //       }
-    //       const perBox = brutoTotal / caixas;
-
-    //       doc.setFont('helvetica','bold'); doc.setFontSize(11);
-    //       doc.text('Embalagem e Pesos', margin, y); y += 14;
-
-    //       doc.setFont('helvetica','normal'); doc.setFontSize(11);
-    //       // Quebra controlada para evitar overflow se alguém usar números longos
-    //       const line1 = `${caixas} caixa(s) • ${altura}×${largura}×${comprimento} cm`;
-    //       const line2 = `Peso líquido: ${pesoLiquidoTotal.toFixed(3)} kg — Peso bruto: ${brutoTotal.toFixed(3)} kg (≈ ${perBox.toFixed(3)} kg/caixa)`;
-    //       const l1 = doc.splitTextToSize(line1, maxTextWidth);
-    //       const l2 = doc.splitTextToSize(line2, maxTextWidth);
-    //       doc.text(l1, margin, y); y += 14 + (l1.length-1)*12;
-    //       doc.text(l2, margin, y); y += 16 + (l2.length-1)*12;
-    //     }
-    //   }
-    // } catch(_) { /* silencioso */ }
-
-    // Tabela principal (itens/valores)
-    const bodyRows = [
-      ['Produto', `Botton ${label}`],
-      ['Quantidade', `${q}`],
-      ['Preço Final', `${brl(finalTotal)}`]
-    ];
-    if (incluirFrete){
-      bodyRows.push(['Frete', `${brl(safe(freteEstimado.value,0))}`]);
-      bodyRows.push(['TOTAL GERAL', `${brl(totalGeral)}`]);
-    }
-
-    doc.autoTable({
-      startY: y,
-      styles: { fontSize: 10, cellPadding: 6 },
-      head: [['Item','Valor']],
-      body: bodyRows,
-      didParseCell: function(data){
-        if (incluirFrete && data.row.index === bodyRows.length-1){
-          data.cell.styles.fontStyle='bold';
+          const r = await fetch('/api/config');
+          if(!r.ok) throw 0;
+          const cfg = await r.json();
+          IS_PRO = true;
+          COMPANY = cfg || {};
+          applyCompanyBrand();
+          el('btnLogout').classList.remove('hidden');
+          el('btnLogout_mobile').classList.remove('hidden');
+          hideAuthOverlay();
+        } catch(e){
+          IS_PRO = false;
+          showAuthOverlay();
+          applyCompanyBrand(true);
+        } finally {
+          bootApp();
         }
       }
-    });
 
-    // Observação sobre o frete e CEP (apenas se frete incluso)
-    if (incluirFrete){
-      const digits = (sanitizeCEP(cepDestino?.value) || '');
-      const formatCEP = (s)=> s && s.length===8 ? `${s.slice(0,5)}-${s.slice(5)}` : s;
-      const cepFmt = formatCEP(digits);
+      function applyCompanyBrand(demo=false){
+        const line = el('companyLine');
+        const logo = el('logoHeader');
+        if (IS_PRO && COMPANY){
+          line.textContent = `${COMPANY.name || 'Ground Shop'} • Tel: ${COMPANY.phone || ''} • ${COMPANY.site || ''}`.trim();
+          if (COMPANY.logo){ logo.src = COMPANY.logo; logo.classList.remove('hidden'); }
+        } else {
+          line.textContent = demo ? 'Demo — faça login para liberar dados da empresa e cálculo de frete (Correios).' : '';
+          logo.classList.add('hidden');
+          logo.src='';
+        }
+      }
 
-      let note = '* O frete é válido somente para o CEP';
-      if (cepFmt) note += ` ${cepFmt}`;
-      note += ', podendo sofrer pequenas variações até o aceite da proposta.';
+      function showAuthOverlay(){ el('authOverlay').classList.remove('hidden'); }
+      function hideAuthOverlay(){ el('authOverlay').classList.add('hidden'); }
 
-      const yNote = (doc.lastAutoTable && doc.lastAutoTable.finalY ? doc.lastAutoTable.finalY : y) + 14;
-      doc.setFont('helvetica','italic'); doc.setFontSize(10);
-      doc.text(doc.splitTextToSize(note, maxTextWidth), margin, yNote);
-    }
+      async function doLogin(){
+        const user = el('loginUser').value.trim();
+        const pass = el('loginPass').value;
+        el('loginMsg').textContent='';
+        const r = await fetch('/api/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ user, pass }) });
+        if (!r.ok){ el('loginMsg').textContent='Usuário ou senha inválidos.'; return; }
+        await sleep(150);
+        location.reload();
+      }
+      async function doLogout(){
+        await fetch('/api/logout', { method:'POST' });
+        await sleep(150);
+        location.reload();
+      }
 
-    // Marca d'água para plano não PRO
-    if (!IS_PRO){
-      doc.setTextColor(180,0,0);
-      doc.setFontSize(48);
-      doc.text('DEMONSTRAÇÃO', pageWidth/2, 520, { align: 'center', angle: 45 });
-      doc.setTextColor(0);
-    }
+      const PROXY_URL = '/api/correios';
 
-    // Rodapé
-    const footerY = doc.internal.pageSize.getHeight() - 40;
-    doc.setFontSize(9); doc.setTextColor(120);
-    doc.text('Proposta válida por 7 dias. Valores sujeitos a alterações conforme condições de venda e frete.', 40, footerY);
+      const DEFAULT_DATA = {
+        "2.5": { label: "2,5 cm", cost: 0.67, anchors: {1:8.00, 10:3.80, 50:2.78, 100:2.49, 500:2.30, 1000:1.99}, simp: { q0: 50, n: 1.5 }, unitWeightKg: 0.004 },
+        "3.5": { label: "3,5 cm", cost: 0.80, anchors: {1:10.00,10:3.90,50:2.98,100:2.67,500:2.45,1000:2.20}, simp: { q0: 50, n: 1.6 }, unitWeightKg: 0.006 },
+        "4.5": { label: "4,5 cm", cost: 0.90, anchors: {1:12.50,10:4.20,50:3.20,100:2.99,500:2.75,1000:2.30}, simp: { q0: 55, n: 1.65 }, unitWeightKg: 0.008 },
+        "5.5": { label: "5,5 cm", cost: 1.22, anchors: {1:15.00,10:4.50,50:3.80,100:3.60,500:3.10,1000:2.70}, simp: { q0: 60, n: 1.7 }, unitWeightKg: 0.010 },
+      };
+      const PLATFORM_PRESETS = {
+        nuvem:       { commission: 0.00, fee: 0.00, shipping: 0.00, threshold: 0.00 },
+        ml_classic:  { commission: 0.14, fee: 6.75, shipping: 21.45, threshold: 79.00 },
+        ml_premium:  { commission: 0.19, fee: 6.50, shipping: 21.45, threshold: 79.00 },
+        shopee_std:  { commission: 0.14, fee: 4.00, shipping: 0.00, threshold: 0.00 },
+        shopee_free: { commission: 0.20, fee: 4.00, shipping: 0.00, threshold: 0.00 },
+      };
+      const STATE = JSON.parse(JSON.stringify(DEFAULT_DATA));
+      let MODE = 'avancado';
 
-    // Nome do arquivo
-    doc.save(`Proposta_GroundShop_Botton_${label.replace(',', '_')}_q${q}_${formatarDataFile(dataAtual)}.pdf`);
+      const clientName=el('clientName'); const cpfCnpj=el('cpfCnpj'); const clientDetails=el('clientDetails'); const clientSection=el('clientSection');
+      const clientEmail=el('clientEmail'); const clientPhone=el('clientPhone');
 
-  } catch(e){
-    showError('Falha ao gerar PDF: ' + (e.message || e));
-  }
-}
+      const freteDetails=el('freteDetails'); const freteSection=el('freteSection');
+      const cepDestino=el('cepDestino'); const cepOrigem=el('cepOrigem'); const servicoCorreios=el('servicoCorreios');
+      const freteEstimado=el('freteEstimado'); const chkFreteCliente=el('chkFreteCliente'); const btnCalcularFrete=el('btnCalcularFrete'); const freteInfo=el('freteInfo'); const embalagemInfo=el('embalagemInfo');
 
-function toggleFreteVisibility(){ const isNuvem = platformSelect.value==='nuvem'; if(isNuvem){ freteDetails.setAttribute('open',''); } else { freteDetails.removeAttribute('open'); chkFreteCliente.checked=false; } }
-function togglePriceCostVisibility(){ const isNuvem = platformSelect.value==='nuvem'; if(isNuvem){ priceCostDetails.setAttribute('open',''); } else { priceCostDetails.removeAttribute('open'); } }
-function applyProRestrictions(){
-  if(!IS_PRO){
-    servicoCorreios.value='outros';
-    for(const opt of servicoCorreios.querySelectorAll('option')){
-      if(opt.value!=='outros'){ opt.disabled=true; } else { opt.disabled=false; }
-    }
-    btnCalcularFrete.disabled=true;
-    freteInfo.textContent='Frete (Correios) disponível somente no plano PRO.';
-  } else {
-    for(const opt of servicoCorreios.querySelectorAll('option')) opt.disabled=false;
-    btnCalcularFrete.disabled=false;
-    freteInfo.textContent='';
-  }
-}
-function bindEvents(){
-  el('btnDoLogin').addEventListener('click', doLogin);
-  el('btnDemo').addEventListener('click', ()=>{ hideAuthOverlay(); IS_PRO=false; applyCompanyBrand(true); applyProRestrictions(); });
-  el('btnLogout').addEventListener('click', doLogout);
-  el('btnLogout_mobile').addEventListener('click', doLogout);
+      const sizeSelect = el('sizeSelect'); const qtyInput=el('qtyInput'); const qtyRange=el('qtyRange');
+      const tabSimplified=el('tabSimplified'); const tabAdvanced=el('tabAdvanced'); const panelSimplified=el('panelSimplified'); const panelAdvanced=el('panelAdvanced');
+      const simpBase=el('simpBase'); const simpMin=el('simpMin'); const simpQ0=el('simpQ0'); const simpN=el('simpN'); const chkAutoInt=el('autoIntermediate');
+      const advQ1=el('advQ1'); const advQ10=el('advQ10'); const advQ50=el('advQ50'); const advQ100=el('advQ100'); const advQ500=el('advQ500'); const advQ1000=el('advQ1000'); const btnAdvReset=el('btnAdvReset');
+      const platformSelect=el('platformSelect'); const chkCommission=el('chkCommission'); const chkFee=el('chkFee'); const chkShipping=el('chkShipping');
+      const inputCommission=el('inputCommission'); const inputFixedFee=el('inputFixedFee'); const inputShipping=el('inputShipping'); const inputShipThreshold=el('inputShipThreshold');
 
-  sizeSelect?.addEventListener('change', ()=>{ loadControlsForSize(getSelectedSizeKey()); refreshChartAndKpis(); updatePackagingInfo(); });
-  qtyInput?.addEventListener('input', ()=>{ qtyRange.value=clamp(parseInt(qtyInput.value||1,10),1,1000); refreshChartAndKpis(); updatePackagingInfo(); });
-  qtyRange?.addEventListener('input', ()=>{ qtyInput.value=qtyRange.value; refreshChartAndKpis(); updatePackagingInfo(); });
-  tabSimplified?.addEventListener('click', ()=>{ setTabs('simplificado'); refreshChartAndKpis(); });
-  tabAdvanced?.addEventListener('click', ()=>{ setTabs('avancado'); refreshChartAndKpis(); });
-  [simpBase,simpMin,simpQ0,simpN].forEach(elm=>elm?.addEventListener('input', refreshChartAndKpis));
-  [advQ1,advQ10,advQ50,advQ100,advQ500,advQ1000].forEach(elm=>elm?.addEventListener('input', ()=>{ if(chkAutoInt && [advQ10,advQ50,advQ100,advQ500].includes(elm)) chkAutoInt.checked=false; refreshChartAndKpis(); }));
-  chkAutoInt && chkAutoInt.addEventListener('change', refreshChartAndKpis);
-  btnAdvReset && btnAdvReset.addEventListener('click', ()=>{ const k=getSelectedSizeKey(); STATE[k]=JSON.parse(JSON.stringify(DEFAULT_DATA[k])); loadControlsForSize(k); setTabs('avancado'); refreshChartAndKpis(); updatePackagingInfo(); });
-  function onPlatformChange(){ loadPlatformDefaults(); refreshChartAndKpis(); toggleFreteVisibility(); }
-  platformSelect?.addEventListener('change', onPlatformChange);
-  [chkCommission,chkFee,chkShipping,inputCommission,inputFixedFee,inputShipping,inputShipThreshold].forEach(elm=>elm?.addEventListener('input', refreshChartAndKpis));
-  btnResetAll?.addEventListener('click', ()=>{ for(const k of Object.keys(STATE)) STATE[k]=JSON.parse(JSON.stringify(DEFAULT_DATA[k])); sizeSelect.value="2.5"; loadControlsForSize("2.5"); platformSelect.value="nuvem"; loadPlatformDefaults(); setTabs('avancado'); qtyInput.value=1; qtyRange.value=1; cepDestino.value=''; freteEstimado.value=''; chkFreteCliente.checked=false; toggleFreteVisibility(); refreshChartAndKpis(); });
-  btnExportCSV?.addEventListener('click', exportCSV); btnExportCSV_mobile && btnExportCSV_mobile.addEventListener('click', exportCSV);
-  btnExportPDF?.addEventListener('click', exportPDF); btnExportPDF_mobile && btnExportPDF_mobile.addEventListener('click', exportPDF);
-  btnCopyQuote && btnCopyQuote.addEventListener('click', copyQuote); btnCopyQuote_mobile && btnCopyQuote_mobile.addEventListener('click', copyQuote);
-  btnCalcularFrete?.addEventListener('click', calcularFrete);
-  cepDestino?.addEventListener('input', ()=>{ const hasVal=(cepDestino.value||'').trim().length>=8; if(hasVal) chkFreteCliente.checked=true; });
-  servicoCorreios?.addEventListener('change', ()=>{ const isOutros=servicoCorreios.value==='outros'; btnCalcularFrete.disabled=isOutros || !IS_PRO; if(isOutros){ freteInfo.textContent='Informe o valor manual do frete (Outros).'; } else { freteInfo.textContent= IS_PRO ? '' : 'Frete (Correios) disponível somente no plano PRO.'; } });
-}
-function bootApp(){
-  try{ loadControlsForSize("2.5"); initChart(); bindEvents(); platformSelect.value="nuvem"; loadPlatformDefaults(); setTabs('avancado'); toggleFreteVisibility(); applyProRestrictions(); refreshChartAndKpis(); loadBoxesCSV(); updatePackagingInfo(); } catch(e){ showError('Falha na inicialização: '+(e.message||e)); }
-}
+      const kpiUnitPrice=el('kpiUnitPrice'); const kpiTotalFinal=el('kpiTotalFinal'); const kpiProfit=el('kpiProfit'); const kpiCostTotal=el('kpiCostTotal'); const kpiMarginPct=el('kpiMarginPct');
+      const btnResetAll=el('btnResetAll'); const btnExportCSV=el('btnExportCSV'); const btnExportCSV_mobile=el('btnExportCSV_mobile');
+      const btnExportPDF=el('btnExportPDF'); const btnExportPDF_mobile=el('btnExportPDF_mobile');
+      const btnCopyQuote=el('btnCopyQuote'); const btnCopyQuote_mobile=el('btnCopyQuote_mobile');
+      const btnLogout=el('btnLogout'); const btnLogout_mobile=el('btnLogout_mobile');
+      const tiersBody=el('tiersBody');
 
-fetchConfig();
-  </script>
+      function priceLogistic(q, pmin, pmax, q0, n){ if(q>=1000) return pmin; const denom=1+Math.pow(q/q0,n); return pmin+(pmax-pmin)/denom; }
+      function priceGeomBetween(q, q1,p1,q2,p2){ const t=(Math.log(q)-Math.log(q1))/(Math.log(q2)-Math.log(q1)); return p1*Math.pow(p2/p1,t); }
+      function priceAnchors(q, anchors){ const A=[1,10,50,100,500,1000]; if(q<=1) return anchors[1]; if(q>=1000) return anchors[1000]; for(let i=0;i<A.length-1;i++){const q1=A[i],q2=A[i+1]; if(q>=q1&&q<=q2) return priceGeomBetween(q,q1,anchors[q1],q2,anchors[q2]);} return anchors[1000]; }
+      function recomputeIntermediates(anchors){ const base=anchors[1],min=anchors[1000]; const out={...anchors}; const lnDen=Math.log(1000)-Math.log(1); for(const q of [10,50,100,500]){ const w=(Math.log(q)-Math.log(1))/lnDen; out[q]=base*Math.pow(min/base,w);} return out; }
+      function getSelectedSizeKey(){ return sizeSelect.value; }
+      function getPlatformPreset(){ return PLATFORM_PRESETS[platformSelect.value]; }
+      function setTabs(mode){ MODE=mode; const simp=mode==='simplificado'; tabSimplified?.classList.toggle('tab-active', simp); tabAdvanced?.classList.toggle('tab-active', !simp); panelSimplified?.classList.toggle('hidden', !simp); panelAdvanced?.classList.toggle('hidden', simp); }
+      function loadControlsForSize(sizeKey){ const s=STATE[sizeKey]; if(!s) return; simpBase.value=s.anchors[1].toFixed(2); simpMin.value=s.anchors[1000].toFixed(2); simpQ0.value=s.simp.q0; simpN.value=s.simp.n; chkAutoInt&&(chkAutoInt.checked=false);
+        advQ1.value=s.anchors[1].toFixed(2); advQ10.value=s.anchors[10].toFixed(2); advQ50.value=s.anchors[50].toFixed(2); advQ100.value=s.anchors[100].toFixed(2); advQ500.value=s.anchors[500].toFixed(2); advQ1000.value=s.anchors[1000].toFixed(2); }
+      function loadPlatformDefaults(){ const p=getPlatformPreset(); inputCommission.value=(p.commission*100).toFixed(1); inputFixedFee.value=p.fee.toFixed(2); inputShipping.value=p.shipping.toFixed(2); inputShipThreshold.value=p.threshold.toFixed(2);
+        chkCommission.checked=p.commission>0; chkFee.checked=p.fee>0; chkShipping.checked=p.shipping>0||p.threshold>0; }
+
+      function serviceName(){ const v=servicoCorreios.value; return v==='04014'?'SEDEX':(v==='04510'?'PAC':'Outros'); }
+      function formatCEP(s){ return s ? s.replace(/\D/g,'').replace(/(\d{5})(\d{3})/,'$1-$2') : ''; }
+      function buildQuoteText(){
+        const sizeKey=getSelectedSizeKey(); const label=STATE[sizeKey].label; const q=clamp(parseInt(qtyInput.value||1,10),1,50000);
+        let fBase; if(MODE==='simplificado'){ fBase=(qq)=>priceLogistic(qq, safe(simpMin.value,0), safe(simpBase.value,0), safe(simpQ0.value,50), safe(simpN.value,1.5)); } else { let a=readAnchorsFromUI(); if(chkAutoInt&&chkAutoInt.checked) a=recomputeIntermediates(a); fBase=(qq)=>priceAnchors(qq,a); }
+        const baseUnit1=(MODE==='simplificado')?safe(simpBase.value,0):safe(advQ1.value,0); const baseTotal=baseUnit1*q; const baseAtQ=fBase(q);
+        const finalUnit=finalUnitPriceForQty(q, baseAtQ); const finalTotal=finalUnit*q; const desconto=Math.max(0, baseTotal-finalTotal);
+        const incluir = chkFreteCliente.checked && safe(freteEstimado.value,0)>0; const cep=(cepDestino.value||'').trim();
+        const freteTxt = incluir ? `\n*Frete (${serviceName()}${cep?` para ${formatCEP(cep)}`:''}):* ${brl(safe(freteEstimado.value,0))}` : '';
+        const totalGeral = incluir ? finalTotal + safe(freteEstimado.value,0) : finalTotal;
+        return [
+          "🧾 ORÇAMENTO GROUNDSHOP", 
+          `*Produto:* Botton ${label}`, 
+          `*Quantidade:* ${q}`, 
+          // `*Preço Base unit.:* ${brl(baseUnit1)}`, 
+          // `*Preço Base Total:* ${brl(baseTotal)}`, 
+          // `*Desconto Total concedido:* ${brl(desconto)}`, 
+          `*Preço Final unit.:* ${brl(finalUnit)}`,
+          // `---------------------`,
+          `*Preço Final Total:* ${brl(finalTotal)}`, 
+          freteTxt, 
+          incluir?`\n*TOTAL GERAL (com frete):* ${brl(totalGeral)}`:"", 
+          "", 
+          "*Proposta válida por 7 dias"].join("\n");
+      }
+      async function copyQuote(){
+        if(!IS_PRO){
+          toast("🔒 Disponível somente no plano PRO. Entre em contato para uma versão personalizada: reche.dev.lab@gmail.com");
+          return;
+        }
+        const text=buildQuoteText();
+        try{ await navigator.clipboard.writeText(text); const btn=btnCopyQuote||btnCopyQuote_mobile; if(btn){ const t=btn.textContent; btn.textContent="✅ Copiado!"; setTimeout(()=>btn.textContent=t,1400);} }catch(e){ const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);}
+      }
+
+      function readAnchorsFromUI(){ return {1:safe(advQ1.value,0),10:safe(advQ10.value,0),50:safe(advQ50.value,0),100:safe(advQ100.value,0),500:safe(advQ500.value,0),1000:safe(advQ1000.value,0)}; }
+      function writeAnchorsToUI(a){ advQ1.value=a[1].toFixed(2); advQ10.value=a[10].toFixed(2); advQ50.value=a[50].toFixed(2); advQ100.value=a[100].toFixed(2); advQ500.value=a[500].toFixed(2); advQ1000.value=a[1000].toFixed(2); }
+
+      function finalUnitPriceForQty(q, baseUnitPrice) {
+        const commission = chkCommission.checked ? (safe(inputCommission.value,0) / 100) : 0;
+        const fixedFee   = chkFee.checked ? safe(inputFixedFee.value,0) : 0;
+        const shipCost   = chkShipping.checked ? safe(inputShipping.value,0) : 0;
+        const shipThresh = chkShipping.checked ? safe(inputShipThreshold.value,0) : 0;
+        const F0=fixedFee; const P0=(baseUnitPrice + F0/q)/Math.max(1 - commission, 0.0001);
+        let includeShip=false; if(shipCost>0){ if(shipThresh>0){ const orderTotal0=P0*q; if(orderTotal0>=shipThresh) includeShip=true; } else includeShip=true; }
+        if(includeShip){ const F=fixedFee+shipCost; return (baseUnitPrice + F/q)/Math.max(1 - commission, 0.0001); }
+        return P0;
+      }
+
+      function platformCostsForKPI(orderTotal) {
+        const commissionRate=safe(inputCommission.value,0)/100; const fee=safe(inputFixedFee.value,0); const ship=safe(inputShipping.value,0); const threshold=safe(inputShipThreshold.value,0);
+        const commissionTotal=commissionRate>0?commissionRate*orderTotal:0; const feeTotal=fee>0?fee:0; const shippingTotal=ship>0?(threshold>0?(orderTotal>=threshold?ship:0):ship):0;
+        return { commissionTotal, feeTotal, shippingTotal };
+      }
+
+      let chart;
+      function initChart(){ const ctx=document.getElementById('priceChart'); if(!ctx) return;
+        chart=new Chart(ctx,{ type:'line', data:{ labels:[], datasets:[
+            { label:'Base', data:[], tension:0.25, pointRadius:0, borderWidth:2, borderColor:'#2563eb' },
+            { label:'Final (com custos)', data:[], tension:0.25, pointRadius:0, borderWidth:2, borderDash:[6,4], borderColor:'#16a34a' },
+            { label:'Âncoras', data:[], type:'scatter', pointRadius:4, showLine:false, backgroundColor:'#c27121', parsing:{xAxisKey:'x', yAxisKey:'y'} }
+          ]},
+          options:{ responsive:true, maintainAspectRatio:false, devicePixelRatio:Math.min(window.devicePixelRatio||1,2), normalized:true, animation:false,
+            scales:{ x:{ title:{text:'Quantidade', display:true}, grid:{display:false} }, y:{ title:{text:'Preço (R$)', display:true} } },
+            plugins:{ legend:{display:true, position:'bottom'}, tooltip:{ callbacks:{ label:(ctx)=>`${ctx.dataset.label}: ${brl(ctx.parsed.y)}` } } }
+          }
+        });
+      }
+      function refreshChartAndKpis(){ try{
+        const sizeKey=getSelectedSizeKey(); const s=STATE[sizeKey]; const q=clamp(parseInt(qtyInput.value||1,10),1,50000); qtyInput.value=q; qtyRange.value=clamp(q,1,1000);
+        let fBase, anchorsUsed; if(MODE==='simplificado'){ const pmax=safe(simpBase.value,0), pmin=safe(simpMin.value,0), q0=safe(simpQ0.value,50), n=safe(simpN.value,1.5); fBase=(qq)=>priceLogistic(qq,pmin,pmax,q0,n); anchorsUsed={...s.anchors,1:pmax,1000:pmin}; } else {
+          let a=readAnchorsFromUI(); if(chkAutoInt&&chkAutoInt.checked){ a=recomputeIntermediates(a); writeAnchorsToUI(a); } anchorsUsed=a; fBase=(qq)=>priceAnchors(qq,anchorsUsed); }
+        const xs=[], ysBase=[], ysFinal=[]; for(let i=1;i<=1000;i++){ const base=fBase(i); const fin=finalUnitPriceForQty(i,base); xs.push(i); ysBase.push(base); ysFinal.push(fin); }
+        if(chart){ chart.data.labels=xs; chart.data.datasets[0].data=ysBase; chart.data.datasets[1].data=ysFinal; chart.data.datasets[2].data=[1,10,50,100,500,1000].map(qq=>({x:qq,y:anchorsUsed[qq]})); chart.update('none'); }
+        const baseQ=fBase(q); const finalQ=finalUnitPriceForQty(q, baseQ); const orderTotal=finalQ*q;
+        const {commissionTotal, feeTotal, shippingTotal} = platformCostsForKPI(orderTotal);
+        const cogsTotal=s.cost*q; const custoTotal=cogsTotal+commissionTotal+feeTotal+shippingTotal; const profitTotal=orderTotal-custoTotal; const marginPct=(profitTotal/Math.max(orderTotal,0.0001))*100;
+        kpiUnitPrice.textContent=brl(finalQ); kpiTotalFinal.textContent=brl(orderTotal); kpiProfit.textContent=brl(profitTotal); kpiCostTotal.textContent=brl(custoTotal); kpiMarginPct.textContent=`${isFinite(marginPct)?marginPct.toFixed(1):'0.0'}%`;
+        const tiersQ=[1,10,50,100,500,1000]; const rows=[]; for(const tq of tiersQ){ const base=fBase(tq); const fin=finalUnitPriceForQty(tq, base); const ord=fin*tq; const cKPI=platformCostsForKPI(ord);
+          rows.push(`<tr class="border-t border-zinc-200/60 dark:border-zinc-800"><td class="py-2 pr-3">${tq}</td><td class="py-2 pr-3">${brl(base)}</td><td class="py-2 pr-3">${brl(fin)}</td><td class="py-2 pr-3">${brl(cKPI.commissionTotal)}</td><td class="py-2 pr-3">${brl(cKPI.feeTotal)}</td><td class="py-2 pr-3">${brl(cKPI.shippingTotal)}</td></tr>`); }
+        tiersBody.innerHTML=rows.join('');
+      } catch(e){ showError('Erro no cálculo: '+(e.message||e)); }}
+
+      function normalizeFieldName(s){
+        return String(s)
+          .toLowerCase().trim()
+          .replace(/\./g, '_')        // 2.5 -> 2_5
+          .replace(/\s+/g, '_')       // espaços -> _
+          .replace(/[^\w]+/g, '_')    // só [a-z0-9_]
+          .replace(/_+/g, '_')        // colapsa __ -> _
+          .replace(/^_|_$/g, '');     // remove _ nas pontas
+      }
+      function parseNum(v){
+        if (v == null) return 0;
+        const s = String(v).trim().replace(/\./g,'.').replace(',', '.');
+        const n = parseFloat(s);
+        return Number.isFinite(n) ? n : 0;
+      }
+      function detectDelimiter(line){
+        const cComma = (line.match(/,/g)||[]).length;
+        const cSemi  = (line.match(/;/g)||[]).length;
+        return cSemi > cComma ? ';' : ',';
+      }
+      function parseCSVLine(line, delim){
+        const out=[]; let cur=''; let inQ=false;
+        for(let i=0;i<line.length;i++){
+          const ch=line[i];
+          if(ch === '"'){
+            if(inQ && line[i+1] === '"'){ cur += '"'; i++; }
+            else { inQ = !inQ; }
+          } else if(ch === delim && !inQ){
+            out.push(cur); cur='';
+          } else {
+            cur += ch;
+          }
+        }
+        out.push(cur);
+        return out.map(s=>s.trim());
+      }
+      let BOX_ROWS=[]; let BOX_CSV_OK=false;
+      async function loadBoxesCSV(){
+        BOX_CSV_OK = false;
+        try{
+          const resp = await fetch('/boxes.csv', { cache: 'no-cache' });
+          if(!resp.ok) throw new Error('boxes.csv não encontrado');
+
+          const txt = await resp.text();
+          parseBoxesCSV(txt);
+          BOX_CSV_OK = BOX_ROWS.length > 0;
+
+          // DEBUG opcional
+          console.log('BOX_ROWS:', BOX_ROWS.length);
+          if (BOX_ROWS.length) console.log('Cols exemplo:', Object.keys(BOX_ROWS[0]));
+        } catch(e){
+          // fallback com upload (o seu bloco antigo pode ficar)
+          if(!document.getElementById('boxesUpload')){
+            const wrap=document.createElement('div');
+            wrap.className='mt-2 text-xs text-zinc-500';
+            wrap.innerHTML=`<p>Não consegui carregar <code>boxes.csv</code> automaticamente. Faça upload manual:</p><input id="boxesUpload" type="file" accept=".csv" class="mt-2 text-sm">`;
+            document.querySelector('footer').insertAdjacentElement('beforebegin', wrap);
+            document.getElementById('boxesUpload').addEventListener('change', async(ev)=>{
+              const file=ev.target.files?.[0]; if(!file) return;
+              const txt=await file.text(); parseBoxesCSV(txt); BOX_CSV_OK = BOX_ROWS.length > 0; updatePackagingInfo();
+            });
+          }
+        }
+      }
+
+      function parseBoxesCSV(text){
+        BOX_ROWS = []; // zera antes
+        const rawLines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+        if(!rawLines.length) return;
+
+        const delim = detectDelimiter(rawLines[0]);
+        const headerRaw = parseCSVLine(rawLines[0], delim);
+        const header = headerRaw.map(normalizeFieldName);
+
+        for(let i=1;i<rawLines.length;i++){
+          const cols = parseCSVLine(rawLines[i], delim);
+          if(cols.length !== header.length) continue;
+
+          const obj = {};
+          for(let j=0;j<cols.length;j++){
+            obj[header[j]] = cols[j];
+          }
+
+          // converte números
+          [
+            'altura_embalagem','largura_embalagem','comprimento_embalagem',
+            'area_embalagem','peso_embalagem',
+            'botton_2_5_quantity','botton_3_5_quantity','botton_4_5_quantity','botton_5_5_quantity'
+          ].forEach(k => { if (obj[k] !== undefined) obj[k] = parseNum(obj[k]); });
+
+          // se area não existir, use largura*comprimento como critério
+          if (!(obj.area_embalagem > 0)){
+            const L = obj.largura_embalagem || 0;
+            const C = obj.comprimento_embalagem || 0;
+            obj.area_embalagem = L * C;
+          }
+
+          BOX_ROWS.push(obj);
+        }
+      }
+      function getCapKey(row, sizeKey){
+        // "2.5" -> "2_5"
+        const sizeNorm = String(sizeKey).replace('.', '_');
+        const target   = `botton_${sizeNorm}_quantity`;
+
+        const keys = Object.keys(row);
+        // 1) match exato já normalizado
+        if (keys.includes(target)) return target;
+
+        // 2) tenta matches por regex tolerante: 2_5 ou 2.5, com ou sem underscores extras
+        const rx = new RegExp(`^botton[_\\s]*${sizeNorm.replace('_','[._ ]?')}[_\\s]*quantity$`);
+        for (const k of keys){
+          const nk = normalizeFieldName(k);
+          if (nk === target) return k;
+          if (rx.test(k) || rx.test(nk)) return k;
+        }
+        return null;
+      }
+
+      function findBestBox(sizeKey, qty){
+        if (!BOX_ROWS || BOX_ROWS.length === 0) return null;
+
+        const suitable = [];
+        for (const r of BOX_ROWS){
+          const k = getCapKey(r, sizeKey);
+          if (!k) continue;
+          const cap = parseNum(r[k]);
+          if (Number.isFinite(cap) && cap >= qty){
+            suitable.push({ row: r, cap });
+          }
+        }
+
+        if (suitable.length > 0){
+          // pega a menor área (ou a que tiver area calculada)
+          suitable.sort((a,b) => parseNum(a.row.area_embalagem) - parseNum(b.row.area_embalagem));
+          const pick = suitable[0];
+          return { ...pick.row, capacity: pick.cap, boxesNeeded: 1 };
+        }
+
+        // caso não caiba em 1 caixa, usa a de maior capacidade e divide
+        const withCap = [];
+        for (const r of BOX_ROWS){
+          const k = getCapKey(r, sizeKey);
+          if (!k) continue;
+          const cap = parseNum(r[k]);
+          if (Number.isFinite(cap) && cap > 0) withCap.push({ row: r, cap });
+        }
+        if (withCap.length === 0) return null;
+
+        withCap.sort((a,b) => b.cap - a.cap);
+        const best = withCap[0];
+        const boxesNeeded = Math.ceil(qty / best.cap);
+        return { ...best.row, capacity: best.cap, boxesNeeded };
+      }
+
+      async function updatePackagingInfo(){
+        try{
+          const sizeKey = getSelectedSizeKey();
+          const q = clamp(parseInt(qtyInput.value || 1, 10), 1, 50000);
+          const s = STATE[sizeKey];
+
+          // garante CSV carregado (sem travar se já estiver)
+          if (!BOX_CSV_OK) { await loadBoxesCSV(); }
+
+          if (!BOX_ROWS || BOX_ROWS.length === 0){
+            embalagemInfo.textContent = 'Anexe o arquivo boxes.csv para estimar dimensões e pesos.';
+            return;
+          }
+
+          const box = findBestBox(sizeKey, q);
+          if (!box){
+            embalagemInfo.textContent = 'Não há caixa compatível na planilha para esta quantidade/tamanho.';
+            return;
+          }
+
+          // dimensões e peso da caixa (vindos do CSV)
+          const altura       = parseNum(box.altura_embalagem);
+          const largura      = parseNum(box.largura_embalagem);
+          const comprimento  = parseNum(box.comprimento_embalagem);
+          const pesoCaixaKg  = parseNum(box.peso_embalagem);
+
+          // capacidade + número de caixas
+          const cap     = parseNum(box.capacity || 0);
+          const caixas  = Math.max(1, parseNum(box.boxesNeeded || Math.ceil(q / Math.max(cap,1))));
+
+          // pesos
+          const unitW   = s.unitWeightKg || 0;
+          const pesoLiquidoTotal = unitW * q;
+
+          // distribui itens pelas caixas para calcular peso bruto total
+          let restante = q, brutoTotal = 0;
+          for (let i=0; i<caixas; i++){
+            const unidades = cap > 0 ? Math.min(cap, restante) : 0;
+            restante -= unidades;
+            const pesoBrutoCaixa = (unitW * unidades) + pesoCaixaKg;
+            brutoTotal += pesoBrutoCaixa;
+          }
+
+          // Mostra as infos (sem depender do cálculo de frete)
+          // exemplo: "2 caixa(s) • 4×11×17 cm • Peso líquido: 0,420 kg • Peso bruto: 0,950 kg (≈ 0,475 kg/caixa)"
+          const perBox = caixas > 0 ? (brutoTotal/caixas) : 0;
+          embalagemInfo.textContent =
+            `${caixas} caixa(s) • ${altura}×${largura}×${comprimento} cm • ` +
+            `Peso líquido: ${pesoLiquidoTotal.toFixed(3).replace('.',',')} kg • ` +
+            `Peso bruto: ${brutoTotal.toFixed(3).replace('.',',')} kg `;
+
+        } catch(e){
+          embalagemInfo.textContent = 'Falha ao estimar embalagem: ' + (e.message || e);
+        }
+      }
+
+
+      function sanitizeCEP(s){ return (s||'').replace(/\D/g,''); }
+
+      async function requestCorreiosREST(payload){
+        const resp = await fetch(PROXY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json().catch(()=> ({}));
+        if (!resp.ok || data?.ok === false){
+          const msg = (data && (data.error || (data.msgs && data.msgs[0]) || data.causa)) || 'Falha no cálculo de frete';
+          throw new Error(msg);
+        }
+        // Esperado do backend que te enviei: { ok:true, totalFrete:number, itens:[...] }
+        return data;
+      }
+      async function calcularFrete(){
+        if(!IS_PRO){ freteInfo.textContent='Disponível somente no plano PRO.'; return; }
+
+        try{
+          freteInfo.textContent='Calculando frete...';
+          embalagemInfo.textContent='';
+
+          const sizeKey = getSelectedSizeKey();
+          const q       = clamp(parseInt(qtyInput.value||1,10),1,50000);
+          const s       = STATE[sizeKey];
+
+          // Garante CSV de caixas
+          if(!BOX_CSV_OK) await loadBoxesCSV();
+          if(!BOX_ROWS || BOX_ROWS.length===0){
+            freteInfo.textContent='Não foi possível ler boxes.csv. Faça upload manual e tente novamente.';
+            return;
+          }
+
+          // Seleciona caixa + distribui quantidade
+          const box = findBestBox(sizeKey, q);
+          if(!box){ freteInfo.textContent='Não há caixa compatível na planilha.'; return; }
+
+          const unitW = s.unitWeightKg || 0;         // kg por botton
+          const pesoLiquido = unitW * q;             // kg total
+          const caixas      = box.boxesNeeded || 1;
+          const cap         = box.capacity || q;
+
+          // Dimensões (aplique mínimos operacionais se desejar)
+          const altura      = Math.max(2,  safe(box.altura_embalagem,0));
+          const largura     = Math.max(11, safe(box.largura_embalagem,0));
+          const comprimento = Math.max(16, safe(box.comprimento_embalagem,0));
+          const pesoCaixaKg = safe(box.peso_embalagem,0); // kg
+
+          // Atualiza info de embalagem (mostra mesmo antes do frete)
+          const brutoEstimado = pesoLiquido + caixas*pesoCaixaKg;
+          const porCaixa      = brutoEstimado/caixas;
+          embalagemInfo.textContent =
+            `${caixas} caixa(s) • ${altura}×${largura}×${comprimento} cm • ` +
+            `Peso líquido: ${pesoLiquido.toFixed(3)} kg • ` +
+            `Peso bruto: ${brutoEstimado.toFixed(3)} kg (≈ ${porCaixa.toFixed(3)} kg/caixa)`;
+
+          // Serviço escolhido
+          const servCode = servicoCorreios.value || '04014';
+          if (servCode === 'outros'){
+            freteInfo.textContent = 'Frete (Outros) — informe o valor manual no campo acima.';
+            chkFreteCliente.checked = true;
+            return;
+          }
+
+          // CEPs (somente dígitos)
+          const cepDest = sanitizeCEP(cepDestino.value);
+          if(!cepDest){ freteInfo.textContent='Informe o CEP de destino para calcular.'; return; }
+          const cepOrig = sanitizeCEP(cepOrigem.value || '11696208');
+
+          // coProduto (mapeado)
+          const CO_PRODUTO_MAP = {
+            '04014': '04162', // SEDEX (exemplo comum)
+            '04510': '04669', // PAC   (exemplo comum)
+            'outros': 'OUTROS'
+          };
+
+          const coProduto = CO_PRODUTO_MAP[servCode] || '04162'; // ajuste conforme seu contrato
+
+          // Monte os "pacotes" — um por caixa
+          // A API REST recebe psObjeto em GRAMAS (string). Usamos peso bruto de cada caixa.
+          const pacotes = [];
+          let remaining = q;
+          for (let i=0; i<caixas; i++){
+            const unitsThis   = Math.min(cap, remaining); remaining -= unitsThis;
+            const pesoBrutoKg = (unitW * unitsThis) + pesoCaixaKg;           // kg por caixa
+            const pesoMinKg   = Math.max(0.3, pesoBrutoKg);                   // aplica 300g mínimo (opcional)
+            pacotes.push({
+              // O handler do /api/correios converte pesoKg→psObjeto (gramas) e demais campos p/ strings
+              pesoKg:      pesoMinKg,
+              comprimento: comprimento,
+              largura:     largura,
+              altura:      altura,
+              diametro:    0
+            });
+          }
+
+          // Payload esperado pelo seu /api/correios (handler que te passei)
+          const payload = {
+            coProduto,           // ex.: "04162" (SEDEX do seu contrato)
+            cepOrigem: cepOrig,
+            cepDestino: cepDest,
+            pacotes              // [{ pesoKg, comprimento, largura, altura, diametro }, ...]
+          };
+
+          const result = await requestCorreiosREST(payload);
+          const totalFrete = Number(result?.totalFrete || 0);
+          freteEstimado.value = totalFrete.toFixed(2);
+
+          freteInfo.textContent =
+            `Frete (${servCode==='04014'?'SEDEX':'PAC'}) estimado: ${brl(totalFrete)} ` +
+            (Array.isArray(result?.itens) && result.itens.length ? '• cotação OK.' : '');
+
+          chkFreteCliente.checked = true;
+
+        } catch(e){
+          freteInfo.textContent = 'Erro nos Correios: ' + (e.message || e);
+        }
+      }
+
+      function exportCSV(){ try{ const sizeKey=getSelectedSizeKey(); const label=STATE[sizeKey].label; let fBase; if(MODE==='simplificado'){ fBase=(qq)=>priceLogistic(qq, safe(simpMin.value,0), safe(simpBase.value,0), safe(simpQ0.value,50), safe(simpN.value,1.5)); } else { let a=readAnchorsFromUI(); if(chkAutoInt&&chkAutoInt.checked) a=recomputeIntermediates(a); fBase=(qq)=>priceAnchors(qq,a); }
+        const costPerUnit=STATE[sizeKey].cost; let csv="produto;quantidade;preco_unitario;preco_total;taxa;comissao;frete;margem_liquida_reais\n";
+        for(let q=1;q<=1000;q++){ const base=fBase(q); const unitFinal=finalUnitPriceForQty(q, base); const orderTotal=unitFinal*q; const cKPI=platformCostsForKPI(orderTotal); const cogsTotal=costPerUnit*q; const profitTotal=orderTotal-cogsTotal-cKPI.feeTotal-cKPI.commissionTotal-cKPI.shippingTotal;
+          csv += `${label.replace(',', '.')};${q};${unitFinal.toFixed(2).replace('.', ',')};${orderTotal.toFixed(2).replace('.', ',')};${cKPI.feeTotal.toFixed(2).replace('.', ',')};${cKPI.commissionTotal.toFixed(2).replace('.', ',')};${cKPI.shippingTotal.toFixed(2).replace('.', ',')};${profitTotal.toFixed(2).replace('.', ',')}\n`; }
+        const blob=new Blob([csv], {type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`precos_${label.replace(',', '_')}_${platformSelect.value}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+      } catch(e){ showError('Falha ao exportar CSV: '+(e.message||e)); } }
+
+      async function exportPDF(){
+        try{
+          const { jsPDF } = window.jspdf;
+          const doc = new jsPDF({ unit:'pt', format:'a4' });
+          const margin = 40;
+          const pageWidth = doc.internal.pageSize.getWidth();
+          const maxTextWidth = pageWidth - margin*2; // <- para wraps controlados
+
+          // Datas
+          const dataAtual = new Date();
+          const dataValidade = new Date();
+          dataValidade.setDate(dataValidade.getDate()+7);
+          const pad2 = (n)=> String(n).padStart(2,'0');
+          const formatarData = (d)=> `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`;
+          const formatarDataFile = (d)=> `${pad2(d.getDate())}-${pad2(d.getMonth()+1)}-${d.getFullYear()}`;
+
+          // Seleção / preços
+          const sizeKey = getSelectedSizeKey();
+          const label = STATE[sizeKey].label;
+          const q = clamp(parseInt(qtyInput.value||1,10),1,50000);
+
+          let fBase;
+          if (MODE==='simplificado'){
+            fBase = (qq)=> priceLogistic(
+              qq,
+              safe(simpMin.value,0),
+              safe(simpBase.value,0),
+              safe(simpQ0.value,50),
+              safe(simpN.value,1.5)
+            );
+          } else {
+            let a = readAnchorsFromUI();
+            if (chkAutoInt && chkAutoInt.checked) a = recomputeIntermediates(a);
+            fBase = (qq)=> priceAnchors(qq, a);
+          }
+
+          const baseUnit1  = (MODE==='simplificado') ? safe(simpBase.value,0) : safe(advQ1.value,0);
+          const baseTotal  = baseUnit1 * q;
+          const baseAtQ    = fBase(q);
+          const finalUnit  = finalUnitPriceForQty(q, baseAtQ);
+          const finalTotal = finalUnit * q;
+          const desconto   = Math.max(0, baseTotal - finalTotal);
+
+          const incluirFrete = chkFreteCliente.checked && safe(freteEstimado.value,0) > 0;
+          const totalGeral   = incluirFrete ? finalTotal + safe(freteEstimado.value,0) : finalTotal;
+
+          // LOGO (header)
+          async function getLogoDataURL(){
+            const logoHeader = document.getElementById('logoHeader');
+            if (logoHeader && !logoHeader.classList.contains('hidden')){
+              try{
+                const canvas=document.createElement('canvas');
+                canvas.width=logoHeader.naturalWidth; canvas.height=logoHeader.naturalHeight;
+                const ctx=canvas.getContext('2d'); ctx.drawImage(logoHeader,0,0);
+                return canvas.toDataURL('image/jpeg',0.92);
+              }catch(e){}
+            }
+            try{
+              const resp=await fetch('/logo.jpeg',{cache:'no-cache'});
+              if(!resp.ok) return null;
+              const blob=await resp.blob();
+              return await new Promise((resolve)=>{
+                const reader=new FileReader(); reader.onload=()=>resolve(reader.result); reader.readAsDataURL(blob);
+              });
+            }catch(e){ return null; }
+          }
+
+          const logoData = await getLogoDataURL();
+          const headerY  = margin;
+          if (logoData){ doc.addImage(logoData, 'JPEG', margin, headerY, 50, 50); }
+
+          doc.setFont('helvetica','bold'); doc.setFontSize(18);
+          doc.text('Proposta Comercial', logoData ? margin+100 : margin, headerY+24);
+
+          if (IS_PRO){
+            doc.setFont('helvetica','normal'); doc.setFontSize(9);
+            doc.text(`${COMPANY.name || ''} • Tel: ${COMPANY.phone || ''} • ${COMPANY.site || ''}`,
+                    logoData ? margin+100 : margin, headerY+42);
+          }
+
+          doc.setDrawColor(200);
+          doc.line(margin, headerY+60, pageWidth-margin, headerY+60);
+
+          // =========================
+          //  DETALHES DA PROPOSTA
+          // =========================
+          let y = headerY + 88;
+
+          // ---- Linha do cliente (sem tabela), com wrap dentro das margens
+          const cName  = (clientName?.value || '').trim();
+          const cDoc   = (cpfCnpj?.value || '').trim();
+          const cEmail = (clientEmail?.value || '').trim();
+          const cPhone = (clientPhone?.value || '').trim();
+
+          const parts = [];
+          if (cName)  parts.push(`Aos cuidados de ${cName}`);
+          if (cDoc)   parts.push(`CPF/CNPJ: ${cDoc}`);
+          if (cEmail) parts.push(`email: ${cEmail}`);
+          if (cPhone) parts.push(`telefone: ${cPhone}`);
+
+          if (parts.length){
+            doc.setFont('helvetica','normal'); doc.setFontSize(11);
+            // Junta tudo numa sentença e faz wrap
+            const clientLine = parts.join(', ');
+            const clientWrapped = doc.splitTextToSize(clientLine, maxTextWidth);
+            doc.text(clientWrapped, margin, y);
+            y += 14 + (clientWrapped.length-1)*12; // avança respeitando as linhas quebradas
+            y += 14;
+          }
+
+          doc.setFont('helvetica','bold'); doc.setFontSize(12);
+          doc.text('Detalhes da Proposta', margin, y); y += 16;
+
+          // Datas e itens principais
+          doc.setFont('helvetica','normal'); doc.setFontSize(11);
+          doc.text(`Data: ${formatarData(dataAtual)} — Válida até: ${formatarData(dataValidade)}`, margin, y); y += 16;
+          doc.text(`Produto: Botton ${label}`, margin, y); y += 16;
+          doc.text(`Quantidade: ${q}`, margin, y); y += 14;
+
+          // Preço destaque
+          doc.setFont('helvetica','bold'); doc.setFontSize(11);
+          doc.text(`Preço unit.: ${brl(finalUnit)} — Preço Final: ${brl(finalTotal)}`, margin, y); 
+          y += 18;
+
+          // =========================
+          //  Embalagem e Pesos (depois do preço, antes da tabela)
+          // =========================
+          // try{
+          //   if(!BOX_CSV_OK) await loadBoxesCSV();
+          //   if(BOX_ROWS && BOX_ROWS.length){
+          //     const box = findBestBox(sizeKey, q);
+          //     if (box){
+          //       // Reset de qualquer espaçamento estranho (se plugin estiver presente)
+          //       if (typeof doc.setCharSpace === 'function') doc.setCharSpace(0);
+
+          //       const unitW = STATE[sizeKey].unitWeightKg || 0;  // kg/un
+          //       const cap   = Number(box.capacity) || q;
+          //       const caixas= Math.max(1, Number(box.boxesNeeded || Math.ceil(q/Math.max(cap,1))));
+
+          //       const altura      = Math.max(2,  safe(box.altura_embalagem,0));
+          //       const largura     = Math.max(11, safe(box.largura_embalagem,0));
+          //       const comprimento = Math.max(16, safe(box.comprimento_embalagem,0));
+          //       const pesoCaixaKg = safe(box.peso_embalagem,0);
+
+          //       const pesoLiquidoTotal = unitW * q;
+          //       let restante = q, brutoTotal = 0;
+          //       for (let i=0;i<caixas;i++){
+          //         const unidades = Math.min(cap, restante); restante -= unidades;
+          //         const pesoBrutoCaixa = (unitW * unidades) + pesoCaixaKg;
+          //         brutoTotal += pesoBrutoCaixa;
+          //       }
+          //       const perBox = brutoTotal / caixas;
+
+          //       doc.setFont('helvetica','bold'); doc.setFontSize(11);
+          //       doc.text('Embalagem e Pesos', margin, y); y += 14;
+
+          //       doc.setFont('helvetica','normal'); doc.setFontSize(11);
+          //       // Quebra controlada para evitar overflow se alguém usar números longos
+          //       const line1 = `${caixas} caixa(s) • ${altura}×${largura}×${comprimento} cm`;
+          //       const line2 = `Peso líquido: ${pesoLiquidoTotal.toFixed(3)} kg — Peso bruto: ${brutoTotal.toFixed(3)} kg (≈ ${perBox.toFixed(3)} kg/caixa)`;
+          //       const l1 = doc.splitTextToSize(line1, maxTextWidth);
+          //       const l2 = doc.splitTextToSize(line2, maxTextWidth);
+          //       doc.text(l1, margin, y); y += 14 + (l1.length-1)*12;
+          //       doc.text(l2, margin, y); y += 16 + (l2.length-1)*12;
+          //     }
+          //   }
+          // } catch(_) { /* silencioso */ }
+
+          // Tabela principal (itens/valores)
+          const bodyRows = [
+            ['Produto', `Botton ${label}`],
+            ['Quantidade', `${q}`],
+            ['Preço Final', `${brl(finalTotal)}`]
+          ];
+          if (incluirFrete){
+            bodyRows.push(['Frete', `${brl(safe(freteEstimado.value,0))}`]);
+            bodyRows.push(['TOTAL GERAL', `${brl(totalGeral)}`]);
+          }
+
+          doc.autoTable({
+            startY: y,
+            styles: { fontSize: 10, cellPadding: 6 },
+            head: [['Item','Valor']],
+            body: bodyRows,
+            didParseCell: function(data){
+              if (incluirFrete && data.row.index === bodyRows.length-1){
+                data.cell.styles.fontStyle='bold';
+              }
+            }
+          });
+
+          // Observação sobre o frete e CEP (apenas se frete incluso)
+          if (incluirFrete){
+            const digits = (sanitizeCEP(cepDestino?.value) || '');
+            const formatCEP = (s)=> s && s.length===8 ? `${s.slice(0,5)}-${s.slice(5)}` : s;
+            const cepFmt = formatCEP(digits);
+
+            let note = '* O frete é válido somente para o CEP';
+            if (cepFmt) note += ` ${cepFmt}`;
+            note += ', podendo sofrer pequenas variações até o aceite da proposta.';
+
+            const yNote = (doc.lastAutoTable && doc.lastAutoTable.finalY ? doc.lastAutoTable.finalY : y) + 14;
+            doc.setFont('helvetica','italic'); doc.setFontSize(10);
+            doc.text(doc.splitTextToSize(note, maxTextWidth), margin, yNote);
+          }
+
+          // Marca d'água para plano não PRO
+          if (!IS_PRO){
+            doc.setTextColor(180,0,0);
+            doc.setFontSize(48);
+            doc.text('DEMONSTRAÇÃO', pageWidth/2, 520, { align: 'center', angle: 45 });
+            doc.setTextColor(0);
+          }
+
+          // Rodapé
+          const footerY = doc.internal.pageSize.getHeight() - 40;
+          doc.setFontSize(9); doc.setTextColor(120);
+          doc.text('Proposta válida por 7 dias. Valores sujeitos a alterações conforme condições de venda e frete.', 40, footerY);
+
+          // Nome do arquivo
+          doc.save(`Proposta_GroundShop_Botton_${label.replace(',', '_')}_q${q}_${formatarDataFile(dataAtual)}.pdf`);
+
+        } catch(e){
+          showError('Falha ao gerar PDF: ' + (e.message || e));
+        }
+      }
+
+      function toggleFreteVisibility(){ const isNuvem = platformSelect.value==='nuvem'; if(isNuvem){ freteDetails.setAttribute('open',''); } else { freteDetails.removeAttribute('open'); chkFreteCliente.checked=false; } }
+      function togglePriceCostVisibility(){ const isNuvem = platformSelect.value==='nuvem'; if(isNuvem){ priceCostDetails.setAttribute('open',''); } else { priceCostDetails.removeAttribute('open'); } }
+      function applyProRestrictions(){
+        if(!IS_PRO){
+          servicoCorreios.value='outros';
+          for(const opt of servicoCorreios.querySelectorAll('option')){
+            if(opt.value!=='outros'){ opt.disabled=true; } else { opt.disabled=false; }
+          }
+          btnCalcularFrete.disabled=true;
+          freteInfo.textContent='Frete (Correios) disponível somente no plano PRO.';
+        } else {
+          for(const opt of servicoCorreios.querySelectorAll('option')) opt.disabled=false;
+          btnCalcularFrete.disabled=false;
+          freteInfo.textContent='';
+        }
+      }
+      function bindEvents(){
+        el('btnDoLogin').addEventListener('click', doLogin);
+        el('btnDemo').addEventListener('click', ()=>{ hideAuthOverlay(); IS_PRO=false; applyCompanyBrand(true); applyProRestrictions(); });
+        el('btnLogout').addEventListener('click', doLogout);
+        el('btnLogout_mobile').addEventListener('click', doLogout);
+
+        sizeSelect?.addEventListener('change', ()=>{ loadControlsForSize(getSelectedSizeKey()); refreshChartAndKpis(); updatePackagingInfo(); });
+        qtyInput?.addEventListener('input', ()=>{ qtyRange.value=clamp(parseInt(qtyInput.value||1,10),1,1000); refreshChartAndKpis(); updatePackagingInfo(); });
+        qtyRange?.addEventListener('input', ()=>{ qtyInput.value=qtyRange.value; refreshChartAndKpis(); updatePackagingInfo(); });
+        tabSimplified?.addEventListener('click', ()=>{ setTabs('simplificado'); refreshChartAndKpis(); });
+        tabAdvanced?.addEventListener('click', ()=>{ setTabs('avancado'); refreshChartAndKpis(); });
+        [simpBase,simpMin,simpQ0,simpN].forEach(elm=>elm?.addEventListener('input', refreshChartAndKpis));
+        [advQ1,advQ10,advQ50,advQ100,advQ500,advQ1000].forEach(elm=>elm?.addEventListener('input', ()=>{ if(chkAutoInt && [advQ10,advQ50,advQ100,advQ500].includes(elm)) chkAutoInt.checked=false; refreshChartAndKpis(); }));
+        chkAutoInt && chkAutoInt.addEventListener('change', refreshChartAndKpis);
+        btnAdvReset && btnAdvReset.addEventListener('click', ()=>{ const k=getSelectedSizeKey(); STATE[k]=JSON.parse(JSON.stringify(DEFAULT_DATA[k])); loadControlsForSize(k); setTabs('avancado'); refreshChartAndKpis(); updatePackagingInfo(); });
+        function onPlatformChange(){ loadPlatformDefaults(); refreshChartAndKpis(); toggleFreteVisibility(); }
+        platformSelect?.addEventListener('change', onPlatformChange);
+        [chkCommission,chkFee,chkShipping,inputCommission,inputFixedFee,inputShipping,inputShipThreshold].forEach(elm=>elm?.addEventListener('input', refreshChartAndKpis));
+        btnResetAll?.addEventListener('click', ()=>{ for(const k of Object.keys(STATE)) STATE[k]=JSON.parse(JSON.stringify(DEFAULT_DATA[k])); sizeSelect.value="2.5"; loadControlsForSize("2.5"); platformSelect.value="nuvem"; loadPlatformDefaults(); setTabs('avancado'); qtyInput.value=1; qtyRange.value=1; cepDestino.value=''; freteEstimado.value=''; chkFreteCliente.checked=false; toggleFreteVisibility(); refreshChartAndKpis(); });
+        btnExportCSV?.addEventListener('click', exportCSV); btnExportCSV_mobile && btnExportCSV_mobile.addEventListener('click', exportCSV);
+        btnExportPDF?.addEventListener('click', exportPDF); btnExportPDF_mobile && btnExportPDF_mobile.addEventListener('click', exportPDF);
+        btnCopyQuote && btnCopyQuote.addEventListener('click', copyQuote); btnCopyQuote_mobile && btnCopyQuote_mobile.addEventListener('click', copyQuote);
+        btnCalcularFrete?.addEventListener('click', calcularFrete);
+        cepDestino?.addEventListener('input', ()=>{ const hasVal=(cepDestino.value||'').trim().length>=8; if(hasVal) chkFreteCliente.checked=true; });
+        servicoCorreios?.addEventListener('change', ()=>{ const isOutros=servicoCorreios.value==='outros'; btnCalcularFrete.disabled=isOutros || !IS_PRO; if(isOutros){ freteInfo.textContent='Informe o valor manual do frete (Outros).'; } else { freteInfo.textContent= IS_PRO ? '' : 'Frete (Correios) disponível somente no plano PRO.'; } });
+      }
+      function bootApp(){
+        try{ loadControlsForSize("2.5"); initChart(); bindEvents(); platformSelect.value="nuvem"; loadPlatformDefaults(); setTabs('avancado'); toggleFreteVisibility(); applyProRestrictions(); refreshChartAndKpis(); loadBoxesCSV(); updatePackagingInfo(); } catch(e){ showError('Falha na inicialização: '+(e.message||e)); }
+      }
+
+      fetchConfig();
+    </script>
 </body>
 </html>
