@@ -382,6 +382,82 @@ const btnCopyQuote=el('btnCopyQuote'); const btnCopyQuote_mobile=el('btnCopyQuot
 const btnLogout=el('btnLogout'); const btnLogout_mobile=el('btnLogout_mobile');
 const tiersBody=el('tiersBody');
 
+// --- utils para CPF/CNPJ ---
+function onlyDigits(s){ return (s || '').replace(/\D/g, ''); }
+
+// CPF: 11 dígitos, dois dígitos verificadores
+function isValidCPF(cpf){
+  const s = onlyDigits(cpf);
+  if (s.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(s)) return false; // todos iguais
+
+  let sum = 0;
+  for (let i=0;i<9;i++) sum += parseInt(s[i]) * (10 - i);
+  let d1 = (sum * 10) % 11; if (d1 === 10) d1 = 0;
+  if (d1 !== parseInt(s[9])) return false;
+
+  sum = 0;
+  for (let i=0;i<10;i++) sum += parseInt(s[i]) * (11 - i);
+  let d2 = (sum * 10) % 11; if (d2 === 10) d2 = 0;
+  return d2 === parseInt(s[10]);
+}
+
+// CNPJ: 14 dígitos, dois dígitos verificadores
+function isValidCNPJ(cnpj){
+  const s = onlyDigits(cnpj);
+  if (s.length !== 14) return false;
+  if (/^(\d)\1{13}$/.test(s)) return false; // todos iguais
+
+  // dígito 1
+  const w1 = [5,4,3,2,9,8,7,6,5,4,3,2];
+  let sum = 0;
+  for (let i=0;i<w1.length;i++) sum += parseInt(s[i]) * w1[i];
+  let rest = sum % 11;
+  const d1 = rest < 2 ? 0 : 11 - rest;
+  if (d1 !== parseInt(s[12])) return false;
+
+  // dígito 2
+  const w2 = [6,5,4,3,2,9,8,7,6,5,4,3,2];
+  sum = 0;
+  for (let i=0;i<w2.length;i++) sum += parseInt(s[i]) * w2[i];
+  rest = sum % 11;
+  const d2 = rest < 2 ? 0 : 11 - rest;
+  return d2 === parseInt(s[13]);
+}
+
+// Decide com base na quantidade de dígitos (<=11 -> CPF, >11 -> CNPJ)
+function validateCpfCnpj(value){
+  const d = onlyDigits(value);
+  if (!d) return true; // vazio = ok (você disse que é opcional)
+  return d.length <= 11 ? isValidCPF(d) : isValidCNPJ(d);
+}
+
+// (opcional) máscara bonitinha enquanto digita
+function formatCpfCnpj(value){
+  const d = onlyDigits(value).slice(0,14);
+  if (d.length <= 11){
+    // CPF: 000.000.000-00
+    return d
+      .replace(/^(\d{3})(\d)/, '$1.$2')
+      .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+      .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4');
+  }
+  // CNPJ: 00.000.000/0000-00
+  return d
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3/$4')
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, '$1.$2.$3/$4-$5');
+}
+
+function markInvalid(el, invalid){
+  if (!el) return;
+  el.classList.toggle('ring-2', invalid);
+  el.classList.toggle('ring-red-500', invalid);
+  el.classList.toggle('ring-offset-1', invalid);
+}
+
+
 function priceLogistic(q, pmin, pmax, q0, n){ if(q>=1000) return pmin; const denom=1+Math.pow(q/q0,n); return pmin+(pmax-pmin)/denom; }
 function priceGeomBetween(q, q1,p1,q2,p2){ const t=(Math.log(q)-Math.log(q1))/(Math.log(q2)-Math.log(q1)); return p1*Math.pow(p2/p1,t); }
 function priceAnchors(q, anchors){ const A=[1,10,50,100,500,1000]; if(q<=1) return anchors[1]; if(q>=1000) return anchors[1000]; for(let i=0;i<A.length-1;i++){const q1=A[i],q2=A[i+1]; if(q>=q1&&q<=q2) return priceGeomBetween(q,q1,anchors[q1],q2,anchors[q2]);} return anchors[1000]; }
