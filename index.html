@@ -871,11 +871,13 @@
           };
 
           const result = await requestCorreiosREST(payload);
+          const kpiTotalFinalValorLimpo = kpiTotalFinal.textContent.replace('R$', '').replace(',', '.').trim();
+          const kpiTotalFinalNumero = parseFloat(kpiTotalFinalValorLimpo);
           const totalFrete = Number(result?.totalFrete || 0);
-          freteEstimado.value = totalFrete.toFixed(2);
+          freteEstimado.value = (totalFrete + kpiTotalFinalNumero * 0.02).toFixed(2);
 
           freteInfo.textContent =
-            `Frete (${servCode==='04014'?'SEDEX':'PAC'}) estimado: ${brl(totalFrete)} ` +
+            `Frete (${servCode==='04014'?'SEDEX':'PAC'}) estimado: ${brl(totalFrete)} - seguro estimado: ${brl(kpiTotalFinalNumero * 0.02)} (2% do Preço Final)` +
             (Array.isArray(result?.itens) && result.itens.length ? '• cotação OK.' : '');
 
           chkFreteCliente.checked = true;
