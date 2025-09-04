@@ -10,7 +10,7 @@ export default async function handler(req, res) {
 
   const cfg = {
     name: process.env.COMPANY_NAME || 'Ground Shop',
-    phone: process.env.COMPANY_PHONE || '(12) 9119-7234',
+    phone: process.env.COMPANY_PHONE || '(12) 97898-9499',
     site: process.env.COMPANY_SITE || 'https://www.groundshop.com.br/',
     logo: process.env.LOGO_URL || './logo.jpeg',
   };
