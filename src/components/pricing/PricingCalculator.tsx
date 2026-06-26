@@ -3,12 +3,16 @@
 import { useMemo, useState } from "react";
 import { Calculator, FileText } from "lucide-react";
 import { calculateQuote } from "@/domain/pricing/pricing";
-import type { DemoProductVariant, platformPresets } from "@/domain/pricing/defaults";
+import type { DemoProductVariant } from "@/domain/pricing/defaults";
 import type { PlatformRule } from "@/domain/pricing/types";
+
+export type PricingPlatformOption = PlatformRule & {
+  name: string;
+};
 
 type PricingCalculatorProps = {
   variants: DemoProductVariant[];
-  platforms: typeof platformPresets;
+  platforms: Record<string, PricingPlatformOption>;
   readonlyMode?: boolean;
 };
 
@@ -20,7 +24,7 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
   const [platformKey, setPlatformKey] = useState(Object.keys(platforms)[0] ?? "direct");
 
   const variant = variants.find((item) => item.id === variantId) ?? variants[0];
-  const platform: PlatformRule = platforms[platformKey] ?? platforms.direct;
+  const platform: PricingPlatformOption = platforms[platformKey] ?? Object.values(platforms)[0];
 
   const result = useMemo(() => {
     if (!variant) return null;
@@ -82,7 +86,7 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
             >
               {Object.entries(platforms).map(([key, rule]) => (
                 <option key={key} value={key}>
-                  {key === "direct" ? "Venda direta" : `Marketplace (${(rule.commissionRate * 100).toFixed(0)}%)`}
+                  {rule.name}
                 </option>
               ))}
             </select>

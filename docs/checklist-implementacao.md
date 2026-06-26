@@ -29,6 +29,8 @@ Status atualizado durante a refatoracao inicial.
 - [x] Implementar API `/api/me`.
 - [x] Implementar API `/api/products`.
 - [x] Implementar API `/api/pricing/calculate`.
+- [x] Implementar API `/api/customers`.
+- [x] Implementar API `/api/quotes`.
 - [x] Criar demo publica com dados ficticios.
 - [x] Criar dashboard autenticado.
 - [x] Criar precificador inicial autenticado.
@@ -36,7 +38,12 @@ Status atualizado durante a refatoracao inicial.
 - [x] Rodar typecheck local.
 - [x] Rodar testes unitarios locais.
 - [x] Rodar build local.
-- [ ] Persistir orcamentos.
+- [x] Persistir orcamentos com item e snapshot de calculo.
+- [x] Criar migration para permitir insert de auditoria por tenant.
+- [x] Criar cadastro/listagem inicial de clientes.
+- [x] Criar tela inicial de orcamentos.
+- [x] Conectar precificador autenticado aos canais do tenant.
+- [x] Adicionar dominio testado de snapshots/transicoes de orcamento.
 - [ ] Criar CRUD de produtos.
 - [ ] Criar CRUD de curvas.
 - [ ] Criar CRUD de clientes.
@@ -63,7 +70,7 @@ Resultado:
 
 - lint passou;
 - typecheck passou;
-- testes passaram: 14 testes em 4 arquivos;
+- testes passaram: 16 testes em 5 arquivos;
 - build Next passou.
 
 Ponto de atencao:
@@ -76,6 +83,7 @@ Ponto de atencao:
 2. `supabase/migrations/0002_rls_policies.sql`
 3. `supabase/migrations/0003_seed_ground_shop.sql`
 4. `supabase/migrations/0004_tenant_profile_integrations.sql`
+5. `supabase/migrations/0005_audit_log_insert_policy.sql`
 
 ## Execucao Recomendada no Supabase
 
@@ -83,13 +91,14 @@ Ponto de atencao:
 2. Rode `0002_rls_policies.sql`.
 3. Rode `0003_seed_ground_shop.sql`.
 4. Rode `0004_tenant_profile_integrations.sql`.
-5. Gere o hash de senha:
+5. Rode `0005_audit_log_insert_policy.sql`.
+6. Gere o hash de senha:
 
 ```bash
 node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 ```
 
-6. Copie `supabase/seed-admin.example.sql`, substitua email, nome e hash, e rode no SQL Editor.
+7. Copie `supabase/seed-admin.example.sql`, substitua email, nome e hash, e rode no SQL Editor.
 
 ## Observacoes
 

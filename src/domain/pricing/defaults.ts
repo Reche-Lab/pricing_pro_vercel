@@ -28,17 +28,19 @@ export const demoVariants: DemoProductVariant[] = [
   }
 ];
 
-export const platformPresets: Record<string, PlatformRule> = {
+export const platformPresets = {
   direct: {
+    name: "Venda direta",
     commissionRate: 0,
     fixedFee: 0,
     sellerShippingCost: 0,
     sellerShippingThreshold: 0
   },
   marketplace_standard: {
+    name: "Marketplace demo",
     commissionRate: 0.14,
     fixedFee: 4,
     sellerShippingCost: 0,
     sellerShippingThreshold: 0
   }
-};
+} satisfies Record<string, PlatformRule & { name: string }>;
