@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:login": "node --env-file=.env scripts/check-login.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

@@ -5,7 +5,8 @@ const serverEnvSchema = z.object({
   AUTH_SECRET: z.string().min(32),
   APP_ENCRYPTION_KEY: z.string().min(32),
   APP_URL: z.string().url().default("http://localhost:3000"),
-  COOKIE_NAME: z.string().default("pricing_session")
+  COOKIE_NAME: z.string().default("pricing_session"),
+  DATABASE_SSL: z.enum(["true", "false", "auto"]).default("auto")
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

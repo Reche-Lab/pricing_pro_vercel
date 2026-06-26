@@ -10,13 +10,33 @@ declare global {
 
 export function getPool(): pg.Pool {
   if (!globalThis.__pricingPool) {
+    const env = getServerEnv();
     globalThis.__pricingPool = new Pool({
-      connectionString: getServerEnv().DATABASE_URL,
-      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : undefined
+      connectionString: env.DATABASE_URL,
+      ssl: resolveSslConfig(env.DATABASE_URL, env.DATABASE_SSL)
     });
   }
 
   return globalThis.__pricingPool;
+}
+
+function resolveSslConfig(databaseUrl: string, mode: "true" | "false" | "auto"): pg.PoolConfig["ssl"] {
+  if (mode === "true") return { rejectUnauthorized: false };
+  if (mode === "false") return undefined;
+
+  if (process.env.NODE_ENV === "production") return { rejectUnauthorized: false };
+
+  try {
+    const host = new URL(databaseUrl).hostname;
+    const isSupabaseHost =
+      host.endsWith(".supabase.co") ||
+      host.includes(".pooler.supabase.com") ||
+      host.includes("supabase.com");
+
+    return isSupabaseHost ? { rejectUnauthorized: false } : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function query<T extends pg.QueryResultRow>(sql: string, params: unknown[] = []): Promise<T[]> {
