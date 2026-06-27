@@ -31,7 +31,13 @@ export default async function CustomersPage() {
                 <div className="grid gap-1 px-5 py-4 text-sm" key={customer.id}>
                   <p className="font-medium text-zinc-950">{customer.name}</p>
                   <p className="text-zinc-500">
-                    {[customer.email, customer.phone, customer.city, customer.state].filter(Boolean).join(" - ") ||
+                    {[
+                      customer.email,
+                      customer.phone,
+                      customer.postal_code,
+                      customer.city,
+                      customer.state
+                    ].filter(Boolean).join(" - ") ||
                       "Sem dados adicionais"}
                   </p>
                 </div>

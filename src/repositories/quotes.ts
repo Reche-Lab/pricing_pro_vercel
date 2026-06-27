@@ -25,10 +25,18 @@ export type QuoteDetail = {
   margin_percent: string;
   notes: string | null;
   created_at: string;
+  customer_id: string | null;
   customer_name: string | null;
   customer_document: string | null;
   customer_email: string | null;
   customer_phone: string | null;
+  customer_postal_code: string | null;
+  customer_address_line: string | null;
+  customer_address_number: string | null;
+  customer_address_complement: string | null;
+  customer_district: string | null;
+  customer_city: string | null;
+  customer_state: string | null;
   created_by_name: string | null;
 };
 
@@ -106,10 +114,18 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           q.margin_percent,
           q.notes,
           q.created_at,
+          c.id as customer_id,
           c.name as customer_name,
           c.document as customer_document,
           c.email as customer_email,
           c.phone as customer_phone,
+          c.postal_code as customer_postal_code,
+          c.address_line as customer_address_line,
+          c.address_number as customer_address_number,
+          c.address_complement as customer_address_complement,
+          c.district as customer_district,
+          c.city as customer_city,
+          c.state as customer_state,
           u.name as created_by_name
         from quotes q
         left join customers c on c.id = q.customer_id and c.tenant_id = q.tenant_id

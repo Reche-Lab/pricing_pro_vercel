@@ -7,6 +7,10 @@ export type CustomerRow = {
   email: string | null;
   phone: string | null;
   postal_code: string | null;
+  address_line: string | null;
+  address_number: string | null;
+  address_complement: string | null;
+  district: string | null;
   city: string | null;
   state: string | null;
   created_at: string;
@@ -19,6 +23,9 @@ export type CreateCustomerInput = {
   phone?: string | null;
   postalCode?: string | null;
   addressLine?: string | null;
+  addressNumber?: string | null;
+  addressComplement?: string | null;
+  district?: string | null;
   city?: string | null;
   state?: string | null;
 };
@@ -27,7 +34,20 @@ export async function listCustomers(userId: string, tenantId: string): Promise<C
   return withTenantContext(userId, tenantId, async (client) => {
     const result = await client.query<CustomerRow>(
       `
-        select id, name, document, email, phone, postal_code, city, state, created_at
+        select
+          id,
+          name,
+          document,
+          email,
+          phone,
+          postal_code,
+          address_line,
+          address_number,
+          address_complement,
+          district,
+          city,
+          state,
+          created_at
         from customers
         where tenant_id = $1
         order by created_at desc
@@ -56,11 +76,27 @@ export async function createCustomer(
           phone,
           postal_code,
           address_line,
+          address_number,
+          address_complement,
+          district,
           city,
           state
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        returning id, name, document, email, phone, postal_code, city, state, created_at
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        returning
+          id,
+          name,
+          document,
+          email,
+          phone,
+          postal_code,
+          address_line,
+          address_number,
+          address_complement,
+          district,
+          city,
+          state,
+          created_at
       `,
       [
         tenantId,
@@ -70,6 +106,9 @@ export async function createCustomer(
         input.phone || null,
         input.postalCode || null,
         input.addressLine || null,
+        input.addressNumber || null,
+        input.addressComplement || null,
+        input.district || null,
         input.city || null,
         input.state || null
       ]

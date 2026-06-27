@@ -45,6 +45,9 @@ export function AppShell({ children, title, subtitle, tenantName }: AppShellProp
             <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/quotes">
               Orcamentos
             </Link>
+            <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/settings">
+              Configuracoes
+            </Link>
             <form action="/api/auth/logout" method="post">
               <button
                 className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-zinc-700 hover:bg-zinc-100"

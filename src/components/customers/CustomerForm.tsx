@@ -24,6 +24,10 @@ export function CustomerForm() {
         email: form.get("email"),
         phone: form.get("phone"),
         postalCode: form.get("postalCode"),
+        addressLine: form.get("addressLine"),
+        addressNumber: form.get("addressNumber"),
+        addressComplement: form.get("addressComplement"),
+        district: form.get("district"),
         city: form.get("city"),
         state: form.get("state")
       })
@@ -51,6 +55,12 @@ export function CustomerForm() {
         <Input label="Email" name="email" type="email" />
         <Input label="Telefone" name="phone" />
         <Input label="CEP" name="postalCode" />
+        <Input label="Endereco" name="addressLine" />
+        <div className="grid grid-cols-[120px_1fr] gap-3">
+          <Input label="Numero" name="addressNumber" />
+          <Input label="Complemento" name="addressComplement" />
+        </div>
+        <Input label="Bairro" name="district" />
         <div className="grid grid-cols-[1fr_80px] gap-3">
           <Input label="Cidade" name="city" />
           <Input label="UF" name="state" maxLength={2} />

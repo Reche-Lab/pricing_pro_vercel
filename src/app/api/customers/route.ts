@@ -11,6 +11,9 @@ const customerSchema = z.object({
   phone: z.string().trim().optional().nullable(),
   postalCode: z.string().trim().optional().nullable(),
   addressLine: z.string().trim().optional().nullable(),
+  addressNumber: z.string().trim().optional().nullable(),
+  addressComplement: z.string().trim().optional().nullable(),
+  district: z.string().trim().optional().nullable(),
   city: z.string().trim().optional().nullable(),
   state: z.string().trim().max(2).optional().nullable()
 });

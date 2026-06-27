@@ -7,6 +7,7 @@ import {
   logIntegrationEvent
 } from "@/repositories/integrations";
 import { estimatePackaging } from "@/repositories/packaging";
+import { createShipmentDraft } from "@/repositories/shipments";
 import { quoteMelhorEnvioShipping } from "@/services/melhor-envio/melhor-envio";
 import type { MelhorEnvioCredentials, MelhorEnvioSettings } from "@/services/melhor-envio/types";
 
@@ -19,7 +20,8 @@ const quoteSchema = z.object({
   insuranceValue: z.number().min(0).optional(),
   ownHand: z.boolean().optional(),
   receipt: z.boolean().optional(),
-  serviceIds: z.array(z.string()).optional()
+  serviceIds: z.array(z.string()).optional(),
+  quoteId: z.string().uuid().optional()
 });
 
 export async function POST(request: Request) {
@@ -64,7 +66,21 @@ export async function POST(request: Request) {
       }
     });
 
-    return NextResponse.json({ ok: true, result, packaging });
+    let shipment: { id: string } | null = null;
+    if (parsed.data.quoteId) {
+      const selected = extractFirstQuoteOption(result);
+      shipment = await createShipmentDraft(session.userId, session.tenantId, {
+        quoteId: parsed.data.quoteId,
+        provider: "melhor_envio",
+        status: "quoted",
+        serviceName: selected.serviceName,
+        serviceCode: selected.serviceCode,
+        shippingAmount: selected.shippingAmount,
+        rawQuote: result
+      });
+    }
+
+    return NextResponse.json({ ok: true, result, packaging, shipment });
   } catch (error) {
     await logIntegrationEvent(session.userId, session.tenantId, {
       provider: "melhor_envio",
@@ -78,4 +94,30 @@ export async function POST(request: Request) {
       { status: 502 }
     );
   }
+}
+
+function extractFirstQuoteOption(result: unknown) {
+  const first = Array.isArray(result) ? result[0] : null;
+  const record = first && typeof first === "object" ? (first as Record<string, unknown>) : {};
+  const company = record.company && typeof record.company === "object" ? (record.company as Record<string, unknown>) : {};
+  return {
+    serviceName: stringOrNull(record.name) ?? stringOrNull(company.name) ?? "Melhor Envio",
+    serviceCode: stringOrNull(record.id),
+    shippingAmount: numberOrZero(record.price) || numberOrZero(record.custom_price)
+  };
+}
+
+function stringOrNull(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value;
+  if (typeof value === "number") return String(value);
+  return null;
+}
+
+function numberOrZero(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
 }

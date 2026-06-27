@@ -1,7 +1,10 @@
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
+import { MelhorEnvioPayloadPreview } from "@/components/quotes/MelhorEnvioPayloadPreview";
 import { QuoteStatusActions } from "@/components/quotes/QuoteStatusActions";
 import { QuoteWhatsAppButton } from "@/components/quotes/QuoteWhatsAppButton";
+import { MelhorEnvioShipmentActions } from "@/components/shipments/MelhorEnvioShipmentActions";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getQuoteDetail } from "@/repositories/quotes";
 import { listQuoteShipments } from "@/repositories/shipments";
@@ -45,6 +48,8 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
             </div>
           </div>
 
+          <MelhorEnvioPayloadPreview quoteId={quoteId} />
+
           <section className="rounded-lg border border-zinc-200 bg-white">
             <div className="border-b border-zinc-200 px-5 py-4">
               <h2 className="font-semibold">Itens</h2>
@@ -82,6 +87,9 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                       {brl.format(Number(shipment.shipping_amount))}
                     </p>
                     {shipment.tracking_code ? <p className="text-zinc-500">Rastreio: {shipment.tracking_code}</p> : null}
+                    {shipment.provider === "melhor_envio" ? (
+                      <MelhorEnvioShipmentActions shipmentId={shipment.id} />
+                    ) : null}
                   </div>
                 ))
               )}
@@ -93,6 +101,12 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
           <div className="rounded-lg border border-zinc-200 bg-white p-5">
             <h2 className="font-semibold">Acoes</h2>
             <div className="mt-4 grid gap-4">
+              <Link
+                className="focus-ring inline-flex w-fit rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                href={`/api/quotes/${quoteId}/pdf`}
+              >
+                Baixar PDF
+              </Link>
               <QuoteWhatsAppButton quoteId={quoteId} />
               <QuoteStatusActions quoteId={quoteId} />
             </div>

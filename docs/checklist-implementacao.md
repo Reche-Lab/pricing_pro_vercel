@@ -69,6 +69,14 @@ Status atualizado durante a refatoracao inicial.
 - [x] Criar alteracao de status do orcamento.
 - [x] Criar texto de WhatsApp do orcamento.
 - [x] Criar vinculo inicial de envios/shipments ao orcamento.
+- [x] Gerar PDF do orcamento pela nova arquitetura.
+- [x] Criar acoes visuais de Melhor Envio por shipment no detalhe do orcamento.
+- [x] Persistir payload/resposta/status das etapas Melhor Envio em shipments.
+- [x] Criar migration de endereco completo para tenant e clientes.
+- [x] Criar tela de configuracoes do tenant/remetente.
+- [x] Ampliar cadastro de cliente com endereco completo.
+- [x] Criar gerador de payload base Melhor Envio a partir do orcamento.
+- [x] Criar teste TDD para payload base Melhor Envio.
 - [ ] Importar `boxes.csv` no banco do ambiente alvo.
 - [ ] Configurar credenciais Correios no banco do ambiente alvo.
 - [ ] Configurar credenciais Melhor Envio no banco do ambiente alvo.
@@ -93,7 +101,7 @@ Resultado:
 
 - lint passou;
 - typecheck passou;
-- testes passaram: 17 testes em 6 arquivos;
+- testes passaram: 25 testes em 11 arquivos;
 - build Next passou.
 
 ## Acoes Manuais Pendentes
@@ -134,6 +142,7 @@ Ponto de atencao:
 4. `supabase/migrations/0004_tenant_profile_integrations.sql`
 5. `supabase/migrations/0005_audit_log_insert_policy.sql`
 6. `supabase/migrations/0006_shipments.sql`
+7. `supabase/migrations/0007_addresses.sql`
 
 ## Execucao Recomendada no Supabase
 
@@ -143,13 +152,14 @@ Ponto de atencao:
 4. Rode `0004_tenant_profile_integrations.sql`.
 5. Rode `0005_audit_log_insert_policy.sql`.
 6. Rode `0006_shipments.sql`.
-7. Gere o hash de senha:
+7. Rode `0007_addresses.sql`.
+8. Gere o hash de senha:
 
 ```bash
 node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 ```
 
-8. Copie `supabase/seed-admin.example.sql`, substitua email, nome e hash, e rode no SQL Editor.
+9. Copie `supabase/seed-admin.example.sql`, substitua email, nome e hash, e rode no SQL Editor.
 
 ## Observacoes
 

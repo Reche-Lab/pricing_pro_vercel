@@ -99,3 +99,97 @@ export async function createShipmentDraft(
     return { id: result.rows[0].id };
   });
 }
+
+export async function getShipment(userId: string, tenantId: string, shipmentId: string): Promise<ShipmentRow | null> {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const result = await client.query<ShipmentRow>(
+      `
+        select
+          id,
+          provider,
+          provider_shipment_id,
+          provider_order_id,
+          tracking_code,
+          status,
+          service_name,
+          service_code,
+          shipping_amount,
+          label_url,
+          created_at
+        from shipments
+        where tenant_id = $1 and id = $2
+        limit 1
+      `,
+      [tenantId, shipmentId]
+    );
+
+    return result.rows[0] ?? null;
+  });
+}
+
+export async function updateShipmentFlow(
+  userId: string,
+  tenantId: string,
+  input: {
+    shipmentId: string;
+    status: string;
+    rawPayload?: unknown;
+    rawResponse?: unknown;
+    providerShipmentId?: string | null;
+    providerOrderId?: string | null;
+    trackingCode?: string | null;
+    labelUrl?: string | null;
+  }
+) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const result = await client.query<{ id: string }>(
+      `
+        update shipments
+        set status = $3,
+            raw_payload = coalesce($4::jsonb, raw_payload),
+            raw_response = coalesce($5::jsonb, raw_response),
+            provider_shipment_id = coalesce($6, provider_shipment_id),
+            provider_order_id = coalesce($7, provider_order_id),
+            tracking_code = coalesce($8, tracking_code),
+            label_url = coalesce($9, label_url),
+            updated_at = now()
+        where tenant_id = $1 and id = $2
+        returning id
+      `,
+      [
+        tenantId,
+        input.shipmentId,
+        input.status,
+        input.rawPayload === undefined ? null : JSON.stringify(input.rawPayload),
+        input.rawResponse === undefined ? null : JSON.stringify(input.rawResponse),
+        input.providerShipmentId ?? null,
+        input.providerOrderId ?? null,
+        input.trackingCode ?? null,
+        input.labelUrl ?? null
+      ]
+    );
+
+    if (!result.rows[0]) throw new Error("Shipment not found.");
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'shipments.flow_update', 'shipment', $3, $4)
+      `,
+      [
+        tenantId,
+        userId,
+        input.shipmentId,
+        JSON.stringify({
+          status: input.status,
+          providerShipmentId: input.providerShipmentId,
+          providerOrderId: input.providerOrderId,
+          trackingCode: input.trackingCode,
+          labelUrl: input.labelUrl
+        })
+      ]
+    );
+
+    return { id: input.shipmentId, status: input.status };
+  });
+}

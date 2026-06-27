@@ -53,15 +53,31 @@ Usa:
 ```txt
 POST /api/melhor-envio/cart
 POST /api/melhor-envio/checkout
+POST /api/shipments/:shipmentId/melhor-envio/cart
+POST /api/shipments/:shipmentId/melhor-envio/checkout
 ```
 
 Esses endpoints recebem `payload` e repassam para o Melhor Envio. O payload final depende dos dados completos de remetente, destinatario, produtos, servico e pedido.
+
+As rotas com `shipmentId` tambem persistem `raw_payload`, `raw_response` e status em `shipments`.
+
+### Payload base por orcamento
+
+```txt
+GET /api/quotes/:quoteId/melhor-envio/payload
+```
+
+Monta um rascunho de payload para carrinho usando dados do remetente em `/settings`, dados do cliente, itens do orcamento e o servico do primeiro shipment Melhor Envio vinculado.
+
+A resposta inclui `missingFields` para mostrar o que ainda precisa ser preenchido antes da compra da etiqueta. Por enquanto `volumes` continua pendente porque a embalagem final escolhida ainda nao fica persistida no shipment.
 
 ### Etiquetas
 
 ```txt
 POST /api/melhor-envio/generate
 POST /api/melhor-envio/print
+POST /api/shipments/:shipmentId/melhor-envio/generate
+POST /api/shipments/:shipmentId/melhor-envio/print
 ```
 
 Tambem recebem `payload`, pois a estrutura exata depende dos IDs dos envios comprados.
@@ -70,6 +86,7 @@ Tambem recebem `payload`, pois a estrutura exata depende dos IDs dos envios comp
 
 ```txt
 POST /api/melhor-envio/tracking
+POST /api/shipments/:shipmentId/melhor-envio/tracking
 ```
 
 Recebe `payload` com os identificadores de envio/pedido a rastrear.
@@ -86,13 +103,11 @@ Recebe `payload` com os identificadores de envio/pedido a rastrear.
 8. Imprimir etiqueta com `/api/melhor-envio/print`.
 9. Acompanhar com `/api/melhor-envio/tracking`.
 
+Na tela `/quotes/:quoteId`, os shipments vinculados ao orcamento exibem acoes para executar carrinho, checkout, gerar etiqueta, imprimir etiqueta e rastrear.
+
 ## Pendencias para produto final
 
-- Modelar endereco completo do tenant/remetente.
-- Modelar endereco completo do cliente/destinatario.
-- Salvar shipment/etiqueta no banco.
-- Vincular shipment a `quotes`.
+- Persistir a embalagem/volume final no shipment para preencher `volumes` automaticamente.
 - Criar tela de compra e pagamento da etiqueta.
 - Criar callback OAuth para persistir tokens automaticamente.
 - Criar jobs/retries para rastreio.
-

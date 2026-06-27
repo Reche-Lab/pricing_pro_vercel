@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildQuoteWhatsAppText } from "@/domain/whatsapp/quote";
+import { generateQuotePdf } from "@/services/pdf/quote-pdf";
 
-describe("quote whatsapp text", () => {
-  it("builds a customer-facing quote summary", () => {
-    const text = buildQuoteWhatsAppText({
+describe("quote PDF", () => {
+  it("generates a PDF buffer", async () => {
+    const pdf = await generateQuotePdf({
+      tenantName: "Ground Shop",
       quote: {
         id: "quote-id",
         status: "draft",
@@ -14,7 +15,7 @@ describe("quote whatsapp text", () => {
         grand_total: "220",
         margin_amount: "100",
         margin_percent: "50",
-        notes: null,
+        notes: "Observacao teste",
         created_at: "2026-06-26",
         customer_id: "customer-id",
         customer_name: "Cliente Teste",
@@ -41,8 +42,7 @@ describe("quote whatsapp text", () => {
       ]
     });
 
-    expect(text).toContain("Cliente: Cliente Teste");
-    expect(text).toContain("100x Botton - 2,5 cm");
-    expect(text.replace(/\s/g, " ")).toContain("Total: R$ 220,00");
+    expect(pdf.byteLength).toBeGreaterThan(500);
+    expect(Buffer.from(pdf.subarray(0, 4)).toString("ascii")).toBe("%PDF");
   });
 });
