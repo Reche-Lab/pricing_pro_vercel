@@ -7,12 +7,14 @@ type PayloadResponse = {
   ok: boolean;
   payload?: unknown;
   missingFields?: string[];
+  warnings?: string[];
   error?: string;
 };
 
 export function MelhorEnvioPayloadPreview({ quoteId }: { quoteId: string }) {
   const [payload, setPayload] = useState("");
   const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -30,6 +32,7 @@ export function MelhorEnvioPayloadPreview({ quoteId }: { quoteId: string }) {
 
     setPayload(JSON.stringify(data.payload, null, 2));
     setMissingFields(data.missingFields ?? []);
+    setWarnings(data.warnings ?? []);
   }
 
   async function copyPayload() {
@@ -67,6 +70,11 @@ export function MelhorEnvioPayloadPreview({ quoteId }: { quoteId: string }) {
       {missingFields.length > 0 ? (
         <div className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
           Pendencias: {missingFields.join(", ")}
+        </div>
+      ) : null}
+      {warnings.length > 0 ? (
+        <div className="rounded-md bg-sky-50 px-3 py-2 text-xs text-sky-800">
+          Avisos: {warnings.join(", ")}
         </div>
       ) : null}
       {payload ? (

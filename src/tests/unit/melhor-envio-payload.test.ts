@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 import type { ShipmentRow } from "@/repositories/shipments";
 import type { TenantShippingProfile } from "@/repositories/tenant-settings";
-import { buildMelhorEnvioCartPayloadDraft } from "@/services/melhor-envio/payloads";
+import {
+  buildMelhorEnvioCartPayloadDraft,
+  buildMelhorEnvioOperationPayloadDraft
+} from "@/services/melhor-envio/payloads";
 
 describe("melhor envio cart payload draft", () => {
   it("builds a cart payload from tenant, customer and quote data", () => {
@@ -13,7 +16,8 @@ describe("melhor envio cart payload draft", () => {
       shipment: shipment()
     });
 
-    expect(draft.missingFields).toEqual(["volumes"]);
+    expect(draft.missingFields).toEqual([]);
+    expect(draft.warnings).toEqual(["correios_multi_volume_requires_separate_labels"]);
     expect(draft.payload.service).toBe("1");
     expect(draft.payload.from).toMatchObject({
       name: "Ground Shop",
@@ -44,7 +48,50 @@ describe("melhor envio cart payload draft", () => {
         unitary_value: 2.5
       }
     ]);
+    expect(draft.payload.volumes).toEqual([
+      {
+        height: 4,
+        width: 11,
+        length: 17,
+        weight: 0.7
+      }
+    ]);
     expect(draft.payload.options.insurance_value).toBe(250);
+  });
+
+  it("prefers selected quote packages when available", () => {
+    const draft = buildMelhorEnvioCartPayloadDraft({
+      tenant: tenantProfile(),
+      quote: quoteDetail(),
+      items: [quoteItem()],
+      shipment: {
+        ...shipment(),
+        service_code: "3",
+        selected_quote: {
+          packages: [
+            {
+              dimensions: {
+                height: 10,
+                width: 20,
+                length: 30
+              },
+              weight: "1.2"
+            }
+          ]
+        }
+      }
+    });
+
+    expect(draft.missingFields).toEqual([]);
+    expect(draft.warnings).toEqual([]);
+    expect(draft.payload.volumes).toEqual([
+      {
+        height: 10,
+        width: 20,
+        length: 30,
+        weight: 1.2
+      }
+    ]);
   });
 
   it("reports missing required fields", () => {
@@ -64,8 +111,44 @@ describe("melhor envio cart payload draft", () => {
       "customer.postal_code",
       "quote.items",
       "shipment.service_code",
-      "volumes"
+      "shipment.volumes"
     ]);
+  });
+
+  it("builds operation payloads from shipment identifiers", () => {
+    const draft = buildMelhorEnvioOperationPayloadDraft({
+      operation: "generate",
+      tenant: tenantProfile(),
+      quote: quoteDetail(),
+      items: [quoteItem()],
+      shipment: {
+        ...shipment(),
+        provider_shipment_id: "me-order-123"
+      }
+    });
+
+    expect(draft).toEqual({
+      operation: "generate",
+      payload: {
+        orders: ["me-order-123"]
+      },
+      missingFields: [],
+      warnings: []
+    });
+  });
+
+  it("reports missing identifiers for non-cart operations", () => {
+    const draft = buildMelhorEnvioOperationPayloadDraft({
+      operation: "checkout",
+      tenant: tenantProfile(),
+      quote: quoteDetail(),
+      items: [quoteItem()],
+      shipment: shipment()
+    });
+
+    expect(draft.payload).toEqual({ orders: [] });
+    expect(draft.missingFields).toEqual(["shipment.provider_shipment_id"]);
+    expect(draft.warnings).toEqual(["checkout_should_use_cart_order_id_after_cart_step"]);
   });
 });
 
@@ -130,6 +213,7 @@ function quoteItem(): QuoteItemRow {
 function shipment(): ShipmentRow {
   return {
     id: "shipment-1",
+    quote_id: "quote-1",
     provider: "melhor_envio",
     provider_shipment_id: null,
     provider_order_id: null,
@@ -139,6 +223,22 @@ function shipment(): ShipmentRow {
     service_code: "1",
     shipping_amount: "20.0000",
     label_url: null,
+    packaging_snapshot: {
+      box: {
+        id: "box-1",
+        name: "Caixa 4x11x17",
+        heightCm: 4,
+        widthCm: 11,
+        lengthCm: 17,
+        weightKg: 0.1
+      },
+      boxesNeeded: 2,
+      capacity: 50,
+      grossWeightKg: 1.4,
+      netWeightKg: 1.2,
+      grossWeightPerBoxKg: 0.7
+    },
+    selected_quote: null,
     created_at: "2026-06-26T00:00:00.000Z"
   };
 }

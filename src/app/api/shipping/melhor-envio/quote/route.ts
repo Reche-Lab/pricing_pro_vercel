@@ -76,7 +76,9 @@ export async function POST(request: Request) {
         serviceName: selected.serviceName,
         serviceCode: selected.serviceCode,
         shippingAmount: selected.shippingAmount,
-        rawQuote: result
+        rawQuote: result,
+        selectedQuote: selected.raw,
+        packagingSnapshot: packaging
       });
     }
 
@@ -103,7 +105,8 @@ function extractFirstQuoteOption(result: unknown) {
   return {
     serviceName: stringOrNull(record.name) ?? stringOrNull(company.name) ?? "Melhor Envio",
     serviceCode: stringOrNull(record.id),
-    shippingAmount: numberOrZero(record.price) || numberOrZero(record.custom_price)
+    shippingAmount: numberOrZero(record.price) || numberOrZero(record.custom_price),
+    raw: record
   };
 }
 

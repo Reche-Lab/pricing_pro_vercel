@@ -77,6 +77,10 @@ Status atualizado durante a refatoracao inicial.
 - [x] Ampliar cadastro de cliente com endereco completo.
 - [x] Criar gerador de payload base Melhor Envio a partir do orcamento.
 - [x] Criar teste TDD para payload base Melhor Envio.
+- [x] Persistir snapshot de embalagem e cotacao selecionada no shipment.
+- [x] Preencher `volumes` do payload Melhor Envio a partir do shipment.
+- [x] Criar rota de payload guiado por shipment e operacao Melhor Envio.
+- [x] Atualizar UI de shipment para preparar payload antes de executar cada operacao.
 - [ ] Importar `boxes.csv` no banco do ambiente alvo.
 - [ ] Configurar credenciais Correios no banco do ambiente alvo.
 - [ ] Configurar credenciais Melhor Envio no banco do ambiente alvo.
@@ -101,7 +105,7 @@ Resultado:
 
 - lint passou;
 - typecheck passou;
-- testes passaram: 25 testes em 11 arquivos;
+- testes passaram: 28 testes em 11 arquivos;
 - build Next passou.
 
 ## Acoes Manuais Pendentes
@@ -143,6 +147,7 @@ Ponto de atencao:
 5. `supabase/migrations/0005_audit_log_insert_policy.sql`
 6. `supabase/migrations/0006_shipments.sql`
 7. `supabase/migrations/0007_addresses.sql`
+8. `supabase/migrations/0008_shipment_packaging_snapshot.sql`
 
 ## Execucao Recomendada no Supabase
 
@@ -153,13 +158,14 @@ Ponto de atencao:
 5. Rode `0005_audit_log_insert_policy.sql`.
 6. Rode `0006_shipments.sql`.
 7. Rode `0007_addresses.sql`.
-8. Gere o hash de senha:
+8. Rode `0008_shipment_packaging_snapshot.sql`.
+9. Gere o hash de senha:
 
 ```bash
 node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 ```
 
-9. Copie `supabase/seed-admin.example.sql`, substitua email, nome e hash, e rode no SQL Editor.
+10. Copie `supabase/seed-admin.example.sql`, substitua email, nome e hash, e rode no SQL Editor.
 
 ## Observacoes
 

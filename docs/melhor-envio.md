@@ -55,11 +55,15 @@ POST /api/melhor-envio/cart
 POST /api/melhor-envio/checkout
 POST /api/shipments/:shipmentId/melhor-envio/cart
 POST /api/shipments/:shipmentId/melhor-envio/checkout
+GET  /api/shipments/:shipmentId/melhor-envio/payload?operation=cart
+GET  /api/shipments/:shipmentId/melhor-envio/payload?operation=checkout
 ```
 
 Esses endpoints recebem `payload` e repassam para o Melhor Envio. O payload final depende dos dados completos de remetente, destinatario, produtos, servico e pedido.
 
 As rotas com `shipmentId` tambem persistem `raw_payload`, `raw_response` e status em `shipments`.
+
+A rota `payload` prepara o JSON sugerido para a operacao escolhida. Para `cart`, ela usa dados do orcamento, remetente, cliente, servico e volumes. Para `checkout`, `generate`, `print` e `tracking`, ela usa os identificadores persistidos no shipment depois das etapas anteriores.
 
 ### Payload base por orcamento
 
@@ -67,9 +71,16 @@ As rotas com `shipmentId` tambem persistem `raw_payload`, `raw_response` e statu
 GET /api/quotes/:quoteId/melhor-envio/payload
 ```
 
-Monta um rascunho de payload para carrinho usando dados do remetente em `/settings`, dados do cliente, itens do orcamento e o servico do primeiro shipment Melhor Envio vinculado.
+Monta um rascunho de payload para carrinho usando dados do remetente em `/settings`, dados do cliente, itens do orcamento, servico e volumes do primeiro shipment Melhor Envio vinculado.
 
-A resposta inclui `missingFields` para mostrar o que ainda precisa ser preenchido antes da compra da etiqueta. Por enquanto `volumes` continua pendente porque a embalagem final escolhida ainda nao fica persistida no shipment.
+A resposta inclui `missingFields` para mostrar o que ainda precisa ser preenchido antes da compra da etiqueta e `warnings` para pontos que exigem decisao operacional.
+
+Depois de `supabase/migrations/0008_shipment_packaging_snapshot.sql`, novas cotacoes vinculadas a orcamento persistem:
+
+- `packaging_snapshot`: caixa, dimensoes, quantidade de caixas e peso por caixa;
+- `selected_quote`: primeira opcao retornada pelo Melhor Envio, incluindo `packages` quando a API retornar esse campo.
+
+Com esses dados, o payload base passa a preencher `volumes` automaticamente. Se o servico for Correios (`1`, `2` ou `17`) e houver mais de uma caixa, o payload retorna o aviso `correios_multi_volume_requires_separate_labels`, pois esse fluxo exige etiquetas separadas por volume.
 
 ### Etiquetas
 
@@ -78,6 +89,8 @@ POST /api/melhor-envio/generate
 POST /api/melhor-envio/print
 POST /api/shipments/:shipmentId/melhor-envio/generate
 POST /api/shipments/:shipmentId/melhor-envio/print
+GET  /api/shipments/:shipmentId/melhor-envio/payload?operation=generate
+GET  /api/shipments/:shipmentId/melhor-envio/payload?operation=print
 ```
 
 Tambem recebem `payload`, pois a estrutura exata depende dos IDs dos envios comprados.
@@ -87,6 +100,7 @@ Tambem recebem `payload`, pois a estrutura exata depende dos IDs dos envios comp
 ```txt
 POST /api/melhor-envio/tracking
 POST /api/shipments/:shipmentId/melhor-envio/tracking
+GET  /api/shipments/:shipmentId/melhor-envio/payload?operation=tracking
 ```
 
 Recebe `payload` com os identificadores de envio/pedido a rastrear.
@@ -107,7 +121,6 @@ Na tela `/quotes/:quoteId`, os shipments vinculados ao orcamento exibem acoes pa
 
 ## Pendencias para produto final
 
-- Persistir a embalagem/volume final no shipment para preencher `volumes` automaticamente.
 - Criar tela de compra e pagamento da etiqueta.
 - Criar callback OAuth para persistir tokens automaticamente.
 - Criar jobs/retries para rastreio.

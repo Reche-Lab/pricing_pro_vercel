@@ -1,7 +1,25 @@
 import { withTenantContext } from "@/lib/db/client";
+import type { SelectedPackage } from "@/domain/shipping/types";
+
+export type ShipmentPackagingSnapshot = {
+  box: {
+    id: string;
+    name: string;
+    heightCm: number;
+    widthCm: number;
+    lengthCm: number;
+    weightKg: number;
+  };
+  boxesNeeded: number;
+  capacity: number;
+  grossWeightKg: number;
+  netWeightKg: number;
+  grossWeightPerBoxKg: number;
+};
 
 export type ShipmentRow = {
   id: string;
+  quote_id: string;
   provider: string;
   provider_shipment_id: string | null;
   provider_order_id: string | null;
@@ -11,6 +29,8 @@ export type ShipmentRow = {
   service_code: string | null;
   shipping_amount: string;
   label_url: string | null;
+  packaging_snapshot: ShipmentPackagingSnapshot | null;
+  selected_quote: Record<string, unknown> | null;
   created_at: string;
 };
 
@@ -24,6 +44,7 @@ export async function listQuoteShipments(
       `
         select
           id,
+          quote_id,
           provider,
           provider_shipment_id,
           provider_order_id,
@@ -33,6 +54,8 @@ export async function listQuoteShipments(
           service_code,
           shipping_amount,
           label_url,
+          packaging_snapshot,
+          selected_quote,
           created_at
         from shipments
         where tenant_id = $1 and quote_id = $2
@@ -56,6 +79,8 @@ export async function createShipmentDraft(
     serviceCode?: string | null;
     shippingAmount?: number;
     rawQuote?: unknown;
+    selectedQuote?: unknown;
+    packagingSnapshot?: SelectedPackage | ShipmentPackagingSnapshot | null;
   }
 ) {
   return withTenantContext(userId, tenantId, async (client) => {
@@ -70,9 +95,11 @@ export async function createShipmentDraft(
           service_code,
           shipping_amount,
           raw_quote,
+          selected_quote,
+          packaging_snapshot,
           created_by
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         returning id
       `,
       [
@@ -84,6 +111,8 @@ export async function createShipmentDraft(
         input.serviceCode ?? null,
         input.shippingAmount ?? 0,
         JSON.stringify(input.rawQuote ?? null),
+        JSON.stringify(input.selectedQuote ?? null),
+        JSON.stringify(input.packagingSnapshot ? toPackagingSnapshot(input.packagingSnapshot) : null),
         userId
       ]
     );
@@ -106,6 +135,7 @@ export async function getShipment(userId: string, tenantId: string, shipmentId: 
       `
         select
           id,
+          quote_id,
           provider,
           provider_shipment_id,
           provider_order_id,
@@ -115,6 +145,8 @@ export async function getShipment(userId: string, tenantId: string, shipmentId: 
           service_code,
           shipping_amount,
           label_url,
+          packaging_snapshot,
+          selected_quote,
           created_at
         from shipments
         where tenant_id = $1 and id = $2
@@ -192,4 +224,22 @@ export async function updateShipmentFlow(
 
     return { id: input.shipmentId, status: input.status };
   });
+}
+
+function toPackagingSnapshot(input: SelectedPackage | ShipmentPackagingSnapshot): ShipmentPackagingSnapshot {
+  return {
+    box: {
+      id: input.box.id,
+      name: input.box.name,
+      heightCm: Number(input.box.heightCm),
+      widthCm: Number(input.box.widthCm),
+      lengthCm: Number(input.box.lengthCm),
+      weightKg: Number(input.box.weightKg)
+    },
+    boxesNeeded: Number(input.boxesNeeded),
+    capacity: Number(input.capacity),
+    grossWeightKg: Number(input.grossWeightKg),
+    netWeightKg: Number(input.netWeightKg),
+    grossWeightPerBoxKg: Number(input.grossWeightPerBoxKg)
+  };
 }

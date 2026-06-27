@@ -9,8 +9,19 @@ type BuildPayloadInput = {
   shipment?: ShipmentRow | null;
 };
 
+type BuildOperationPayloadInput = BuildPayloadInput & {
+  operation: MelhorEnvioOperation;
+};
+
+export type MelhorEnvioOperation = "cart" | "checkout" | "generate" | "print" | "tracking";
+
 export type MelhorEnvioCartPayloadDraft = {
-  payload: {
+  payload: MelhorEnvioCartPayload;
+  missingFields: string[];
+  warnings: string[];
+};
+
+type MelhorEnvioCartPayload = {
     service?: string | number;
     from: MelhorEnvioAddressPayload;
     to: MelhorEnvioAddressPayload;
@@ -32,8 +43,13 @@ export type MelhorEnvioCartPayloadDraft = {
       length: number;
       weight: number;
     }>;
-  };
+};
+
+export type MelhorEnvioOperationPayloadDraft = {
+  operation: MelhorEnvioOperation;
+  payload: unknown;
   missingFields: string[];
+  warnings: string[];
 };
 
 type MelhorEnvioAddressPayload = {
@@ -59,6 +75,7 @@ export function buildMelhorEnvioCartPayloadDraft({
   shipment
 }: BuildPayloadInput): MelhorEnvioCartPayloadDraft {
   const missingFields: string[] = [];
+  const warnings: string[] = [];
   const from = buildFromAddress(tenant, missingFields);
   const to = buildToAddress(quote, missingFields);
   const products = items.map((item) => ({
@@ -71,6 +88,8 @@ export function buildMelhorEnvioCartPayloadDraft({
 
   const service = shipment?.service_code ?? undefined;
   if (!service) missingFields.push("shipment.service_code");
+  const volumes = buildVolumes(shipment, warnings);
+  if (volumes.length === 0) missingFields.push("shipment.volumes");
 
   return {
     payload: {
@@ -85,10 +104,108 @@ export function buildMelhorEnvioCartPayloadDraft({
         reverse: false,
         non_commercial: true
       },
-      volumes: []
+      volumes
     },
-    missingFields: [...missingFields, "volumes"]
+    missingFields,
+    warnings
   };
+}
+
+export function buildMelhorEnvioOperationPayloadDraft(
+  input: BuildOperationPayloadInput
+): MelhorEnvioOperationPayloadDraft {
+  if (input.operation === "cart") {
+    const draft = buildMelhorEnvioCartPayloadDraft(input);
+    return {
+      operation: input.operation,
+      payload: draft.payload,
+      missingFields: draft.missingFields,
+      warnings: draft.warnings
+    };
+  }
+
+  const missingFields: string[] = [];
+  const warnings: string[] = [];
+  const shipmentIdentifier = shipmentOperationIdentifier(input.shipment);
+  if (!shipmentIdentifier) missingFields.push("shipment.provider_shipment_id");
+
+  if (input.operation === "tracking") {
+    return {
+      operation: input.operation,
+      payload: { orders: shipmentIdentifier ? [shipmentIdentifier] : [] },
+      missingFields,
+      warnings
+    };
+  }
+
+  if (input.operation === "checkout" && !input.shipment?.provider_shipment_id) {
+    warnings.push("checkout_should_use_cart_order_id_after_cart_step");
+  }
+
+  return {
+    operation: input.operation,
+    payload: { orders: shipmentIdentifier ? [shipmentIdentifier] : [] },
+    missingFields,
+    warnings
+  };
+}
+
+function buildVolumes(shipment: ShipmentRow | null | undefined, warnings: string[]) {
+  const packageVolumes = volumesFromSelectedQuotePackages(shipment?.selected_quote);
+  if (packageVolumes.length > 0) return packageVolumes;
+
+  if (!shipment?.packaging_snapshot) return [];
+
+  const boxCount = Math.max(1, Math.trunc(shipment.packaging_snapshot.boxesNeeded));
+  const volume = {
+    height: numberWithMinimum(shipment.packaging_snapshot.box.heightCm, 2),
+    width: numberWithMinimum(shipment.packaging_snapshot.box.widthCm, 11),
+    length: numberWithMinimum(shipment.packaging_snapshot.box.lengthCm, 16),
+    weight: numberWithMinimum(shipment.packaging_snapshot.grossWeightPerBoxKg, 0.3)
+  };
+
+  if (boxCount > 1 && isCorreiosService(shipment.service_code)) {
+    warnings.push("correios_multi_volume_requires_separate_labels");
+    return [volume];
+  }
+
+  return Array.from({ length: boxCount }, () => volume);
+}
+
+function volumesFromSelectedQuotePackages(selectedQuote: Record<string, unknown> | null | undefined) {
+  const packages = selectedQuote?.packages;
+  if (!Array.isArray(packages)) return [];
+
+  return packages
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const dimensions = record.dimensions && typeof record.dimensions === "object"
+        ? (record.dimensions as Record<string, unknown>)
+        : record;
+      const height = numberOrNull(dimensions.height);
+      const width = numberOrNull(dimensions.width);
+      const length = numberOrNull(dimensions.length);
+      const weight = numberOrNull(record.weight);
+
+      if (!height || !width || !length || !weight) return null;
+
+      return {
+        height,
+        width,
+        length,
+        weight
+      };
+    })
+    .filter((item): item is { height: number; width: number; length: number; weight: number } => Boolean(item));
+}
+
+function isCorreiosService(serviceCode: string | null | undefined): boolean {
+  return serviceCode === "1" || serviceCode === "2" || serviceCode === "17";
+}
+
+function shipmentOperationIdentifier(shipment: ShipmentRow | null | undefined): string | null {
+  return shipment?.provider_order_id ?? shipment?.provider_shipment_id ?? shipment?.tracking_code ?? null;
 }
 
 function buildFromAddress(tenant: TenantShippingProfile, missingFields: string[]): MelhorEnvioAddressPayload {
@@ -156,4 +273,17 @@ function onlyDigits(value: string | null | undefined): string | undefined {
 
 function money(value: string): number {
   return Number(Number(value).toFixed(2));
+}
+
+function numberWithMinimum(value: number, minimum: number): number {
+  return Number(Math.max(minimum, value).toFixed(3));
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
