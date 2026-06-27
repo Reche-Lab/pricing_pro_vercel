@@ -95,6 +95,8 @@ Status atualizado durante a refatoracao inicial.
 - [x] Criar dominio testado para series de simulacao e comparacao de curvas.
 - [x] Criar botoes de orcamento rapido no precificador para PDF e WhatsApp.
 - [x] Permitir ordenacao dos canais para definir canal padrao do precificador.
+- [x] Criar ordenacao visual de canais por arrastar e soltar.
+- [x] Criar grafico denso do precificador com tooltip e ancoras destacadas.
 - [ ] Importar `boxes.csv` no banco do ambiente alvo.
 - [ ] Configurar credenciais Correios no banco do ambiente alvo.
 - [ ] Configurar credenciais Melhor Envio no banco do ambiente alvo.

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import {
   buildPricingSimulationSeries,
+  calculateAnchoredUnitPrice,
   calculateQuote,
   comparePricingSimulationSeries,
   recomputeIntermediateAnchors
@@ -34,15 +35,25 @@ type PricingCalculatorProps = {
 };
 
 type ChartPoint = {
+  baseValue: number;
+  finalValue: number;
   quantity: number;
   label: string;
   value: number;
+  isAnchor?: boolean;
 };
 
 const ANCHOR_QUANTITIES = [1, 10, 50, 100, 500, 1000] as const;
 const SIMULATION_QUANTITIES = [1, 10, 25, 50, 100, 250, 500, 1000] as const;
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const percent = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+const emptyPlatform: PricingPlatformOption = {
+  name: "Canal nao configurado",
+  commissionRate: 0,
+  fixedFee: 0,
+  sellerShippingCost: 0,
+  sellerShippingThreshold: 0
+};
 
 export function PricingCalculator({ variants, platforms, readonlyMode = false }: PricingCalculatorProps) {
   const router = useRouter();
@@ -51,7 +62,7 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
   const [platformKey, setPlatformKey] = useState(Object.keys(platforms)[0] ?? "direct");
 
   const variant = variants.find((item) => item.id === variantId) ?? variants[0];
-  const platform: PricingPlatformOption = platforms[platformKey] ?? Object.values(platforms)[0];
+  const platform: PricingPlatformOption = platforms[platformKey] ?? Object.values(platforms)[0] ?? emptyPlatform;
   const [currentAnchors, setCurrentAnchors] = useState<PricingAnchors>(() => variant?.anchors ?? emptyAnchors());
   const [simulatedAnchors, setSimulatedAnchors] = useState<PricingAnchors>(() => variant?.anchors ?? emptyAnchors());
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -64,6 +75,9 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
   const [shippingService, setShippingService] = useState("manual");
   const [shippingAmount, setShippingAmount] = useState(0);
   const [includeShipping, setIncludeShipping] = useState(false);
+  const [includeCommission, setIncludeCommission] = useState(true);
+  const [includeFixedFee, setIncludeFixedFee] = useState(true);
+  const [includeSellerShipping, setIncludeSellerShipping] = useState(true);
   const [quickState, setQuickState] = useState<"idle" | "creating_pdf" | "copying_text" | "copied" | "error">("idle");
   const [quickMessage, setQuickMessage] = useState("");
   const [quickText, setQuickText] = useState("");
@@ -79,6 +93,16 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
     }
   }, [variant]);
 
+  const effectivePlatform = useMemo(
+    () => ({
+      ...platform,
+      commissionRate: includeCommission ? platform.commissionRate : 0,
+      fixedFee: includeFixedFee ? platform.fixedFee : 0,
+      sellerShippingCost: includeSellerShipping ? platform.sellerShippingCost : 0
+    }),
+    [includeCommission, includeFixedFee, includeSellerShipping, platform]
+  );
+
   const currentResult = useMemo(() => {
     if (!variant || !platform) return null;
     return calculateQuote({
@@ -86,9 +110,9 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
       unitCost: variant.unitCost,
       method: "anchors",
       anchors: currentAnchors,
-      platform
+      platform: effectivePlatform
     });
-  }, [currentAnchors, platform, quantity, variant]);
+  }, [currentAnchors, effectivePlatform, platform, quantity, variant]);
 
   const simulatedResult = useMemo(() => {
     if (!variant || !platform) return null;
@@ -97,9 +121,9 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
       unitCost: variant.unitCost,
       method: "anchors",
       anchors: simulatedAnchors,
-      platform
+      platform: effectivePlatform
     });
-  }, [platform, quantity, simulatedAnchors, variant]);
+  }, [effectivePlatform, platform, quantity, simulatedAnchors, variant]);
 
   const currentSeries = useMemo(() => {
     if (!variant || !platform) return [];
@@ -108,11 +132,11 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
         unitCost: variant.unitCost,
         method: "anchors",
         anchors: currentAnchors,
-        platform
+        platform: effectivePlatform
       },
       [...SIMULATION_QUANTITIES]
     );
-  }, [currentAnchors, platform, variant]);
+  }, [currentAnchors, effectivePlatform, platform, variant]);
 
   const simulatedSeries = useMemo(() => {
     if (!variant || !platform) return [];
@@ -121,11 +145,11 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
         unitCost: variant.unitCost,
         method: "anchors",
         anchors: simulatedAnchors,
-        platform
+        platform: effectivePlatform
       },
       [...SIMULATION_QUANTITIES]
     );
-  }, [platform, simulatedAnchors, variant]);
+  }, [effectivePlatform, platform, simulatedAnchors, variant]);
 
   const comparison = useMemo(() => {
     if (!variant || !platform) return [];
@@ -134,17 +158,17 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
         unitCost: variant.unitCost,
         method: "anchors",
         anchors: currentAnchors,
-        platform
+        platform: effectivePlatform
       },
       {
         unitCost: variant.unitCost,
         method: "anchors",
         anchors: simulatedAnchors,
-        platform
+        platform: effectivePlatform
       },
       [quantity]
     );
-  }, [currentAnchors, platform, quantity, simulatedAnchors, variant]);
+  }, [currentAnchors, effectivePlatform, platform, quantity, simulatedAnchors, variant]);
 
   if (!variant || !platform || !currentResult || !simulatedResult) {
     return <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-6">Nenhum produto disponivel.</div>;
@@ -208,6 +232,9 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
         customerEmail: quickCustomerEmail,
         customerPhone: quickCustomerPhone,
         shippingTotal: includeShipping ? shippingAmount : 0,
+        includeCommission,
+        includeFixedFee,
+        includeSellerShipping,
         validDays: 7,
         notes: buildQuickQuoteNotes({
           destinationPostalCode,
@@ -374,19 +401,6 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
           </Control>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <Metric icon={<CircleDollarSign size={18} />} label="Preco unitario" tone="amber" value={brl.format(simulatedResult.finalUnitPrice)} />
-          <Metric label="Preco total" value={brl.format(simulatedResult.subtotal)} />
-          <Metric label="Margem liquida" value={brl.format(simulatedResult.profit)} tone="emerald" />
-          <Metric label="Custo total" value={brl.format(simulatedResult.totalCost)} />
-          <Metric
-            icon={<TrendingUp size={18} />}
-            label="Margem (%)"
-            value={`${percent.format(simulatedResult.marginPercent)}%`}
-            tone={simulatedResult.marginPercent >= 0 ? "emerald" : "red"}
-          />
-        </div>
-
         <DetailsPanel icon={<UserRound size={16} />} title="Informacoes do Cliente">
           <div className="grid gap-4 md:grid-cols-2">
             <Input label="Nome (cliente)" placeholder="Insira o nome do cliente" value={quickCustomerName} onChange={setQuickCustomerName} />
@@ -473,23 +487,51 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
             ))}
           </div>
           <div className="mt-5 grid gap-4 md:grid-cols-4">
-            <ReadOnlyField label="Comissao" value={`${percent.format(platform.commissionRate * 100)}%`} />
-            <ReadOnlyField label="Taxa fixa" value={brl.format(platform.fixedFee)} />
-            <ReadOnlyField label="Frete vendedor" value={brl.format(platform.sellerShippingCost)} />
+            <CostToggle
+              checked={includeCommission}
+              label="Comissao"
+              value={`${percent.format(platform.commissionRate * 100)}%`}
+              onChange={setIncludeCommission}
+            />
+            <CostToggle
+              checked={includeFixedFee}
+              label="Taxa fixa"
+              value={brl.format(platform.fixedFee)}
+              onChange={setIncludeFixedFee}
+            />
+            <CostToggle
+              checked={includeSellerShipping}
+              label="Frete vendedor"
+              value={brl.format(platform.sellerShippingCost)}
+              onChange={setIncludeSellerShipping}
+            />
             <ReadOnlyField label="Limite frete vendedor" value={brl.format(platform.sellerShippingThreshold)} />
-          </div>
-          <div className="mt-5">
-            <ChartPanel title="Ancoragem de precos" subtitle="Pontos cadastrados. O ponto q=1 usa exatamente a ancoragem base.">
-              <LineChart
-                current={anchorChartPoints(currentAnchors)}
-                formatValue={(value) => brl.format(value)}
-                simulated={anchorChartPoints(simulatedAnchors)}
-              />
-            </ChartPanel>
           </div>
           {saveState === "saved" ? <p className="mt-3 text-sm text-emerald-300">Nova curva ativa salva.</p> : null}
           {saveState === "error" ? <p className="mt-3 text-sm text-red-300">Nao foi possivel salvar a curva.</p> : null}
         </DetailsPanel>
+
+        <ChartPanel title="Curva de precos com custos" subtitle="Calculada para cada unidade entre 1 e 1000. Passe o mouse para ver quantidade, base e preco final.">
+          <LineChart
+            anchors={ANCHOR_QUANTITIES}
+            current={pricingCurvePoints(currentAnchors, variant.unitCost, effectivePlatform)}
+            formatValue={(value) => brl.format(value)}
+            simulated={pricingCurvePoints(simulatedAnchors, variant.unitCost, effectivePlatform)}
+          />
+        </ChartPanel>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <Metric icon={<CircleDollarSign size={18} />} label="Preco unitario" tone="amber" value={brl.format(simulatedResult.finalUnitPrice)} />
+          <Metric label="Preco total" value={brl.format(simulatedResult.subtotal)} />
+          <Metric label="Margem liquida" value={brl.format(simulatedResult.profit)} tone="emerald" />
+          <Metric label="Custo total" value={brl.format(simulatedResult.totalCost)} />
+          <Metric
+            icon={<TrendingUp size={18} />}
+            label="Margem (%)"
+            value={`${percent.format(simulatedResult.marginPercent)}%`}
+            tone={simulatedResult.marginPercent >= 0 ? "emerald" : "red"}
+          />
+        </div>
 
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
           <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
@@ -635,6 +677,33 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
   );
 }
 
+function CostToggle({
+  checked,
+  label,
+  onChange,
+  value
+}: {
+  checked: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+  value: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-zinc-800 bg-zinc-950 p-3">
+      <span>
+        <span className="block text-xs uppercase tracking-wide text-zinc-500">{label}</span>
+        <span className="mt-1 block font-medium text-zinc-100">{value}</span>
+      </span>
+      <input
+        checked={checked}
+        className="h-4 w-4 accent-amber-500"
+        type="checkbox"
+        onChange={(event) => onChange(event.target.checked)}
+      />
+    </label>
+  );
+}
+
 function Metric({
   icon,
   label,
@@ -689,14 +758,17 @@ function ChartPanel({ children, subtitle, title }: { children: React.ReactNode; 
 }
 
 function LineChart({
+  anchors,
   current,
   formatValue,
   simulated
 }: {
+  anchors?: readonly number[];
   current: ChartPoint[];
   formatValue: (value: number) => string;
   simulated: ChartPoint[];
 }) {
+  const [tooltip, setTooltip] = useState<{ point: ChartPoint; x: number; y: number } | null>(null);
   const allValues = [...current, ...simulated].map((point) => point.value);
   const min = Math.min(...allValues);
   const max = Math.max(...allValues);
@@ -706,15 +778,38 @@ function LineChart({
   const padding = { top: 18, right: 18, bottom: 44, left: 56 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
+  const minQuantity = Math.min(...simulated.map((point) => point.quantity));
+  const maxQuantity = Math.max(...simulated.map((point) => point.quantity));
 
-  const toX = (index: number) => padding.left + (index / Math.max(current.length - 1, 1)) * chartWidth;
+  const toX = (quantity: number) =>
+    padding.left + ((quantity - minQuantity) / Math.max(maxQuantity - minQuantity, 1)) * chartWidth;
   const toY = (value: number) => padding.top + (1 - (value - min) / range) * chartHeight;
   const linePath = (points: ChartPoint[]) =>
-    points.map((point, index) => `${index === 0 ? "M" : "L"} ${toX(index).toFixed(2)} ${toY(point.value).toFixed(2)}`).join(" ");
+    points
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${toX(point.quantity).toFixed(2)} ${toY(point.value).toFixed(2)}`)
+      .join(" ");
+  const anchorSet = new Set(anchors ?? []);
+  const highlightedAnchors = simulated.filter((point) => anchorSet.has(point.quantity));
 
   return (
     <div className="h-[280px] w-full overflow-hidden rounded-md border border-zinc-800 bg-zinc-950">
-      <svg className="h-full w-full" role="img" viewBox={`0 0 ${width} ${height}`}>
+      <svg
+        className="h-full w-full"
+        role="img"
+        viewBox={`0 0 ${width} ${height}`}
+        onMouseLeave={() => setTooltip(null)}
+        onMouseMove={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          const ratio = width / rect.width;
+          const svgX = (event.clientX - rect.left) * ratio;
+          const quantity = Math.round(
+            minQuantity + ((svgX - padding.left) / Math.max(chartWidth, 1)) * (maxQuantity - minQuantity)
+          );
+          const nearest = simulated[Math.max(0, Math.min(simulated.length - 1, quantity - minQuantity))];
+          if (!nearest) return;
+          setTooltip({ point: nearest, x: toX(nearest.quantity), y: toY(nearest.value) });
+        }}
+      >
         <line stroke="#27272a" x1={padding.left} x2={width - padding.right} y1={padding.top} y2={padding.top} />
         <line
           stroke="#27272a"
@@ -740,14 +835,38 @@ function LineChart({
         <path d={linePath(current)} fill="none" stroke="#f59e0b" strokeLinecap="round" strokeWidth="3" />
         <path d={linePath(simulated)} fill="none" stroke="#34d399" strokeLinecap="round" strokeWidth="3" />
 
-        {simulated.map((point, index) => (
+        {highlightedAnchors.map((point) => (
           <g key={point.quantity}>
-            <circle cx={toX(index)} cy={toY(point.value)} fill="#34d399" r="4" />
-            <text fill="#a1a1aa" fontSize="11" textAnchor="middle" x={toX(index)} y={height - 18}>
+            <circle cx={toX(point.quantity)} cy={toY(point.value)} fill="#34d399" r="5" stroke="#f4f4f5" strokeWidth="1.5" />
+            <text fill="#a1a1aa" fontSize="11" textAnchor="middle" x={toX(point.quantity)} y={height - 18}>
               {point.label}
             </text>
           </g>
         ))}
+        {tooltip ? (
+          <g>
+            <line stroke="#71717a" strokeDasharray="4 4" x1={tooltip.x} x2={tooltip.x} y1={padding.top} y2={height - padding.bottom} />
+            <circle cx={tooltip.x} cy={tooltip.y} fill="#f59e0b" r="4" />
+            <rect
+              fill="#18181b"
+              height="58"
+              rx="6"
+              stroke="#3f3f46"
+              width="178"
+              x={Math.min(tooltip.x + 12, width - 196)}
+              y={Math.max(tooltip.y - 70, 12)}
+            />
+            <text fill="#f4f4f5" fontSize="11" x={Math.min(tooltip.x + 24, width - 184)} y={Math.max(tooltip.y - 50, 32)}>
+              Qtd: {tooltip.point.quantity}
+            </text>
+            <text fill="#d4d4d8" fontSize="11" x={Math.min(tooltip.x + 24, width - 184)} y={Math.max(tooltip.y - 34, 48)}>
+              Base: {formatValue(tooltip.point.baseValue)}
+            </text>
+            <text fill="#34d399" fontSize="11" x={Math.min(tooltip.x + 24, width - 184)} y={Math.max(tooltip.y - 18, 64)}>
+              Com custos: {formatValue(tooltip.point.finalValue)}
+            </text>
+          </g>
+        ) : null}
       </svg>
     </div>
   );
@@ -766,12 +885,26 @@ function hasAnchorChanges(current: PricingAnchors, simulated: PricingAnchors) {
   return ANCHOR_QUANTITIES.some((quantity) => Math.abs(current[quantity] - simulated[quantity]) > 0.001);
 }
 
-function anchorChartPoints(anchors: PricingAnchors): ChartPoint[] {
-  return ANCHOR_QUANTITIES.map((quantity) => ({
-    quantity,
-    label: String(quantity),
-    value: anchors[quantity]
-  }));
+function pricingCurvePoints(anchors: PricingAnchors, unitCost: number, platform: PlatformRule): ChartPoint[] {
+  return Array.from({ length: 1000 }, (_, index) => {
+    const quantity = index + 1;
+    const baseValue = calculateAnchoredUnitPrice(quantity, anchors);
+    const result = calculateQuote({
+      quantity,
+      unitCost,
+      method: "anchors",
+      anchors,
+      platform
+    });
+    return {
+      baseValue,
+      finalValue: result.finalUnitPrice,
+      quantity,
+      label: String(quantity),
+      value: result.finalUnitPrice,
+      isAnchor: ANCHOR_QUANTITIES.includes(quantity as PricingAnchorQuantity)
+    };
+  });
 }
 
 function emptyAnchors(): PricingAnchors {

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { PlatformForm } from "@/components/platforms/PlatformForm";
-import { PlatformInlineEditor } from "@/components/platforms/PlatformInlineEditor";
+import { PlatformList } from "@/components/platforms/PlatformList";
 import { getCurrentSession } from "@/lib/auth/session";
 import { listPlatformRules } from "@/repositories/platforms";
 import { getSessionProfile } from "@/repositories/users";
@@ -24,31 +24,18 @@ export default async function PlatformsPage() {
           <div className="border-b border-zinc-800 px-5 py-4">
             <h2 className="font-semibold">Canais cadastrados</h2>
           </div>
-          <div className="divide-y divide-zinc-800">
-            {platforms.length === 0 ? (
-              <p className="p-5 text-sm text-zinc-500">Nenhum canal cadastrado.</p>
-            ) : (
-              platforms.map((platform) => (
-                <div className="grid gap-3 px-5 py-4 text-sm" key={platform.id}>
-                  <div>
-                    <p className="font-medium text-white">{platform.name}</p>
-                    <p className="text-zinc-500">{platform.key}</p>
-                  </div>
-                  <PlatformInlineEditor
-                    platform={{
-                      id: platform.id,
-                      name: platform.name,
-                      commissionRate: Number(platform.commission_rate),
-                      fixedFee: Number(platform.fixed_fee),
-                      sellerShippingCost: Number(platform.seller_shipping_cost),
-                      sellerShippingThreshold: Number(platform.seller_shipping_threshold),
-                      sortOrder: platform.sort_order
-                    }}
-                  />
-                </div>
-              ))
-            )}
-          </div>
+          <PlatformList
+            platforms={platforms.map((platform) => ({
+              id: platform.id,
+              key: platform.key,
+              name: platform.name,
+              commissionRate: Number(platform.commission_rate),
+              fixedFee: Number(platform.fixed_fee),
+              sellerShippingCost: Number(platform.seller_shipping_cost),
+              sellerShippingThreshold: Number(platform.seller_shipping_threshold),
+              sortOrder: platform.sort_order
+            }))}
+          />
         </section>
       </div>
     </AppShell>

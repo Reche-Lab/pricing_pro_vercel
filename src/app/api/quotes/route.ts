@@ -13,6 +13,9 @@ const quoteSchema = z.object({
   customerEmail: z.string().trim().email().optional().or(z.literal("")).nullable(),
   customerPhone: z.string().trim().optional().nullable(),
   shippingTotal: z.number().min(0).max(100000).optional(),
+  includeCommission: z.boolean().optional(),
+  includeFixedFee: z.boolean().optional(),
+  includeSellerShipping: z.boolean().optional(),
   validDays: z.number().int().min(1).max(90).optional(),
   notes: z.string().trim().max(2000).optional().nullable()
 });

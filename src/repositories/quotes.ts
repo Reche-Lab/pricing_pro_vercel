@@ -66,6 +66,9 @@ export type CreateQuoteInput = {
   customerEmail?: string | null;
   customerPhone?: string | null;
   shippingTotal?: number;
+  includeCommission?: boolean;
+  includeFixedFee?: boolean;
+  includeSellerShipping?: boolean;
   validDays?: number;
   notes?: string | null;
 };
@@ -325,9 +328,9 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
       method: "anchors",
       anchors: mapAnchors(variant.anchors),
       platform: {
-        commissionRate: Number(platform.commission_rate),
-        fixedFee: Number(platform.fixed_fee),
-        sellerShippingCost: Number(platform.seller_shipping_cost),
+        commissionRate: input.includeCommission === false ? 0 : Number(platform.commission_rate),
+        fixedFee: input.includeFixedFee === false ? 0 : Number(platform.fixed_fee),
+        sellerShippingCost: input.includeSellerShipping === false ? 0 : Number(platform.seller_shipping_cost),
         sellerShippingThreshold: Number(platform.seller_shipping_threshold)
       }
     });

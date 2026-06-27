@@ -4,16 +4,18 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save } from "lucide-react";
 
+export type EditablePlatform = {
+  id: string;
+  name: string;
+  commissionRate: number;
+  fixedFee: number;
+  sellerShippingCost: number;
+  sellerShippingThreshold: number;
+  sortOrder: number;
+};
+
 type PlatformInlineEditorProps = {
-  platform: {
-    id: string;
-    name: string;
-    commissionRate: number;
-    fixedFee: number;
-    sellerShippingCost: number;
-    sellerShippingThreshold: number;
-    sortOrder: number;
-  };
+  platform: EditablePlatform;
 };
 
 export function PlatformInlineEditor({ platform }: PlatformInlineEditorProps) {
@@ -36,7 +38,7 @@ export function PlatformInlineEditor({ platform }: PlatformInlineEditorProps) {
         fixedFee: Number(form.get("fixedFee")),
         sellerShippingCost: Number(form.get("sellerShippingCost")),
         sellerShippingThreshold: Number(form.get("sellerShippingThreshold")),
-        sortOrder: Number(form.get("sortOrder"))
+        sortOrder: platform.sortOrder
       })
     });
 
@@ -51,8 +53,7 @@ export function PlatformInlineEditor({ platform }: PlatformInlineEditorProps) {
 
   return (
     <form className="grid gap-3" onSubmit={onSubmit}>
-      <div className="grid gap-3 md:grid-cols-6">
-        <Input defaultValue={String(platform.sortOrder)} label="Ordem" name="sortOrder" />
+      <div className="grid gap-3 md:grid-cols-5">
         <Input defaultValue={platform.name} label="Nome" name="name" />
         <Input defaultValue={(platform.commissionRate * 100).toFixed(2)} label="Comissao %" name="commissionRate" />
         <Input defaultValue={platform.fixedFee.toFixed(2)} label="Taxa" name="fixedFee" />
