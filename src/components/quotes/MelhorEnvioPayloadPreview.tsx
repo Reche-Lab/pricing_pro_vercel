@@ -42,14 +42,14 @@ export function MelhorEnvioPayloadPreview({ quoteId }: { quoteId: string }) {
   }
 
   return (
-    <div className="grid gap-3 rounded-lg border border-zinc-200 bg-white p-5">
+    <div className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-900/70 p-5">
       <div>
         <h2 className="font-semibold">Payload Melhor Envio</h2>
         <p className="text-sm text-zinc-500">Rascunho para carrinho gerado a partir do orcamento.</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <button
-          className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
+          className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
           disabled={loading}
           onClick={loadPayload}
           type="button"
@@ -58,7 +58,7 @@ export function MelhorEnvioPayloadPreview({ quoteId }: { quoteId: string }) {
           {loading ? "Gerando..." : "Gerar"}
         </button>
         <button
-          className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
+          className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
           disabled={!payload}
           onClick={copyPayload}
           type="button"
@@ -68,7 +68,7 @@ export function MelhorEnvioPayloadPreview({ quoteId }: { quoteId: string }) {
         </button>
       </div>
       {missingFields.length > 0 ? (
-        <div className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <div className="rounded-md bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
           Pendencias: {missingFields.join(", ")}
         </div>
       ) : null}
@@ -79,7 +79,7 @@ export function MelhorEnvioPayloadPreview({ quoteId }: { quoteId: string }) {
       ) : null}
       {payload ? (
         <textarea
-          className="focus-ring min-h-64 w-full rounded-md border border-zinc-300 px-3 py-2 font-mono text-xs"
+          className="focus-ring min-h-64 w-full rounded-md border border-zinc-700 px-3 py-2 font-mono text-xs"
           onChange={(event) => setPayload(event.target.value)}
           value={payload}
         />

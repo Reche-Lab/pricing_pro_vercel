@@ -19,17 +19,17 @@ export default async function CustomersPage() {
     <AppShell title="Clientes" subtitle="Clientes isolados por tenant." tenantName={profile.tenant_name}>
       <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
         <CustomerForm />
-        <section className="rounded-lg border border-zinc-200 bg-white">
-          <div className="border-b border-zinc-200 px-5 py-4">
+        <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
+          <div className="border-b border-zinc-800 px-5 py-4">
             <h2 className="font-semibold">Clientes recentes</h2>
           </div>
-          <div className="divide-y divide-zinc-100">
+          <div className="divide-y divide-zinc-800">
             {customers.length === 0 ? (
               <p className="p-5 text-sm text-zinc-500">Nenhum cliente cadastrado ainda.</p>
             ) : (
               customers.map((customer) => (
                 <div className="grid gap-1 px-5 py-4 text-sm" key={customer.id}>
-                  <p className="font-medium text-zinc-950">{customer.name}</p>
+                  <p className="font-medium text-white">{customer.name}</p>
                   <p className="text-zinc-500">
                     {[
                       customer.email,

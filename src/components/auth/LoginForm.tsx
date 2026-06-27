@@ -36,9 +36,9 @@ export function LoginForm() {
   return (
     <form className="mt-6 space-y-4" onSubmit={onSubmit}>
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-zinc-700">Email</span>
+        <span className="mb-1 block text-sm font-medium text-zinc-300">Email</span>
         <input
-          className="focus-ring w-full rounded-md border border-zinc-300 px-3 py-2"
+          className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
           name="email"
           type="email"
           autoComplete="email"
@@ -46,16 +46,16 @@ export function LoginForm() {
         />
       </label>
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-zinc-700">Senha</span>
+        <span className="mb-1 block text-sm font-medium text-zinc-300">Senha</span>
         <input
-          className="focus-ring w-full rounded-md border border-zinc-300 px-3 py-2"
+          className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
           name="password"
           type="password"
           autoComplete="current-password"
           required
         />
       </label>
-      {error ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="rounded-md bg-red-400/10 px-3 py-2 text-sm text-red-300">{error}</p> : null}
       <button
         className="focus-ring w-full rounded-md bg-zinc-950 px-4 py-2 font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
         disabled={loading}

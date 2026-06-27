@@ -44,9 +44,9 @@ export function CustomerForm() {
   }
 
   return (
-    <form className="rounded-lg border border-zinc-200 bg-white p-5" onSubmit={onSubmit}>
+    <form className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5" onSubmit={onSubmit}>
       <div className="mb-4 flex items-center gap-2">
-        <UserPlus className="text-brand" size={18} />
+        <UserPlus className="text-amber-400" size={18} />
         <h2 className="font-semibold">Novo cliente</h2>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
@@ -66,7 +66,7 @@ export function CustomerForm() {
           <Input label="UF" name="state" maxLength={2} />
         </div>
       </div>
-      {error ? <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="mt-4 rounded-md bg-red-400/10 px-3 py-2 text-sm text-red-300">{error}</p> : null}
       <button
         className="focus-ring mt-4 rounded-md bg-zinc-950 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
         disabled={loading}
@@ -93,9 +93,9 @@ function Input({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-zinc-700">{label}</span>
+      <span className="mb-1 block text-sm font-medium text-zinc-300">{label}</span>
       <input
-        className="focus-ring w-full rounded-md border border-zinc-300 px-3 py-2"
+        className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
         maxLength={maxLength}
         name={name}
         required={required}

@@ -103,11 +103,11 @@ export function MelhorEnvioIntegrationPanel({
   }
 
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white p-5">
+    <section className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <LinkIcon className="text-brand" size={18} />
+            <LinkIcon className="text-amber-400" size={18} />
             <h2 className="font-semibold">Melhor Envio</h2>
           </div>
           <p className="mt-1 text-sm text-zinc-500">OAuth por tenant, sem token manual no servidor.</p>
@@ -119,9 +119,9 @@ export function MelhorEnvioIntegrationPanel({
         <form className="grid gap-4" onSubmit={saveSettings}>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-zinc-700">Ambiente</span>
+              <span className="mb-1 block text-sm font-medium text-zinc-300">Ambiente</span>
               <select
-                className="focus-ring w-full rounded-md border border-zinc-300 px-3 py-2"
+                className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
                 defaultValue={integration?.environment ?? "sandbox"}
                 name="environment"
               >
@@ -135,15 +135,15 @@ export function MelhorEnvioIntegrationPanel({
           </div>
 
           <label className="block">
-            <span className="mb-1 block text-sm font-medium text-zinc-700">Callback cadastrado no app</span>
+            <span className="mb-1 block text-sm font-medium text-zinc-300">Callback cadastrado no app</span>
             <div className="grid gap-2 md:grid-cols-[1fr_auto]">
               <input
-                className="w-full rounded-md border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-600"
+                className="w-full rounded-md border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-400"
                 readOnly
                 value={integration?.redirectUri ?? ""}
               />
               <button
-                className="focus-ring rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+                className="focus-ring rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-950/60"
                 onClick={copyCallback}
                 type="button"
               >
@@ -162,7 +162,7 @@ export function MelhorEnvioIntegrationPanel({
               {loading === "save" ? "Salvando..." : "Salvar credenciais"}
             </button>
             <button
-              className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
+              className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
               disabled={!integration?.configured || loading === "connect"}
               onClick={startAuthorization}
               type="button"
@@ -171,7 +171,7 @@ export function MelhorEnvioIntegrationPanel({
               {loading === "connect" ? "Abrindo..." : "Autorizar aplicativo"}
             </button>
             <button
-              className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
+              className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
               disabled={!integration?.connected || loading === "refresh"}
               onClick={refreshToken}
               type="button"
@@ -182,8 +182,8 @@ export function MelhorEnvioIntegrationPanel({
           </div>
         </form>
 
-        <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-600">
-          <p className="font-medium text-zinc-950">Checklist OAuth</p>
+        <div className="rounded-md border border-zinc-800 bg-zinc-950/60 p-4 text-sm text-zinc-400">
+          <p className="font-medium text-white">Checklist OAuth</p>
           <ul className="mt-3 grid gap-2">
             <li className="flex gap-2">
               <CheckCircle2 className={integration?.configured ? "text-emerald-600" : "text-zinc-300"} size={16} />
@@ -208,14 +208,14 @@ export function MelhorEnvioIntegrationPanel({
 }
 
 function StatusBadge({ integration }: { integration: IntegrationState | null }) {
-  if (!integration) return <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs text-zinc-600">Carregando</span>;
+  if (!integration) return <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400">Carregando</span>;
   if (integration.connected) {
-    return <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs text-emerald-700">Conectado</span>;
+    return <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-xs text-emerald-300">Conectado</span>;
   }
   if (integration.configured) {
-    return <span className="rounded-full bg-amber-50 px-3 py-1 text-xs text-amber-700">Aguardando autorizacao</span>;
+    return <span className="rounded-full bg-amber-400/10 px-3 py-1 text-xs text-amber-300">Aguardando autorizacao</span>;
   }
-  return <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs text-zinc-600">Nao configurado</span>;
+  return <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400">Nao configurado</span>;
 }
 
 function Input({
@@ -233,9 +233,9 @@ function Input({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-zinc-700">{label}</span>
+      <span className="mb-1 block text-sm font-medium text-zinc-300">{label}</span>
       <input
-        className="focus-ring w-full rounded-md border border-zinc-300 px-3 py-2"
+        className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
         name={name}
         placeholder={placeholder}
         required={required}
@@ -257,7 +257,7 @@ function callbackStatusMessage(status?: string, callbackMessage?: string): Statu
 }
 
 function messageClassName(type: StatusMessage["type"]) {
-  if (type === "success") return "bg-emerald-50 text-emerald-700";
-  if (type === "error") return "bg-red-50 text-red-700";
-  return "bg-zinc-50 text-zinc-600";
+  if (type === "success") return "bg-emerald-400/10 text-emerald-300";
+  if (type === "error") return "bg-red-400/10 text-red-300";
+  return "bg-zinc-950/60 text-zinc-400";
 }

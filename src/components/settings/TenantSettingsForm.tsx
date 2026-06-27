@@ -47,9 +47,9 @@ export function TenantSettingsForm({ tenant }: { tenant: TenantShippingProfile }
   }
 
   return (
-    <form className="rounded-lg border border-zinc-200 bg-white p-5" onSubmit={onSubmit}>
+    <form className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5" onSubmit={onSubmit}>
       <div className="mb-5 flex items-center gap-2">
-        <Save className="text-brand" size={18} />
+        <Save className="text-amber-400" size={18} />
         <h2 className="font-semibold">Dados do tenant e remetente</h2>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
@@ -70,7 +70,7 @@ export function TenantSettingsForm({ tenant }: { tenant: TenantShippingProfile }
           <Input defaultValue={tenant.state} label="UF" maxLength={2} name="state" />
         </div>
       </div>
-      {message ? <p className="mt-4 rounded-md bg-zinc-50 px-3 py-2 text-sm text-zinc-600">{message}</p> : null}
+      {message ? <p className="mt-4 rounded-md bg-zinc-950/60 px-3 py-2 text-sm text-zinc-400">{message}</p> : null}
       <button
         className="focus-ring mt-4 inline-flex items-center gap-2 rounded-md bg-zinc-950 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
         disabled={loading}
@@ -100,9 +100,9 @@ function Input({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-zinc-700">{label}</span>
+      <span className="mb-1 block text-sm font-medium text-zinc-300">{label}</span>
       <input
-        className="focus-ring w-full rounded-md border border-zinc-300 px-3 py-2"
+        className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
         defaultValue={defaultValue ?? ""}
         maxLength={maxLength}
         name={name}

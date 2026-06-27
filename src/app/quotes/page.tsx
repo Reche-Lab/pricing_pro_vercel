@@ -36,25 +36,25 @@ export default async function QuotesPage() {
           }))}
         />
 
-        <section className="rounded-lg border border-zinc-200 bg-white">
-          <div className="border-b border-zinc-200 px-5 py-4">
+        <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
+          <div className="border-b border-zinc-800 px-5 py-4">
             <h2 className="font-semibold">Orcamentos recentes</h2>
           </div>
-          <div className="divide-y divide-zinc-100">
+          <div className="divide-y divide-zinc-800">
             {quotes.length === 0 ? (
               <p className="p-5 text-sm text-zinc-500">Nenhum orcamento criado ainda.</p>
             ) : (
               quotes.map((quote) => (
                 <div className="grid gap-1 px-5 py-4 text-sm md:grid-cols-[1fr_auto] md:items-center" key={quote.id}>
                   <div>
-                    <Link className="font-medium text-zinc-950 hover:underline" href={`/quotes/${quote.id}`}>
+                    <Link className="font-medium text-white hover:underline" href={`/quotes/${quote.id}`}>
                       {quote.customer_name ?? "Cliente nao informado"}
                     </Link>
                     <p className="text-zinc-500">
                       Status: {quote.status} - Margem: {Number(quote.margin_percent).toFixed(1)}%
                     </p>
                   </div>
-                  <p className="text-lg font-semibold text-zinc-950">{brl.format(Number(quote.grand_total))}</p>
+                  <p className="text-lg font-semibold text-white">{brl.format(Number(quote.grand_total))}</p>
                 </div>
               ))
             )}

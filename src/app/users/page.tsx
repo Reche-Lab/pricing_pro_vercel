@@ -27,7 +27,7 @@ export default async function UsersPage() {
           roles={roles}
         />
       ) : (
-        <div className="rounded-lg border border-zinc-200 bg-white p-5 text-sm text-zinc-600">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5 text-sm text-zinc-400">
           Seu usuario nao tem permissao para gerenciar membros.
         </div>
       )}

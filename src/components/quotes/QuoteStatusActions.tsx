@@ -38,7 +38,7 @@ export function QuoteStatusActions({ quoteId }: { quoteId: string }) {
       <div className="flex flex-wrap gap-2">
         {STATUS_OPTIONS.map((option) => (
           <button
-            className="focus-ring rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
+            className="focus-ring rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
             disabled={loading === option.value}
             key={option.value}
             onClick={() => update(option.value)}
@@ -48,7 +48,7 @@ export function QuoteStatusActions({ quoteId }: { quoteId: string }) {
           </button>
         ))}
       </div>
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="text-sm text-red-300">{error}</p> : null}
     </div>
   );
 }

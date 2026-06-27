@@ -13,10 +13,10 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   if (!invite) notFound();
 
   return (
-    <main className="grid min-h-screen place-items-center bg-zinc-100 px-4">
-      <section className="w-full max-w-md rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-brand">{invite.tenant_name}</p>
-        <h1 className="mt-1 text-2xl font-semibold text-zinc-950">Ativar acesso</h1>
+    <main className="grid min-h-screen place-items-center bg-zinc-800 px-4">
+      <section className="w-full max-w-md rounded-lg border border-zinc-800 bg-zinc-900/70 p-6 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-wide text-amber-400">{invite.tenant_name}</p>
+        <h1 className="mt-1 text-2xl font-semibold text-white">Ativar acesso</h1>
         <p className="mt-1 text-sm text-zinc-500">
           Convite para {invite.user_name} ({invite.user_email})
         </p>

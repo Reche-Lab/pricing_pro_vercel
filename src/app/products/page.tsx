@@ -22,11 +22,11 @@ export default async function ProductsPage() {
     <AppShell title="Produtos" subtitle="Cadastro inicial de produtos, variantes e curvas." tenantName={profile.tenant_name}>
       <div className="grid gap-6 xl:grid-cols-[520px_1fr]">
         <ProductForm />
-        <section className="rounded-lg border border-zinc-200 bg-white">
-          <div className="border-b border-zinc-200 px-5 py-4">
+        <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
+          <div className="border-b border-zinc-800 px-5 py-4">
             <h2 className="font-semibold">Produtos cadastrados</h2>
           </div>
-          <div className="divide-y divide-zinc-100">
+          <div className="divide-y divide-zinc-800">
             {products.length === 0 ? (
               <p className="p-5 text-sm text-zinc-500">Nenhum produto cadastrado.</p>
             ) : (
@@ -34,7 +34,7 @@ export default async function ProductsPage() {
                 <div className="grid gap-3 px-5 py-4 text-sm" key={item.variant_id}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="font-medium text-zinc-950">
+                      <p className="font-medium text-white">
                         {item.product_name} - {item.variant_name}
                       </p>
                       <p className="text-zinc-500">
@@ -42,7 +42,7 @@ export default async function ProductsPage() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium text-zinc-950">{brl.format(Number(item.unit_cost))}</p>
+                      <p className="font-medium text-white">{brl.format(Number(item.unit_cost))}</p>
                       <p className="text-zinc-500">{Number(item.unit_weight_kg).toFixed(4)} kg/un</p>
                     </div>
                   </div>

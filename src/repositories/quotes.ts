@@ -62,6 +62,10 @@ export type CreateQuoteInput = {
   quantity: number;
   customerId?: string | null;
   customerName?: string | null;
+  customerDocument?: string | null;
+  customerEmail?: string | null;
+  customerPhone?: string | null;
+  shippingTotal?: number;
   validDays?: number;
   notes?: string | null;
 };
@@ -300,11 +304,17 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
     if (!customerId && input.customerName) {
       const customerResult = await client.query<{ id: string }>(
         `
-          insert into customers (tenant_id, name)
-          values ($1, $2)
+          insert into customers (tenant_id, name, document, email, phone)
+          values ($1, $2, $3, $4, $5)
           returning id
         `,
-        [tenantId, input.customerName]
+        [
+          tenantId,
+          input.customerName,
+          clean(input.customerDocument),
+          clean(input.customerEmail),
+          clean(input.customerPhone)
+        ]
       );
       customerId = customerResult.rows[0].id;
     }
@@ -323,6 +333,8 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
     });
 
     const validDays = Math.max(1, Math.min(90, input.validDays ?? 7));
+    const shippingTotal = Math.max(0, input.shippingTotal ?? 0);
+    const grandTotal = calculation.subtotal + shippingTotal;
     const quoteResult = await client.query<{ id: string }>(
       `
         insert into quotes (
@@ -346,12 +358,12 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
           'draft',
           current_date + $4::int,
           $5,
-          0,
-          0,
-          $5,
           $6,
+          0,
           $7,
-          $8
+          $8,
+          $9,
+          $10
         )
         returning id
       `,
@@ -361,6 +373,8 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
         userId,
         validDays,
         calculation.subtotal,
+        shippingTotal,
+        grandTotal,
         calculation.profit,
         calculation.marginPercent,
         input.notes || null
@@ -433,4 +447,10 @@ function mapAnchors(anchors: Record<string, string>): PricingAnchors {
     500: Number(anchors["500"] ?? 0),
     1000: Number(anchors["1000"] ?? 0)
   };
+}
+
+function clean(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed || null;
 }

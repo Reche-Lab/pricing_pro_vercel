@@ -40,10 +40,10 @@ export function AcceptInviteForm({ token }: { token: string }) {
   return (
     <form className="mt-6 space-y-4" onSubmit={onSubmit}>
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-zinc-700">Nova senha</span>
+        <span className="mb-1 block text-sm font-medium text-zinc-300">Nova senha</span>
         <input
           autoComplete="new-password"
-          className="focus-ring w-full rounded-md border border-zinc-300 px-3 py-2"
+          className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
           minLength={8}
           name="password"
           required
@@ -51,17 +51,17 @@ export function AcceptInviteForm({ token }: { token: string }) {
         />
       </label>
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-zinc-700">Confirmar senha</span>
+        <span className="mb-1 block text-sm font-medium text-zinc-300">Confirmar senha</span>
         <input
           autoComplete="new-password"
-          className="focus-ring w-full rounded-md border border-zinc-300 px-3 py-2"
+          className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
           minLength={8}
           name="confirmPassword"
           required
           type="password"
         />
       </label>
-      {error ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="rounded-md bg-red-400/10 px-3 py-2 text-sm text-red-300">{error}</p> : null}
       <button
         className="focus-ring w-full rounded-md bg-zinc-950 px-4 py-2 font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
         disabled={loading}

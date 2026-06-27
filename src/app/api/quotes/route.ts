@@ -9,6 +9,10 @@ const quoteSchema = z.object({
   quantity: z.number().int().min(1).max(50000),
   customerId: z.string().uuid().optional().nullable(),
   customerName: z.string().trim().min(2).optional().nullable(),
+  customerDocument: z.string().trim().optional().nullable(),
+  customerEmail: z.string().trim().email().optional().or(z.literal("")).nullable(),
+  customerPhone: z.string().trim().optional().nullable(),
+  shippingTotal: z.number().min(0).max(100000).optional(),
   validDays: z.number().int().min(1).max(90).optional(),
   notes: z.string().trim().max(2000).optional().nullable()
 });

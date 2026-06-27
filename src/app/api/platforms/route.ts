@@ -13,7 +13,8 @@ const platformSchema = z.object({
   commissionRate: z.number().min(0).max(0.99),
   fixedFee: z.number().min(0),
   sellerShippingCost: z.number().min(0),
-  sellerShippingThreshold: z.number().min(0)
+  sellerShippingThreshold: z.number().min(0),
+  sortOrder: z.number().int().min(1).max(10000).optional()
 });
 
 export async function GET() {

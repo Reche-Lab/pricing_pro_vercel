@@ -109,9 +109,9 @@ export function UserManagementPanel({
 
   return (
     <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
-      <form className="rounded-lg border border-zinc-200 bg-white p-5" onSubmit={createMember}>
+      <form className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5" onSubmit={createMember}>
         <div className="mb-5 flex items-center gap-2">
-          <UserPlus className="text-brand" size={18} />
+          <UserPlus className="text-amber-400" size={18} />
           <h2 className="font-semibold">Novo membro</h2>
         </div>
         <div className="grid gap-4">
@@ -121,8 +121,8 @@ export function UserManagementPanel({
             <Input label="Senha inicial" minLength={8} name="password" required type="password" />
           ) : null}
           <label className="block">
-            <span className="mb-1 block text-sm font-medium text-zinc-700">Role</span>
-            <select className="focus-ring w-full rounded-md border border-zinc-300 px-3 py-2" name="roleKey">
+            <span className="mb-1 block text-sm font-medium text-zinc-300">Role</span>
+            <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="roleKey">
               {assignableRoles.map((role) => (
                 <option key={role.key} value={role.key}>
                   {role.name}
@@ -131,9 +131,9 @@ export function UserManagementPanel({
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm font-medium text-zinc-700">Status</span>
+            <span className="mb-1 block text-sm font-medium text-zinc-300">Status</span>
             <select
-              className="focus-ring w-full rounded-md border border-zinc-300 px-3 py-2"
+              className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
               name="memberStatus"
               onChange={(event) => setNewMemberStatus(event.target.value as "active" | "invited")}
               value={newMemberStatus}
@@ -152,16 +152,16 @@ export function UserManagementPanel({
           {loading === "create" ? "Salvando..." : newMemberStatus === "invited" ? "Gerar convite" : "Criar membro"}
         </button>
         {inviteUrl ? (
-          <div className="mt-4 rounded-md border border-zinc-200 bg-zinc-50 p-3">
-            <p className="text-xs font-medium text-zinc-700">Link de convite</p>
+          <div className="mt-4 rounded-md border border-zinc-800 bg-zinc-950/60 p-3">
+            <p className="text-xs font-medium text-zinc-300">Link de convite</p>
             <div className="mt-2 grid gap-2">
               <input
-                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-600"
+                className="w-full rounded-md border border-zinc-700 bg-zinc-900/70 px-3 py-2 text-xs text-zinc-400"
                 readOnly
                 value={inviteUrl}
               />
               <button
-                className="focus-ring w-fit rounded-md border border-zinc-300 px-3 py-2 text-xs text-zinc-700 hover:bg-white"
+                className="focus-ring w-fit rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-900/70"
                 onClick={copyInviteUrl}
                 type="button"
               >
@@ -170,26 +170,26 @@ export function UserManagementPanel({
             </div>
           </div>
         ) : null}
-        {message ? <p className="mt-4 rounded-md bg-zinc-50 px-3 py-2 text-sm text-zinc-600">{message}</p> : null}
+        {message ? <p className="mt-4 rounded-md bg-zinc-950/60 px-3 py-2 text-sm text-zinc-400">{message}</p> : null}
       </form>
 
-      <section className="rounded-lg border border-zinc-200 bg-white">
-        <div className="border-b border-zinc-200 px-5 py-4">
+      <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
+        <div className="border-b border-zinc-800 px-5 py-4">
           <h2 className="font-semibold">Membros do tenant</h2>
         </div>
-        <div className="divide-y divide-zinc-100">
+        <div className="divide-y divide-zinc-800">
           {members.map((member) => {
             const isSelf = member.user_id === currentUserId;
             const canEdit = !isSelf && (currentRole === "owner" || member.role_key !== "owner");
             return (
               <div className="grid gap-3 px-5 py-4 text-sm xl:grid-cols-[1fr_160px_160px_auto]" key={member.membership_id}>
                 <div>
-                  <p className="font-medium text-zinc-950">{member.name}</p>
+                  <p className="font-medium text-white">{member.name}</p>
                   <p className="text-zinc-500">{member.email}</p>
                   {isSelf ? <p className="mt-1 text-xs text-zinc-400">Usuario atual</p> : null}
                 </div>
                 <select
-                  className="focus-ring h-10 rounded-md border border-zinc-300 px-3"
+                  className="focus-ring h-10 rounded-md border border-zinc-700 px-3"
                   disabled={!canEdit || loading === member.membership_id}
                   onChange={(event) => updateMember(member.membership_id, { roleKey: event.target.value })}
                   value={member.role_key}
@@ -201,7 +201,7 @@ export function UserManagementPanel({
                     ))}
                 </select>
                 <select
-                  className="focus-ring h-10 rounded-md border border-zinc-300 px-3"
+                  className="focus-ring h-10 rounded-md border border-zinc-700 px-3"
                   disabled={!canEdit || loading === member.membership_id}
                   onChange={(event) => updateMember(member.membership_id, { status: event.target.value })}
                   value={member.member_status}
@@ -213,7 +213,7 @@ export function UserManagementPanel({
                   ))}
                 </select>
                 <button
-                  className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-300 px-3 text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
+                  className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
                   disabled={!canEdit || loading === member.membership_id}
                   onClick={() => removeMember(member.membership_id)}
                   type="button"
@@ -245,9 +245,9 @@ function Input({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-zinc-700">{label}</span>
+      <span className="mb-1 block text-sm font-medium text-zinc-300">{label}</span>
       <input
-        className="focus-ring w-full rounded-md border border-zinc-300 px-3 py-2"
+        className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
         minLength={minLength}
         name={name}
         required={required}

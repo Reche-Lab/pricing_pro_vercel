@@ -96,14 +96,14 @@ export function MelhorEnvioShipmentActions({ shipmentId }: { shipmentId: string 
   }
 
   return (
-    <div className="mt-3 grid gap-3 rounded-md border border-zinc-200 p-3">
+    <div className="mt-3 grid gap-3 rounded-md border border-zinc-800 p-3">
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
         {ACTIONS.map((action) => {
           const Icon = action.icon;
           const isLoading = loading === action.key || loading === `payload:${action.key}`;
           return (
             <button
-              className="focus-ring grid min-h-24 gap-2 rounded-md border border-zinc-300 p-3 text-left text-xs text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
+              className="focus-ring grid min-h-24 gap-2 rounded-md border border-zinc-700 p-3 text-left text-xs text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
               disabled={isLoading}
               key={action.key}
               onClick={() => runPrepared(action.key)}
@@ -113,28 +113,28 @@ export function MelhorEnvioShipmentActions({ shipmentId }: { shipmentId: string 
                 <Icon size={16} />
                 {completed[action.key] ? <CheckCircle2 className="text-emerald-600" size={16} /> : null}
               </span>
-              <span className="font-medium text-zinc-950">{action.label}</span>
+              <span className="font-medium text-white">{action.label}</span>
               <span>{isLoading ? "Executando..." : action.actionLabel}</span>
             </button>
           );
         })}
       </div>
       {missingFields.length > 0 ? (
-        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <p className="rounded-md bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
           Pendencias: {missingFields.join(", ")}
         </p>
       ) : null}
       {warnings.length > 0 ? (
         <p className="rounded-md bg-sky-50 px-3 py-2 text-xs text-sky-800">Avisos: {warnings.join(", ")}</p>
       ) : null}
-      <details className="rounded-md border border-zinc-200 p-3">
-        <summary className="cursor-pointer text-xs font-medium text-zinc-700">Revisar payload</summary>
+      <details className="rounded-md border border-zinc-800 p-3">
+        <summary className="cursor-pointer text-xs font-medium text-zinc-300">Revisar payload</summary>
         <div className="mt-3 grid gap-2">
           <div className="grid gap-2 md:grid-cols-[1fr_auto]">
             <label className="block">
               <span className="mb-1 block text-xs text-zinc-500">Operacao</span>
               <select
-                className="focus-ring w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2 text-sm"
                 onChange={(event) => {
                   const nextOperation = event.target.value as MelhorEnvioAction;
                   setOperation(nextOperation);
@@ -151,7 +151,7 @@ export function MelhorEnvioShipmentActions({ shipmentId }: { shipmentId: string 
               </select>
             </label>
             <button
-              className="focus-ring inline-flex items-center gap-2 self-end rounded-md border border-zinc-300 px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
+              className="focus-ring inline-flex items-center gap-2 self-end rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
               disabled={loading === `payload:${operation}`}
               onClick={() => loadSuggestedPayload()}
               type="button"
@@ -163,7 +163,7 @@ export function MelhorEnvioShipmentActions({ shipmentId }: { shipmentId: string 
           <label className="block">
             <span className="mb-1 block text-xs text-zinc-500">Payload Melhor Envio</span>
             <textarea
-              className="focus-ring min-h-32 w-full rounded-md border border-zinc-300 px-3 py-2 font-mono text-xs"
+              className="focus-ring min-h-32 w-full rounded-md border border-zinc-700 px-3 py-2 font-mono text-xs"
               onChange={(event) => setPayload(event.target.value)}
               value={payload}
             />

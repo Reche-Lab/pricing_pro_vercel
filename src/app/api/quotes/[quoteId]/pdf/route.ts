@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getQuoteDetail } from "@/repositories/quotes";
+import { getTenantShippingProfile } from "@/repositories/tenant-settings";
 import { getSessionProfile } from "@/repositories/users";
 import { generateQuotePdf } from "@/services/pdf/quote-pdf";
 
@@ -15,9 +16,10 @@ export async function GET(_request: Request, context: { params: Promise<{ quoteI
     return NextResponse.json({ ok: false, error: "Invalid quote id." }, { status: 400 });
   }
 
-  const [profile, detail] = await Promise.all([
+  const [profile, detail, tenant] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
-    getQuoteDetail(session.userId, session.tenantId, quoteId)
+    getQuoteDetail(session.userId, session.tenantId, quoteId),
+    getTenantShippingProfile(session.userId, session.tenantId)
   ]);
   if (!profile || !detail) {
     return NextResponse.json({ ok: false, error: "Quote not found." }, { status: 404 });
@@ -25,6 +27,7 @@ export async function GET(_request: Request, context: { params: Promise<{ quoteI
 
   const pdf = await generateQuotePdf({
     tenantName: profile.tenant_name,
+    tenant,
     quote: detail.quote,
     items: detail.items
   });

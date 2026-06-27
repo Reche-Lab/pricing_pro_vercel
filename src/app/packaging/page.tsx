@@ -27,11 +27,11 @@ export default async function PackagingPage() {
     <AppShell title="Embalagens" subtitle="Caixas e capacidades por variante." tenantName={profile.tenant_name}>
       <div className="grid gap-6 xl:grid-cols-[480px_1fr]">
         <PackagingForm variants={variantOptions} />
-        <section className="rounded-lg border border-zinc-200 bg-white">
-          <div className="border-b border-zinc-200 px-5 py-4">
+        <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
+          <div className="border-b border-zinc-800 px-5 py-4">
             <h2 className="font-semibold">Embalagens cadastradas</h2>
           </div>
-          <div className="divide-y divide-zinc-100">
+          <div className="divide-y divide-zinc-800">
             {boxes.length === 0 ? (
               <p className="p-5 text-sm text-zinc-500">Nenhuma embalagem cadastrada.</p>
             ) : (
@@ -39,18 +39,18 @@ export default async function PackagingPage() {
                 <div className="grid gap-3 px-5 py-4 text-sm" key={box.id}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="font-medium text-zinc-950">{box.name}</p>
+                      <p className="font-medium text-white">{box.name}</p>
                       <p className="text-zinc-500">
                         {Number(box.height_cm)} x {Number(box.width_cm)} x {Number(box.length_cm)} cm
                       </p>
                     </div>
-                    <p className="font-medium text-zinc-950">{Number(box.weight_kg).toFixed(3)} kg</p>
+                    <p className="font-medium text-white">{Number(box.weight_kg).toFixed(3)} kg</p>
                   </div>
                   <div className="grid gap-2 md:grid-cols-2">
                     {Object.entries(box.capacities ?? {}).map(([variantId, capacity]) => (
-                      <div className="rounded-md bg-zinc-50 px-3 py-2" key={variantId}>
+                      <div className="rounded-md bg-zinc-950/60 px-3 py-2" key={variantId}>
                         <p className="text-xs text-zinc-500">{variantLabelById[variantId] ?? variantId}</p>
-                        <p className="font-medium text-zinc-950">{capacity} un.</p>
+                        <p className="font-medium text-white">{capacity} un.</p>
                       </div>
                     ))}
                   </div>

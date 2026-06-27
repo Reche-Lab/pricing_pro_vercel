@@ -4,12 +4,12 @@ import { demoVariants, platformPresets } from "@/domain/pricing/defaults";
 
 export default function DemoPage() {
   return (
-    <main className="min-h-screen bg-zinc-100">
-      <header className="border-b border-zinc-200 bg-white">
+    <main className="min-h-screen bg-zinc-800">
+      <header className="border-b border-zinc-800 bg-zinc-900/70">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand">Demo publica</p>
-            <h1 className="text-2xl font-semibold text-zinc-950">Pricing Pro</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-400">Demo publica</p>
+            <h1 className="text-2xl font-semibold text-white">Pricing Pro</h1>
             <p className="text-sm text-zinc-500">Simulador com produtos ficticios e dados protegidos.</p>
           </div>
           <Link

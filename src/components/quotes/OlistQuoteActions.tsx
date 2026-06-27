@@ -38,7 +38,7 @@ export function OlistQuoteActions({
   return (
     <div className="grid gap-2">
       <button
-        className="focus-ring inline-flex w-fit items-center gap-2 rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
+        className="focus-ring inline-flex w-fit items-center gap-2 rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
         disabled={!hasCustomer || loading === "customer"}
         onClick={() => run("customer")}
         type="button"
@@ -47,7 +47,7 @@ export function OlistQuoteActions({
         {loading === "customer" ? "Criando..." : externalOlistId ? "Atualizar cliente Olist" : "Criar cliente Olist"}
       </button>
       <button
-        className="focus-ring inline-flex w-fit items-center gap-2 rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
+        className="focus-ring inline-flex w-fit items-center gap-2 rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
         disabled={loading === "crm"}
         onClick={() => run("crm")}
         type="button"

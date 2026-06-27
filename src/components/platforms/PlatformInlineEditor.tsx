@@ -12,6 +12,7 @@ type PlatformInlineEditorProps = {
     fixedFee: number;
     sellerShippingCost: number;
     sellerShippingThreshold: number;
+    sortOrder: number;
   };
 };
 
@@ -34,7 +35,8 @@ export function PlatformInlineEditor({ platform }: PlatformInlineEditorProps) {
         commissionRate: Number(form.get("commissionRate")) / 100,
         fixedFee: Number(form.get("fixedFee")),
         sellerShippingCost: Number(form.get("sellerShippingCost")),
-        sellerShippingThreshold: Number(form.get("sellerShippingThreshold"))
+        sellerShippingThreshold: Number(form.get("sellerShippingThreshold")),
+        sortOrder: Number(form.get("sortOrder"))
       })
     });
 
@@ -49,16 +51,17 @@ export function PlatformInlineEditor({ platform }: PlatformInlineEditorProps) {
 
   return (
     <form className="grid gap-3" onSubmit={onSubmit}>
-      <div className="grid gap-3 md:grid-cols-5">
+      <div className="grid gap-3 md:grid-cols-6">
+        <Input defaultValue={String(platform.sortOrder)} label="Ordem" name="sortOrder" />
         <Input defaultValue={platform.name} label="Nome" name="name" />
         <Input defaultValue={(platform.commissionRate * 100).toFixed(2)} label="Comissao %" name="commissionRate" />
         <Input defaultValue={platform.fixedFee.toFixed(2)} label="Taxa" name="fixedFee" />
         <Input defaultValue={platform.sellerShippingCost.toFixed(2)} label="Frete" name="sellerShippingCost" />
         <Input defaultValue={platform.sellerShippingThreshold.toFixed(2)} label="Limite" name="sellerShippingThreshold" />
       </div>
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="text-sm text-red-300">{error}</p> : null}
       <button
-        className="focus-ring inline-flex w-fit items-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
+        className="focus-ring inline-flex w-fit items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
         disabled={loading}
         type="submit"
       >
@@ -74,12 +77,12 @@ function Input({ label, name, defaultValue }: { label: string; name: string; def
     <label className="block">
       <span className="mb-1 block text-xs text-zinc-500">{label}</span>
       <input
-        className="focus-ring w-full rounded-md border border-zinc-300 px-2 py-2 text-sm"
+        className="focus-ring w-full rounded-md border border-zinc-700 px-2 py-2 text-sm"
         defaultValue={defaultValue}
         min={name === "name" ? undefined : 0}
         name={name}
         required
-        step={name === "name" ? undefined : "0.01"}
+        step={name === "name" ? undefined : name === "sortOrder" ? "1" : "0.01"}
         type={name === "name" ? "text" : "number"}
       />
     </label>

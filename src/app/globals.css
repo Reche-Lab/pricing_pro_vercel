@@ -16,8 +16,21 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
+}
+
+input,
+select,
+textarea {
+  background: #09090b;
+  color: #f4f4f5;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #71717a;
 }
 
 .focus-ring {

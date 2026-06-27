@@ -8,6 +8,8 @@ import {
   CircleDollarSign,
   Clipboard,
   FileText,
+  Truck,
+  UserRound,
   RotateCcw,
   Save,
   TrendingUp
@@ -19,7 +21,7 @@ import {
   recomputeIntermediateAnchors
 } from "@/domain/pricing/pricing";
 import type { DemoProductVariant } from "@/domain/pricing/defaults";
-import type { PlatformRule, PricingAnchors, PricingAnchorQuantity, PricingSimulationPoint } from "@/domain/pricing/types";
+import type { PlatformRule, PricingAnchors, PricingAnchorQuantity } from "@/domain/pricing/types";
 
 export type PricingPlatformOption = PlatformRule & {
   name: string;
@@ -45,7 +47,7 @@ const percent = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1, minim
 export function PricingCalculator({ variants, platforms, readonlyMode = false }: PricingCalculatorProps) {
   const router = useRouter();
   const [variantId, setVariantId] = useState(variants[0]?.id ?? "");
-  const [quantity, setQuantity] = useState(100);
+  const [quantity, setQuantity] = useState(1);
   const [platformKey, setPlatformKey] = useState(Object.keys(platforms)[0] ?? "direct");
 
   const variant = variants.find((item) => item.id === variantId) ?? variants[0];
@@ -54,6 +56,14 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
   const [simulatedAnchors, setSimulatedAnchors] = useState<PricingAnchors>(() => variant?.anchors ?? emptyAnchors());
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [quickCustomerName, setQuickCustomerName] = useState("");
+  const [quickCustomerDocument, setQuickCustomerDocument] = useState("");
+  const [quickCustomerEmail, setQuickCustomerEmail] = useState("");
+  const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
+  const [destinationPostalCode, setDestinationPostalCode] = useState("");
+  const [originPostalCode, setOriginPostalCode] = useState("");
+  const [shippingService, setShippingService] = useState("manual");
+  const [shippingAmount, setShippingAmount] = useState(0);
+  const [includeShipping, setIncludeShipping] = useState(false);
   const [quickState, setQuickState] = useState<"idle" | "creating_pdf" | "copying_text" | "copied" | "error">("idle");
   const [quickMessage, setQuickMessage] = useState("");
   const [quickText, setQuickText] = useState("");
@@ -137,7 +147,7 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
   }, [currentAnchors, platform, quantity, simulatedAnchors, variant]);
 
   if (!variant || !platform || !currentResult || !simulatedResult) {
-    return <div className="rounded-lg border border-zinc-200 bg-white p-6">Nenhum produto disponivel.</div>;
+    return <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-6">Nenhum produto disponivel.</div>;
   }
 
   const selectedComparison = comparison[0];
@@ -194,8 +204,18 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
         quantity,
         customerId: null,
         customerName: quickCustomerName.trim() || "Cliente nao informado",
+        customerDocument: quickCustomerDocument,
+        customerEmail: quickCustomerEmail,
+        customerPhone: quickCustomerPhone,
+        shippingTotal: includeShipping ? shippingAmount : 0,
         validDays: 7,
-        notes: "Orcamento rapido gerado pelo precificador."
+        notes: buildQuickQuoteNotes({
+          destinationPostalCode,
+          includeShipping,
+          originPostalCode,
+          shippingAmount,
+          shippingService
+        })
       })
     });
 
@@ -259,7 +279,7 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
   return (
     <section className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl shadow-zinc-950/20">
       <div className="border-b border-zinc-800 bg-zinc-950 px-5 py-5 md:px-6">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div className="grid gap-5 xl:grid-cols-[1fr_auto] xl:items-start">
           <div>
             <div className="mb-2 flex items-center gap-2 text-sm font-medium text-amber-400">
               <Calculator size={18} />
@@ -271,125 +291,166 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
             </p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-3 xl:w-[720px]">
-            <Control label="Produto">
-              <select
-                className="focus-ring h-11 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-white"
-                value={variantId}
-                onChange={(event) => setVariantId(event.target.value)}
-              >
-                {variants.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.productName} - {item.variantName}
-                  </option>
-                ))}
-              </select>
-            </Control>
-
-            <Control label="Canal">
-              <select
-                className="focus-ring h-11 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-white"
-                value={platformKey}
-                onChange={(event) => setPlatformKey(event.target.value)}
-              >
-                {Object.entries(platforms).map(([key, rule]) => (
-                  <option key={key} value={key}>
-                    {rule.name}
-                  </option>
-                ))}
-              </select>
-            </Control>
-
-            <Control label="Quantidade">
-              <input
-                className="focus-ring h-11 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-white"
-                min={1}
-                max={50000}
-                type="number"
-                value={quantity}
-                onChange={(event) => setQuantity(Number(event.target.value))}
-              />
-            </Control>
+          <div className="grid gap-2 sm:grid-cols-2 xl:w-[360px]">
+            <button
+              className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-md bg-amber-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+              disabled={readonlyMode || simulatedChanged || quickState === "creating_pdf"}
+              type="button"
+              onClick={generateQuickPdf}
+            >
+              <FileText size={16} />
+              {quickState === "creating_pdf" ? "Gerando..." : "Gerar PDF"}
+            </button>
+            <button
+              className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-md border border-zinc-700 px-4 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:text-zinc-500"
+              disabled={readonlyMode || simulatedChanged || quickState === "copying_text"}
+              type="button"
+              onClick={copyQuickWhatsAppText}
+            >
+              <Clipboard size={16} />
+              {quickState === "copying_text" ? "Copiando..." : "Copiar WhatsApp"}
+            </button>
           </div>
         </div>
+
+        {simulatedChanged ? (
+          <p className="mt-4 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
+            Salve a curva simulada antes de gerar orcamento, PDF ou texto para WhatsApp.
+          </p>
+        ) : null}
+        {quickMessage ? (
+          <p className={`mt-4 text-sm ${quickState === "error" ? "text-red-300" : "text-emerald-300"}`}>
+            {quickMessage}
+          </p>
+        ) : null}
+        {quickText ? (
+          <textarea
+            className="focus-ring mt-3 min-h-32 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+            readOnly
+            value={quickText}
+          />
+        ) : null}
       </div>
 
-      <div className="grid gap-px bg-zinc-800 xl:grid-cols-[420px_1fr]">
-        <aside className="bg-zinc-950 p-5 md:p-6">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-            <Metric
-              icon={<CircleDollarSign size={18} />}
-              label="Unitario atual"
-              tone="amber"
-              value={brl.format(currentResult.finalUnitPrice)}
-            />
-            <Metric
-              icon={<TrendingUp size={18} />}
-              label="Unitario simulado"
-              tone={simulatedChanged ? "emerald" : "zinc"}
-              value={brl.format(simulatedResult.finalUnitPrice)}
-            />
-            <Metric label="Total simulado" value={brl.format(simulatedResult.subtotal)} />
-            <Metric
-              label="Margem simulada"
-              value={`${percent.format(simulatedResult.marginPercent)}%`}
-              tone={simulatedResult.marginPercent >= currentResult.marginPercent ? "emerald" : "red"}
-            />
-          </div>
-
-          <div className="mt-5 rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="font-semibold text-white">Ancoragens</h3>
-                <p className="text-xs text-zinc-400">Valores unitarios base por quantidade.</p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-                  title="Recalcular intermediarios"
-                  type="button"
-                  onClick={smoothAnchors}
-                >
-                  <Activity size={16} />
-                </button>
-                <button
-                  className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-                  title="Restaurar curva atual"
-                  type="button"
-                  onClick={resetAnchors}
-                >
-                  <RotateCcw size={16} />
-                </button>
-              </div>
-            </div>
-
-            <div className="grid gap-3">
-              {ANCHOR_QUANTITIES.map((anchorQuantity) => (
-                <label key={anchorQuantity} className="grid grid-cols-[72px_1fr_86px] items-center gap-3 text-sm">
-                  <span className="font-medium text-zinc-300">{anchorQuantity} un.</span>
-                  <input
-                    className="focus-ring h-2 w-full accent-amber-500"
-                    max={Math.max(20, currentAnchors[1] * 1.8)}
-                    min={0}
-                    step={0.01}
-                    type="range"
-                    value={simulatedAnchors[anchorQuantity]}
-                    onChange={(event) => updateAnchor(anchorQuantity, Number(event.target.value))}
-                  />
-                  <input
-                    className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-right text-sm text-white"
-                    min={0}
-                    step={0.01}
-                    type="number"
-                    value={simulatedAnchors[anchorQuantity]}
-                    onChange={(event) => updateAnchor(anchorQuantity, Number(event.target.value))}
-                  />
-                </label>
+      <div className="grid gap-5 p-5 md:p-6">
+        <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr_180px]">
+          <Control label="Produto">
+            <select
+              className="focus-ring h-11 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-white"
+              value={variantId}
+              onChange={(event) => setVariantId(event.target.value)}
+            >
+              {variants.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.productName} - {item.variantName}
+                </option>
               ))}
-            </div>
+            </select>
+          </Control>
 
+          <Control label="Canal">
+            <select
+              className="focus-ring h-11 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-white"
+              value={platformKey}
+              onChange={(event) => setPlatformKey(event.target.value)}
+            >
+              {Object.entries(platforms).map(([key, rule]) => (
+                <option key={key} value={key}>
+                  {rule.name}
+                </option>
+              ))}
+            </select>
+          </Control>
+
+          <Control label="Quantidade">
+            <input
+              className="focus-ring h-11 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-white"
+              min={1}
+              max={50000}
+              type="number"
+              value={quantity}
+              onChange={(event) => setQuantity(Number(event.target.value))}
+            />
+          </Control>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <Metric icon={<CircleDollarSign size={18} />} label="Preco unitario" tone="amber" value={brl.format(simulatedResult.finalUnitPrice)} />
+          <Metric label="Preco total" value={brl.format(simulatedResult.subtotal)} />
+          <Metric label="Margem liquida" value={brl.format(simulatedResult.profit)} tone="emerald" />
+          <Metric label="Custo total" value={brl.format(simulatedResult.totalCost)} />
+          <Metric
+            icon={<TrendingUp size={18} />}
+            label="Margem (%)"
+            value={`${percent.format(simulatedResult.marginPercent)}%`}
+            tone={simulatedResult.marginPercent >= 0 ? "emerald" : "red"}
+          />
+        </div>
+
+        <DetailsPanel icon={<UserRound size={16} />} title="Informacoes do Cliente">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input label="Nome (cliente)" placeholder="Insira o nome do cliente" value={quickCustomerName} onChange={setQuickCustomerName} />
+            <Input label="CPF/CNPJ" placeholder="000.000.000-00 ou 00.000.000/0000-00" value={quickCustomerDocument} onChange={setQuickCustomerDocument} />
+            <Input label="Email" placeholder="Email do cliente" type="email" value={quickCustomerEmail} onChange={setQuickCustomerEmail} />
+            <Input label="Telefone" placeholder="Telefone do cliente" value={quickCustomerPhone} onChange={setQuickCustomerPhone} />
+          </div>
+          <p className="mt-3 text-xs text-zinc-500">Se vazio, entra como cliente nao informado no orcamento rapido.</p>
+        </DetailsPanel>
+
+        <DetailsPanel icon={<Truck size={16} />} title="Frete e calculo">
+          <div className="grid gap-4 md:grid-cols-5">
+            <Input label="CEP destino" placeholder="00000-000" value={destinationPostalCode} onChange={setDestinationPostalCode} />
+            <Input label="CEP origem" placeholder="Usa padrao configurado" value={originPostalCode} onChange={setOriginPostalCode} />
+            <Control label="Servico">
+              <select
+                className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm"
+                value={shippingService}
+                onChange={(event) => setShippingService(event.target.value)}
+              >
+                <option value="manual">Outros/manual</option>
+                <option value="sedex">SEDEX</option>
+                <option value="pac">PAC</option>
+                <option value="melhor_envio">Melhor Envio</option>
+              </select>
+            </Control>
+            <Input label="Frete estimado (R$)" min={0} step={0.01} type="number" value={shippingAmount} onChange={setShippingAmount} />
+            <div className="flex flex-col justify-end gap-2">
+              <label className="flex min-h-10 items-center gap-2 text-sm text-zinc-300">
+                <input
+                  checked={includeShipping}
+                  className="h-4 w-4 accent-amber-500"
+                  type="checkbox"
+                  onChange={(event) => setIncludeShipping(event.target.checked)}
+                />
+                Somar frete ao orcamento
+              </label>
+            </div>
+          </div>
+          <p className="mt-3 text-sm text-zinc-400">
+            Total com frete: {brl.format(simulatedResult.subtotal + (includeShipping ? shippingAmount : 0))}
+          </p>
+        </DetailsPanel>
+
+        <DetailsPanel icon={<Activity size={16} />} title="Ancoragem de precos & Custos">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
             <button
-              className="focus-ring mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-amber-500 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+              className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800"
+              type="button"
+              onClick={smoothAnchors}
+            >
+              <Activity size={16} />
+              Recalcular intermediarios
+            </button>
+            <button
+              className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800"
+              type="button"
+              onClick={resetAnchors}
+            >
+              <RotateCcw size={16} />
+              Resetar curva
+            </button>
+            <button
+              className="focus-ring inline-flex items-center gap-2 rounded-md bg-amber-500 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
               disabled={readonlyMode || !simulatedChanged || saveState === "saving"}
               type="button"
               onClick={saveCurveVersion}
@@ -397,150 +458,126 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
               <Save size={16} />
               {saveState === "saving" ? "Salvando..." : "Salvar nova versao"}
             </button>
-            {saveState === "saved" ? (
-              <p className="mt-3 text-sm text-emerald-300">Nova curva ativa salva.</p>
-            ) : null}
-            {saveState === "error" ? (
-              <p className="mt-3 text-sm text-red-300">Nao foi possivel salvar a curva.</p>
-            ) : null}
           </div>
-
-          <div className="mt-5 rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
-            <div className="mb-4">
-              <h3 className="font-semibold text-white">Orcamento rapido</h3>
-              <p className="text-xs text-zinc-400">Cria um orcamento com os dados minimos da simulacao atual.</p>
-            </div>
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">
-                Cliente
-              </span>
-              <input
-                className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
-                placeholder="Nome para exibir no orcamento"
-                value={quickCustomerName}
-                onChange={(event) => setQuickCustomerName(event.target.value)}
+          <div className="grid gap-3 md:grid-cols-6">
+            {ANCHOR_QUANTITIES.map((anchorQuantity) => (
+              <Input
+                key={anchorQuantity}
+                label={`q=${anchorQuantity}`}
+                min={0}
+                step={0.01}
+                type="number"
+                value={simulatedAnchors[anchorQuantity]}
+                onChange={(value) => updateAnchor(anchorQuantity, value)}
               />
-            </label>
-            {simulatedChanged ? (
-              <p className="mt-3 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
-                Salve a curva simulada antes de gerar o orcamento.
-              </p>
-            ) : null}
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-              <button
-                className="focus-ring inline-flex items-center justify-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
-                disabled={readonlyMode || simulatedChanged || quickState === "creating_pdf"}
-                type="button"
-                onClick={generateQuickPdf}
-              >
-                <FileText size={16} />
-                {quickState === "creating_pdf" ? "Gerando..." : "Gerar PDF"}
-              </button>
-              <button
-                className="focus-ring inline-flex items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:text-zinc-500"
-                disabled={readonlyMode || simulatedChanged || quickState === "copying_text"}
-                type="button"
-                onClick={copyQuickWhatsAppText}
-              >
-                <Clipboard size={16} />
-                {quickState === "copying_text" ? "Copiando..." : "Copiar WhatsApp"}
-              </button>
-            </div>
-            {quickMessage ? (
-              <p className={`mt-3 text-sm ${quickState === "error" ? "text-red-300" : "text-emerald-300"}`}>
-                {quickMessage}
-              </p>
-            ) : null}
-            {quickText ? (
-              <textarea
-                className="focus-ring mt-3 min-h-36 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-                readOnly
-                value={quickText}
-              />
-            ) : null}
+            ))}
           </div>
-
-          {readonlyMode ? (
-            <p className="mt-4 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
-              Demo com dados ficticios. Custos e curvas reais ficam protegidos apos login.
-            </p>
-          ) : null}
-        </aside>
-
-        <div className="bg-zinc-950 p-5 md:p-6">
-          <div className="grid gap-4 2xl:grid-cols-2">
-            <ChartPanel title="Preco unitario" subtitle="Atual x simulado">
+          <div className="mt-5 grid gap-4 md:grid-cols-4">
+            <ReadOnlyField label="Comissao" value={`${percent.format(platform.commissionRate * 100)}%`} />
+            <ReadOnlyField label="Taxa fixa" value={brl.format(platform.fixedFee)} />
+            <ReadOnlyField label="Frete vendedor" value={brl.format(platform.sellerShippingCost)} />
+            <ReadOnlyField label="Limite frete vendedor" value={brl.format(platform.sellerShippingThreshold)} />
+          </div>
+          <div className="mt-5">
+            <ChartPanel title="Ancoragem de precos" subtitle="Pontos cadastrados. O ponto q=1 usa exatamente a ancoragem base.">
               <LineChart
-                current={currentSeries.map((point) => toChartPoint(point, "finalUnitPrice"))}
+                current={anchorChartPoints(currentAnchors)}
                 formatValue={(value) => brl.format(value)}
-                simulated={simulatedSeries.map((point) => toChartPoint(point, "finalUnitPrice"))}
-              />
-            </ChartPanel>
-            <ChartPanel title="Margem" subtitle="Percentual por faixa">
-              <LineChart
-                current={currentSeries.map((point) => toChartPoint(point, "marginPercent"))}
-                formatValue={(value) => `${percent.format(value)}%`}
-                simulated={simulatedSeries.map((point) => toChartPoint(point, "marginPercent"))}
+                simulated={anchorChartPoints(simulatedAnchors)}
               />
             </ChartPanel>
           </div>
+          {saveState === "saved" ? <p className="mt-3 text-sm text-emerald-300">Nova curva ativa salva.</p> : null}
+          {saveState === "error" ? <p className="mt-3 text-sm text-red-300">Nao foi possivel salvar a curva.</p> : null}
+        </DetailsPanel>
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_360px]">
-            <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
-              <div className="border-b border-zinc-800 px-4 py-3">
-                <h3 className="font-semibold text-white">Faixas de quantidade</h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-zinc-800 text-sm">
-                  <thead className="text-left text-xs uppercase tracking-wide text-zinc-500">
-                    <tr>
-                      <th className="px-4 py-3 font-semibold">Qtd</th>
-                      <th className="px-4 py-3 font-semibold">Atual</th>
-                      <th className="px-4 py-3 font-semibold">Simulado</th>
-                      <th className="px-4 py-3 font-semibold">Margem</th>
-                      <th className="px-4 py-3 font-semibold">Lucro</th>
+        <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+          <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
+            <div className="border-b border-zinc-800 px-4 py-3">
+              <h3 className="font-semibold text-white">Faixas de quantidade</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-zinc-800 text-sm">
+                <thead className="text-left text-xs uppercase tracking-wide text-zinc-500">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">Qtd</th>
+                    <th className="px-4 py-3 font-semibold">Atual</th>
+                    <th className="px-4 py-3 font-semibold">Simulado</th>
+                    <th className="px-4 py-3 font-semibold">Margem</th>
+                    <th className="px-4 py-3 font-semibold">Lucro</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800">
+                  {simulatedSeries.map((point, index) => (
+                    <tr key={point.quantity}>
+                      <td className="px-4 py-3 font-medium text-white">{point.label}</td>
+                      <td className="px-4 py-3 text-zinc-300">{brl.format(currentSeries[index].finalUnitPrice)}</td>
+                      <td className="px-4 py-3 text-emerald-300">{brl.format(point.finalUnitPrice)}</td>
+                      <td className="px-4 py-3 text-zinc-300">{percent.format(point.marginPercent)}%</td>
+                      <td className="px-4 py-3 text-zinc-300">{brl.format(point.profit)}</td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-800">
-                    {simulatedSeries.map((point, index) => (
-                      <tr key={point.quantity}>
-                        <td className="px-4 py-3 font-medium text-white">{point.label}</td>
-                        <td className="px-4 py-3 text-zinc-300">{brl.format(currentSeries[index].finalUnitPrice)}</td>
-                        <td className="px-4 py-3 text-emerald-300">{brl.format(point.finalUnitPrice)}</td>
-                        <td className="px-4 py-3 text-zinc-300">{percent.format(point.marginPercent)}%</td>
-                        <td className="px-4 py-3 text-zinc-300">{brl.format(point.profit)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
-            <section className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
-              <h3 className="font-semibold text-white">Breakdown</h3>
-              <dl className="mt-4 grid gap-3 text-sm">
-                <Detail label="Base atual" value={brl.format(currentResult.baseUnitPrice)} />
-                <Detail label="Base simulada" value={brl.format(simulatedResult.baseUnitPrice)} />
-                <Detail label="Comissao" value={brl.format(simulatedResult.commissionTotal)} />
-                <Detail label="Taxa fixa" value={brl.format(simulatedResult.fixedFeeTotal)} />
-                <Detail label="Frete vendedor" value={brl.format(simulatedResult.sellerShippingTotal)} />
-                <Detail label="Custo mercadoria" value={brl.format(simulatedResult.costOfGoodsTotal)} />
-                <Detail label="Lucro liquido" value={brl.format(simulatedResult.profit)} />
-              </dl>
-              <div className="mt-4 rounded-md border border-zinc-800 bg-zinc-950 p-3">
-                <p className="text-xs uppercase tracking-wide text-zinc-500">Diferenca na quantidade atual</p>
-                <p className="mt-2 text-sm text-zinc-300">
-                  Unitario: <span className={deltaClass(selectedComparison.unitPriceDelta)}>{formatDeltaMoney(selectedComparison.unitPriceDelta)}</span>
-                </p>
-                <p className="mt-1 text-sm text-zinc-300">
-                  Margem: <span className={deltaClass(selectedComparison.marginDelta)}>{formatDeltaPercent(selectedComparison.marginDelta)}</span>
-                </p>
-              </div>
-            </section>
-          </div>
+          <section className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
+            <h3 className="font-semibold text-white">Resumo do calculo</h3>
+            <dl className="mt-4 grid gap-3 text-sm">
+              <Detail label="Base atual" value={brl.format(currentResult.baseUnitPrice)} />
+              <Detail label="Base simulada" value={brl.format(simulatedResult.baseUnitPrice)} />
+              <Detail label="Comissao" value={brl.format(simulatedResult.commissionTotal)} />
+              <Detail label="Taxa fixa" value={brl.format(simulatedResult.fixedFeeTotal)} />
+              <Detail label="Frete vendedor" value={brl.format(simulatedResult.sellerShippingTotal)} />
+              <Detail label="Frete cliente" value={includeShipping ? brl.format(shippingAmount) : brl.format(0)} />
+              <Detail label="Custo mercadoria" value={brl.format(simulatedResult.costOfGoodsTotal)} />
+              <Detail label="Lucro liquido" value={brl.format(simulatedResult.profit)} />
+            </dl>
+            <div className="mt-4 rounded-md border border-zinc-800 bg-zinc-950 p-3">
+              <p className="text-xs uppercase tracking-wide text-zinc-500">Diferenca na quantidade atual</p>
+              <p className="mt-2 text-sm text-zinc-300">
+                Unitario: <span className={deltaClass(selectedComparison.unitPriceDelta)}>{formatDeltaMoney(selectedComparison.unitPriceDelta)}</span>
+              </p>
+              <p className="mt-1 text-sm text-zinc-300">
+                Margem: <span className={deltaClass(selectedComparison.marginDelta)}>{formatDeltaPercent(selectedComparison.marginDelta)}</span>
+              </p>
+            </div>
+          </section>
         </div>
+
+        {readonlyMode ? (
+          <p className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
+            Demo com dados ficticios. Custos e curvas reais ficam protegidos apos login.
+          </p>
+        ) : null}
       </div>
     </section>
+  );
+}
+
+function DetailsPanel({
+  children,
+  defaultOpen = false,
+  icon,
+  title
+}: {
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+  icon?: React.ReactNode;
+  title: string;
+}) {
+  return (
+    <details className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4" open={defaultOpen}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+        <span className="inline-flex items-center gap-2 font-medium text-amber-400">
+          {icon}
+          {title}
+        </span>
+        <span className="text-xs text-zinc-500">Clique para expandir/recolher</span>
+      </summary>
+      <div className="mt-4">{children}</div>
+    </details>
   );
 }
 
@@ -550,6 +587,51 @@ function Control({ children, label }: { children: React.ReactNode; label: string
       <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</span>
       {children}
     </label>
+  );
+}
+
+function Input<T extends number | string>({
+  label,
+  min,
+  onChange,
+  placeholder,
+  step,
+  type = "text",
+  value
+}: {
+  label: string;
+  min?: number;
+  onChange: (value: T) => void;
+  placeholder?: string;
+  step?: number;
+  type?: string;
+  value: T;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</span>
+      <input
+        className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+        min={min}
+        placeholder={placeholder}
+        step={step}
+        type={type}
+        value={value}
+        onChange={(event) => {
+          const nextValue = type === "number" ? Number(event.target.value) : event.target.value;
+          onChange(nextValue as T);
+        }}
+      />
+    </label>
+  );
+}
+
+function ReadOnlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3">
+      <p className="text-xs uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="mt-1 font-medium text-zinc-100">{value}</p>
+    </div>
   );
 }
 
@@ -680,16 +762,16 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
-function toChartPoint(point: PricingSimulationPoint, key: "finalUnitPrice" | "marginPercent"): ChartPoint {
-  return {
-    quantity: point.quantity,
-    label: point.label,
-    value: point[key]
-  };
-}
-
 function hasAnchorChanges(current: PricingAnchors, simulated: PricingAnchors) {
   return ANCHOR_QUANTITIES.some((quantity) => Math.abs(current[quantity] - simulated[quantity]) > 0.001);
+}
+
+function anchorChartPoints(anchors: PricingAnchors): ChartPoint[] {
+  return ANCHOR_QUANTITIES.map((quantity) => ({
+    quantity,
+    label: String(quantity),
+    value: anchors[quantity]
+  }));
 }
 
 function emptyAnchors(): PricingAnchors {
@@ -710,4 +792,19 @@ function formatDeltaMoney(value: number) {
 function formatDeltaPercent(value: number) {
   const sign = value > 0 ? "+" : "";
   return `${sign}${percent.format(value)} p.p.`;
+}
+
+function buildQuickQuoteNotes(input: {
+  destinationPostalCode: string;
+  includeShipping: boolean;
+  originPostalCode: string;
+  shippingAmount: number;
+  shippingService: string;
+}) {
+  const lines = ["Orcamento rapido gerado pelo precificador."];
+  if (input.destinationPostalCode) lines.push(`CEP destino: ${input.destinationPostalCode}`);
+  if (input.originPostalCode) lines.push(`CEP origem: ${input.originPostalCode}`);
+  if (input.shippingService !== "manual") lines.push(`Servico de frete: ${input.shippingService}`);
+  if (input.includeShipping) lines.push(`Frete incluido: ${brl.format(input.shippingAmount)}`);
+  return lines.join("\n");
 }
