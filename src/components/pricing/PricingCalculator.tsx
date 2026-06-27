@@ -2,7 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Activity, Calculator, CircleDollarSign, RotateCcw, Save, TrendingUp } from "lucide-react";
+import {
+  Activity,
+  Calculator,
+  CircleDollarSign,
+  Clipboard,
+  FileText,
+  RotateCcw,
+  Save,
+  TrendingUp
+} from "lucide-react";
 import {
   buildPricingSimulationSeries,
   calculateQuote,
@@ -44,12 +53,19 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
   const [currentAnchors, setCurrentAnchors] = useState<PricingAnchors>(() => variant?.anchors ?? emptyAnchors());
   const [simulatedAnchors, setSimulatedAnchors] = useState<PricingAnchors>(() => variant?.anchors ?? emptyAnchors());
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [quickCustomerName, setQuickCustomerName] = useState("");
+  const [quickState, setQuickState] = useState<"idle" | "creating_pdf" | "copying_text" | "copied" | "error">("idle");
+  const [quickMessage, setQuickMessage] = useState("");
+  const [quickText, setQuickText] = useState("");
 
   useEffect(() => {
     if (variant) {
       setCurrentAnchors(variant.anchors);
       setSimulatedAnchors(variant.anchors);
       setSaveState("idle");
+      setQuickState("idle");
+      setQuickMessage("");
+      setQuickText("");
     }
   }, [variant]);
 
@@ -133,6 +149,9 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
       [quantityKey]: Number.isFinite(value) ? Math.max(0, value) : 0
     }));
     setSaveState("idle");
+    setQuickState("idle");
+    setQuickMessage("");
+    setQuickText("");
   }
 
   function resetAnchors() {
@@ -163,6 +182,78 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
     setCurrentAnchors(simulatedAnchors);
     setSaveState("saved");
     router.refresh();
+  }
+
+  async function createQuickQuote() {
+    const response = await fetch("/api/quotes", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        productVariantId: variant.id,
+        platformRuleId: platformKey,
+        quantity,
+        customerId: null,
+        customerName: quickCustomerName.trim() || "Cliente nao informado",
+        validDays: 7,
+        notes: "Orcamento rapido gerado pelo precificador."
+      })
+    });
+
+    if (!response.ok) throw new Error("Quote creation failed.");
+    const payload = (await response.json()) as { quote?: { id?: string } };
+    const quoteId = payload.quote?.id;
+    if (!quoteId) throw new Error("Quote id missing.");
+    return quoteId;
+  }
+
+  async function generateQuickPdf() {
+    if (readonlyMode || simulatedChanged || quickState === "creating_pdf") return;
+
+    setQuickState("creating_pdf");
+    setQuickMessage("");
+    setQuickText("");
+    const pdfWindow = window.open("about:blank", "_blank");
+
+    try {
+      const quoteId = await createQuickQuote();
+      const pdfUrl = `/api/quotes/${quoteId}/pdf`;
+      if (pdfWindow) {
+        pdfWindow.location.href = pdfUrl;
+      } else {
+        window.location.href = pdfUrl;
+      }
+      setQuickState("idle");
+      setQuickMessage("Orcamento criado e PDF gerado.");
+      router.refresh();
+    } catch {
+      pdfWindow?.close();
+      setQuickState("error");
+      setQuickMessage("Nao foi possivel gerar o PDF.");
+    }
+  }
+
+  async function copyQuickWhatsAppText() {
+    if (readonlyMode || simulatedChanged || quickState === "copying_text") return;
+
+    setQuickState("copying_text");
+    setQuickMessage("");
+    setQuickText("");
+
+    try {
+      const quoteId = await createQuickQuote();
+      const response = await fetch(`/api/quotes/${quoteId}/whatsapp`);
+      if (!response.ok) throw new Error("WhatsApp text failed.");
+      const payload = (await response.json()) as { text?: string };
+      if (!payload.text) throw new Error("WhatsApp text missing.");
+      setQuickText(payload.text);
+      await navigator.clipboard.writeText(payload.text);
+      setQuickState("copied");
+      setQuickMessage("Texto do orcamento copiado para o WhatsApp.");
+      router.refresh();
+    } catch {
+      setQuickState("error");
+      setQuickMessage("Nao foi possivel copiar o texto.");
+    }
   }
 
   return (
@@ -311,6 +402,61 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
             ) : null}
             {saveState === "error" ? (
               <p className="mt-3 text-sm text-red-300">Nao foi possivel salvar a curva.</p>
+            ) : null}
+          </div>
+
+          <div className="mt-5 rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
+            <div className="mb-4">
+              <h3 className="font-semibold text-white">Orcamento rapido</h3>
+              <p className="text-xs text-zinc-400">Cria um orcamento com os dados minimos da simulacao atual.</p>
+            </div>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Cliente
+              </span>
+              <input
+                className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+                placeholder="Nome para exibir no orcamento"
+                value={quickCustomerName}
+                onChange={(event) => setQuickCustomerName(event.target.value)}
+              />
+            </label>
+            {simulatedChanged ? (
+              <p className="mt-3 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
+                Salve a curva simulada antes de gerar o orcamento.
+              </p>
+            ) : null}
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+              <button
+                className="focus-ring inline-flex items-center justify-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+                disabled={readonlyMode || simulatedChanged || quickState === "creating_pdf"}
+                type="button"
+                onClick={generateQuickPdf}
+              >
+                <FileText size={16} />
+                {quickState === "creating_pdf" ? "Gerando..." : "Gerar PDF"}
+              </button>
+              <button
+                className="focus-ring inline-flex items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:text-zinc-500"
+                disabled={readonlyMode || simulatedChanged || quickState === "copying_text"}
+                type="button"
+                onClick={copyQuickWhatsAppText}
+              >
+                <Clipboard size={16} />
+                {quickState === "copying_text" ? "Copiando..." : "Copiar WhatsApp"}
+              </button>
+            </div>
+            {quickMessage ? (
+              <p className={`mt-3 text-sm ${quickState === "error" ? "text-red-300" : "text-emerald-300"}`}>
+                {quickMessage}
+              </p>
+            ) : null}
+            {quickText ? (
+              <textarea
+                className="focus-ring mt-3 min-h-36 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                readOnly
+                value={quickText}
+              />
             ) : null}
           </div>
 

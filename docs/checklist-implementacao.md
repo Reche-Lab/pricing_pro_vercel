@@ -93,6 +93,7 @@ Status atualizado durante a refatoracao inicial.
 - [x] Criar pagina publica `/invite/[token]` para ativacao de acesso.
 - [x] Criar Precificador 2.0 com visual dark, graficos e simulacao de ancoragens.
 - [x] Criar dominio testado para series de simulacao e comparacao de curvas.
+- [x] Criar botoes de orcamento rapido no precificador para PDF e WhatsApp.
 - [ ] Importar `boxes.csv` no banco do ambiente alvo.
 - [ ] Configurar credenciais Correios no banco do ambiente alvo.
 - [ ] Configurar credenciais Melhor Envio no banco do ambiente alvo.

@@ -43,8 +43,8 @@ describe("quote whatsapp text", () => {
       ]
     });
 
-    expect(text).toContain("Cliente: Cliente Teste");
-    expect(text).toContain("100x Botton - 2,5 cm");
-    expect(text.replace(/\s/g, " ")).toContain("Total: R$ 220,00");
+    expect(text).toContain("*Cliente:* Cliente Teste");
+    expect(text).toContain("*100x* Botton - 2,5 cm");
+    expect(text.replace(/\s/g, " ")).toContain("*Total:* R$ 220,00");
   });
 });
