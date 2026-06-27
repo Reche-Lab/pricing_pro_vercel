@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { MelhorEnvioPayloadPreview } from "@/components/quotes/MelhorEnvioPayloadPreview";
+import { OlistQuoteActions } from "@/components/quotes/OlistQuoteActions";
 import { QuoteStatusActions } from "@/components/quotes/QuoteStatusActions";
 import { QuoteWhatsAppButton } from "@/components/quotes/QuoteWhatsAppButton";
 import { MelhorEnvioShipmentActions } from "@/components/shipments/MelhorEnvioShipmentActions";
@@ -108,6 +109,12 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                 Baixar PDF
               </Link>
               <QuoteWhatsAppButton quoteId={quoteId} />
+              <OlistQuoteActions
+                externalCrmId={detail.quote.external_crm_id}
+                externalOlistId={detail.quote.customer_external_olist_id}
+                hasCustomer={Boolean(detail.quote.customer_id)}
+                quoteId={quoteId}
+              />
               <QuoteStatusActions quoteId={quoteId} />
             </div>
           </div>

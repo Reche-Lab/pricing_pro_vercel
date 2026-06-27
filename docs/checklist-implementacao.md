@@ -94,8 +94,12 @@ Status atualizado durante a refatoracao inicial.
 - [ ] Importar `boxes.csv` no banco do ambiente alvo.
 - [ ] Configurar credenciais Correios no banco do ambiente alvo.
 - [ ] Configurar credenciais Melhor Envio no banco do ambiente alvo.
-- [ ] Integrar Olist.
-- [ ] Integrar CRM.
+- [x] Criar configuracao Olist/CRM por tenant.
+- [x] Criar adapter HTTP configuravel para Olist/CRM.
+- [x] Criar payload testado de cliente Olist.
+- [x] Criar payload testado de orcamento para CRM Olist.
+- [x] Criar botoes no detalhe do orcamento para sincronizar cliente e enviar orcamento.
+- [ ] Homologar paths e respostas reais Olist/CRM no ambiente alvo.
 - [ ] Criar auditoria em todas as escritas.
 - [ ] Criar testes e2e com Playwright.
 - [ ] Revisar `npm audit` e atualizar dependencias vulneraveis sem quebrar Next/Vitest.
@@ -115,7 +119,7 @@ Resultado:
 
 - lint passou;
 - typecheck passou;
-- testes passaram: 33 testes em 13 arquivos;
+- testes passaram: 35 testes em 14 arquivos;
 - build Next passou.
 
 ## Acoes Manuais Pendentes
@@ -137,6 +141,8 @@ npm run configure:correios -- ground-shop 'TOKEN_CORREIOS' 'CONTRATO_CORREIOS'
 Depois disso a tela `/shipping` consegue cotar SEDEX/PAC usando as embalagens cadastradas/importadas.
 
 Configurar Melhor Envio pelo fluxo OAuth em `/settings`. Cadastre no app do Melhor Envio o callback `${APP_URL}/api/melhor-envio/oauth/callback`, salve Client ID/Secret na tela e autorize o aplicativo.
+
+Configurar Olist/CRM em `/settings`. Informe Base URL, path de cliente, path de orcamento, token e formato de autenticacao conforme o ambiente alvo.
 
 Ponto de atencao:
 

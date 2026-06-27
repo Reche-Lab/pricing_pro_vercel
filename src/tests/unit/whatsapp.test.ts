@@ -28,6 +28,8 @@ describe("quote whatsapp text", () => {
         customer_district: null,
         customer_city: null,
         customer_state: null,
+        customer_external_olist_id: null,
+        external_crm_id: null,
         created_by_name: "Admin"
       },
       items: [

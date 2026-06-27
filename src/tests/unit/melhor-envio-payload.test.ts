@@ -196,6 +196,8 @@ function quoteDetail(): QuoteDetail {
     customer_district: "Se",
     customer_city: "Sao Paulo",
     customer_state: "sp",
+    customer_external_olist_id: null,
+    external_crm_id: null,
     created_by_name: "Admin"
   };
 }
