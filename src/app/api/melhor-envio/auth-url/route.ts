@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth/session";
-import { decryptIntegrationCredentials, getIntegrationConnection } from "@/repositories/integrations";
+import { createOAuthState, decryptIntegrationCredentials, getIntegrationConnection } from "@/repositories/integrations";
 import { buildMelhorEnvioAuthUrl } from "@/services/melhor-envio/melhor-envio";
 import type { MelhorEnvioCredentials, MelhorEnvioSettings } from "@/services/melhor-envio/types";
 
@@ -15,6 +15,13 @@ export async function GET() {
   }
 
   const credentials = decryptIntegrationCredentials<MelhorEnvioCredentials>(connection);
-  const authUrl = buildMelhorEnvioAuthUrl(connection.settings as MelhorEnvioSettings, credentials, randomUUID());
+  const state = randomUUID();
+  await createOAuthState(session.userId, session.tenantId, {
+    provider: "melhor_envio",
+    state,
+    redirectPath: "/settings",
+    ttlMinutes: 10
+  });
+  const authUrl = buildMelhorEnvioAuthUrl(connection.settings as MelhorEnvioSettings, credentials, state);
   return NextResponse.json({ ok: true, authUrl });
 }

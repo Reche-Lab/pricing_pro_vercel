@@ -12,9 +12,10 @@ const DEFAULT_SCOPES = [
   "shipping-calculate",
   "cart-read",
   "cart-write",
-  "cart-checkout",
+  "shipping-checkout",
+  "shipping-generate",
+  "shipping-print",
   "orders-read",
-  "orders-write",
   "shipping-tracking"
 ];
 
@@ -55,6 +56,35 @@ export async function refreshMelhorEnvioToken(
       client_id: credentials.clientId,
       client_secret: credentials.clientSecret,
       refresh_token: credentials.refreshToken
+    })
+  });
+
+  return parseMelhorEnvioResponse<MelhorEnvioOAuthTokenResponse>(response);
+}
+
+export async function exchangeMelhorEnvioAuthorizationCode(
+  code: string,
+  settings: MelhorEnvioSettings,
+  credentials: MelhorEnvioCredentials
+): Promise<MelhorEnvioOAuthTokenResponse> {
+  if (!credentials.clientId || !credentials.clientSecret) {
+    throw new Error("Melhor Envio clientId and clientSecret are required.");
+  }
+  if (!settings.redirect_uri) throw new Error("Melhor Envio redirect_uri is required.");
+
+  const response = await fetch(`${appBaseUrl(settings)}/oauth/token`, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "user-agent": userAgent(settings)
+    },
+    body: JSON.stringify({
+      grant_type: "authorization_code",
+      client_id: credentials.clientId,
+      client_secret: credentials.clientSecret,
+      redirect_uri: settings.redirect_uri,
+      code
     })
   });
 

@@ -6,6 +6,7 @@ export type MelhorEnvioSettings = {
   redirect_uri?: string;
   user_agent?: string;
   services?: string[];
+  environment?: "sandbox" | "production";
 };
 
 export type MelhorEnvioCredentials = {

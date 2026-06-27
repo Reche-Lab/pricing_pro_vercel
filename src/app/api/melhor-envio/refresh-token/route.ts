@@ -3,7 +3,8 @@ import { getCurrentSession } from "@/lib/auth/session";
 import {
   decryptIntegrationCredentials,
   getIntegrationConnection,
-  logIntegrationEvent
+  logIntegrationEvent,
+  updateIntegrationCredentials
 } from "@/repositories/integrations";
 import { refreshMelhorEnvioToken } from "@/services/melhor-envio/melhor-envio";
 import type { MelhorEnvioCredentials, MelhorEnvioSettings } from "@/services/melhor-envio/types";
@@ -20,6 +21,15 @@ export async function POST() {
   try {
     const credentials = decryptIntegrationCredentials<MelhorEnvioCredentials>(connection);
     const token = await refreshMelhorEnvioToken(connection.settings as MelhorEnvioSettings, credentials);
+    await updateIntegrationCredentials(session.userId, session.tenantId, {
+      provider: "melhor_envio",
+      credentials: {
+        ...credentials,
+        accessToken: token.access_token,
+        refreshToken: token.refresh_token ?? credentials.refreshToken
+      },
+      status: "active"
+    });
     await logIntegrationEvent(session.userId, session.tenantId, {
       provider: "melhor_envio",
       operation: "oauth.refresh_token",

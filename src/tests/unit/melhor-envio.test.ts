@@ -17,6 +17,9 @@ describe("melhor envio adapter", () => {
     expect(url).toContain("https://sandbox.melhorenvio.com.br/oauth/authorize");
     expect(url).toContain("client_id=client-id");
     expect(url).toContain("state=state-123");
+    expect(decodeURIComponent(url)).toContain("shipping-checkout");
+    expect(decodeURIComponent(url)).toContain("shipping-generate");
+    expect(decodeURIComponent(url)).toContain("shipping-print");
   });
 
   it("builds quote payload from selected packaging", () => {

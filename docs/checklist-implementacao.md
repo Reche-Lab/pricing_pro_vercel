@@ -81,6 +81,10 @@ Status atualizado durante a refatoracao inicial.
 - [x] Preencher `volumes` do payload Melhor Envio a partir do shipment.
 - [x] Criar rota de payload guiado por shipment e operacao Melhor Envio.
 - [x] Atualizar UI de shipment para preparar payload antes de executar cada operacao.
+- [x] Criar fluxo guiado de compra/geracao/rastreio de etiqueta Melhor Envio no shipment.
+- [x] Criar callback OAuth Melhor Envio com troca automatica de `code` por tokens.
+- [x] Criar tela de configuracao/autorizacao OAuth Melhor Envio em `/settings`.
+- [x] Persistir renovacao de access token Melhor Envio no banco.
 - [ ] Importar `boxes.csv` no banco do ambiente alvo.
 - [ ] Configurar credenciais Correios no banco do ambiente alvo.
 - [ ] Configurar credenciais Melhor Envio no banco do ambiente alvo.
@@ -148,6 +152,7 @@ Ponto de atencao:
 6. `supabase/migrations/0006_shipments.sql`
 7. `supabase/migrations/0007_addresses.sql`
 8. `supabase/migrations/0008_shipment_packaging_snapshot.sql`
+9. `supabase/migrations/0009_oauth_states.sql`
 
 ## Execucao Recomendada no Supabase
 
@@ -159,13 +164,14 @@ Ponto de atencao:
 6. Rode `0006_shipments.sql`.
 7. Rode `0007_addresses.sql`.
 8. Rode `0008_shipment_packaging_snapshot.sql`.
-9. Gere o hash de senha:
+9. Rode `0009_oauth_states.sql`.
+10. Gere o hash de senha:
 
 ```bash
 node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 ```
 
-10. Copie `supabase/seed-admin.example.sql`, substitua email, nome e hash, e rode no SQL Editor.
+11. Copie `supabase/seed-admin.example.sql`, substitua email, nome e hash, e rode no SQL Editor.
 
 ## Observacoes
 

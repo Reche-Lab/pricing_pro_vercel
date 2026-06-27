@@ -28,10 +28,20 @@ Os tokens sao criptografados com `APP_ENCRYPTION_KEY`.
 
 ```txt
 GET  /api/melhor-envio/auth-url
+GET  /api/melhor-envio/oauth/callback
 POST /api/melhor-envio/refresh-token
+GET  /api/integrations/melhor-envio
+POST /api/integrations/melhor-envio
 ```
 
-Observacao: o callback OAuth completo ainda depende da tela de configuracoes de integracao e persistencia automatica do novo token.
+O fluxo OAuth completo fica em `/settings`.
+
+1. Cadastre no aplicativo do Melhor Envio o callback exibido na tela.
+2. Salve Client ID e Client Secret.
+3. Clique em autorizar aplicativo.
+4. O callback troca o `code` por `access_token` e `refresh_token` automaticamente e salva os tokens criptografados por tenant.
+
+O endpoint de refresh tambem persiste o novo access token no banco.
 
 ### Cotacao de fretes
 
@@ -117,10 +127,9 @@ Recebe `payload` com os identificadores de envio/pedido a rastrear.
 8. Imprimir etiqueta com `/api/melhor-envio/print`.
 9. Acompanhar com `/api/melhor-envio/tracking`.
 
-Na tela `/quotes/:quoteId`, os shipments vinculados ao orcamento exibem acoes para executar carrinho, checkout, gerar etiqueta, imprimir etiqueta e rastrear.
+Na tela `/quotes/:quoteId`, os shipments vinculados ao orcamento exibem acoes guiadas para executar carrinho, checkout, gerar etiqueta, imprimir etiqueta e rastrear. Cada botao prepara o payload automaticamente, bloqueia a execucao quando houver `missingFields` e mantem uma area de revisao JSON para ajustes manuais quando necessario.
 
 ## Pendencias para produto final
 
 - Criar tela de compra e pagamento da etiqueta.
-- Criar callback OAuth para persistir tokens automaticamente.
-- Criar jobs/retries para rastreio.
+- Validar em sandbox real os retornos de carrinho, checkout, geracao, impressao e rastreio para ajustar os mapeamentos de IDs.
