@@ -270,3 +270,87 @@ export async function updateVariantAnchors(
     return { variantId, curveId };
   });
 }
+
+export async function createVariantPricingCurveVersion(
+  userId: string,
+  tenantId: string,
+  variantId: string,
+  anchors: PricingAnchorsInput
+) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const variantResult = await client.query<{ id: string }>(
+      `
+        select id
+        from product_variants
+        where tenant_id = $1
+          and id = $2
+          and active = true
+        limit 1
+      `,
+      [tenantId, variantId]
+    );
+
+    if (!variantResult.rows[0]) throw new Error("Product variant not found.");
+
+    const versionResult = await client.query<{ next_version: number }>(
+      `
+        select coalesce(max(version), 0) + 1 as next_version
+        from pricing_curves
+        where tenant_id = $1
+          and product_variant_id = $2
+      `,
+      [tenantId, variantId]
+    );
+    const nextVersion = versionResult.rows[0]?.next_version ?? 1;
+
+    await client.query(
+      `
+        update pricing_curves
+        set active = false,
+            updated_at = now()
+        where tenant_id = $1
+          and product_variant_id = $2
+          and active = true
+      `,
+      [tenantId, variantId]
+    );
+
+    const curveResult = await client.query<{ id: string }>(
+      `
+        insert into pricing_curves (
+          tenant_id,
+          product_variant_id,
+          name,
+          method,
+          version,
+          active,
+          created_by
+        )
+        values ($1, $2, $3, 'anchors', $4, true, $5)
+        returning id
+      `,
+      [tenantId, variantId, `Curva v${nextVersion}`, nextVersion, userId]
+    );
+    const curveId = curveResult.rows[0].id;
+
+    for (const quantity of [1, 10, 50, 100, 500, 1000] as const) {
+      await client.query(
+        `
+          insert into pricing_anchors (tenant_id, pricing_curve_id, quantity, unit_price)
+          values ($1, $2, $3, $4)
+        `,
+        [tenantId, curveId, quantity, anchors[quantity]]
+      );
+    }
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'pricing_curves.version_create', 'product_variant', $3, $4)
+      `,
+      [tenantId, userId, variantId, JSON.stringify({ curveId, version: nextVersion, anchors })]
+    );
+
+    return { variantId, curveId, version: nextVersion };
+  });
+}

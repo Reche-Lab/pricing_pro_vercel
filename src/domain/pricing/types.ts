@@ -43,3 +43,7 @@ export type QuoteCalculationResult = {
   profit: number;
   marginPercent: number;
 };
+
+export type PricingSimulationPoint = QuoteCalculationResult & {
+  label: string;
+};

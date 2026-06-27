@@ -91,6 +91,8 @@ Status atualizado durante a refatoracao inicial.
 - [x] Criar policy/funcoes para gestao de membros por `users:manage`.
 - [x] Criar fluxo de convite com link e definicao de senha pelo usuario.
 - [x] Criar pagina publica `/invite/[token]` para ativacao de acesso.
+- [x] Criar Precificador 2.0 com visual dark, graficos e simulacao de ancoragens.
+- [x] Criar dominio testado para series de simulacao e comparacao de curvas.
 - [ ] Importar `boxes.csv` no banco do ambiente alvo.
 - [ ] Configurar credenciais Correios no banco do ambiente alvo.
 - [ ] Configurar credenciais Melhor Envio no banco do ambiente alvo.
@@ -100,7 +102,9 @@ Status atualizado durante a refatoracao inicial.
 - [x] Criar payload testado de orcamento para CRM Olist.
 - [x] Criar botoes no detalhe do orcamento para sincronizar cliente e enviar orcamento.
 - [ ] Homologar paths e respostas reais Olist/CRM no ambiente alvo.
-- [ ] Criar auditoria em todas as escritas.
+- [x] Criar painel `/audit` para eventos do tenant e logs de integracao.
+- [x] Cobrir auditoria das escritas principais da aplicacao.
+- [x] Criar versionamento persistido de curvas de precificacao.
 - [ ] Criar testes e2e com Playwright.
 - [ ] Revisar `npm audit` e atualizar dependencias vulneraveis sem quebrar Next/Vitest.
 

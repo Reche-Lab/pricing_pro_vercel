@@ -31,7 +31,7 @@ export default async function PricingPage() {
   return (
     <AppShell
       title="Precificador"
-      subtitle="Primeira versao modular. Proximo passo: carregar curvas reais por variante."
+      subtitle="Simulacao de curvas, comissoes e margem por quantidade."
       tenantName={profile.tenant_name}
     >
       <PricingCalculator variants={mappedVariants} platforms={mapPlatforms(platforms)} />

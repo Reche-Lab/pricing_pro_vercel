@@ -196,6 +196,22 @@ export async function createOAuthState(
       `,
       [tenantId, userId, input.provider, input.state, input.redirectPath ?? null, ttlMinutes]
     );
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, metadata)
+        values ($1, $2, 'integrations.oauth_state_create', 'oauth_state', $3)
+      `,
+      [
+        tenantId,
+        userId,
+        JSON.stringify({
+          provider: input.provider,
+          redirect_path: input.redirectPath ?? null,
+          ttl_minutes: ttlMinutes
+        })
+      ]
+    );
   });
 }
 

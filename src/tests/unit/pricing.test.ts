@@ -5,6 +5,8 @@ import {
   calculateLogisticUnitPrice,
   calculatePlatformCosts,
   calculateQuote,
+  buildPricingSimulationSeries,
+  comparePricingSimulationSeries,
   recomputeIntermediateAnchors
 } from "@/domain/pricing/pricing";
 import type { PricingAnchors } from "@/domain/pricing/types";
@@ -87,5 +89,59 @@ describe("pricing domain", () => {
     expect(quote.costOfGoodsTotal).toBe(67);
     expect(quote.profit).toBeCloseTo(182);
     expect(quote.marginPercent).toBeCloseTo(73.0924, 4);
+  });
+
+  it("builds pricing simulation points across quantities", () => {
+    const series = buildPricingSimulationSeries(
+      {
+        unitCost: 0.67,
+        method: "anchors",
+        anchors,
+        platform: {
+          commissionRate: 0.14,
+          fixedFee: 4,
+          sellerShippingCost: 0,
+          sellerShippingThreshold: 0
+        }
+      },
+      [10, 100, 1000]
+    );
+
+    expect(series).toHaveLength(3);
+    expect(series[0].label).toBe("10");
+    expect(series[1].quantity).toBe(100);
+    expect(series[1].commissionTotal).toBeGreaterThan(0);
+  });
+
+  it("compares current and simulated anchor curves", () => {
+    const simulatedAnchors: PricingAnchors = { ...anchors, 100: 2.69, 1000: 2.09 };
+    const comparison = comparePricingSimulationSeries(
+      {
+        unitCost: 0.67,
+        method: "anchors",
+        anchors,
+        platform: {
+          commissionRate: 0,
+          fixedFee: 0,
+          sellerShippingCost: 0,
+          sellerShippingThreshold: 0
+        }
+      },
+      {
+        unitCost: 0.67,
+        method: "anchors",
+        anchors: simulatedAnchors,
+        platform: {
+          commissionRate: 0,
+          fixedFee: 0,
+          sellerShippingCost: 0,
+          sellerShippingThreshold: 0
+        }
+      },
+      [100]
+    );
+
+    expect(comparison[0].unitPriceDelta).toBeCloseTo(0.2, 4);
+    expect(comparison[0].marginDelta).toBeGreaterThan(0);
   });
 });

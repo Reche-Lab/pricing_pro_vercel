@@ -346,6 +346,18 @@ export async function acceptUserInvite(tokenHash: string, passwordHash: string) 
   return rows[0] ?? null;
 }
 
+export async function recordInviteAccepted(userId: string, tenantId: string, membershipId: string): Promise<void> {
+  return withTenantContext(userId, tenantId, async (client) => {
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id)
+        values ($1, $2, 'users.invite_accept', 'tenant_member', $3)
+      `,
+      [tenantId, userId, membershipId]
+    );
+  });
+}
+
 export async function getTenantMember(
   userId: string,
   tenantId: string,

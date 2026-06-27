@@ -3,7 +3,7 @@ import { z } from "zod";
 import { hashInviteToken } from "@/domain/users/invites";
 import { hashPassword } from "@/lib/auth/password";
 import { setSessionCookie } from "@/lib/auth/session";
-import { acceptUserInvite, getSessionProfile } from "@/repositories/users";
+import { acceptUserInvite, getSessionProfile, recordInviteAccepted } from "@/repositories/users";
 
 const acceptInviteSchema = z.object({
   token: z.string().min(20),
@@ -25,6 +25,8 @@ export async function POST(request: Request) {
 
   const profile = await getSessionProfile(accepted.user_id, accepted.tenant_id);
   if (!profile) return NextResponse.json({ ok: false, error: "Invite accepted but login failed." }, { status: 409 });
+
+  await recordInviteAccepted(profile.user_id, profile.tenant_id, accepted.tenant_member_id);
 
   await setSessionCookie({
     userId: profile.user_id,

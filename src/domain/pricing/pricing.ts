@@ -1,6 +1,7 @@
 import type {
   PlatformRule,
   PricingAnchors,
+  PricingSimulationPoint,
   QuoteCalculationInput,
   QuoteCalculationResult
 } from "./types";
@@ -141,6 +142,41 @@ export function calculateQuote(input: QuoteCalculationInput): QuoteCalculationRe
     profit,
     marginPercent
   };
+}
+
+export function buildPricingSimulationSeries(
+  input: Omit<QuoteCalculationInput, "quantity">,
+  quantities: number[]
+): PricingSimulationPoint[] {
+  return quantities.map((quantity) => {
+    const result = calculateQuote({ ...input, quantity });
+    return {
+      ...result,
+      label: result.quantity.toLocaleString("pt-BR")
+    };
+  });
+}
+
+export function comparePricingSimulationSeries(
+  currentInput: Omit<QuoteCalculationInput, "quantity">,
+  simulatedInput: Omit<QuoteCalculationInput, "quantity">,
+  quantities: number[]
+) {
+  const current = buildPricingSimulationSeries(currentInput, quantities);
+  const simulated = buildPricingSimulationSeries(simulatedInput, quantities);
+
+  return current.map((point, index) => {
+    const simulatedPoint = simulated[index];
+    return {
+      quantity: point.quantity,
+      currentUnitPrice: point.finalUnitPrice,
+      simulatedUnitPrice: simulatedPoint.finalUnitPrice,
+      currentMarginPercent: point.marginPercent,
+      simulatedMarginPercent: simulatedPoint.marginPercent,
+      unitPriceDelta: simulatedPoint.finalUnitPrice - point.finalUnitPrice,
+      marginDelta: simulatedPoint.marginPercent - point.marginPercent
+    };
+  });
 }
 
 function requireAnchors(anchors: PricingAnchors | undefined): PricingAnchors {

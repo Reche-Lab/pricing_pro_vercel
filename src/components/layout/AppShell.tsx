@@ -10,50 +10,53 @@ type AppShellProps = {
 
 export function AppShell({ children, title, subtitle, tenantName }: AppShellProps) {
   return (
-    <main className="min-h-screen bg-zinc-100">
-      <header className="border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand">
+    <main className="min-h-screen bg-zinc-950">
+      <header className="border-b border-zinc-800 bg-zinc-950/95">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-400">
               {tenantName ?? "Pricing Pro"}
             </p>
-            <h1 className="text-2xl font-semibold text-zinc-950">{title}</h1>
-            {subtitle ? <p className="text-sm text-zinc-500">{subtitle}</p> : null}
+            <h1 className="text-2xl font-semibold text-white">{title}</h1>
+            {subtitle ? <p className="text-sm text-zinc-400">{subtitle}</p> : null}
           </div>
-          <nav className="flex items-center gap-2 text-sm">
-            <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/dashboard">
+          <nav className="flex items-center gap-2 overflow-x-auto pb-1 text-sm xl:pb-0">
+            <Link className="rounded-md px-3 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-white" href="/dashboard">
               Dashboard
             </Link>
-            <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/pricing">
+            <Link className="rounded-md px-3 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-white" href="/pricing">
               Precificador
             </Link>
-            <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/products">
+            <Link className="rounded-md px-3 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-white" href="/products">
               Produtos
             </Link>
-            <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/platforms">
+            <Link className="rounded-md px-3 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-white" href="/platforms">
               Canais
             </Link>
-            <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/packaging">
+            <Link className="rounded-md px-3 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-white" href="/packaging">
               Embalagens
             </Link>
-            <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/shipping">
+            <Link className="rounded-md px-3 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-white" href="/shipping">
               Frete
             </Link>
-            <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/customers">
+            <Link className="rounded-md px-3 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-white" href="/customers">
               Clientes
             </Link>
-            <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/quotes">
+            <Link className="rounded-md px-3 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-white" href="/quotes">
               Orcamentos
             </Link>
-            <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/users">
+            <Link className="rounded-md px-3 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-white" href="/users">
               Usuarios
             </Link>
-            <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/settings">
+            <Link className="rounded-md px-3 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-white" href="/audit">
+              Auditoria
+            </Link>
+            <Link className="rounded-md px-3 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-white" href="/settings">
               Configuracoes
             </Link>
             <form action="/api/auth/logout" method="post">
               <button
-                className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-zinc-700 hover:bg-zinc-100"
+                className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-white"
                 type="submit"
               >
                 <LogOut size={16} />
