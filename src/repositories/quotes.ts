@@ -37,6 +37,8 @@ export type QuoteDetail = {
   customer_district: string | null;
   customer_city: string | null;
   customer_state: string | null;
+  customer_external_olist_id: string | null;
+  external_crm_id: string | null;
   created_by_name: string | null;
 };
 
@@ -126,6 +128,8 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           c.district as customer_district,
           c.city as customer_city,
           c.state as customer_state,
+          c.external_olist_id as customer_external_olist_id,
+          q.external_crm_id,
           u.name as created_by_name
         from quotes q
         left join customers c on c.id = q.customer_id and c.tenant_id = q.tenant_id
@@ -165,6 +169,33 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
       items: items.rows,
       snapshots: snapshots.rows
     };
+  });
+}
+
+export async function updateQuoteExternalCrmId(
+  userId: string,
+  tenantId: string,
+  quoteId: string,
+  externalCrmId: string
+) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    await client.query(
+      `
+        update quotes
+        set external_crm_id = $3,
+            updated_at = now()
+        where tenant_id = $1 and id = $2
+      `,
+      [tenantId, quoteId, externalCrmId]
+    );
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'quotes.crm_sync', 'quote', $3, $4)
+      `,
+      [tenantId, userId, quoteId, JSON.stringify({ externalCrmId })]
+    );
   });
 }
 

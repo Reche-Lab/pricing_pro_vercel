@@ -13,6 +13,7 @@ export type CustomerRow = {
   district: string | null;
   city: string | null;
   state: string | null;
+  external_olist_id: string | null;
   created_at: string;
 };
 
@@ -47,6 +48,7 @@ export async function listCustomers(userId: string, tenantId: string): Promise<C
           district,
           city,
           state,
+          external_olist_id,
           created_at
         from customers
         where tenant_id = $1
@@ -96,6 +98,7 @@ export async function createCustomer(
           district,
           city,
           state,
+          external_olist_id,
           created_at
       `,
       [
@@ -123,6 +126,67 @@ export async function createCustomer(
     );
 
     return result.rows[0];
+  });
+}
+
+export async function getCustomerById(
+  userId: string,
+  tenantId: string,
+  customerId: string
+): Promise<CustomerRow | null> {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const result = await client.query<CustomerRow>(
+      `
+        select
+          id,
+          name,
+          document,
+          email,
+          phone,
+          postal_code,
+          address_line,
+          address_number,
+          address_complement,
+          district,
+          city,
+          state,
+          external_olist_id,
+          created_at
+        from customers
+        where tenant_id = $1 and id = $2
+        limit 1
+      `,
+      [tenantId, customerId]
+    );
+
+    return result.rows[0] ?? null;
+  });
+}
+
+export async function updateCustomerExternalOlistId(
+  userId: string,
+  tenantId: string,
+  customerId: string,
+  externalOlistId: string
+) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    await client.query(
+      `
+        update customers
+        set external_olist_id = $3,
+            updated_at = now()
+        where tenant_id = $1 and id = $2
+      `,
+      [tenantId, customerId, externalOlistId]
+    );
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'customers.olist_sync', 'customer', $3, $4)
+      `,
+      [tenantId, userId, customerId, JSON.stringify({ externalOlistId })]
+    );
   });
 }
 

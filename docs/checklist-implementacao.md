@@ -85,6 +85,12 @@ Status atualizado durante a refatoracao inicial.
 - [x] Criar callback OAuth Melhor Envio com troca automatica de `code` por tokens.
 - [x] Criar tela de configuracao/autorizacao OAuth Melhor Envio em `/settings`.
 - [x] Persistir renovacao de access token Melhor Envio no banco.
+- [x] Criar regras testadas de gestao de usuarios e roles.
+- [x] Criar tela `/users` para membros multi-user por tenant.
+- [x] Criar APIs para listar, criar, atualizar e remover membros do tenant.
+- [x] Criar policy/funcoes para gestao de membros por `users:manage`.
+- [x] Criar fluxo de convite com link e definicao de senha pelo usuario.
+- [x] Criar pagina publica `/invite/[token]` para ativacao de acesso.
 - [ ] Importar `boxes.csv` no banco do ambiente alvo.
 - [ ] Configurar credenciais Correios no banco do ambiente alvo.
 - [ ] Configurar credenciais Melhor Envio no banco do ambiente alvo.
@@ -109,7 +115,7 @@ Resultado:
 
 - lint passou;
 - typecheck passou;
-- testes passaram: 28 testes em 11 arquivos;
+- testes passaram: 33 testes em 13 arquivos;
 - build Next passou.
 
 ## Acoes Manuais Pendentes
@@ -130,13 +136,7 @@ npm run configure:correios -- ground-shop 'TOKEN_CORREIOS' 'CONTRATO_CORREIOS'
 
 Depois disso a tela `/shipping` consegue cotar SEDEX/PAC usando as embalagens cadastradas/importadas.
 
-Configurar credenciais Melhor Envio para o tenant `ground-shop`:
-
-```bash
-npm run configure:melhor-envio -- ground-shop 'ACCESS_TOKEN' 'REFRESH_TOKEN' 'CLIENT_ID' 'CLIENT_SECRET' sandbox
-```
-
-Troque `sandbox` por `production` quando for usar o ambiente real.
+Configurar Melhor Envio pelo fluxo OAuth em `/settings`. Cadastre no app do Melhor Envio o callback `${APP_URL}/api/melhor-envio/oauth/callback`, salve Client ID/Secret na tela e autorize o aplicativo.
 
 Ponto de atencao:
 
@@ -153,6 +153,8 @@ Ponto de atencao:
 7. `supabase/migrations/0007_addresses.sql`
 8. `supabase/migrations/0008_shipment_packaging_snapshot.sql`
 9. `supabase/migrations/0009_oauth_states.sql`
+10. `supabase/migrations/0010_user_management_policies.sql`
+11. `supabase/migrations/0011_user_invites.sql`
 
 ## Execucao Recomendada no Supabase
 
@@ -165,13 +167,15 @@ Ponto de atencao:
 7. Rode `0007_addresses.sql`.
 8. Rode `0008_shipment_packaging_snapshot.sql`.
 9. Rode `0009_oauth_states.sql`.
-10. Gere o hash de senha:
+10. Rode `0010_user_management_policies.sql`.
+11. Rode `0011_user_invites.sql`.
+12. Gere o hash de senha:
 
 ```bash
 node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 ```
 
-11. Copie `supabase/seed-admin.example.sql`, substitua email, nome e hash, e rode no SQL Editor.
+13. Copie `supabase/seed-admin.example.sql`, substitua email, nome e hash, e rode no SQL Editor.
 
 ## Observacoes
 
