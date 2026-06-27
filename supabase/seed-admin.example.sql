@@ -6,9 +6,9 @@
 with inserted_user as (
   insert into app_users (email, name, password_hash, status)
   values (
-    'liaflow.ai@gmail.com', // Substitua pelo email do usuário administrador
+    'liaflow.ai@gmail.com', -- Substitua pelo email do usuário administrador
     'Admin',
-    '$2a$12$.0Mwmbv.t8ZclNM2PtR/m.4NZt45sU2fwxOF7wzsK9CF6si8u6g4.', // Substitua pelo hash gerado no passo 1
+    '$2a$12$.0Mwmbv.t8ZclNM2PtR/m.4NZt45sU2fwxOF7wzsK9CF6si8u6g4.', -- Substitua pelo hash gerado no passo 1
     'active'
   )
   on conflict (email) do update

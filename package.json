@@ -11,7 +11,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "check:login": "node --env-file=.env scripts/check-login.mjs"
+    "check:login": "node --env-file=.env scripts/check-login.mjs",
+    "import:boxes": "node --env-file=.env scripts/import-boxes.mjs",
+    "configure:correios": "node --env-file=.env scripts/configure-correios.mjs",
+    "configure:melhor-envio": "node --env-file=.env scripts/configure-melhor-envio.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

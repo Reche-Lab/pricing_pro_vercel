@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { QuoteForm } from "@/components/quotes/QuoteForm";
 import { getCurrentSession } from "@/lib/auth/session";
@@ -46,7 +47,9 @@ export default async function QuotesPage() {
               quotes.map((quote) => (
                 <div className="grid gap-1 px-5 py-4 text-sm md:grid-cols-[1fr_auto] md:items-center" key={quote.id}>
                   <div>
-                    <p className="font-medium text-zinc-950">{quote.customer_name ?? "Cliente nao informado"}</p>
+                    <Link className="font-medium text-zinc-950 hover:underline" href={`/quotes/${quote.id}`}>
+                      {quote.customer_name ?? "Cliente nao informado"}
+                    </Link>
                     <p className="text-zinc-500">
                       Status: {quote.status} - Margem: {Number(quote.margin_percent).toFixed(1)}%
                     </p>

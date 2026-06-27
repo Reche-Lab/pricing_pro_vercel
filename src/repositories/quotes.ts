@@ -1,5 +1,6 @@
 import { calculateQuote } from "@/domain/pricing/pricing";
-import { createQuoteCalculationSnapshot } from "@/domain/quotes/quotes";
+import { canTransitionQuoteStatus, createQuoteCalculationSnapshot } from "@/domain/quotes/quotes";
+import type { QuoteStatus } from "@/domain/quotes/types";
 import type { PricingAnchors } from "@/domain/pricing/types";
 import { withTenantContext } from "@/lib/db/client";
 
@@ -9,6 +10,39 @@ export type QuoteRow = {
   status: string;
   grand_total: string;
   margin_percent: string;
+  created_at: string;
+};
+
+export type QuoteDetail = {
+  id: string;
+  status: QuoteStatus;
+  valid_until: string | null;
+  subtotal: string;
+  shipping_total: string;
+  discount_total: string;
+  grand_total: string;
+  margin_amount: string;
+  margin_percent: string;
+  notes: string | null;
+  created_at: string;
+  customer_name: string | null;
+  customer_document: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  created_by_name: string | null;
+};
+
+export type QuoteItemRow = {
+  id: string;
+  description: string;
+  quantity: number;
+  unit_price: string;
+  total_price: string;
+};
+
+export type QuoteSnapshotRow = {
+  id: string;
+  snapshot: Record<string, unknown>;
   created_at: string;
 };
 
@@ -53,6 +87,107 @@ export async function countQuotes(userId: string, tenantId: string): Promise<num
       [tenantId]
     );
     return Number(result.rows[0]?.count ?? 0);
+  });
+}
+
+export async function getQuoteDetail(userId: string, tenantId: string, quoteId: string) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const quoteResult = await client.query<QuoteDetail>(
+      `
+        select
+          q.id,
+          q.status,
+          q.valid_until,
+          q.subtotal,
+          q.shipping_total,
+          q.discount_total,
+          q.grand_total,
+          q.margin_amount,
+          q.margin_percent,
+          q.notes,
+          q.created_at,
+          c.name as customer_name,
+          c.document as customer_document,
+          c.email as customer_email,
+          c.phone as customer_phone,
+          u.name as created_by_name
+        from quotes q
+        left join customers c on c.id = q.customer_id and c.tenant_id = q.tenant_id
+        left join app_users u on u.id = q.created_by
+        where q.tenant_id = $1 and q.id = $2
+        limit 1
+      `,
+      [tenantId, quoteId]
+    );
+
+    const quote = quoteResult.rows[0] ?? null;
+    if (!quote) return null;
+
+    const items = await client.query<QuoteItemRow>(
+      `
+        select id, description, quantity, unit_price, total_price
+        from quote_items
+        where tenant_id = $1 and quote_id = $2
+        order by created_at asc
+      `,
+      [tenantId, quoteId]
+    );
+
+    const snapshots = await client.query<QuoteSnapshotRow>(
+      `
+        select id, snapshot, created_at
+        from quote_calculation_snapshots
+        where tenant_id = $1 and quote_id = $2
+        order by created_at desc
+        limit 5
+      `,
+      [tenantId, quoteId]
+    );
+
+    return {
+      quote,
+      items: items.rows,
+      snapshots: snapshots.rows
+    };
+  });
+}
+
+export async function updateQuoteStatus(
+  userId: string,
+  tenantId: string,
+  quoteId: string,
+  nextStatus: QuoteStatus
+) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const currentResult = await client.query<{ status: QuoteStatus }>(
+      "select status from quotes where tenant_id = $1 and id = $2 limit 1",
+      [tenantId, quoteId]
+    );
+    const current = currentResult.rows[0];
+    if (!current) throw new Error("Quote not found.");
+    if (!canTransitionQuoteStatus(current.status, nextStatus)) {
+      throw new Error(`Invalid status transition from ${current.status} to ${nextStatus}.`);
+    }
+
+    await client.query(
+      `
+        update quotes
+        set status = $3,
+            updated_at = now()
+        where tenant_id = $1 and id = $2
+      `,
+      [tenantId, quoteId, nextStatus]
+    );
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'quotes.status_update', 'quote', $3, $4)
+      `,
+      [tenantId, userId, quoteId, JSON.stringify({ from: current.status, to: nextStatus })]
+    );
+
+    return { id: quoteId, status: nextStatus };
   });
 }
 

@@ -27,6 +27,18 @@ export function AppShell({ children, title, subtitle, tenantName }: AppShellProp
             <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/pricing">
               Precificador
             </Link>
+            <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/products">
+              Produtos
+            </Link>
+            <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/platforms">
+              Canais
+            </Link>
+            <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/packaging">
+              Embalagens
+            </Link>
+            <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/shipping">
+              Frete
+            </Link>
             <Link className="rounded-md px-3 py-2 text-zinc-700 hover:bg-zinc-100" href="/customers">
               Clientes
             </Link>

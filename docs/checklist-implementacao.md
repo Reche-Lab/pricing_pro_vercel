@@ -44,11 +44,34 @@ Status atualizado durante a refatoracao inicial.
 - [x] Criar tela inicial de orcamentos.
 - [x] Conectar precificador autenticado aos canais do tenant.
 - [x] Adicionar dominio testado de snapshots/transicoes de orcamento.
-- [ ] Criar CRUD de produtos.
+- [x] Criar CRUD inicial de produtos.
+- [x] Criar cadastro inicial de variantes.
+- [x] Criar cadastro inicial de curvas por ancoragem.
+- [x] Criar edicao inicial de ancoragens/curvas.
+- [x] Criar CRUD inicial de plataformas/canais.
+- [x] Corrigir template SQL do seed admin.
 - [ ] Criar CRUD de curvas.
-- [ ] Criar CRUD de clientes.
-- [ ] Migrar caixas do CSV para seed completa.
-- [ ] Reimplementar Correios na nova arquitetura.
+- [x] Criar CRUD de clientes.
+- [x] Criar CRUD inicial de embalagens.
+- [x] Criar script para importar `boxes.csv` para o banco.
+- [x] Criar endpoint de estimativa de embalagem.
+- [x] Reimplementar adapter Correios na nova arquitetura.
+- [x] Criar endpoint autenticado de cotacao Correios.
+- [x] Criar tela inicial de cotacao de frete.
+- [x] Criar script para configurar credenciais Correios por tenant.
+- [x] Criar adapter Melhor Envio.
+- [x] Criar configuracao Melhor Envio por tenant.
+- [x] Criar API de autenticacao OAuth URL/refresh para Melhor Envio.
+- [x] Criar API de cotacao Melhor Envio.
+- [x] Criar APIs proxy para carrinho, checkout, geracao, impressao e rastreio Melhor Envio.
+- [x] Criar migration de shipments vinculados a orcamentos.
+- [x] Criar pagina de detalhe do orcamento.
+- [x] Criar alteracao de status do orcamento.
+- [x] Criar texto de WhatsApp do orcamento.
+- [x] Criar vinculo inicial de envios/shipments ao orcamento.
+- [ ] Importar `boxes.csv` no banco do ambiente alvo.
+- [ ] Configurar credenciais Correios no banco do ambiente alvo.
+- [ ] Configurar credenciais Melhor Envio no banco do ambiente alvo.
 - [ ] Integrar Olist.
 - [ ] Integrar CRM.
 - [ ] Criar auditoria em todas as escritas.
@@ -70,8 +93,34 @@ Resultado:
 
 - lint passou;
 - typecheck passou;
-- testes passaram: 16 testes em 5 arquivos;
+- testes passaram: 17 testes em 6 arquivos;
 - build Next passou.
+
+## Acoes Manuais Pendentes
+
+Importar as caixas do `boxes.csv` para o tenant `ground-shop`:
+
+```bash
+npm run import:boxes -- ground-shop boxes.csv
+```
+
+Esse comando usa `DATABASE_URL` e `DATABASE_SSL` do `.env`.
+
+Configurar credenciais Correios para o tenant `ground-shop`:
+
+```bash
+npm run configure:correios -- ground-shop 'TOKEN_CORREIOS' 'CONTRATO_CORREIOS'
+```
+
+Depois disso a tela `/shipping` consegue cotar SEDEX/PAC usando as embalagens cadastradas/importadas.
+
+Configurar credenciais Melhor Envio para o tenant `ground-shop`:
+
+```bash
+npm run configure:melhor-envio -- ground-shop 'ACCESS_TOKEN' 'REFRESH_TOKEN' 'CLIENT_ID' 'CLIENT_SECRET' sandbox
+```
+
+Troque `sandbox` por `production` quando for usar o ambiente real.
 
 Ponto de atencao:
 
@@ -84,6 +133,7 @@ Ponto de atencao:
 3. `supabase/migrations/0003_seed_ground_shop.sql`
 4. `supabase/migrations/0004_tenant_profile_integrations.sql`
 5. `supabase/migrations/0005_audit_log_insert_policy.sql`
+6. `supabase/migrations/0006_shipments.sql`
 
 ## Execucao Recomendada no Supabase
 
@@ -92,13 +142,14 @@ Ponto de atencao:
 3. Rode `0003_seed_ground_shop.sql`.
 4. Rode `0004_tenant_profile_integrations.sql`.
 5. Rode `0005_audit_log_insert_policy.sql`.
-6. Gere o hash de senha:
+6. Rode `0006_shipments.sql`.
+7. Gere o hash de senha:
 
 ```bash
 node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 ```
 
-7. Copie `supabase/seed-admin.example.sql`, substitua email, nome e hash, e rode no SQL Editor.
+8. Copie `supabase/seed-admin.example.sql`, substitua email, nome e hash, e rode no SQL Editor.
 
 ## Observacoes
 

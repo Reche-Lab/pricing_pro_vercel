@@ -1,3 +1,4 @@
+import { createProductSlug } from "@/domain/products/products";
 import { withTenantContext } from "@/lib/db/client";
 
 export type ProductVariantRow = {
@@ -12,6 +13,33 @@ export type ProductVariantRow = {
   unit_weight_kg: string;
   anchors: Record<string, number> | null;
 };
+
+export type ProductAdminRow = ProductVariantRow & {
+  product_active: boolean;
+  variant_active: boolean;
+  curve_id: string | null;
+  curve_version: number | null;
+};
+
+export type CreateProductWithVariantInput = {
+  productName: string;
+  category: string;
+  description?: string | null;
+  variantName: string;
+  sku?: string | null;
+  unitCost: number;
+  unitWeightKg: number;
+  anchors: {
+    1: number;
+    10: number;
+    50: number;
+    100: number;
+    500: number;
+    1000: number;
+  };
+};
+
+export type PricingAnchorsInput = CreateProductWithVariantInput["anchors"];
 
 export async function listProductVariants(userId: string, tenantId: string): Promise<ProductVariantRow[]> {
   return withTenantContext(userId, tenantId, async (client) => {
@@ -46,5 +74,199 @@ export async function listProductVariants(userId: string, tenantId: string): Pro
     );
 
     return result.rows;
+  });
+}
+
+export async function listProductsAdmin(userId: string, tenantId: string): Promise<ProductAdminRow[]> {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const result = await client.query<ProductAdminRow>(
+      `
+        select
+          p.id as product_id,
+          p.name as product_name,
+          p.slug as product_slug,
+          p.category as product_category,
+          p.active as product_active,
+          v.id as variant_id,
+          v.name as variant_name,
+          v.sku,
+          v.unit_cost,
+          v.unit_weight_kg,
+          v.active as variant_active,
+          pc.id as curve_id,
+          pc.version as curve_version,
+          (
+            select jsonb_object_agg(pa.quantity::text, pa.unit_price order by pa.quantity)
+            from pricing_anchors pa
+            where pa.pricing_curve_id = pc.id
+              and pa.tenant_id = pc.tenant_id
+          ) as anchors
+        from products p
+        join product_variants v on v.product_id = p.id and v.tenant_id = p.tenant_id
+        left join pricing_curves pc
+          on pc.product_variant_id = v.id
+          and pc.tenant_id = v.tenant_id
+          and pc.active = true
+        where p.tenant_id = $1
+        order by p.name, v.name
+      `,
+      [tenantId]
+    );
+
+    return result.rows;
+  });
+}
+
+export async function createProductWithVariant(
+  userId: string,
+  tenantId: string,
+  input: CreateProductWithVariantInput
+) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const slug = createProductSlug(input.productName);
+    const productResult = await client.query<{ id: string }>(
+      `
+        insert into products (tenant_id, name, slug, category, description, active)
+        values ($1, $2, $3, $4, $5, true)
+        on conflict (tenant_id, slug) do update
+          set name = excluded.name,
+              category = excluded.category,
+              description = excluded.description,
+              active = true,
+              updated_at = now()
+        returning id
+      `,
+      [tenantId, input.productName, slug, input.category, input.description || null]
+    );
+    const productId = productResult.rows[0].id;
+
+    const variantResult = await client.query<{ id: string }>(
+      `
+        insert into product_variants (
+          tenant_id,
+          product_id,
+          name,
+          sku,
+          unit_cost,
+          unit_weight_kg,
+          active
+        )
+        values ($1, $2, $3, $4, $5, $6, true)
+        returning id
+      `,
+      [
+        tenantId,
+        productId,
+        input.variantName,
+        input.sku || null,
+        input.unitCost,
+        input.unitWeightKg
+      ]
+    );
+    const variantId = variantResult.rows[0].id;
+
+    const curveResult = await client.query<{ id: string }>(
+      `
+        insert into pricing_curves (
+          tenant_id,
+          product_variant_id,
+          name,
+          method,
+          version,
+          active,
+          created_by
+        )
+        values ($1, $2, 'Curva inicial', 'anchors', 1, true, $3)
+        returning id
+      `,
+      [tenantId, variantId, userId]
+    );
+    const curveId = curveResult.rows[0].id;
+
+    for (const quantity of [1, 10, 50, 100, 500, 1000] as const) {
+      await client.query(
+        `
+          insert into pricing_anchors (tenant_id, pricing_curve_id, quantity, unit_price)
+          values ($1, $2, $3, $4)
+        `,
+        [tenantId, curveId, quantity, input.anchors[quantity]]
+      );
+    }
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'products.create_with_variant', 'product', $3, $4)
+      `,
+      [
+        tenantId,
+        userId,
+        productId,
+        JSON.stringify({
+          variantId,
+          curveId
+        })
+      ]
+    );
+
+    return { productId, variantId, curveId };
+  });
+}
+
+export async function updateVariantAnchors(
+  userId: string,
+  tenantId: string,
+  variantId: string,
+  anchors: PricingAnchorsInput
+) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const curveResult = await client.query<{ id: string }>(
+      `
+        select pc.id
+        from pricing_curves pc
+        join product_variants v on v.id = pc.product_variant_id and v.tenant_id = pc.tenant_id
+        where pc.tenant_id = $1
+          and pc.product_variant_id = $2
+          and pc.active = true
+          and v.active = true
+        limit 1
+      `,
+      [tenantId, variantId]
+    );
+
+    const curveId = curveResult.rows[0]?.id;
+    if (!curveId) throw new Error("Active pricing curve not found.");
+
+    for (const quantity of [1, 10, 50, 100, 500, 1000] as const) {
+      await client.query(
+        `
+          insert into pricing_anchors (tenant_id, pricing_curve_id, quantity, unit_price)
+          values ($1, $2, $3, $4)
+          on conflict (tenant_id, pricing_curve_id, quantity) do update
+            set unit_price = excluded.unit_price,
+                updated_at = now()
+        `,
+        [tenantId, curveId, quantity, anchors[quantity]]
+      );
+    }
+
+    await client.query(
+      `
+        update pricing_curves
+        set updated_at = now()
+        where tenant_id = $1 and id = $2
+      `,
+      [tenantId, curveId]
+    );
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'pricing_anchors.update', 'product_variant', $3, $4)
+      `,
+      [tenantId, userId, variantId, JSON.stringify({ curveId, anchors })]
+    );
+
+    return { variantId, curveId };
   });
 }
