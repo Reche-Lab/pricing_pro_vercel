@@ -4,9 +4,17 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { createQuote, listQuotes } from "@/repositories/quotes";
 
 const quoteSchema = z.object({
-  productVariantId: z.string().uuid(),
+  productVariantId: z.string().uuid().optional(),
   platformRuleId: z.string().uuid(),
-  quantity: z.number().int().min(1).max(50000),
+  quantity: z.number().int().min(1).max(50000).optional(),
+  pricingRule: z.enum(["per_item", "per_art_average", "aggregate_total"]).optional(),
+  items: z.array(
+    z.object({
+      productVariantId: z.string().uuid(),
+      quantity: z.number().int().min(1).max(50000),
+      artworkName: z.string().trim().max(120).optional().nullable()
+    })
+  ).min(1).max(50).optional(),
   customerId: z.string().uuid().optional().nullable(),
   customerName: z.string().trim().min(2).optional().nullable(),
   customerDocument: z.string().trim().optional().nullable(),
@@ -41,6 +49,13 @@ export async function POST(request: Request) {
   if (!parsed.data.customerId && !parsed.data.customerName) {
     return NextResponse.json(
       { ok: false, error: "Select an existing customer or provide a new customer name." },
+      { status: 400 }
+    );
+  }
+
+  if (!parsed.data.items?.length && (!parsed.data.productVariantId || !parsed.data.quantity)) {
+    return NextResponse.json(
+      { ok: false, error: "Provide productVariantId and quantity or composite quote items." },
       { status: 400 }
     );
   }

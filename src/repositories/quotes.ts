@@ -1,8 +1,14 @@
 import { calculateQuote } from "@/domain/pricing/pricing";
+import {
+  calculateCompositeQuote,
+  type CompositePricingRule,
+  type CompositeQuoteInputItem
+} from "@/domain/quotes/composite-pricing";
 import { canTransitionQuoteStatus, createQuoteCalculationSnapshot } from "@/domain/quotes/quotes";
 import type { QuoteStatus } from "@/domain/quotes/types";
 import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
 import { withTenantContext } from "@/lib/db/client";
+import type pg from "pg";
 
 export type QuoteRow = {
   id: string;
@@ -48,6 +54,11 @@ export type QuoteItemRow = {
   quantity: number;
   unit_price: string;
   total_price: string;
+  artwork_name?: string | null;
+  pricing_rule?: CompositePricingRule | null;
+  pricing_group_key?: string | null;
+  reference_quantity?: number | null;
+  base_unit_price?: string | null;
 };
 
 export type QuoteSnapshotRow = {
@@ -57,9 +68,15 @@ export type QuoteSnapshotRow = {
 };
 
 export type CreateQuoteInput = {
-  productVariantId: string;
+  productVariantId?: string;
   platformRuleId: string;
-  quantity: number;
+  quantity?: number;
+  pricingRule?: CompositePricingRule;
+  items?: Array<{
+    productVariantId: string;
+    quantity: number;
+    artworkName?: string | null;
+  }>;
   customerId?: string | null;
   customerName?: string | null;
   customerDocument?: string | null;
@@ -152,7 +169,17 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
 
     const items = await client.query<QuoteItemRow>(
       `
-        select id, description, quantity, unit_price, total_price
+        select
+          id,
+          description,
+          quantity,
+          unit_price,
+          total_price,
+          artwork_name,
+          pricing_rule,
+          pricing_group_key,
+          reference_quantity,
+          base_unit_price
         from quote_items
         where tenant_id = $1 and quote_id = $2
         order by created_at asc
@@ -247,6 +274,14 @@ export async function updateQuoteStatus(
 
 export async function createQuote(userId: string, tenantId: string, input: CreateQuoteInput) {
   return withTenantContext(userId, tenantId, async (client) => {
+    if (input.items?.length) {
+      return createCompositeQuoteWithClient(client, userId, tenantId, input);
+    }
+
+    if (!input.productVariantId || !input.quantity) {
+      throw new Error("Product variant and quantity are required.");
+    }
+
     const variantResult = await client.query<{
       variant_id: string;
       variant_name: string;
@@ -449,6 +484,264 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
 
     return { id: quoteId, calculation };
   });
+}
+
+async function createCompositeQuoteWithClient(
+  client: pg.PoolClient,
+  userId: string,
+  tenantId: string,
+  input: CreateQuoteInput
+) {
+  const quoteItems = input.items ?? [];
+  const variantIds = Array.from(new Set(quoteItems.map((item) => item.productVariantId)));
+  if (variantIds.length === 0) throw new Error("At least one quote item is required.");
+
+  const platform = await findPlatformRule(client, tenantId, input.platformRuleId);
+  const variants = await findVariantsForQuote(client, tenantId, input.platformRuleId, variantIds);
+  const variantMap = new Map(variants.map((variant) => [variant.variant_id, variant]));
+
+  const calculationItems: CompositeQuoteInputItem[] = quoteItems.map((item, index) => {
+    const variant = variantMap.get(item.productVariantId);
+    if (!variant) throw new Error("Product variant not found.");
+    if (!variant.anchors) throw new Error("Active pricing curve not found.");
+
+    return {
+      id: String(index + 1),
+      productVariantId: variant.variant_id,
+      description: `${variant.product_name} - ${variant.variant_name}`,
+      artworkName: clean(item.artworkName) ?? `Arte ${index + 1}`,
+      quantity: item.quantity,
+      unitCost: Number(variant.unit_cost),
+      curve: mapCurve(variant.curve_mode, variant.anchors)
+    };
+  });
+
+  const effectivePlatform = {
+    commissionRate: input.includeCommission === false ? 0 : Number(platform.commission_rate),
+    fixedFee: input.includeFixedFee === false ? 0 : Number(platform.fixed_fee),
+    sellerShippingCost: input.includeSellerShipping === false ? 0 : Number(platform.seller_shipping_cost),
+    sellerShippingThreshold: Number(platform.seller_shipping_threshold)
+  };
+
+  const calculation = calculateCompositeQuote({
+    items: calculationItems,
+    platform: effectivePlatform,
+    pricingRule: input.pricingRule ?? "per_art_average"
+  });
+
+  const customerId = await resolveQuoteCustomer(client, tenantId, input);
+  const validDays = Math.max(1, Math.min(90, input.validDays ?? 7));
+  const shippingTotal = Math.max(0, input.shippingTotal ?? 0);
+  const grandTotal = calculation.subtotal + shippingTotal;
+  const quoteResult = await client.query<{ id: string }>(
+    `
+      insert into quotes (
+        tenant_id,
+        customer_id,
+        created_by,
+        status,
+        valid_until,
+        subtotal,
+        shipping_total,
+        discount_total,
+        grand_total,
+        margin_amount,
+        margin_percent,
+        notes
+      )
+      values (
+        $1,
+        $2,
+        $3,
+        'draft',
+        current_date + $4::int,
+        $5,
+        $6,
+        0,
+        $7,
+        $8,
+        $9,
+        $10
+      )
+      returning id
+    `,
+    [
+      tenantId,
+      customerId,
+      userId,
+      validDays,
+      calculation.subtotal,
+      shippingTotal,
+      grandTotal,
+      calculation.profit,
+      calculation.marginPercent,
+      input.notes || null
+    ]
+  );
+  const quoteId = quoteResult.rows[0].id;
+
+  for (const item of calculation.items) {
+    await client.query(
+      `
+        insert into quote_items (
+          tenant_id,
+          quote_id,
+          product_variant_id,
+          description,
+          quantity,
+          unit_price,
+          total_price,
+          artwork_name,
+          pricing_rule,
+          pricing_group_key,
+          reference_quantity,
+          base_unit_price
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `,
+      [
+        tenantId,
+        quoteId,
+        item.productVariantId,
+        item.description,
+        item.quantity,
+        item.finalUnitPrice,
+        item.subtotal,
+        item.artworkName,
+        item.pricingRule,
+        item.pricingGroupKey,
+        item.referenceQuantity,
+        item.baseUnitPrice
+      ]
+    );
+  }
+
+  await client.query(
+    `
+      insert into quote_calculation_snapshots (tenant_id, quote_id, snapshot)
+      values ($1, $2, $3)
+    `,
+    [
+      tenantId,
+      quoteId,
+      JSON.stringify({
+        kind: "composite_quote",
+        request: input,
+        platform,
+        effectivePlatform,
+        calculation
+      })
+    ]
+  );
+
+  await client.query(
+    `
+      insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+      values ($1, $2, 'quotes.create_composite', 'quote', $3, $4)
+    `,
+    [tenantId, userId, quoteId, JSON.stringify({ itemCount: calculation.items.length, pricingRule: input.pricingRule })]
+  );
+
+  return { id: quoteId, calculation };
+}
+
+async function resolveQuoteCustomer(client: pg.PoolClient, tenantId: string, input: CreateQuoteInput) {
+  let customerId = input.customerId || null;
+  if (!customerId && input.customerName) {
+    const customerResult = await client.query<{ id: string }>(
+      `
+        insert into customers (tenant_id, name, document, email, phone)
+        values ($1, $2, $3, $4, $5)
+        returning id
+      `,
+      [
+        tenantId,
+        input.customerName,
+        clean(input.customerDocument),
+        clean(input.customerEmail),
+        clean(input.customerPhone)
+      ]
+    );
+    customerId = customerResult.rows[0].id;
+  }
+
+  return customerId;
+}
+
+async function findPlatformRule(client: pg.PoolClient, tenantId: string, platformRuleId: string) {
+  const platformResult = await client.query<{
+    id: string;
+    key: string;
+    name: string;
+    commission_rate: string;
+    fixed_fee: string;
+    seller_shipping_cost: string;
+    seller_shipping_threshold: string;
+  }>(
+    `
+      select id, key, name, commission_rate, fixed_fee, seller_shipping_cost, seller_shipping_threshold
+      from platform_rules
+      where tenant_id = $1 and id = $2 and active = true
+      limit 1
+    `,
+    [tenantId, platformRuleId]
+  );
+
+  const platform = platformResult.rows[0];
+  if (!platform) throw new Error("Platform rule not found.");
+  return platform;
+}
+
+async function findVariantsForQuote(
+  client: pg.PoolClient,
+  tenantId: string,
+  platformRuleId: string,
+  variantIds: string[]
+) {
+  const result = await client.query<{
+    variant_id: string;
+    variant_name: string;
+    product_name: string;
+    unit_cost: string;
+    unit_weight_kg: string;
+    curve_mode: PricingCurveMode | null;
+    anchors: Record<string, string> | null;
+  }>(
+    `
+      select
+        v.id as variant_id,
+        v.name as variant_name,
+        p.name as product_name,
+        v.unit_cost,
+        v.unit_weight_kg,
+        pc.mode as curve_mode,
+        (
+          select jsonb_object_agg(pa.quantity::text, pa.unit_price order by pa.quantity)
+          from pricing_anchors pa
+          where pa.pricing_curve_id = pc.id
+            and pa.tenant_id = pc.tenant_id
+        ) as anchors
+      from product_variants v
+      join products p on p.id = v.product_id and p.tenant_id = v.tenant_id
+      left join lateral (
+        select pc.*
+        from pricing_curves pc
+        where pc.product_variant_id = v.id
+          and pc.tenant_id = v.tenant_id
+          and pc.active = true
+          and (pc.platform_rule_id = $3 or pc.platform_rule_id is null)
+        order by case when pc.platform_rule_id = $3 then 0 else 1 end, pc.version desc, pc.created_at desc
+        limit 1
+      ) pc on true
+      where v.tenant_id = $1
+        and v.id = any($2::uuid[])
+        and v.active = true
+        and p.active = true
+    `,
+    [tenantId, variantIds, platformRuleId]
+  );
+
+  return result.rows;
 }
 
 function mapCurve(mode: PricingCurveMode | null, anchors: Record<string, string>): PricingCurve {

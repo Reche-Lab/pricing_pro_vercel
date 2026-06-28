@@ -10,9 +10,12 @@ export function buildQuoteWhatsAppText(input: { quote: QuoteDetail; items: Quote
     "",
     ...items.map(
       (item) =>
-        `*${item.quantity}x* ${item.description}\n${brl.format(Number(item.unit_price))}/un - ${brl.format(
-          Number(item.total_price)
-        )}`
+        [
+          `*${item.quantity}x* ${item.description}`,
+          item.artwork_name ? `Arte: ${item.artwork_name}` : null,
+          item.reference_quantity ? `Qtd. referencia: ${item.reference_quantity} (${formatPricingRule(item.pricing_rule)})` : null,
+          `${brl.format(Number(item.unit_price))}/un - ${brl.format(Number(item.total_price))}`
+        ].filter(Boolean).join("\n")
     ),
     "",
     `*Subtotal:* ${brl.format(Number(quote.subtotal))}`,
@@ -24,6 +27,12 @@ export function buildQuoteWhatsAppText(input: { quote: QuoteDetail; items: Quote
   ];
 
   return lines.filter((line) => line !== null).join("\n");
+}
+
+function formatPricingRule(rule: string | null | undefined) {
+  if (rule === "per_art_average") return "por artes";
+  if (rule === "aggregate_total") return "por total";
+  return "por item";
 }
 
 function formatDate(value: string): string {

@@ -79,14 +79,20 @@ export async function generateQuotePdf(input: {
 
   drawSectionTitle("Itens");
   drawTable(
-    ["Descricao", "Qtd", "Unitario", "Total"],
+    ["Descricao", "Qtd", "Ref.", "Unitario", "Total"],
     input.items.map((item) => [
-      item.description,
+      [
+        item.description,
+        item.artwork_name ? `Arte: ${item.artwork_name}` : null,
+        item.reference_quantity ? `Regra: ${formatPricingRule(item.pricing_rule)}`
+          : null
+      ].filter(Boolean).join(" | "),
       String(item.quantity),
+      item.reference_quantity ? String(item.reference_quantity) : "-",
       brl.format(Number(item.unit_price)),
       brl.format(Number(item.total_price))
     ]),
-    [260, 54, 92, 92]
+    [230, 44, 44, 90, 90]
   );
 
   drawSectionTitle("Resumo");
@@ -199,6 +205,12 @@ function sanitizePdfText(value: string): string {
 
 function shortId(value: string) {
   return value.slice(0, 8).toUpperCase();
+}
+
+function formatPricingRule(rule: string | null | undefined) {
+  if (rule === "per_art_average") return "por artes";
+  if (rule === "aggregate_total") return "por total";
+  return "por item";
 }
 
 function wrapText(value: string, maxLength: number): string[] {

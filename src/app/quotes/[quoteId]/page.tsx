@@ -63,6 +63,12 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                     <p className="text-zinc-500">
                       {item.quantity} x {brl.format(Number(item.unit_price))}
                     </p>
+                    {item.artwork_name ? <p className="text-zinc-500">Arte: {item.artwork_name}</p> : null}
+                    {item.reference_quantity ? (
+                      <p className="text-xs text-amber-300">
+                        Qtd. de referencia: {item.reference_quantity} · {formatPricingRule(item.pricing_rule)}
+                      </p>
+                    ) : null}
                   </div>
                   <p className="font-semibold text-white">{brl.format(Number(item.total_price))}</p>
                 </div>
@@ -133,6 +139,12 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
       </div>
     </AppShell>
   );
+}
+
+function formatPricingRule(rule: string | null | undefined) {
+  if (rule === "per_art_average") return "por artes do mesmo produto";
+  if (rule === "aggregate_total") return "por total do mesmo produto";
+  return "por item individual";
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
