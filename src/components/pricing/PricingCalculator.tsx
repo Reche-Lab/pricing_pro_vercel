@@ -511,17 +511,9 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
           {saveState === "error" ? <p className="mt-3 text-sm text-red-300">Nao foi possivel salvar a curva.</p> : null}
         </DetailsPanel>
 
-        <ChartPanel title="Curva de precos com custos" subtitle="Calculada para cada unidade entre 1 e 1000. Passe o mouse para ver quantidade, base e preco final.">
-          <LineChart
-            anchors={ANCHOR_QUANTITIES}
-            current={pricingCurvePoints(currentAnchors, variant.unitCost, effectivePlatform)}
-            formatValue={(value) => brl.format(value)}
-            simulated={pricingCurvePoints(simulatedAnchors, variant.unitCost, effectivePlatform)}
-          />
-        </ChartPanel>
-
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <Metric icon={<CircleDollarSign size={18} />} label="Preco unitario" tone="amber" value={brl.format(simulatedResult.finalUnitPrice)} />
+          <Metric label="Taxa fixa" value={brl.format(simulatedResult.fixedFeeTotal)} />
           <Metric label="Preco total" value={brl.format(simulatedResult.subtotal)} />
           <Metric label="Margem liquida" value={brl.format(simulatedResult.profit)} tone="emerald" />
           <Metric label="Custo total" value={brl.format(simulatedResult.totalCost)} />
@@ -532,6 +524,15 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
             tone={simulatedResult.marginPercent >= 0 ? "emerald" : "red"}
           />
         </div>
+
+        <ChartPanel title="Curva de precos com custos" subtitle="Calculada para cada unidade entre 1 e 1000. Passe o mouse para ver quantidade, base e preco final.">
+          <LineChart
+            anchors={ANCHOR_QUANTITIES}
+            current={pricingCurvePoints(currentAnchors, variant.unitCost, effectivePlatform)}
+            formatValue={(value) => brl.format(value)}
+            simulated={pricingCurvePoints(simulatedAnchors, variant.unitCost, effectivePlatform)}
+          />
+        </ChartPanel>
 
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
           <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">

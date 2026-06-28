@@ -20,10 +20,11 @@ export function PackagingForm({ variants }: PackagingFormProps) {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     setError("");
     setLoading(true);
 
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(formElement);
     const capacities = variants.map((variant) => ({
       productVariantId: variant.id,
       capacity: Number(form.get(`capacity_${variant.id}`) || 0)
@@ -48,7 +49,7 @@ export function PackagingForm({ variants }: PackagingFormProps) {
       return;
     }
 
-    event.currentTarget.reset();
+    formElement.reset();
     router.refresh();
   }
 

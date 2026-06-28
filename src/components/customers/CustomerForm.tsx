@@ -11,10 +11,11 @@ export function CustomerForm() {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     setError("");
     setLoading(true);
 
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(formElement);
     const response = await fetch("/api/customers", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -39,7 +40,7 @@ export function CustomerForm() {
       return;
     }
 
-    event.currentTarget.reset();
+    formElement.reset();
     router.refresh();
   }
 

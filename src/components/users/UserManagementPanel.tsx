@@ -33,10 +33,11 @@ export function UserManagementPanel({
 
   async function createMember(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     setMessage("");
     setInviteUrl("");
     setLoading("create");
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(formElement);
     const response = await fetch("/api/users", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -56,7 +57,7 @@ export function UserManagementPanel({
       return;
     }
 
-    event.currentTarget.reset();
+    formElement.reset();
     setNewMemberStatus("invited");
     if (data.inviteUrl) {
       setInviteUrl(data.inviteUrl);

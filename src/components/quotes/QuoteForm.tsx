@@ -35,10 +35,11 @@ export function QuoteForm({ variants, platforms, customers }: QuoteFormProps) {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     setError("");
     setLoading(true);
 
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(formElement);
     const response = await fetch("/api/quotes", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -59,7 +60,7 @@ export function QuoteForm({ variants, platforms, customers }: QuoteFormProps) {
       return;
     }
 
-    event.currentTarget.reset();
+    formElement.reset();
     router.refresh();
   }
 

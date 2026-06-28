@@ -13,10 +13,11 @@ export function ProductForm() {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     setError("");
     setLoading(true);
 
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(formElement);
     const anchors = Object.fromEntries(
       ANCHORS.map((quantity) => [quantity, Number(form.get(`anchor_${quantity}`))])
     );
@@ -42,7 +43,7 @@ export function ProductForm() {
       return;
     }
 
-    event.currentTarget.reset();
+    formElement.reset();
     router.refresh();
   }
 
