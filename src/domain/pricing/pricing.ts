@@ -1,12 +1,15 @@
 import type {
   PlatformRule,
   PricingAnchors,
+  PricingCurve,
+  PricingCurveMode,
+  PricingCurvePoint,
   PricingSimulationPoint,
   QuoteCalculationInput,
   QuoteCalculationResult
 } from "./types";
 
-const ANCHOR_QUANTITIES = [1, 10, 50, 100, 500, 1000] as const;
+export const DEFAULT_ANCHOR_QUANTITIES = [1, 10, 50, 100, 500, 1000] as const;
 
 export function clampQuantity(quantity: number, min = 1, max = 50000): number {
   if (!Number.isFinite(quantity)) return min;
@@ -37,20 +40,66 @@ export function interpolateGeometric(
   return p1 * Math.pow(p2 / p1, t);
 }
 
-export function calculateAnchoredUnitPrice(quantity: number, anchors: PricingAnchors): number {
-  const q = clampQuantity(quantity);
-  if (q <= 1) return anchors[1];
-  if (q >= 1000) return anchors[1000];
+export function normalizePricingCurvePoints(points: PricingCurvePoint[]): PricingCurvePoint[] {
+  const byQuantity = new Map<number, number>();
 
-  for (let i = 0; i < ANCHOR_QUANTITIES.length - 1; i += 1) {
-    const q1 = ANCHOR_QUANTITIES[i];
-    const q2 = ANCHOR_QUANTITIES[i + 1];
-    if (q >= q1 && q <= q2) {
-      return interpolateGeometric(q, q1, anchors[q1], q2, anchors[q2]);
+  for (const point of points) {
+    const quantity = clampQuantity(point.quantity);
+    const unitPrice = Number.isFinite(point.unitPrice) ? Math.max(0, point.unitPrice) : 0;
+    byQuantity.set(quantity, unitPrice);
+  }
+
+  return Array.from(byQuantity.entries())
+    .map(([quantity, unitPrice]) => ({ quantity, unitPrice }))
+    .sort((a, b) => a.quantity - b.quantity);
+}
+
+export function anchorsToPricingCurve(
+  anchors: PricingAnchors,
+  mode: PricingCurveMode = "interpolated"
+): PricingCurve {
+  return {
+    mode,
+    points: DEFAULT_ANCHOR_QUANTITIES.map((quantity) => ({ quantity, unitPrice: anchors[quantity] }))
+  };
+}
+
+export function pricingCurveToAnchors(curve: PricingCurve): PricingAnchors {
+  const fallback = normalizePricingCurvePoints(curve.points);
+  const first = fallback[0]?.unitPrice ?? 0;
+  const result = {} as PricingAnchors;
+
+  for (const quantity of DEFAULT_ANCHOR_QUANTITIES) {
+    result[quantity] = calculateCurveUnitPrice(quantity, curve) || first;
+  }
+
+  return result;
+}
+
+export function calculateCurveUnitPrice(quantity: number, curve: PricingCurve): number {
+  const q = clampQuantity(quantity);
+  const points = normalizePricingCurvePoints(curve.points);
+  if (points.length === 0) throw new Error("Pricing curve points are required.");
+  if (points.length === 1) return points[0].unitPrice;
+  if (q <= points[0].quantity) return points[0].unitPrice;
+  if (q >= points[points.length - 1].quantity) return points[points.length - 1].unitPrice;
+
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const from = points[i];
+    const to = points[i + 1];
+    if (q === from.quantity) return from.unitPrice;
+    if (q > from.quantity && q <= to.quantity) {
+      if (curve.mode === "step") return q === to.quantity ? to.unitPrice : from.unitPrice;
+      if (from.unitPrice <= 0 || to.unitPrice <= 0) return linearInterpolate(q, from, to);
+      return interpolateGeometric(q, from.quantity, from.unitPrice, to.quantity, to.unitPrice);
     }
   }
 
-  return anchors[1000];
+  return points[points.length - 1].unitPrice;
+}
+
+export function calculateAnchoredUnitPrice(quantity: number, anchors: PricingAnchors): number {
+  return calculateCurveUnitPrice(quantity, anchorsToPricingCurve(anchors));
 }
 
 export function recomputeIntermediateAnchors(anchors: PricingAnchors): PricingAnchors {
@@ -109,7 +158,7 @@ export function calculateQuote(input: QuoteCalculationInput): QuoteCalculationRe
   const quantity = clampQuantity(input.quantity);
   const baseUnitPrice =
     input.method === "anchors"
-      ? calculateAnchoredUnitPrice(quantity, requireAnchors(input.anchors))
+      ? calculateCurveUnitPrice(quantity, input.curve ?? anchorsToPricingCurve(requireAnchors(input.anchors)))
       : calculateLogisticUnitPrice(
           quantity,
           requireLogistic(input.logistic).minPrice,
@@ -187,4 +236,10 @@ function requireAnchors(anchors: PricingAnchors | undefined): PricingAnchors {
 function requireLogistic(logistic: QuoteCalculationInput["logistic"]) {
   if (!logistic) throw new Error("Logistic parameters are required for logistic pricing.");
   return logistic;
+}
+
+function linearInterpolate(quantity: number, from: PricingCurvePoint, to: PricingCurvePoint): number {
+  const span = Math.max(to.quantity - from.quantity, 1);
+  const t = (quantity - from.quantity) / span;
+  return from.unitPrice + (to.unitPrice - from.unitPrice) * t;
 }

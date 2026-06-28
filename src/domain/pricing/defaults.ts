@@ -1,10 +1,11 @@
-import type { PlatformRule, PricingAnchors } from "./types";
+import type { PlatformRule, PricingCurve } from "./types";
 
 export type DemoProductVariant = {
   id: string;
   productName: string;
   variantName: string;
-  anchors: PricingAnchors;
+  curve: PricingCurve;
+  platformCurves?: Record<string, PricingCurve>;
   unitCost: number;
   unitWeightKg: number;
 };
@@ -16,7 +17,17 @@ export const demoVariants: DemoProductVariant[] = [
     variantName: "4,5 cm",
     unitCost: 0.42,
     unitWeightKg: 0.002,
-    anchors: { 1: 6.9, 10: 2.9, 50: 1.85, 100: 1.55, 500: 1.18, 1000: 0.98 }
+    curve: {
+      mode: "interpolated",
+      points: [
+        { quantity: 1, unitPrice: 6.9 },
+        { quantity: 10, unitPrice: 2.9 },
+        { quantity: 50, unitPrice: 1.85 },
+        { quantity: 100, unitPrice: 1.55 },
+        { quantity: 500, unitPrice: 1.18 },
+        { quantity: 1000, unitPrice: 0.98 }
+      ]
+    }
   },
   {
     id: "demo-tag-premium",
@@ -24,7 +35,17 @@ export const demoVariants: DemoProductVariant[] = [
     variantName: "Premium",
     unitCost: 0.88,
     unitWeightKg: 0.006,
-    anchors: { 1: 9.9, 10: 4.2, 50: 2.95, 100: 2.48, 500: 2.08, 1000: 1.74 }
+    curve: {
+      mode: "interpolated",
+      points: [
+        { quantity: 1, unitPrice: 9.9 },
+        { quantity: 10, unitPrice: 4.2 },
+        { quantity: 50, unitPrice: 2.95 },
+        { quantity: 100, unitPrice: 2.48 },
+        { quantity: 500, unitPrice: 2.08 },
+        { quantity: 1000, unitPrice: 1.74 }
+      ]
+    }
   }
 ];
 

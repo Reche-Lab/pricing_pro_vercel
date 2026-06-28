@@ -3,6 +3,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { AnchorEditor } from "@/components/products/AnchorEditor";
 import { ProductForm } from "@/components/products/ProductForm";
 import { getCurrentSession } from "@/lib/auth/session";
+import { listPlatformRules } from "@/repositories/platforms";
 import { listProductsAdmin } from "@/repositories/products";
 import { getSessionProfile } from "@/repositories/users";
 
@@ -12,9 +13,10 @@ export default async function ProductsPage() {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
 
-  const [profile, products] = await Promise.all([
+  const [profile, products, platforms] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
-    listProductsAdmin(session.userId, session.tenantId)
+    listProductsAdmin(session.userId, session.tenantId),
+    listPlatformRules(session.userId, session.tenantId)
   ]);
   if (!profile) redirect("/login");
 
@@ -46,7 +48,12 @@ export default async function ProductsPage() {
                       <p className="text-zinc-500">{Number(item.unit_weight_kg).toFixed(4)} kg/un</p>
                     </div>
                   </div>
-                  <AnchorEditor anchors={item.anchors} variantId={item.variant_id} />
+                  <AnchorEditor
+                    anchors={item.anchors}
+                    mode={item.curve_mode}
+                    platforms={platforms.map((platform) => ({ id: platform.id, name: platform.name }))}
+                    variantId={item.variant_id}
+                  />
                 </div>
               ))
             )}

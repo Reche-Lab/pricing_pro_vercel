@@ -11,11 +11,22 @@ const anchorsSchema = z.object({
   1000: z.number().nonnegative()
 });
 
+const curveSchema = z.object({
+  mode: z.enum(["interpolated", "step"]),
+  points: z.array(
+    z.object({
+      quantity: z.number().int().min(1).max(50000),
+      unitPrice: z.number().nonnegative()
+    })
+  ).min(1).max(50)
+});
+
 const calculateSchema = z.object({
   quantity: z.number().int().positive(),
   unitCost: z.number().nonnegative(),
   method: z.enum(["anchors", "logistic"]),
   anchors: anchorsSchema.optional(),
+  curve: curveSchema.optional(),
   logistic: z
     .object({
       basePrice: z.number().nonnegative(),

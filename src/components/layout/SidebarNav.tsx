@@ -37,8 +37,8 @@ export function SidebarNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="grid gap-6 text-sm">
-      <div className="grid gap-1">
+    <nav className="flex gap-2 overflow-x-auto pb-1 text-sm [-webkit-overflow-scrolling:touch] lg:grid lg:gap-6 lg:overflow-visible lg:pb-0">
+      <div className="flex shrink-0 gap-2 lg:grid lg:gap-1">
         {primaryItems.map((item) => (
           <NavItem active={isActive(pathname, item.href)} href={item.href} icon={item.icon} key={item.href}>
             {item.label}
@@ -46,12 +46,12 @@ export function SidebarNav() {
         ))}
       </div>
 
-      <div>
-        <div className="mb-2 flex items-center gap-2 px-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+      <div className="flex shrink-0 gap-2 lg:block">
+        <div className="hidden lg:mb-2 lg:flex lg:items-center lg:gap-2 lg:px-3 lg:text-xs lg:font-semibold lg:uppercase lg:tracking-wide lg:text-zinc-500">
           <Settings size={14} />
           Configuracoes
         </div>
-        <div className="grid gap-1">
+        <div className="flex gap-2 lg:grid lg:gap-1">
           {settingsItems.map((item) => (
             <NavItem active={isActive(pathname, item.href)} href={item.href} icon={item.icon} key={item.href} nested>
               {item.label}
@@ -79,8 +79,8 @@ function NavItem({
   return (
     <Link
       className={[
-        "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors",
-        nested ? "ml-2" : "",
+        "group relative flex shrink-0 items-center gap-2 rounded-lg px-3 py-2.5 transition-colors lg:gap-3",
+        nested ? "lg:ml-2" : "",
         active
           ? "bg-amber-500 text-zinc-950 shadow-lg shadow-amber-500/10"
           : "text-zinc-300 hover:bg-zinc-800/90 hover:text-white"
@@ -89,12 +89,12 @@ function NavItem({
     >
       <span
         className={[
-          "absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full transition-opacity",
+          "absolute left-0 top-1/2 hidden h-6 w-1 -translate-y-1/2 rounded-r-full transition-opacity lg:block",
           active ? "bg-zinc-950 opacity-100" : "bg-amber-400 opacity-0 group-hover:opacity-70"
         ].join(" ")}
       />
       <Icon className={active ? "text-zinc-950" : "text-zinc-500 group-hover:text-amber-300"} size={17} />
-      <span className="font-medium">{children}</span>
+      <span className="whitespace-nowrap font-medium">{children}</span>
     </Link>
   );
 }

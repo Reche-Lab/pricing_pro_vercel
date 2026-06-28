@@ -60,12 +60,12 @@ export function TenantSettingsForm({ tenant }: { tenant: TenantShippingProfile }
         <Input defaultValue={tenant.logo_url} label="Logo URL" name="logoUrl" type="url" />
         <Input defaultValue={tenant.postal_code} label="CEP de origem" name="postalCode" />
         <Input defaultValue={tenant.address_line} label="Endereco" name="addressLine" />
-        <div className="grid grid-cols-[120px_1fr] gap-3">
+        <div className="grid grid-cols-[minmax(0,120px)_minmax(0,1fr)] gap-3">
           <Input defaultValue={tenant.address_number} label="Numero" name="addressNumber" />
           <Input defaultValue={tenant.address_complement} label="Complemento" name="addressComplement" />
         </div>
         <Input defaultValue={tenant.district} label="Bairro" name="district" />
-        <div className="grid grid-cols-[1fr_80px] gap-3">
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,80px)] gap-3">
           <Input defaultValue={tenant.city} label="Cidade" name="city" />
           <Input defaultValue={tenant.state} label="UF" maxLength={2} name="state" />
         </div>
@@ -102,7 +102,7 @@ function Input({
     <label className="block">
       <span className="mb-1 block text-sm font-medium text-zinc-300">{label}</span>
       <input
-        className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
+        className="focus-ring w-full min-w-0 rounded-md border border-zinc-700 px-3 py-2"
         defaultValue={defaultValue ?? ""}
         maxLength={maxLength}
         name={name}

@@ -1,7 +1,7 @@
 import { calculateQuote } from "@/domain/pricing/pricing";
 import { canTransitionQuoteStatus, createQuoteCalculationSnapshot } from "@/domain/quotes/quotes";
 import type { QuoteStatus } from "@/domain/quotes/types";
-import type { PricingAnchors } from "@/domain/pricing/types";
+import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
 import { withTenantContext } from "@/lib/db/client";
 
 export type QuoteRow = {
@@ -253,6 +253,7 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
       product_name: string;
       unit_cost: string;
       unit_weight_kg: string;
+      curve_mode: PricingCurveMode | null;
       anchors: Record<string, string> | null;
     }>(
       `
@@ -262,20 +263,29 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
           p.name as product_name,
           v.unit_cost,
           v.unit_weight_kg,
+          pc.mode as curve_mode,
           (
             select jsonb_object_agg(pa.quantity::text, pa.unit_price order by pa.quantity)
-            from pricing_curves pc
-            join pricing_anchors pa on pa.pricing_curve_id = pc.id and pa.tenant_id = pc.tenant_id
-            where pc.product_variant_id = v.id
-              and pc.tenant_id = v.tenant_id
-              and pc.active = true
+            from pricing_anchors pa
+            where pa.pricing_curve_id = pc.id
+              and pa.tenant_id = pc.tenant_id
           ) as anchors
         from product_variants v
         join products p on p.id = v.product_id and p.tenant_id = v.tenant_id
+        left join lateral (
+          select pc.*
+          from pricing_curves pc
+          where pc.product_variant_id = v.id
+            and pc.tenant_id = v.tenant_id
+            and pc.active = true
+            and (pc.platform_rule_id = $3 or pc.platform_rule_id is null)
+          order by case when pc.platform_rule_id = $3 then 0 else 1 end, pc.version desc, pc.created_at desc
+          limit 1
+        ) pc on true
         where v.tenant_id = $1 and v.id = $2 and v.active = true and p.active = true
         limit 1
       `,
-      [tenantId, input.productVariantId]
+      [tenantId, input.productVariantId, input.platformRuleId]
     );
 
     const variant = variantResult.rows[0];
@@ -326,7 +336,7 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
       quantity: input.quantity,
       unitCost: Number(variant.unit_cost),
       method: "anchors",
-      anchors: mapAnchors(variant.anchors),
+      curve: mapCurve(variant.curve_mode, variant.anchors),
       platform: {
         commissionRate: input.includeCommission === false ? 0 : Number(platform.commission_rate),
         fixedFee: input.includeFixedFee === false ? 0 : Number(platform.fixed_fee),
@@ -441,14 +451,15 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
   });
 }
 
-function mapAnchors(anchors: Record<string, string>): PricingAnchors {
+function mapCurve(mode: PricingCurveMode | null, anchors: Record<string, string>): PricingCurve {
   return {
-    1: Number(anchors["1"] ?? 0),
-    10: Number(anchors["10"] ?? 0),
-    50: Number(anchors["50"] ?? 0),
-    100: Number(anchors["100"] ?? 0),
-    500: Number(anchors["500"] ?? 0),
-    1000: Number(anchors["1000"] ?? 0)
+    mode: mode ?? "interpolated",
+    points: Object.entries(anchors)
+      .map(([quantity, unitPrice]) => ({
+        quantity: Number(quantity),
+        unitPrice: Number(unitPrice)
+      }))
+      .sort((a, b) => a.quantity - b.quantity)
   };
 }
 

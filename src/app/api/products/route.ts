@@ -3,6 +3,16 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
 import { createProductWithVariant, listProductVariants } from "@/repositories/products";
 
+const pointSchema = z.object({
+  quantity: z.number().int().min(1).max(50000),
+  unitPrice: z.number().nonnegative()
+});
+
+const curveSchema = z.object({
+  mode: z.enum(["interpolated", "step"]).default("interpolated"),
+  points: z.array(pointSchema).min(1).max(50)
+});
+
 const anchorsSchema = z.object({
   1: z.number().nonnegative(),
   10: z.number().nonnegative(),
@@ -20,7 +30,29 @@ const createProductSchema = z.object({
   sku: z.string().trim().optional().nullable(),
   unitCost: z.number().min(0),
   unitWeightKg: z.number().min(0),
-  anchors: anchorsSchema
+  curve: curveSchema.optional(),
+  anchors: anchorsSchema.optional()
+}).transform((input, context) => {
+  if (input.curve) return { ...input, curve: input.curve };
+  if (input.anchors) {
+    return {
+      ...input,
+      curve: {
+        mode: "interpolated" as const,
+        points: Object.entries(input.anchors).map(([quantity, unitPrice]) => ({
+          quantity: Number(quantity),
+          unitPrice
+        }))
+      }
+    };
+  }
+
+  context.addIssue({
+    code: z.ZodIssueCode.custom,
+    message: "curve or anchors is required",
+    path: ["curve"]
+  });
+  return z.NEVER;
 });
 
 export async function GET() {

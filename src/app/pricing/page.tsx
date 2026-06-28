@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { PricingCalculator } from "@/components/pricing/PricingCalculator";
-import type { PricingAnchors } from "@/domain/pricing/types";
+import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
 import { getCurrentSession } from "@/lib/auth/session";
 import { listPlatformRules } from "@/repositories/platforms";
 import { getSessionProfile } from "@/repositories/users";
@@ -25,7 +25,8 @@ export default async function PricingPage() {
     variantName: variant.variant_name,
     unitCost: Number(variant.unit_cost),
     unitWeightKg: Number(variant.unit_weight_kg),
-    anchors: mapAnchors(variant.anchors)
+    curve: mapCurve(variant.curve_mode, variant.anchors),
+    platformCurves: mapPlatformCurves(variant.platform_curves)
   }));
 
   return (
@@ -39,15 +40,27 @@ export default async function PricingPage() {
   );
 }
 
-function mapAnchors(anchors: Record<string, number> | null): PricingAnchors {
+function mapCurve(mode: PricingCurveMode | null, anchors: Record<string, number> | null): PricingCurve {
   return {
-    1: Number(anchors?.["1"] ?? 0),
-    10: Number(anchors?.["10"] ?? 0),
-    50: Number(anchors?.["50"] ?? 0),
-    100: Number(anchors?.["100"] ?? 0),
-    500: Number(anchors?.["500"] ?? 0),
-    1000: Number(anchors?.["1000"] ?? 0)
+    mode: mode ?? "interpolated",
+    points: Object.entries(anchors ?? {})
+      .map(([quantity, unitPrice]) => ({
+        quantity: Number(quantity),
+        unitPrice: Number(unitPrice)
+      }))
+      .sort((a, b) => a.quantity - b.quantity)
   };
+}
+
+function mapPlatformCurves(
+  platformCurves: Record<string, { mode: PricingCurveMode; anchors: Record<string, number> | null }> | null | undefined
+) {
+  return Object.fromEntries(
+    Object.entries(platformCurves ?? {}).map(([platformId, curve]) => [
+      platformId,
+      mapCurve(curve.mode, curve.anchors)
+    ])
+  );
 }
 
 function mapPlatforms(platforms: Awaited<ReturnType<typeof listPlatformRules>>) {

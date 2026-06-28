@@ -57,12 +57,12 @@ export function CustomerForm() {
         <Input label="Telefone" name="phone" />
         <Input label="CEP" name="postalCode" />
         <Input label="Endereco" name="addressLine" />
-        <div className="grid grid-cols-[120px_1fr] gap-3">
+        <div className="grid grid-cols-[minmax(0,120px)_minmax(0,1fr)] gap-3">
           <Input label="Numero" name="addressNumber" />
           <Input label="Complemento" name="addressComplement" />
         </div>
         <Input label="Bairro" name="district" />
-        <div className="grid grid-cols-[1fr_80px] gap-3">
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,80px)] gap-3">
           <Input label="Cidade" name="city" />
           <Input label="UF" name="state" maxLength={2} />
         </div>
@@ -96,7 +96,7 @@ function Input({
     <label className="block">
       <span className="mb-1 block text-sm font-medium text-zinc-300">{label}</span>
       <input
-        className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
+        className="focus-ring w-full min-w-0 rounded-md border border-zinc-700 px-3 py-2"
         maxLength={maxLength}
         name={name}
         required={required}

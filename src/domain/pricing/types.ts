@@ -2,6 +2,18 @@ export type PricingAnchorQuantity = 1 | 10 | 50 | 100 | 500 | 1000;
 
 export type PricingAnchors = Record<PricingAnchorQuantity, number>;
 
+export type PricingCurveMode = "interpolated" | "step";
+
+export type PricingCurvePoint = {
+  quantity: number;
+  unitPrice: number;
+};
+
+export type PricingCurve = {
+  mode: PricingCurveMode;
+  points: PricingCurvePoint[];
+};
+
 export type PricingMethod = "anchors" | "logistic";
 
 export type PlatformRule = {
@@ -21,6 +33,7 @@ export type QuoteCalculationInput = {
   unitCost: number;
   method: PricingMethod;
   anchors?: PricingAnchors;
+  curve?: PricingCurve;
   logistic?: {
     basePrice: number;
     minPrice: number;

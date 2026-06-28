@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateCurveUnitPrice,
   calculateAnchoredUnitPrice,
   calculateFinalUnitPrice,
   calculateLogisticUnitPrice,
@@ -9,7 +10,7 @@ import {
   comparePricingSimulationSeries,
   recomputeIntermediateAnchors
 } from "@/domain/pricing/pricing";
-import type { PricingAnchors } from "@/domain/pricing/types";
+import type { PricingAnchors, PricingCurve } from "@/domain/pricing/types";
 
 const anchors: PricingAnchors = {
   1: 8,
@@ -29,6 +30,40 @@ describe("pricing domain", () => {
 
   it("interpolates prices geometrically between anchors", () => {
     expect(calculateAnchoredUnitPrice(25, anchors)).toBeCloseTo(3.1806, 4);
+  });
+
+  it("interpolates dynamic curve points and respects exact anchors", () => {
+    const curve: PricingCurve = {
+      mode: "interpolated",
+      points: [
+        { quantity: 1, unitPrice: 8 },
+        { quantity: 50, unitPrice: 2.78 },
+        { quantity: 1000, unitPrice: 1.99 }
+      ]
+    };
+
+    expect(calculateCurveUnitPrice(1, curve)).toBe(8);
+    expect(calculateCurveUnitPrice(50, curve)).toBe(2.78);
+    expect(calculateCurveUnitPrice(1000, curve)).toBe(1.99);
+    expect(calculateCurveUnitPrice(25, curve)).toBeCloseTo(3.3526, 4);
+  });
+
+  it("keeps a stable unit price within each step curve range", () => {
+    const curve: PricingCurve = {
+      mode: "step",
+      points: [
+        { quantity: 50, unitPrice: 2.9 },
+        { quantity: 100, unitPrice: 2.6 },
+        { quantity: 500, unitPrice: 2.1 }
+      ]
+    };
+
+    expect(calculateCurveUnitPrice(1, curve)).toBe(2.9);
+    expect(calculateCurveUnitPrice(50, curve)).toBe(2.9);
+    expect(calculateCurveUnitPrice(99, curve)).toBe(2.9);
+    expect(calculateCurveUnitPrice(100, curve)).toBe(2.6);
+    expect(calculateCurveUnitPrice(499, curve)).toBe(2.6);
+    expect(calculateCurveUnitPrice(500, curve)).toBe(2.1);
   });
 
   it("calculates logistic price and clamps at minimum after 1000 units", () => {
