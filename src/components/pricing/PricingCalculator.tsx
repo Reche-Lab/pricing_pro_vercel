@@ -9,12 +9,14 @@ import {
   Clipboard,
   FileText,
   Plus,
+  ShoppingCart,
   Truck,
   UserRound,
   Trash2,
   RotateCcw,
   Save,
-  TrendingUp
+  TrendingUp,
+  X
 } from "lucide-react";
 import {
   buildPricingSimulationSeries,
@@ -46,6 +48,18 @@ type ChartPoint = {
   value: number;
   isAnchor?: boolean;
 };
+
+type DraftQuoteItem = {
+  id: string;
+  productVariantId: string;
+  productLabel: string;
+  artworkName: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+};
+
+type DraftPricingRule = "per_art_average" | "per_item" | "aggregate_total";
 
 const SIMULATION_QUANTITIES = [1, 10, 25, 50, 100, 250, 500, 1000] as const;
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -85,6 +99,15 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
   const [quickState, setQuickState] = useState<"idle" | "creating_pdf" | "copying_text" | "copied" | "error">("idle");
   const [quickMessage, setQuickMessage] = useState("");
   const [quickText, setQuickText] = useState("");
+  const [draftArtworkName, setDraftArtworkName] = useState("Arte 1");
+  const [draftItems, setDraftItems] = useState<DraftQuoteItem[]>([]);
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [draftPricingRule, setDraftPricingRule] = useState<DraftPricingRule>("per_item");
+  const [draftNotes, setDraftNotes] = useState("");
+  const [draftState, setDraftState] = useState<"idle" | "creating" | "creating_pdf" | "copying_text" | "copied" | "error">("idle");
+  const [draftMessage, setDraftMessage] = useState("");
+  const [draftText, setDraftText] = useState("");
+  const [draftAttention, setDraftAttention] = useState(false);
 
   useEffect(() => {
     if (variant) {
@@ -94,6 +117,7 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
       setQuickState("idle");
       setQuickMessage("");
       setQuickText("");
+      setDraftArtworkName((current) => current || "Arte 1");
     }
   }, [activeVariantCurve, variant]);
 
@@ -173,6 +197,11 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
       [quantity]
     );
   }, [currentCurve, effectivePlatform, platform, quantity, simulatedCurve, variant]);
+
+  const draftEstimatedTotal = useMemo(
+    () => draftItems.reduce((sum, item) => sum + item.totalPrice, 0) + (includeShipping ? shippingAmount : 0),
+    [draftItems, includeShipping, shippingAmount]
+  );
 
   if (!variant || !platform || !currentResult || !simulatedResult) {
     return <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-6">Nenhum produto disponivel.</div>;
@@ -292,6 +321,148 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
     return quoteId;
   }
 
+  function addCurrentItemToDraft() {
+    if (readonlyMode || simulatedChanged || !variant || !simulatedResult) return;
+
+    const artworkName = draftArtworkName.trim() || `Arte ${draftItems.length + 1}`;
+    setDraftItems((current) => [
+      ...current,
+      {
+        id: `${Date.now()}-${current.length}`,
+        productVariantId: variant.id,
+        productLabel: `${variant.productName} - ${variant.variantName}`,
+        artworkName,
+        quantity,
+        unitPrice: simulatedResult.finalUnitPrice,
+        totalPrice: simulatedResult.subtotal
+      }
+    ]);
+    setDraftArtworkName(`Arte ${draftItems.length + 2}`);
+    setDraftMessage("Item adicionado a bandeja de orcamento.");
+    setDraftAttention(true);
+    window.setTimeout(() => setDraftAttention(false), 2600);
+    setDraftState("idle");
+  }
+
+  function removeDraftItem(itemId: string) {
+    setDraftItems((current) => current.filter((item) => item.id !== itemId));
+  }
+
+  async function createDraftQuote() {
+    if (draftItems.length === 0) throw new Error("Draft is empty.");
+
+    const response = await fetch("/api/quotes", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        platformRuleId: platformKey,
+        pricingRule: draftPricingRule,
+        items: draftItems.map((item) => ({
+          productVariantId: item.productVariantId,
+          quantity: item.quantity,
+          artworkName: item.artworkName
+        })),
+        customerId: null,
+        customerName: quickCustomerName.trim() || "Cliente nao informado",
+        customerDocument: quickCustomerDocument,
+        customerEmail: quickCustomerEmail,
+        customerPhone: quickCustomerPhone,
+        shippingTotal: includeShipping ? shippingAmount : 0,
+        includeCommission,
+        includeFixedFee,
+        includeSellerShipping,
+        validDays: 7,
+        notes: [draftNotes, buildQuickQuoteNotes({
+          destinationPostalCode,
+          includeShipping,
+          originPostalCode,
+          shippingAmount,
+          shippingService
+        })].filter(Boolean).join("\n\n")
+      })
+    });
+
+    if (!response.ok) throw new Error("Composite quote creation failed.");
+    const payload = (await response.json()) as { quote?: { id?: string } };
+    const quoteId = payload.quote?.id;
+    if (!quoteId) throw new Error("Quote id missing.");
+    return quoteId;
+  }
+
+  async function createDraftOnly() {
+    if (readonlyMode || draftState === "creating") return;
+
+    setDraftState("creating");
+    setDraftMessage("");
+    setDraftText("");
+
+    try {
+      const quoteId = await createDraftQuote();
+      setDraftState("idle");
+      setDraftMessage("Orcamento composto criado.");
+      setDraftItems([]);
+      router.refresh();
+      window.location.href = `/quotes/${quoteId}`;
+    } catch {
+      setDraftState("error");
+      setDraftMessage("Nao foi possivel criar o orcamento composto.");
+    }
+  }
+
+  async function generateDraftPdf() {
+    if (readonlyMode || draftState === "creating_pdf") return;
+
+    setDraftState("creating_pdf");
+    setDraftMessage("");
+    setDraftText("");
+    const pdfWindow = window.open("about:blank", "_blank");
+
+    try {
+      const quoteId = await createDraftQuote();
+      const pdfUrl = `/api/quotes/${quoteId}/pdf`;
+      if (pdfWindow) {
+        pdfWindow.location.href = pdfUrl;
+      } else {
+        window.location.href = pdfUrl;
+      }
+      setDraftState("idle");
+      setDraftMessage("Orcamento composto criado e PDF gerado. Os itens foram mantidos na bandeja.");
+      router.refresh();
+    } catch {
+      pdfWindow?.close();
+      setDraftState("error");
+      setDraftMessage("Nao foi possivel gerar o PDF composto.");
+    }
+  }
+
+  async function copyDraftWhatsAppText() {
+    if (readonlyMode || draftState === "copying_text") return;
+
+    setDraftState("copying_text");
+    setDraftMessage("");
+    setDraftText("");
+
+    try {
+      const quoteId = await createDraftQuote();
+      const response = await fetch(`/api/quotes/${quoteId}/whatsapp`);
+      if (!response.ok) throw new Error("WhatsApp text failed.");
+      const payload = (await response.json()) as { text?: string };
+      if (!payload.text) throw new Error("WhatsApp text missing.");
+      setDraftText(payload.text);
+      try {
+        await navigator.clipboard.writeText(payload.text);
+        setDraftMessage("Texto do orcamento composto copiado para o WhatsApp.");
+      } catch {
+        setDraftMessage("Orcamento criado. Nao foi possivel copiar automaticamente; use o texto abaixo.");
+      }
+      setDraftState("copied");
+      router.refresh();
+    } catch {
+      setDraftState("error");
+      setDraftMessage("Nao foi possivel criar/copiar o texto composto. Os itens foram mantidos na bandeja.");
+    }
+  }
+
   async function generateQuickPdf() {
     if (readonlyMode || simulatedChanged || quickState === "creating_pdf") return;
 
@@ -343,6 +514,7 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
   }
 
   return (
+    <>
     <section className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl shadow-zinc-950/20">
       <div className="border-b border-zinc-800 bg-zinc-950 px-4 py-4 sm:px-5 sm:py-5 md:px-6">
         <div className="grid gap-5 xl:grid-cols-[1fr_auto] xl:items-start">
@@ -357,7 +529,7 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
             </p>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2 xl:w-[360px]">
+          <div className="grid gap-2 sm:grid-cols-2 xl:w-[520px]">
             <button
               className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-md bg-amber-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
               disabled={readonlyMode || simulatedChanged || quickState === "creating_pdf"}
@@ -376,6 +548,24 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
               <Clipboard size={16} />
               {quickState === "copying_text" ? "Copiando..." : "Copiar WhatsApp"}
             </button>
+            <button
+              className={[
+                "focus-ring relative inline-flex h-11 items-center justify-center gap-2 overflow-hidden rounded-md border px-4 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:border-zinc-700 disabled:text-zinc-500 sm:col-span-2",
+                draftAttention
+                  ? "animate-pulse border-amber-300 bg-amber-400/15 text-amber-50 shadow-lg shadow-amber-500/30"
+                  : "border-amber-400/40 text-amber-100 hover:bg-amber-400/10"
+              ].join(" ")}
+              disabled={readonlyMode}
+              type="button"
+              onClick={() => setDraftOpen(true)}
+            >
+              {draftAttention ? <span className="absolute inset-0 bg-amber-300/10" /> : null}
+              <ShoppingCart size={16} />
+              <span className="relative">Bandeja de orcamento</span>
+              <span className="relative rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-zinc-950 ring-2 ring-amber-200/20">
+                {draftItems.length}
+              </span>
+            </button>
           </div>
         </div>
 
@@ -387,6 +577,11 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
         {quickMessage ? (
           <p className={`mt-4 text-sm ${quickState === "error" ? "text-red-300" : "text-emerald-300"}`}>
             {quickMessage}
+          </p>
+        ) : null}
+        {draftMessage && !draftOpen ? (
+          <p className={`mt-4 rounded-md border px-3 py-2 text-sm ${draftState === "error" ? "border-red-400/30 bg-red-400/10 text-red-200" : "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"}`}>
+            {draftMessage}
           </p>
         ) : null}
         {quickText ? (
@@ -438,6 +633,24 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
               onChange={(event) => setQuantity(Number(event.target.value))}
             />
           </Control>
+        </div>
+
+        <div className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-900/70 p-3 md:grid-cols-[1fr_auto] md:items-end">
+          <Input
+            label="Arte/lote para orcamento composto"
+            placeholder="Ex.: Logo azul, Arte cliente A"
+            value={draftArtworkName}
+            onChange={setDraftArtworkName}
+          />
+          <button
+            className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-amber-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+            disabled={readonlyMode || simulatedChanged}
+            type="button"
+            onClick={addCurrentItemToDraft}
+          >
+            <Plus size={16} />
+            Adicionar ao orcamento
+          </button>
         </div>
 
         <DetailsPanel icon={<UserRound size={16} />} title="Informacoes do Cliente">
@@ -682,6 +895,248 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
         ) : null}
       </div>
     </section>
+    <QuoteDraftDrawer
+      draftEstimatedTotal={draftEstimatedTotal}
+      draftItems={draftItems}
+      draftMessage={draftMessage}
+      draftNotes={draftNotes}
+      draftOpen={draftOpen}
+      draftPricingRule={draftPricingRule}
+      draftState={draftState}
+      draftText={draftText}
+      includeShipping={includeShipping}
+      onClose={() => setDraftOpen(false)}
+      onCopyWhatsApp={copyDraftWhatsAppText}
+      onCreateQuote={createDraftOnly}
+      onGeneratePdf={generateDraftPdf}
+      onPricingRuleChange={setDraftPricingRule}
+      onClearItems={() => setDraftItems([])}
+      onRemoveItem={removeDraftItem}
+      onUpdateNotes={setDraftNotes}
+      shippingAmount={shippingAmount}
+    />
+    </>
+  );
+}
+
+function QuoteDraftDrawer({
+  draftEstimatedTotal,
+  draftItems,
+  draftMessage,
+  draftNotes,
+  draftOpen,
+  draftPricingRule,
+  draftState,
+  draftText,
+  includeShipping,
+  onClose,
+  onCopyWhatsApp,
+  onCreateQuote,
+  onGeneratePdf,
+  onPricingRuleChange,
+  onClearItems,
+  onRemoveItem,
+  onUpdateNotes,
+  shippingAmount
+}: {
+  draftEstimatedTotal: number;
+  draftItems: DraftQuoteItem[];
+  draftMessage: string;
+  draftNotes: string;
+  draftOpen: boolean;
+  draftPricingRule: DraftPricingRule;
+  draftState: "idle" | "creating" | "creating_pdf" | "copying_text" | "copied" | "error";
+  draftText: string;
+  includeShipping: boolean;
+  onClose: () => void;
+  onCopyWhatsApp: () => void;
+  onCreateQuote: () => void;
+  onGeneratePdf: () => void;
+  onPricingRuleChange: (rule: DraftPricingRule) => void;
+  onClearItems: () => void;
+  onRemoveItem: (itemId: string) => void;
+  onUpdateNotes: (value: string) => void;
+  shippingAmount: number;
+}) {
+  if (!draftOpen) return null;
+
+  const disabled = draftItems.length === 0 || ["creating", "creating_pdf", "copying_text"].includes(draftState);
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <button className="absolute inset-0 bg-black/70" aria-label="Fechar bandeja" type="button" onClick={onClose} />
+      <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col border-l border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl shadow-black/40 sm:w-[520px]">
+        <div className="flex items-start justify-between gap-4 border-b border-zinc-800 px-4 py-4">
+          <div>
+            <p className="inline-flex items-center gap-2 text-sm font-medium text-amber-400">
+              <ShoppingCart size={16} />
+              Bandeja de orcamento
+            </p>
+            <h3 className="mt-1 text-xl font-semibold text-white">{draftItems.length} item(ns)</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="focus-ring inline-flex h-9 items-center justify-center rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
+              disabled={draftItems.length === 0}
+              type="button"
+              onClick={onClearItems}
+            >
+              Limpar
+            </button>
+            <button
+              className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              type="button"
+              onClick={onClose}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          <div className="grid gap-3">
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3">
+              <p className="text-sm font-medium text-white">Regra de cobranca</p>
+              <div className="mt-3 grid gap-2">
+                <DraftRuleButton
+                  active={draftPricingRule === "per_item"}
+                  description="Cada item usa sua propria quantidade para buscar o preco."
+                  label="Por item individual"
+                  onClick={() => onPricingRuleChange("per_item")}
+                />
+                <DraftRuleButton
+                  active={draftPricingRule === "per_art_average"}
+                  description="Soma o mesmo produto, divide pelo numero de artes e usa essa quantidade como referencia."
+                  label="Por artes do mesmo produto"
+                  onClick={() => onPricingRuleChange("per_art_average")}
+                />
+                <DraftRuleButton
+                  active={draftPricingRule === "aggregate_total"}
+                  description="Soma o mesmo produto e usa o total como referencia para todas as artes."
+                  label="Por total do mesmo produto"
+                  onClick={() => onPricingRuleChange("aggregate_total")}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              {draftItems.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-zinc-700 p-4 text-sm text-zinc-500">
+                  Adicione itens pelo precificador para montar um orcamento composto.
+                </p>
+              ) : (
+                draftItems.map((item) => (
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3" key={item.id}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="break-words text-sm font-medium text-white">{item.productLabel}</p>
+                        <p className="mt-1 text-xs text-zinc-500">Arte: {item.artworkName}</p>
+                        <p className="mt-1 text-xs text-zinc-400">
+                          {item.quantity} x {brl.format(item.unitPrice)}
+                        </p>
+                      </div>
+                      <button
+                        className="focus-ring inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+                        type="button"
+                        onClick={() => onRemoveItem(item.id)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                    <p className="mt-2 text-right text-sm font-semibold text-white">{brl.format(item.totalPrice)}</p>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">Observacoes</span>
+              <textarea
+                className="focus-ring min-h-24 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
+                value={draftNotes}
+                onChange={(event) => onUpdateNotes(event.target.value)}
+              />
+            </label>
+
+            {draftText ? (
+              <textarea
+                className="focus-ring min-h-32 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                readOnly
+                value={draftText}
+              />
+            ) : null}
+          </div>
+        </div>
+
+        <div className="border-t border-zinc-800 px-4 py-4">
+          <dl className="mb-3 grid gap-2 text-sm">
+            <Detail label="Itens estimados" value={brl.format(draftItems.reduce((sum, item) => sum + item.totalPrice, 0))} />
+            <Detail label="Frete cliente" value={includeShipping ? brl.format(shippingAmount) : brl.format(0)} />
+            <Detail label="Total estimado" value={brl.format(draftEstimatedTotal)} />
+          </dl>
+          {draftMessage ? (
+            <p className={`mb-3 text-sm ${draftState === "error" ? "text-red-300" : "text-emerald-300"}`}>
+              {draftMessage}
+            </p>
+          ) : null}
+          <div className="grid gap-2 sm:grid-cols-3">
+            <button
+              className="focus-ring inline-flex h-10 items-center justify-center rounded-md border border-zinc-700 px-3 text-sm font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+              disabled={disabled}
+              type="button"
+              onClick={onCreateQuote}
+            >
+              {draftState === "creating" ? "Criando..." : "Criar"}
+            </button>
+            <button
+              className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-amber-500 px-3 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:opacity-50"
+              disabled={disabled}
+              type="button"
+              onClick={onGeneratePdf}
+            >
+              <FileText size={15} />
+              {draftState === "creating_pdf" ? "Gerando..." : "PDF"}
+            </button>
+            <button
+              className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-sm font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+              disabled={disabled}
+              type="button"
+              onClick={onCopyWhatsApp}
+            >
+              <Clipboard size={15} />
+              {draftState === "copying_text" ? "Copiando..." : "WhatsApp"}
+            </button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function DraftRuleButton({
+  active,
+  description,
+  label,
+  onClick
+}: {
+  active: boolean;
+  description: string;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`focus-ring rounded-md border px-3 py-2 text-left transition-colors ${
+        active
+          ? "border-amber-400 bg-amber-400/10 text-amber-100"
+          : "border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-700"
+      }`}
+      type="button"
+      onClick={onClick}
+    >
+      <span className="block text-sm font-medium">{label}</span>
+      <span className="mt-1 block text-xs text-zinc-500">{description}</span>
+    </button>
   );
 }
 
