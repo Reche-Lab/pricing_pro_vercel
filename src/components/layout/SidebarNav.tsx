@@ -6,6 +6,7 @@ import {
   BarChart3,
   Boxes,
   ClipboardList,
+  CreditCard,
   Gauge,
   Package,
   ScrollText,
@@ -24,6 +25,7 @@ const primaryItems = [
 
 const settingsItems = [
   { href: "/settings", label: "Geral", icon: Settings },
+  { href: "/billing", label: "Assinatura", icon: CreditCard },
   { href: "/products", label: "Produtos", icon: Package },
   { href: "/platforms", label: "Canais", icon: Store },
   { href: "/packaging", label: "Embalagens", icon: Boxes },

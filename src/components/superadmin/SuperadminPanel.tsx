@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Copy, Mail, ShieldCheck, Users } from "lucide-react";
+import { Building2, Copy, Gift, Mail, ShieldCheck, TimerReset, Users } from "lucide-react";
 import type { SuperadminTenantRow, SuperadminUserRow } from "@/repositories/superadmin";
 
 export function SuperadminPanel({
@@ -18,6 +18,7 @@ export function SuperadminPanel({
   const [message, setMessage] = useState("");
   const [inviteUrl, setInviteUrl] = useState("");
   const [loading, setLoading] = useState(false);
+  const [billingLoading, setBillingLoading] = useState("");
 
   const generatedSlug = useMemo(() => slugify(tenantName), [tenantName]);
 
@@ -63,6 +64,26 @@ export function SuperadminPanel({
     if (!inviteUrl) return;
     await navigator.clipboard.writeText(inviteUrl);
     setMessage("Link de convite copiado.");
+  }
+
+  async function updateTenantBilling(tenantId: string, input: Record<string, unknown>) {
+    setBillingLoading(tenantId);
+    setMessage("");
+    const response = await fetch(`/api/superadmin/tenants/${tenantId}/billing`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
+    const data = await response.json().catch(() => null);
+    setBillingLoading("");
+
+    if (!response.ok || !data?.ok) {
+      setMessage(data?.error ? "Não foi possível atualizar a cobrança." : "Não foi possível atualizar a cobrança.");
+      return;
+    }
+
+    setMessage("Cobrança atualizada.");
+    router.refresh();
   }
 
   return (
@@ -139,7 +160,7 @@ export function SuperadminPanel({
           </div>
           <div className="divide-y divide-zinc-800">
             {tenants.map((tenant) => (
-              <div className="grid gap-3 px-5 py-4 text-sm lg:grid-cols-[1fr_180px_120px]" key={tenant.id}>
+              <div className="grid gap-4 px-5 py-4 text-sm xl:grid-cols-[1fr_150px_170px_260px]" key={tenant.id}>
                 <div className="min-w-0">
                   <p className="font-medium text-white">{tenant.name}</p>
                   <p className="text-zinc-500">{tenant.slug}</p>
@@ -148,7 +169,26 @@ export function SuperadminPanel({
                   </p>
                 </div>
                 <Badge>{tenant.status}</Badge>
-                <p className="text-zinc-400">{tenant.member_count} membros</p>
+                <div>
+                  <Badge>{billingLabel(tenant.subscription_status ?? tenant.billing_status)}</Badge>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {tenant.current_period_end ? new Intl.DateTimeFormat("pt-BR").format(new Date(tenant.current_period_end)) : "sem vencimento"}
+                  </p>
+                </div>
+                <div className="grid gap-3">
+                  <p className="text-zinc-400">{tenant.member_count} membros</p>
+                  {tenant.discount_percent && Number(tenant.discount_percent) > 0 ? (
+                    <p className="text-xs text-emerald-300">
+                      Voucher {Number(tenant.discount_percent).toFixed(0)}% até{" "}
+                      {tenant.discount_expires_at ? new Intl.DateTimeFormat("pt-BR").format(new Date(tenant.discount_expires_at)) : "sem data"}
+                    </p>
+                  ) : null}
+                  <TenantBillingActions
+                    disabled={billingLoading === tenant.id}
+                    tenantId={tenant.id}
+                    onSubmit={updateTenantBilling}
+                  />
+                </div>
               </div>
             ))}
             {tenants.length === 0 ? <EmptyState text="Nenhum tenant cadastrado." /> : null}
@@ -178,6 +218,83 @@ export function SuperadminPanel({
           </div>
         </section>
       </div>
+    </div>
+  );
+}
+
+function TenantBillingActions({
+  disabled,
+  onSubmit,
+  tenantId
+}: {
+  disabled: boolean;
+  onSubmit: (tenantId: string, input: Record<string, unknown>) => void;
+  tenantId: string;
+}) {
+  const [trialDays, setTrialDays] = useState(14);
+  const [discountPercent, setDiscountPercent] = useState(50);
+  const [voucherDays, setVoucherDays] = useState(30);
+
+  function futureDate(days: number) {
+    const date = new Date();
+    date.setDate(date.getDate() + Math.max(1, days));
+    return date.toISOString();
+  }
+
+  return (
+    <div className="grid gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 p-2">
+      <div className="grid grid-cols-[1fr_auto] gap-2">
+        <input
+          className="focus-ring h-9 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs"
+          min={1}
+          type="number"
+          value={trialDays}
+          onChange={(event) => setTrialDays(Number(event.target.value))}
+        />
+        <button
+          className="focus-ring inline-flex h-9 items-center gap-1 rounded-md border border-zinc-700 px-2 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+          disabled={disabled}
+          type="button"
+          onClick={() => onSubmit(tenantId, { action: "extend_trial", endsAt: futureDate(trialDays) })}
+        >
+          <TimerReset size={14} />
+          Trial dias
+        </button>
+      </div>
+      <div className="grid grid-cols-[70px_1fr_auto] gap-2">
+        <input
+          className="focus-ring h-9 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs"
+          max={100}
+          min={1}
+          type="number"
+          value={discountPercent}
+          onChange={(event) => setDiscountPercent(Number(event.target.value))}
+        />
+        <input
+          className="focus-ring h-9 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs"
+          min={1}
+          type="number"
+          value={voucherDays}
+          onChange={(event) => setVoucherDays(Number(event.target.value))}
+        />
+        <button
+          className="focus-ring inline-flex h-9 items-center gap-1 rounded-md border border-emerald-400/40 px-2 text-xs text-emerald-200 hover:bg-emerald-400/10 disabled:opacity-50"
+          disabled={disabled}
+          type="button"
+          onClick={() =>
+            onSubmit(tenantId, {
+              action: "apply_voucher",
+              discountPercent,
+              expiresAt: futureDate(voucherDays),
+              note: `Voucher ${discountPercent}% por ${voucherDays} dia(s)`
+            })
+          }
+        >
+          <Gift size={14} />
+          Voucher
+        </button>
+      </div>
+      <p className="text-[11px] text-zinc-500">Campos: dias de trial, % desconto e dias do voucher.</p>
     </div>
   );
 }
@@ -245,4 +362,15 @@ function formatError(error: unknown) {
   if (typeof error === "string") return error;
   if (typeof error === "object" && "fieldErrors" in error) return "Confira os campos informados.";
   return "Erro inesperado.";
+}
+
+function billingLabel(status: string) {
+  const map: Record<string, string> = {
+    active: "Ativo",
+    blocked: "Bloqueado",
+    cancelled: "Cancelado",
+    past_due: "Em atraso",
+    trial: "Teste"
+  };
+  return map[status] ?? status;
 }

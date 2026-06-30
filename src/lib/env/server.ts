@@ -11,7 +11,9 @@ const serverEnvSchema = z.object({
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_SECURE: z.enum(["true", "false"]).default("false"),
   SMTP_USER: z.string().default(""),
-  SMTP_PASS: z.string().default("")
+  SMTP_PASS: z.string().default(""),
+  MERCADO_PAGO_ACCESS_TOKEN: z.string().default(""),
+  MERCADO_PAGO_WEBHOOK_SECRET: z.string().default("")
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

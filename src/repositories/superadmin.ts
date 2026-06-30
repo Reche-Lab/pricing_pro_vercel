@@ -7,6 +7,11 @@ export type SuperadminTenantRow = {
   status: string;
   owner_name: string | null;
   owner_email: string | null;
+  billing_status: string;
+  subscription_status: string | null;
+  current_period_end: string | null;
+  discount_percent: number | null;
+  discount_expires_at: string | null;
   member_count: number;
   created_at: string;
 };
@@ -40,6 +45,11 @@ export async function listSuperadminTenants(): Promise<SuperadminTenantRow[]> {
         t.status,
         owner.name as owner_name,
         owner.email::text as owner_email,
+        t.billing_status,
+        ts.status as subscription_status,
+        ts.current_period_end,
+        ts.discount_percent,
+        ts.discount_expires_at,
         count(tm_all.id)::int as member_count,
         t.created_at
       from tenants t
@@ -47,7 +57,8 @@ export async function listSuperadminTenants(): Promise<SuperadminTenantRow[]> {
       left join roles r_owner on r_owner.id = tm_owner.role_id and r_owner.key = 'owner'
       left join app_users owner on owner.id = tm_owner.user_id
       left join tenant_members tm_all on tm_all.tenant_id = t.id
-      group by t.id, owner.name, owner.email
+      left join tenant_subscriptions ts on ts.tenant_id = t.id
+      group by t.id, owner.name, owner.email, ts.status, ts.current_period_end, ts.discount_percent, ts.discount_expires_at
       order by t.created_at desc
     `
   );
@@ -132,6 +143,17 @@ export async function createTenantWithOwner(input: {
         returning id
       `,
       [tenant.rows[0].id, user.rows[0].id, ownerRole.rows[0].id, input.actorUserId]
+    );
+
+    await client.query(
+      `
+        insert into tenant_subscriptions (tenant_id, plan_id, status, current_period_start, current_period_end)
+        select $1, p.id, 'trial', now(), now() + interval '14 days'
+        from billing_plans p
+        where p.key = 'starter_50'
+        on conflict (tenant_id) do nothing
+      `,
+      [tenant.rows[0].id]
     );
 
     await client.query(
