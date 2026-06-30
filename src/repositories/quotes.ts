@@ -86,6 +86,12 @@ export type CreateQuoteInput = {
   includeCommission?: boolean;
   includeFixedFee?: boolean;
   includeSellerShipping?: boolean;
+  platformOverride?: Partial<{
+    commissionRate: number;
+    fixedFee: number;
+    sellerShippingCost: number;
+    sellerShippingThreshold: number;
+  }>;
   validDays?: number;
   notes?: string | null;
 };
@@ -367,17 +373,14 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
       customerId = customerResult.rows[0].id;
     }
 
+    const effectivePlatform = buildEffectivePlatform(input, platform);
+
     const calculation = calculateQuote({
       quantity: input.quantity,
       unitCost: Number(variant.unit_cost),
       method: "anchors",
       curve: mapCurve(variant.curve_mode, variant.anchors),
-      platform: {
-        commissionRate: input.includeCommission === false ? 0 : Number(platform.commission_rate),
-        fixedFee: input.includeFixedFee === false ? 0 : Number(platform.fixed_fee),
-        sellerShippingCost: input.includeSellerShipping === false ? 0 : Number(platform.seller_shipping_cost),
-        sellerShippingThreshold: Number(platform.seller_shipping_threshold)
-      }
+      platform: effectivePlatform
     });
 
     const validDays = Math.max(1, Math.min(90, input.validDays ?? 7));
@@ -469,7 +472,8 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
             product: variant,
             platform,
             calculation
-          })
+          }),
+          effectivePlatform
         })
       ]
     );
@@ -516,12 +520,7 @@ async function createCompositeQuoteWithClient(
     };
   });
 
-  const effectivePlatform = {
-    commissionRate: input.includeCommission === false ? 0 : Number(platform.commission_rate),
-    fixedFee: input.includeFixedFee === false ? 0 : Number(platform.fixed_fee),
-    sellerShippingCost: input.includeSellerShipping === false ? 0 : Number(platform.seller_shipping_cost),
-    sellerShippingThreshold: Number(platform.seller_shipping_threshold)
-  };
+  const effectivePlatform = buildEffectivePlatform(input, platform);
 
   const calculation = calculateCompositeQuote({
     items: calculationItems,
@@ -690,6 +689,44 @@ async function findPlatformRule(client: pg.PoolClient, tenantId: string, platfor
   const platform = platformResult.rows[0];
   if (!platform) throw new Error("Platform rule not found.");
   return platform;
+}
+
+function buildEffectivePlatform(
+  input: CreateQuoteInput,
+  platform: {
+    commission_rate: string;
+    fixed_fee: string;
+    seller_shipping_cost: string;
+    seller_shipping_threshold: string;
+  }
+) {
+  const override = input.platformOverride ?? {};
+
+  return {
+    commissionRate:
+      input.includeCommission === false
+        ? 0
+        : clampNumber(override.commissionRate, 0, 0.99, Number(platform.commission_rate)),
+    fixedFee:
+      input.includeFixedFee === false
+        ? 0
+        : clampNumber(override.fixedFee, 0, 100000, Number(platform.fixed_fee)),
+    sellerShippingCost:
+      input.includeSellerShipping === false
+        ? 0
+        : clampNumber(override.sellerShippingCost, 0, 100000, Number(platform.seller_shipping_cost)),
+    sellerShippingThreshold: clampNumber(
+      override.sellerShippingThreshold,
+      0,
+      100000,
+      Number(platform.seller_shipping_threshold)
+    )
+  };
+}
+
+function clampNumber(value: number | undefined, min: number, max: number, fallback: number) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, Number(value)));
 }
 
 async function findVariantsForQuote(

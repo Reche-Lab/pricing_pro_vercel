@@ -32,6 +32,7 @@ import type { PlatformRule, PricingCurve, PricingCurveMode } from "@/domain/pric
 
 export type PricingPlatformOption = PlatformRule & {
   name: string;
+  defaultPricingMode?: PricingCurveMode;
 };
 
 type PricingCalculatorProps = {
@@ -69,7 +70,8 @@ const emptyPlatform: PricingPlatformOption = {
   commissionRate: 0,
   fixedFee: 0,
   sellerShippingCost: 0,
-  sellerShippingThreshold: 0
+  sellerShippingThreshold: 0,
+  defaultPricingMode: "interpolated"
 };
 
 export function PricingCalculator({ variants, platforms, readonlyMode = false }: PricingCalculatorProps) {
@@ -80,7 +82,7 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
 
   const variant = variants.find((item) => item.id === variantId) ?? variants[0];
   const platform: PricingPlatformOption = platforms[platformKey] ?? Object.values(platforms)[0] ?? emptyPlatform;
-  const activeVariantCurve = useMemo(() => resolveVariantCurve(variant, platformKey), [platformKey, variant]);
+  const activeVariantCurve = useMemo(() => resolveVariantCurve(variant, platformKey, platform.defaultPricingMode), [platform.defaultPricingMode, platformKey, variant]);
   const [currentCurve, setCurrentCurve] = useState<PricingCurve>(() => activeVariantCurve);
   const [simulatedCurve, setSimulatedCurve] = useState<PricingCurve>(() => activeVariantCurve);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -96,6 +98,9 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
   const [includeCommission, setIncludeCommission] = useState(true);
   const [includeFixedFee, setIncludeFixedFee] = useState(true);
   const [includeSellerShipping, setIncludeSellerShipping] = useState(true);
+  const [localCommissionRate, setLocalCommissionRate] = useState(platform.commissionRate);
+  const [localFixedFee, setLocalFixedFee] = useState(platform.fixedFee);
+  const [localSellerShippingCost, setLocalSellerShippingCost] = useState(platform.sellerShippingCost);
   const [quickState, setQuickState] = useState<"idle" | "creating_pdf" | "copying_text" | "copied" | "error">("idle");
   const [quickMessage, setQuickMessage] = useState("");
   const [quickText, setQuickText] = useState("");
@@ -121,14 +126,20 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
     }
   }, [activeVariantCurve, variant]);
 
+  useEffect(() => {
+    setLocalCommissionRate(platform.commissionRate);
+    setLocalFixedFee(platform.fixedFee);
+    setLocalSellerShippingCost(platform.sellerShippingCost);
+  }, [platform.commissionRate, platform.fixedFee, platform.sellerShippingCost, platformKey]);
+
   const effectivePlatform = useMemo(
     () => ({
       ...platform,
-      commissionRate: includeCommission ? platform.commissionRate : 0,
-      fixedFee: includeFixedFee ? platform.fixedFee : 0,
-      sellerShippingCost: includeSellerShipping ? platform.sellerShippingCost : 0
+      commissionRate: includeCommission ? localCommissionRate : 0,
+      fixedFee: includeFixedFee ? localFixedFee : 0,
+      sellerShippingCost: includeSellerShipping ? localSellerShippingCost : 0
     }),
-    [includeCommission, includeFixedFee, includeSellerShipping, platform]
+    [includeCommission, includeFixedFee, includeSellerShipping, localCommissionRate, localFixedFee, localSellerShippingCost, platform]
   );
 
   const currentResult = useMemo(() => {
@@ -303,6 +314,12 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
         includeCommission,
         includeFixedFee,
         includeSellerShipping,
+        platformOverride: buildLocalPlatformOverride({
+          localCommissionRate,
+          localFixedFee,
+          localSellerShippingCost,
+          sellerShippingThreshold: platform.sellerShippingThreshold
+        }),
         validDays: 7,
         notes: buildQuickQuoteNotes({
           destinationPostalCode,
@@ -371,6 +388,12 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
         includeCommission,
         includeFixedFee,
         includeSellerShipping,
+        platformOverride: buildLocalPlatformOverride({
+          localCommissionRate,
+          localFixedFee,
+          localSellerShippingCost,
+          sellerShippingThreshold: platform.sellerShippingThreshold
+        }),
         validDays: 7,
         notes: [draftNotes, buildQuickQuoteNotes({
           destinationPostalCode,
@@ -785,26 +808,35 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
             Em curva progressiva, o sistema interpola todos os pontos entre duas quantidades. Em preco por faixa, o valor fica fixo ate o proximo ponto.
           </p>
           <div className="mt-5 grid gap-4 md:grid-cols-4">
-            <CostToggle
+            <EditableCostToggle
               checked={includeCommission}
               label="Comissao"
-              value={`${percent.format(platform.commissionRate * 100)}%`}
+              suffix="%"
+              value={Number((localCommissionRate * 100).toFixed(2))}
               onChange={setIncludeCommission}
+              onValueChange={(value) => setLocalCommissionRate(Math.max(0, Math.min(99, value)) / 100)}
             />
-            <CostToggle
+            <EditableCostToggle
               checked={includeFixedFee}
               label="Taxa fixa"
-              value={brl.format(platform.fixedFee)}
+              prefix="R$"
+              value={localFixedFee}
               onChange={setIncludeFixedFee}
+              onValueChange={(value) => setLocalFixedFee(Math.max(0, value))}
             />
-            <CostToggle
+            <EditableCostToggle
               checked={includeSellerShipping}
               label="Frete vendedor"
-              value={brl.format(platform.sellerShippingCost)}
+              prefix="R$"
+              value={localSellerShippingCost}
               onChange={setIncludeSellerShipping}
+              onValueChange={(value) => setLocalSellerShippingCost(Math.max(0, value))}
             />
             <ReadOnlyField label="Limite frete vendedor" value={brl.format(platform.sellerShippingThreshold)} />
           </div>
+          <p className="mt-3 rounded-md border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs text-sky-100">
+            Estes ajustes valem apenas para a simulacao/orcamento atual. Para alterar definitivamente, edite o canal em Configuracoes &gt; Canais.
+          </p>
           {saveState === "saved" ? <p className="mt-3 text-sm text-emerald-300">Nova curva ativa salva.</p> : null}
           {saveState === "error" ? <p className="mt-3 text-sm text-red-300">Nao foi possivel salvar a curva.</p> : null}
         </DetailsPanel>
@@ -1219,30 +1251,48 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function CostToggle({
+function EditableCostToggle({
   checked,
   label,
   onChange,
+  onValueChange,
+  prefix,
+  suffix,
   value
 }: {
   checked: boolean;
   label: string;
   onChange: (checked: boolean) => void;
-  value: string;
+  onValueChange: (value: number) => void;
+  prefix?: string;
+  suffix?: string;
+  value: number;
 }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-zinc-800 bg-zinc-950 p-3">
-      <span>
-        <span className="block text-xs uppercase tracking-wide text-zinc-500">{label}</span>
-        <span className="mt-1 block font-medium text-zinc-100">{value}</span>
-      </span>
-      <input
-        checked={checked}
-        className="h-4 w-4 accent-amber-500"
-        type="checkbox"
-        onChange={(event) => onChange(event.target.checked)}
-      />
-    </label>
+    <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs uppercase tracking-wide text-zinc-500">{label}</p>
+        <input
+          checked={checked}
+          className="h-4 w-4 accent-amber-500"
+          type="checkbox"
+          onChange={(event) => onChange(event.target.checked)}
+        />
+      </div>
+      <label className="mt-2 flex items-center gap-2">
+        {prefix ? <span className="text-sm text-zinc-500">{prefix}</span> : null}
+        <input
+          className="focus-ring h-9 min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-sm font-medium text-zinc-100 disabled:opacity-50"
+          disabled={!checked}
+          min={0}
+          step="0.01"
+          type="number"
+          value={value}
+          onChange={(event) => onValueChange(Number(event.target.value))}
+        />
+        {suffix ? <span className="text-sm text-zinc-500">{suffix}</span> : null}
+      </label>
+    </div>
   );
 }
 
@@ -1555,8 +1605,16 @@ function emptyCurve(): PricingCurve {
   return { mode: "interpolated", points: DEFAULT_ANCHOR_QUANTITIES.map((quantity) => ({ quantity, unitPrice: 0 })) };
 }
 
-function resolveVariantCurve(variant: DemoProductVariant | undefined, platformKey: string): PricingCurve {
-  return variant?.platformCurves?.[platformKey] ?? variant?.curve ?? emptyCurve();
+function resolveVariantCurve(
+  variant: DemoProductVariant | undefined,
+  platformKey: string,
+  defaultPricingMode: PricingCurveMode | undefined
+): PricingCurve {
+  const platformCurve = variant?.platformCurves?.[platformKey];
+  if (platformCurve) return platformCurve;
+
+  const baseCurve = variant?.curve ?? emptyCurve();
+  return { ...baseCurve, mode: defaultPricingMode ?? baseCurve.mode };
 }
 
 function pricingCurveToDefaultAnchors(curve: PricingCurve) {
@@ -1603,4 +1661,18 @@ function buildQuickQuoteNotes(input: {
   if (input.shippingService !== "manual") lines.push(`Servico de frete: ${input.shippingService}`);
   if (input.includeShipping) lines.push(`Frete incluido: ${brl.format(input.shippingAmount)}`);
   return lines.join("\n");
+}
+
+function buildLocalPlatformOverride(input: {
+  localCommissionRate: number;
+  localFixedFee: number;
+  localSellerShippingCost: number;
+  sellerShippingThreshold: number;
+}) {
+  return {
+    commissionRate: input.localCommissionRate,
+    fixedFee: input.localFixedFee,
+    sellerShippingCost: input.localSellerShippingCost,
+    sellerShippingThreshold: input.sellerShippingThreshold
+  };
 }

@@ -72,7 +72,8 @@ function mapPlatforms(platforms: Awaited<ReturnType<typeof listPlatformRules>>) 
         commissionRate: Number(platform.commission_rate),
         fixedFee: Number(platform.fixed_fee),
         sellerShippingCost: Number(platform.seller_shipping_cost),
-        sellerShippingThreshold: Number(platform.seller_shipping_threshold)
+        sellerShippingThreshold: Number(platform.seller_shipping_threshold),
+        defaultPricingMode: platform.default_pricing_mode
       }
     ])
   );

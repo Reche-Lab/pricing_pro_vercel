@@ -25,6 +25,7 @@ export function PlatformList({ platforms }: PlatformListProps) {
           fixedFee: platform.fixedFee,
           sellerShippingCost: platform.sellerShippingCost,
           sellerShippingThreshold: platform.sellerShippingThreshold,
+          defaultPricingMode: platform.defaultPricingMode,
           sortOrder: index + 1
         })
       })

@@ -33,6 +33,7 @@ export default async function PlatformsPage() {
               fixedFee: Number(platform.fixed_fee),
               sellerShippingCost: Number(platform.seller_shipping_cost),
               sellerShippingThreshold: Number(platform.seller_shipping_threshold),
+              defaultPricingMode: platform.default_pricing_mode,
               sortOrder: platform.sort_order
             }))}
           />

@@ -9,6 +9,7 @@ const platformSchema = z.object({
   fixedFee: z.number().min(0),
   sellerShippingCost: z.number().min(0),
   sellerShippingThreshold: z.number().min(0),
+  defaultPricingMode: z.enum(["interpolated", "step"]).optional(),
   sortOrder: z.number().int().min(1).max(10000).optional()
 });
 

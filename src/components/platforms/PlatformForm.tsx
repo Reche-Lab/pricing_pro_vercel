@@ -25,7 +25,8 @@ export function PlatformForm() {
         commissionRate: Number(form.get("commissionRate")) / 100,
         fixedFee: Number(form.get("fixedFee")),
         sellerShippingCost: Number(form.get("sellerShippingCost")),
-        sellerShippingThreshold: Number(form.get("sellerShippingThreshold"))
+        sellerShippingThreshold: Number(form.get("sellerShippingThreshold")),
+        defaultPricingMode: form.get("defaultPricingMode")
       })
     });
 
@@ -52,6 +53,13 @@ export function PlatformForm() {
         <Input label="Taxa fixa (R$)" name="fixedFee" required step="0.01" type="number" />
         <Input label="Frete vendedor (R$)" name="sellerShippingCost" required step="0.01" type="number" />
         <Input label="Limite frete vendedor (R$)" name="sellerShippingThreshold" required step="0.01" type="number" />
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-zinc-300">Modo padrao de preco</span>
+          <select className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2" name="defaultPricingMode" defaultValue="interpolated">
+            <option value="interpolated">Curva progressiva</option>
+            <option value="step">Preco por faixa</option>
+          </select>
+        </label>
       </div>
       {error ? <p className="mt-4 rounded-md bg-red-400/10 px-3 py-2 text-sm text-red-300">{error}</p> : null}
       <button

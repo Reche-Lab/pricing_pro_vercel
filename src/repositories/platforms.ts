@@ -9,6 +9,7 @@ export type PlatformRuleRow = {
   seller_shipping_cost: string;
   seller_shipping_threshold: string;
   sort_order: number;
+  default_pricing_mode: "interpolated" | "step";
 };
 
 export type PlatformRuleInput = {
@@ -18,6 +19,7 @@ export type PlatformRuleInput = {
   fixedFee: number;
   sellerShippingCost: number;
   sellerShippingThreshold: number;
+  defaultPricingMode?: "interpolated" | "step";
   sortOrder?: number;
 };
 
@@ -33,7 +35,8 @@ export async function listPlatformRules(userId: string, tenantId: string): Promi
           fixed_fee,
           seller_shipping_cost,
           seller_shipping_threshold,
-          sort_order
+          sort_order,
+          default_pricing_mode
         from platform_rules
         where tenant_id = $1 and active = true
         order by sort_order asc, name asc
@@ -67,10 +70,11 @@ export async function createPlatformRule(userId: string, tenantId: string, input
           fixed_fee,
           seller_shipping_cost,
           seller_shipping_threshold,
+          default_pricing_mode,
           sort_order,
           active
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, true)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
         returning id
       `,
       [
@@ -81,6 +85,7 @@ export async function createPlatformRule(userId: string, tenantId: string, input
         input.fixedFee,
         input.sellerShippingCost,
         input.sellerShippingThreshold,
+        input.defaultPricingMode ?? "interpolated",
         sortOrder
       ]
     );
@@ -112,7 +117,8 @@ export async function updatePlatformRule(
             fixed_fee = $5,
             seller_shipping_cost = $6,
             seller_shipping_threshold = $7,
-            sort_order = coalesce($8, sort_order),
+            default_pricing_mode = $8,
+            sort_order = coalesce($9, sort_order),
             updated_at = now()
         where tenant_id = $1 and id = $2
         returning id
@@ -125,6 +131,7 @@ export async function updatePlatformRule(
         input.fixedFee,
         input.sellerShippingCost,
         input.sellerShippingThreshold,
+        input.defaultPricingMode ?? "interpolated",
         input.sortOrder ?? null
       ]
     );

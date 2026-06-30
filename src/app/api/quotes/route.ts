@@ -24,6 +24,12 @@ const quoteSchema = z.object({
   includeCommission: z.boolean().optional(),
   includeFixedFee: z.boolean().optional(),
   includeSellerShipping: z.boolean().optional(),
+  platformOverride: z.object({
+    commissionRate: z.number().min(0).max(0.99).optional(),
+    fixedFee: z.number().min(0).max(100000).optional(),
+    sellerShippingCost: z.number().min(0).max(100000).optional(),
+    sellerShippingThreshold: z.number().min(0).max(100000).optional()
+  }).optional(),
   validDays: z.number().int().min(1).max(90).optional(),
   notes: z.string().trim().max(2000).optional().nullable()
 });

@@ -11,6 +11,7 @@ export type EditablePlatform = {
   fixedFee: number;
   sellerShippingCost: number;
   sellerShippingThreshold: number;
+  defaultPricingMode: "interpolated" | "step";
   sortOrder: number;
 };
 
@@ -38,6 +39,7 @@ export function PlatformInlineEditor({ platform }: PlatformInlineEditorProps) {
         fixedFee: Number(form.get("fixedFee")),
         sellerShippingCost: Number(form.get("sellerShippingCost")),
         sellerShippingThreshold: Number(form.get("sellerShippingThreshold")),
+        defaultPricingMode: form.get("defaultPricingMode"),
         sortOrder: platform.sortOrder
       })
     });
@@ -53,12 +55,23 @@ export function PlatformInlineEditor({ platform }: PlatformInlineEditorProps) {
 
   return (
     <form className="grid gap-3" onSubmit={onSubmit}>
-      <div className="grid gap-3 md:grid-cols-5">
+      <div className="grid gap-3 md:grid-cols-6">
         <Input defaultValue={platform.name} label="Nome" name="name" />
         <Input defaultValue={(platform.commissionRate * 100).toFixed(2)} label="Comissao %" name="commissionRate" />
         <Input defaultValue={platform.fixedFee.toFixed(2)} label="Taxa" name="fixedFee" />
         <Input defaultValue={platform.sellerShippingCost.toFixed(2)} label="Frete" name="sellerShippingCost" />
         <Input defaultValue={platform.sellerShippingThreshold.toFixed(2)} label="Limite" name="sellerShippingThreshold" />
+        <label className="block">
+          <span className="mb-1 block text-xs text-zinc-500">Modo</span>
+          <select
+            className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-2 text-sm"
+            defaultValue={platform.defaultPricingMode}
+            name="defaultPricingMode"
+          >
+            <option value="interpolated">Curva</option>
+            <option value="step">Faixa</option>
+          </select>
+        </label>
       </div>
       {error ? <p className="text-sm text-red-300">{error}</p> : null}
       <button
