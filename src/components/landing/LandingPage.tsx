@@ -50,33 +50,33 @@ const scenarios = [
 const features = [
   {
     icon: BarChart3,
-    title: "Precificacao inteligente",
-    text: "Curvas por produto e canal, faixas estaveis, ancoragens editaveis e simulacoes sem alterar o cadastro."
+    title: "Pare de chutar preco",
+    text: "Defina curvas por produto e canal, simule ancoragens e enxergue margem antes de enviar o orçamento."
   },
   {
     icon: FileText,
-    title: "Orcamentos prontos",
-    text: "PDF comercial, texto para WhatsApp, orcamento composto por artes e snapshot dos calculos."
+    title: "Orcamento em poucos cliques",
+    text: "Gere PDF comercial e texto para WhatsApp com os dados organizados, sem remontar tudo a cada atendimento."
   },
   {
     icon: Truck,
-    title: "Frete integrado",
-    text: "Embalagens, Correios, Melhor Envio, etiquetas, rastreio e fluxo preparado para operacao real."
+    title: "Frete sem sair da tela",
+    text: "Tenha embalagens, Correios, Melhor Envio, etiquetas e rastreio preparados para entrar no fluxo comercial."
   },
   {
     icon: Building2,
-    title: "Multi-tenant",
-    text: "Empresas isoladas, configuracoes e credenciais por tenant, usuarios e permissoes por papel."
+    title: "Cada empresa no seu espaco",
+    text: "Organize tenants, credenciais, usuarios e permissoes sem misturar dados ou depender de ajustes manuais."
   },
   {
     icon: ShieldCheck,
-    title: "Seguranca aplicada",
-    text: "Login, convites por token, RLS no banco, auditoria, superadmin e troca segura de senha."
+    title: "Seguranca desde o atendimento",
+    text: "Login, convites por token, RLS, auditoria, superadmin e troca de senha deixam a operacao mais controlada."
   },
   {
     icon: PackageCheck,
-    title: "Produtos flexiveis",
-    text: "Botons, chaveiros, espelhos, abridores, imas e novos produtos com suas proprias regras."
+    title: "Cresca alem de um produto",
+    text: "Inclua botons, chaveiros, espelhos, abridores, imas e novas linhas com regras proprias de precificacao."
   }
 ];
 
@@ -149,34 +149,34 @@ export function LandingPage() {
           <div className="max-w-3xl">
             <p className="inline-flex items-center gap-2 rounded-full border border-amber-300/30 bg-zinc-950/60 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-300">
               <MousePointerClick size={14} />
-              Passe o mouse, clique no console e simule cenarios
+              Tem dificuldade para definir preco e responder rapido?
             </p>
             <h1 className="mt-6 max-w-4xl text-4xl font-semibold leading-tight text-white sm:text-5xl lg:text-6xl">
-              O cockpit futurista para vender produtos personalizados com preco certo.
+              Encontre aqui uma ferramenta que acelera seu atendimento e deixa tudo a mao.
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-zinc-400 sm:text-lg">
-              Precificacao progressiva, orcamentos compostos, frete, canais, usuarios, tenants e integracoes em uma
-              operacao moderna, segura e pronta para crescer.
+              Se precificar, calcular desconto progressivo, montar orcamento e conferir frete ainda toma tempo demais,
+              o Pricing Pro organiza tudo em poucos cliques: preco, margem, PDF, WhatsApp, produtos, canais e clientes.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
                 className="focus-ring inline-flex items-center justify-center gap-2 rounded-md bg-amber-300 px-5 py-3 text-sm font-semibold text-zinc-950 shadow-lg shadow-amber-400/10 hover:bg-amber-200"
                 href="/demo"
               >
-                Abrir console demo
+                Testar agora no demo
                 <ArrowRight size={17} />
               </Link>
               <Link
                 className="focus-ring inline-flex items-center justify-center gap-2 rounded-md border border-zinc-700 bg-zinc-950/70 px-5 py-3 text-sm font-semibold text-zinc-100 hover:border-zinc-500 hover:bg-zinc-900"
                 href="/login"
               >
-                Entrar na area segura
+                Acessar meu console
               </Link>
             </div>
             <div className="mt-8 grid gap-3 text-sm text-zinc-400 sm:grid-cols-3">
-              <MiniStat label="Tenants isolados" value="multi" />
-              <MiniStat label="PDF + WhatsApp" value="1 clique" />
-              <MiniStat label="Frete e CRM" value="integrado" />
+              <MiniStat label="Preco com margem" value="na hora" />
+              <MiniStat label="PDF + WhatsApp" value="poucos cliques" />
+              <MiniStat label="Produtos e frete" value="tudo junto" />
             </div>
           </div>
 
@@ -184,14 +184,14 @@ export function LandingPage() {
             <div className="mb-4 flex items-center justify-between gap-3 border-b border-zinc-800 pb-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">Console demo</p>
-                <h2 className="text-lg font-semibold text-white">Simulador comercial</h2>
+                <h2 className="text-lg font-semibold text-white">Veja o preco ganhar forma</h2>
               </div>
               <button
                 className="focus-ring rounded-md border border-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-300 hover:border-amber-300/60 hover:text-white"
                 onClick={nextScenario}
                 type="button"
               >
-                Alternar cenario
+                Simular outro caso
               </button>
             </div>
 
@@ -261,7 +261,7 @@ export function LandingPage() {
                   className="focus-ring inline-flex items-center justify-center gap-2 rounded-md border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-200 hover:bg-zinc-900"
                   href="/login"
                 >
-                  Acessar login
+                  Entrar no sistema
                   <Users size={17} />
                 </Link>
               </div>
@@ -273,10 +273,10 @@ export function LandingPage() {
       <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
         <div className="mb-8 max-w-2xl">
           <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">Funcionalidades</p>
-          <h2 className="mt-2 text-3xl font-semibold text-white">Tudo que uma operacao de orcamento precisa.</h2>
+          <h2 className="mt-2 text-3xl font-semibold text-white">Menos planilha aberta. Mais atendimento fluindo.</h2>
           <p className="mt-3 text-sm leading-6 text-zinc-400">
-            O sistema saiu do HTML isolado para uma plataforma multi-tenant com regras de negocio, seguranca e
-            integracoes pensadas para manutencao.
+            Uma ferramenta para quem precisa responder rapido, manter padrao comercial e ter clareza sobre preco,
+            custo, margem e proximos passos do pedido.
           </p>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
