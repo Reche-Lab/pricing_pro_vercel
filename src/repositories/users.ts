@@ -9,6 +9,7 @@ export type UserWithMembership = {
   tenant_name: string;
   tenant_slug: string;
   role_key: string;
+  is_super_admin: boolean;
 };
 
 export type TenantMemberRow = {
@@ -42,6 +43,14 @@ export type UserInviteInfo = {
   expires_at: string;
 };
 
+export type PasswordUserRow = {
+  id: string;
+  email: string;
+  name: string;
+  password_hash: string;
+  status: string;
+};
+
 export async function findUserWithDefaultMembership(email: string): Promise<UserWithMembership | null> {
   const rows = await query<UserWithMembership>(
     `
@@ -50,6 +59,7 @@ export async function findUserWithDefaultMembership(email: string): Promise<User
         u.email,
         u.name,
         u.password_hash,
+        u.is_super_admin,
         t.id as tenant_id,
         t.name as tenant_name,
         t.slug as tenant_slug,
@@ -79,6 +89,7 @@ export async function getSessionProfile(userId: string, tenantId: string) {
       tenant_name: string;
       tenant_slug: string;
       role: string;
+      is_super_admin: boolean;
     }>(
       `
         select
@@ -88,7 +99,8 @@ export async function getSessionProfile(userId: string, tenantId: string) {
           t.id as tenant_id,
           t.name as tenant_name,
           t.slug as tenant_slug,
-          r.key as role
+          r.key as role,
+          u.is_super_admin
         from app_users u
         join tenant_members tm on tm.user_id = u.id
         join tenants t on t.id = tm.tenant_id
@@ -356,6 +368,65 @@ export async function recordInviteAccepted(userId: string, tenantId: string, mem
       [tenantId, userId, membershipId]
     );
   });
+}
+
+export async function findPasswordUserByEmail(email: string): Promise<PasswordUserRow | null> {
+  const rows = await query<PasswordUserRow>(
+    `
+      select id, email::text as email, name, password_hash, status
+      from app_users
+      where lower(email::text) = lower($1)
+      limit 1
+    `,
+    [email]
+  );
+
+  return rows[0] ?? null;
+}
+
+export async function getPasswordUserById(userId: string): Promise<PasswordUserRow | null> {
+  const rows = await query<PasswordUserRow>(
+    `
+      select id, email::text as email, name, password_hash, status
+      from app_users
+      where id = $1
+      limit 1
+    `,
+    [userId]
+  );
+
+  return rows[0] ?? null;
+}
+
+export async function updateUserPassword(input: {
+  actorUserId?: string;
+  tenantId?: string;
+  userId: string;
+  passwordHash: string;
+  auditAction?: string;
+}): Promise<void> {
+  await query(
+    `
+      update app_users
+      set password_hash = $2,
+          updated_at = now()
+      where id = $1
+        and status <> 'blocked'
+    `,
+    [input.userId, input.passwordHash]
+  );
+
+  if (input.actorUserId && input.tenantId && input.auditAction) {
+    await withTenantContext(input.actorUserId, input.tenantId, async (client) => {
+      await client.query(
+        `
+          insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id)
+          values ($1, $2, $3, 'app_user', $4)
+        `,
+        [input.tenantId, input.actorUserId, input.auditAction, input.userId]
+      );
+    });
+  }
 }
 
 export async function getTenantMember(

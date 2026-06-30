@@ -18,7 +18,12 @@ export default async function UsersPage() {
   if (!profile) redirect("/login");
 
   return (
-    <AppShell title="Usuarios" subtitle="Membros e permissoes por tenant." tenantName={profile.tenant_name}>
+    <AppShell
+      isSuperAdmin={profile.is_super_admin}
+      title="Usuarios"
+      subtitle="Membros e permissoes por tenant."
+      tenantName={profile.tenant_name}
+    >
       {allowed ? (
         <UserManagementPanel
           currentRole={profile.role}

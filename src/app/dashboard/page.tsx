@@ -21,6 +21,7 @@ export default async function DashboardPage() {
 
   return (
     <AppShell
+      isSuperAdmin={profile.is_super_admin}
       title="Dashboard"
       subtitle="Base multi-tenant inicial com produtos e usuarios por tenant."
       tenantName={profile.tenant_name}

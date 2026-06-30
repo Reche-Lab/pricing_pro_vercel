@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export function LoginForm() {
@@ -46,7 +47,12 @@ export function LoginForm() {
         />
       </label>
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-zinc-300">Senha</span>
+        <span className="mb-1 flex items-center justify-between gap-3 text-sm font-medium text-zinc-300">
+          Senha
+          <Link className="text-xs font-semibold text-amber-300 hover:text-amber-200" href="/forgot-password">
+            Esqueci minha senha
+          </Link>
+        </span>
         <input
           className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
           name="password"

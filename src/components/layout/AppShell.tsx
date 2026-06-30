@@ -3,12 +3,13 @@ import { SidebarNav } from "@/components/layout/SidebarNav";
 
 type AppShellProps = {
   children: React.ReactNode;
+  isSuperAdmin?: boolean;
   title: string;
   subtitle?: string;
   tenantName?: string;
 };
 
-export function AppShell({ children, title, subtitle, tenantName }: AppShellProps) {
+export function AppShell({ children, isSuperAdmin = false, title, subtitle, tenantName }: AppShellProps) {
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100 lg:grid lg:grid-cols-[280px_1fr]">
       <aside className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/95 px-3 py-3 backdrop-blur lg:top-0 lg:h-screen lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
@@ -31,7 +32,7 @@ export function AppShell({ children, title, subtitle, tenantName }: AppShellProp
           </form>
         </div>
 
-        <SidebarNav />
+        <SidebarNav isSuperAdmin={isSuperAdmin} />
 
         <form action="/api/auth/logout" className="mt-6 hidden lg:block" method="post">
           <button

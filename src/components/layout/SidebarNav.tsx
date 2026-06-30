@@ -11,6 +11,7 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
+  Sparkles,
   Store,
   Truck,
   Users
@@ -33,7 +34,7 @@ const settingsItems = [
   { href: "/audit", label: "Auditoria", icon: ScrollText }
 ];
 
-export function SidebarNav() {
+export function SidebarNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -44,6 +45,11 @@ export function SidebarNav() {
             {item.label}
           </NavItem>
         ))}
+        {isSuperAdmin ? (
+          <NavItem active={isActive(pathname, "/superadmin")} href="/superadmin" icon={Sparkles}>
+            Superadmin
+          </NavItem>
+        ) : null}
       </div>
 
       <div className="flex shrink-0 gap-2 lg:block">

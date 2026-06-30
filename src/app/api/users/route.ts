@@ -5,6 +5,7 @@ import { buildInviteUrl, createInviteToken, hashInviteToken } from "@/domain/use
 import { getCurrentSession } from "@/lib/auth/session";
 import { hashPassword } from "@/lib/auth/password";
 import { getServerEnv } from "@/lib/env/server";
+import { sendInviteEmail } from "@/services/email/invite-email";
 import {
   createUserInvite,
   createOrInviteTenantMember,
@@ -76,6 +77,7 @@ export async function POST(request: Request) {
   });
 
   let inviteUrl: string | null = null;
+  let emailDelivery: Awaited<ReturnType<typeof sendInviteEmail>> | null = null;
   if (parsed.data.memberStatus === "invited") {
     const token = createInviteToken();
     await createUserInvite(session.userId, session.tenantId, {
@@ -85,7 +87,14 @@ export async function POST(request: Request) {
       ttlDays: 7
     });
     inviteUrl = buildInviteUrl(getServerEnv().APP_URL, token);
+    emailDelivery = await sendInviteEmail({
+      to: member.email,
+      name: member.name,
+      tenantName: profile.tenant_name,
+      inviteUrl,
+      roleName: member.role_name
+    });
   }
 
-  return NextResponse.json({ ok: true, member, inviteUrl }, { status: 201 });
+  return NextResponse.json({ ok: true, member, inviteUrl, emailDelivery }, { status: 201 });
 }

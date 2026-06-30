@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { MelhorEnvioIntegrationPanel } from "@/components/settings/MelhorEnvioIntegrationPanel";
 import { OlistIntegrationPanel } from "@/components/settings/OlistIntegrationPanel";
+import { ChangePasswordForm } from "@/components/settings/ChangePasswordForm";
 import { TenantSettingsForm } from "@/components/settings/TenantSettingsForm";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getTenantShippingProfile } from "@/repositories/tenant-settings";
@@ -24,11 +25,13 @@ export default async function SettingsPage({
 
   return (
     <AppShell
+      isSuperAdmin={profile.is_super_admin}
       title="Configuracoes"
       subtitle="Dados usados em documentos, remetente de frete e integracoes."
       tenantName={profile.tenant_name}
     >
       <div className="grid max-w-5xl gap-6">
+        <ChangePasswordForm />
         <MelhorEnvioIntegrationPanel callbackMessage={params.message} callbackStatus={params.melhor_envio} />
         <OlistIntegrationPanel />
         <TenantSettingsForm tenant={tenant} />
