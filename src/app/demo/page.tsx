@@ -21,7 +21,7 @@ export default function DemoPage() {
         </div>
       </header>
       <div className="mx-auto max-w-7xl px-4 py-6">
-        <PricingCalculator variants={demoVariants} platforms={platformPresets} readonlyMode />
+        <PricingCalculator variants={demoVariants} platforms={platformPresets} demoMode />
       </div>
     </main>
   );

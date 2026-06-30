@@ -251,7 +251,7 @@ export function LandingPage() {
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <Link
-                  className="focus-ring inline-flex items-center justify-center gap-2 rounded-md bg-zinc-100 px-4 py-3 text-sm font-semibold text-zinc-950 hover:bg-white"
+                  className="focus-ring inline-flex items-center justify-center gap-2 rounded-md border border-emerald-300/40 bg-emerald-400/15 px-4 py-3 text-sm font-semibold text-emerald-100 shadow-lg shadow-emerald-500/10 hover:border-emerald-300/70 hover:bg-emerald-400/25"
                   href="/demo"
                 >
                   Testar demo pública

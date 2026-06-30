@@ -38,6 +38,7 @@ export type PricingPlatformOption = PlatformRule & {
 type PricingCalculatorProps = {
   variants: DemoProductVariant[];
   platforms: Record<string, PricingPlatformOption>;
+  demoMode?: boolean;
   readonlyMode?: boolean;
 };
 
@@ -74,7 +75,7 @@ const emptyPlatform: PricingPlatformOption = {
   defaultPricingMode: "interpolated"
 };
 
-export function PricingCalculator({ variants, platforms, readonlyMode = false }: PricingCalculatorProps) {
+export function PricingCalculator({ variants, platforms, demoMode = false, readonlyMode = false }: PricingCalculatorProps) {
   const router = useRouter();
   const [variantId, setVariantId] = useState(variants[0]?.id ?? "");
   const [quantity, setQuantity] = useState(1);
@@ -220,6 +221,8 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
 
   const selectedComparison = comparison[0];
   const simulatedChanged = hasCurveChanges(currentCurve, simulatedCurve);
+  const persistentActionsDisabled = readonlyMode || (simulatedChanged && !demoMode);
+  const quoteActionsDisabled = readonlyMode || (simulatedChanged && !demoMode);
 
   function updateCurvePoint(index: number, field: "quantity" | "unitPrice", value: number) {
     setSimulatedCurve((current) => {
@@ -298,6 +301,8 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
   }
 
   async function createQuickQuote() {
+    if (demoMode) return `demo-${Date.now()}`;
+
     const response = await fetch("/api/quotes", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -339,7 +344,7 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
   }
 
   function addCurrentItemToDraft() {
-    if (readonlyMode || simulatedChanged || !variant || !simulatedResult) return;
+    if (readonlyMode || (simulatedChanged && !demoMode) || !variant || !simulatedResult) return;
 
     const artworkName = draftArtworkName.trim() || `Arte ${draftItems.length + 1}`;
     setDraftItems((current) => [
@@ -367,6 +372,7 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
 
   async function createDraftQuote() {
     if (draftItems.length === 0) throw new Error("Draft is empty.");
+    if (demoMode) return `demo-${Date.now()}`;
 
     const response = await fetch("/api/quotes", {
       method: "POST",
@@ -422,10 +428,14 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
     try {
       const quoteId = await createDraftQuote();
       setDraftState("idle");
-      setDraftMessage("Orcamento composto criado.");
-      setDraftItems([]);
-      router.refresh();
-      window.location.href = `/quotes/${quoteId}`;
+      if (demoMode) {
+        setDraftMessage("Orcamento demo criado. Use PDF ou WhatsApp para exportar.");
+      } else {
+        setDraftMessage("Orcamento composto criado.");
+        setDraftItems([]);
+        router.refresh();
+        window.location.href = `/quotes/${quoteId}`;
+      }
     } catch {
       setDraftState("error");
       setDraftMessage("Nao foi possivel criar o orcamento composto.");
@@ -442,14 +452,24 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
 
     try {
       const quoteId = await createDraftQuote();
-      const pdfUrl = `/api/quotes/${quoteId}/pdf`;
-      if (pdfWindow) {
-        pdfWindow.location.href = pdfUrl;
+      if (demoMode) {
+        writeDemoPdfWindow(pdfWindow, buildDemoQuoteDocument({
+          customerName: quickCustomerName,
+          items: draftItems,
+          quoteId,
+          shippingTotal: includeShipping ? shippingAmount : 0,
+          title: "Orcamento demo composto"
+        }));
       } else {
-        window.location.href = pdfUrl;
+        const pdfUrl = `/api/quotes/${quoteId}/pdf`;
+        if (pdfWindow) {
+          pdfWindow.location.href = pdfUrl;
+        } else {
+          window.location.href = pdfUrl;
+        }
       }
       setDraftState("idle");
-      setDraftMessage("Orcamento composto criado e PDF gerado. Os itens foram mantidos na bandeja.");
+      setDraftMessage(demoMode ? "PDF demo aberto para impressao/salvar." : "Orcamento composto criado e PDF gerado. Os itens foram mantidos na bandeja.");
       router.refresh();
     } catch {
       pdfWindow?.close();
@@ -467,13 +487,25 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
 
     try {
       const quoteId = await createDraftQuote();
-      const response = await fetch(`/api/quotes/${quoteId}/whatsapp`);
-      if (!response.ok) throw new Error("WhatsApp text failed.");
-      const payload = (await response.json()) as { text?: string };
-      if (!payload.text) throw new Error("WhatsApp text missing.");
-      setDraftText(payload.text);
+      let text = "";
+      if (demoMode) {
+        text = buildDemoWhatsAppText({
+          customerName: quickCustomerName,
+          items: draftItems,
+          quoteId,
+          shippingTotal: includeShipping ? shippingAmount : 0,
+          title: "Orcamento demo composto"
+        });
+      } else {
+        const response = await fetch(`/api/quotes/${quoteId}/whatsapp`);
+        if (!response.ok) throw new Error("WhatsApp text failed.");
+        const payload = (await response.json()) as { text?: string };
+        if (!payload.text) throw new Error("WhatsApp text missing.");
+        text = payload.text;
+      }
+      setDraftText(text);
       try {
-        await navigator.clipboard.writeText(payload.text);
+        await navigator.clipboard.writeText(text);
         setDraftMessage("Texto do orcamento composto copiado para o WhatsApp.");
       } catch {
         setDraftMessage("Orcamento criado. Nao foi possivel copiar automaticamente; use o texto abaixo.");
@@ -487,8 +519,10 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
   }
 
   async function generateQuickPdf() {
-    if (readonlyMode || simulatedChanged || quickState === "creating_pdf") return;
+    if (quoteActionsDisabled || quickState === "creating_pdf") return;
 
+    if (!simulatedResult) return;
+    const demoItem = currentDemoItem(variant, quantity, simulatedResult.finalUnitPrice, simulatedResult.subtotal, draftArtworkName);
     setQuickState("creating_pdf");
     setQuickMessage("");
     setQuickText("");
@@ -496,14 +530,24 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
 
     try {
       const quoteId = await createQuickQuote();
-      const pdfUrl = `/api/quotes/${quoteId}/pdf`;
-      if (pdfWindow) {
-        pdfWindow.location.href = pdfUrl;
+      if (demoMode) {
+        writeDemoPdfWindow(pdfWindow, buildDemoQuoteDocument({
+          customerName: quickCustomerName,
+          items: [demoItem],
+          quoteId,
+          shippingTotal: includeShipping ? shippingAmount : 0,
+          title: "Orcamento demo rapido"
+        }));
       } else {
-        window.location.href = pdfUrl;
+        const pdfUrl = `/api/quotes/${quoteId}/pdf`;
+        if (pdfWindow) {
+          pdfWindow.location.href = pdfUrl;
+        } else {
+          window.location.href = pdfUrl;
+        }
       }
       setQuickState("idle");
-      setQuickMessage("Orcamento criado e PDF gerado.");
+      setQuickMessage(demoMode ? "PDF demo aberto para impressao/salvar." : "Orcamento criado e PDF gerado.");
       router.refresh();
     } catch {
       pdfWindow?.close();
@@ -513,20 +557,27 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
   }
 
   async function copyQuickWhatsAppText() {
-    if (readonlyMode || simulatedChanged || quickState === "copying_text") return;
+    if (quoteActionsDisabled || quickState === "copying_text") return;
 
+    if (!simulatedResult) return;
+    const demoItem = currentDemoItem(variant, quantity, simulatedResult.finalUnitPrice, simulatedResult.subtotal, draftArtworkName);
     setQuickState("copying_text");
     setQuickMessage("");
     setQuickText("");
 
     try {
       const quoteId = await createQuickQuote();
-      const response = await fetch(`/api/quotes/${quoteId}/whatsapp`);
-      if (!response.ok) throw new Error("WhatsApp text failed.");
-      const payload = (await response.json()) as { text?: string };
-      if (!payload.text) throw new Error("WhatsApp text missing.");
-      setQuickText(payload.text);
-      await navigator.clipboard.writeText(payload.text);
+      const text = demoMode
+        ? buildDemoWhatsAppText({
+            customerName: quickCustomerName,
+            items: [demoItem],
+            quoteId,
+            shippingTotal: includeShipping ? shippingAmount : 0,
+            title: "Orcamento demo rapido"
+          })
+        : await fetchQuoteWhatsAppText(quoteId);
+      setQuickText(text);
+      await navigator.clipboard.writeText(text);
       setQuickState("copied");
       setQuickMessage("Texto do orcamento copiado para o WhatsApp.");
       router.refresh();
@@ -555,7 +606,7 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
           <div className="grid gap-2 sm:grid-cols-2 xl:w-[520px]">
             <button
               className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-md bg-amber-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
-              disabled={readonlyMode || simulatedChanged || quickState === "creating_pdf"}
+              disabled={quoteActionsDisabled || quickState === "creating_pdf"}
               type="button"
               onClick={generateQuickPdf}
             >
@@ -564,7 +615,7 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
             </button>
             <button
               className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-md border border-zinc-700 px-4 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:text-zinc-500"
-              disabled={readonlyMode || simulatedChanged || quickState === "copying_text"}
+              disabled={quoteActionsDisabled || quickState === "copying_text"}
               type="button"
               onClick={copyQuickWhatsAppText}
             >
@@ -667,7 +718,7 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
           />
           <button
             className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-amber-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
-            disabled={readonlyMode || simulatedChanged}
+            disabled={readonlyMode || (simulatedChanged && !demoMode)}
             type="button"
             onClick={addCurrentItemToDraft}
           >
@@ -765,7 +816,7 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
             </button>
             <button
               className="focus-ring inline-flex items-center gap-2 rounded-md bg-amber-500 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
-              disabled={readonlyMode || !simulatedChanged || saveState === "saving"}
+              disabled={persistentActionsDisabled || !simulatedChanged || saveState === "saving"}
               type="button"
               onClick={saveCurveVersion}
             >
@@ -920,9 +971,11 @@ export function PricingCalculator({ variants, platforms, readonlyMode = false }:
           </section>
         </div>
 
-        {readonlyMode ? (
+        {demoMode || readonlyMode ? (
           <p className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
-            Demo com dados ficticios. Custos e curvas reais ficam protegidos apos login.
+            {demoMode
+              ? "Demo com dados ficticios. Voce pode testar PDF e WhatsApp sem salvar dados reais."
+              : "Demo com dados ficticios. Custos e curvas reais ficam protegidos apos login."}
           </p>
         ) : null}
       </div>
@@ -1143,6 +1196,171 @@ function QuoteDraftDrawer({
       </aside>
     </div>
   );
+}
+
+async function fetchQuoteWhatsAppText(quoteId: string) {
+  const response = await fetch(`/api/quotes/${quoteId}/whatsapp`);
+  if (!response.ok) throw new Error("WhatsApp text failed.");
+  const payload = (await response.json()) as { text?: string };
+  if (!payload.text) throw new Error("WhatsApp text missing.");
+  return payload.text;
+}
+
+function currentDemoItem(
+  variant: DemoProductVariant,
+  quantity: number,
+  unitPrice: number,
+  totalPrice: number,
+  artworkName: string
+): DraftQuoteItem {
+  return {
+    id: "demo-item",
+    productVariantId: variant.id,
+    productLabel: `${variant.productName} - ${variant.variantName}`,
+    artworkName: artworkName.trim() || "Arte 1",
+    quantity,
+    unitPrice,
+    totalPrice
+  };
+}
+
+function buildDemoWhatsAppText({
+  customerName,
+  items,
+  quoteId,
+  shippingTotal,
+  title
+}: {
+  customerName: string;
+  items: DraftQuoteItem[];
+  quoteId: string;
+  shippingTotal: number;
+  title: string;
+}) {
+  const itemsTotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
+  const grandTotal = itemsTotal + shippingTotal;
+
+  return [
+    `*${title.replace("Orcamento", "Orçamento")}*`,
+    `Cliente: ${customerName.trim() || "Cliente não informado"}`,
+    `Código: ${quoteId}`,
+    "",
+    "*Itens*",
+    ...items.map((item, index) =>
+      `${index + 1}. ${item.productLabel}${item.artworkName ? ` (${item.artworkName})` : ""} - ${item.quantity} un. x ${brl.format(item.unitPrice)} = ${brl.format(item.totalPrice)}`
+    ),
+    "",
+    `Subtotal: ${brl.format(itemsTotal)}`,
+    `Frete: ${brl.format(shippingTotal)}`,
+    `Total: *${brl.format(grandTotal)}*`,
+    "",
+    "Orçamento demonstrativo gerado no Pricing Pro."
+  ].join("\n");
+}
+
+function buildDemoQuoteDocument({
+  customerName,
+  items,
+  quoteId,
+  shippingTotal,
+  title
+}: {
+  customerName: string;
+  items: DraftQuoteItem[];
+  quoteId: string;
+  shippingTotal: number;
+  title: string;
+}) {
+  const itemsTotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
+  const grandTotal = itemsTotal + shippingTotal;
+  const rows = items
+    .map(
+      (item) => `
+        <tr>
+          <td>
+            <strong>${escapeHtml(item.productLabel)}</strong>
+            <span>${escapeHtml(item.artworkName || "Arte 1")}</span>
+          </td>
+          <td>${item.quantity}</td>
+          <td>${brl.format(item.unitPrice)}</td>
+          <td>${brl.format(item.totalPrice)}</td>
+        </tr>
+      `
+    )
+    .join("");
+
+  return `
+    <!doctype html>
+    <html lang="pt-BR">
+      <head>
+        <meta charset="utf-8" />
+        <title>${escapeHtml(title.replace("Orcamento", "Orçamento"))}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 40px; color: #18181b; }
+          header { display: flex; justify-content: space-between; gap: 24px; border-bottom: 2px solid #18181b; padding-bottom: 18px; }
+          h1 { margin: 0; font-size: 26px; }
+          p { margin: 4px 0; color: #52525b; }
+          table { width: 100%; border-collapse: collapse; margin-top: 28px; }
+          th { background: #18181b; color: white; text-align: left; }
+          th, td { border: 1px solid #d4d4d8; padding: 10px; font-size: 13px; vertical-align: top; }
+          td span { display: block; color: #71717a; margin-top: 3px; }
+          .summary { margin-left: auto; margin-top: 24px; width: 320px; border: 1px solid #d4d4d8; padding: 14px; }
+          .summary div { display: flex; justify-content: space-between; margin: 8px 0; }
+          .total { font-size: 18px; font-weight: 700; border-top: 1px solid #d4d4d8; padding-top: 10px; }
+          .demo { margin-top: 24px; padding: 10px; background: #fef3c7; color: #78350f; font-size: 12px; }
+          @media print { body { margin: 24px; } button { display: none; } }
+        </style>
+      </head>
+      <body>
+        <header>
+          <div>
+            <h1>${escapeHtml(title.replace("Orcamento", "Orçamento"))}</h1>
+            <p>Pricing Pro - demonstração pública</p>
+          </div>
+          <div>
+            <p><strong>Código:</strong> ${escapeHtml(quoteId)}</p>
+            <p><strong>Cliente:</strong> ${escapeHtml(customerName.trim() || "Cliente não informado")}</p>
+            <p><strong>Validade:</strong> 7 dias</p>
+          </div>
+        </header>
+        <table>
+          <thead>
+            <tr>
+              <th>Produto</th>
+              <th>Qtd.</th>
+              <th>Unitário</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <section class="summary">
+          <div><span>Subtotal</span><strong>${brl.format(itemsTotal)}</strong></div>
+          <div><span>Frete</span><strong>${brl.format(shippingTotal)}</strong></div>
+          <div class="total"><span>Total</span><strong>${brl.format(grandTotal)}</strong></div>
+        </section>
+        <p class="demo">Documento demonstrativo. Dados reais, custos e regras comerciais ficam protegidos na área logada.</p>
+        <script>window.print();</script>
+      </body>
+    </html>
+  `;
+}
+
+function writeDemoPdfWindow(pdfWindow: Window | null, html: string) {
+  const target = pdfWindow ?? window.open("about:blank", "_blank");
+  if (!target) return;
+  target.document.open();
+  target.document.write(html);
+  target.document.close();
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function DraftRuleButton({
