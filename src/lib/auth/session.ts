@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
-import { getServerEnv } from "@/lib/env/server";
 
 export type AppSession = {
   userId: string;
@@ -10,7 +9,16 @@ export type AppSession = {
 };
 
 function secretKey() {
-  return new TextEncoder().encode(getServerEnv().AUTH_SECRET);
+  const secret = process.env.AUTH_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error("Invalid auth environment: AUTH_SECRET");
+  }
+
+  return new TextEncoder().encode(secret);
+}
+
+function cookieName() {
+  return process.env.COOKIE_NAME || "pricing_session";
 }
 
 export async function createSessionToken(session: AppSession): Promise<string> {
@@ -24,7 +32,7 @@ export async function createSessionToken(session: AppSession): Promise<string> {
 export async function setSessionCookie(session: AppSession): Promise<void> {
   const token = await createSessionToken(session);
   const cookieStore = await cookies();
-  cookieStore.set(getServerEnv().COOKIE_NAME, token, {
+  cookieStore.set(cookieName(), token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -35,7 +43,7 @@ export async function setSessionCookie(session: AppSession): Promise<void> {
 
 export async function clearSessionCookie(): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.set(getServerEnv().COOKIE_NAME, "", {
+  cookieStore.set(cookieName(), "", {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -46,7 +54,7 @@ export async function clearSessionCookie(): Promise<void> {
 
 export async function getCurrentSession(): Promise<AppSession | null> {
   const cookieStore = await cookies();
-  const token = cookieStore.get(getServerEnv().COOKIE_NAME)?.value;
+  const token = cookieStore.get(cookieName())?.value;
   if (!token) return null;
 
   try {
