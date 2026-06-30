@@ -1,7 +1,5 @@
-import { redirect } from "next/navigation";
-import { getCurrentSession } from "@/lib/auth/session";
+import { LandingPage } from "@/components/landing/LandingPage";
 
-export default async function HomePage() {
-  const session = await getCurrentSession();
-  redirect(session ? "/dashboard" : "/demo");
+export default function HomePage() {
+  return <LandingPage />;
 }
