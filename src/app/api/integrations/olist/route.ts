@@ -7,6 +7,7 @@ import {
   upsertIntegrationConnection
 } from "@/repositories/integrations";
 import { OLIST_API_V3_BASE_URL, OLIST_APP_BASE_URL, OLIST_DEFAULT_PATHS } from "@/services/olist/defaults";
+import { normalizeOlistAppBaseUrl } from "@/services/olist/olist";
 import type { OlistCredentials, OlistSettings } from "@/services/olist/types";
 
 const olistIntegrationSchema = z.object({
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
     status: "active",
     settings: {
       api_base_url: parsed.data.apiBaseUrl,
-      app_base_url: parsed.data.appBaseUrl,
+      app_base_url: normalizeOlistAppBaseUrl(parsed.data.appBaseUrl),
       authorize_path: parsed.data.authorizePath,
       token_path: parsed.data.tokenPath,
       customer_path: parsed.data.path,
