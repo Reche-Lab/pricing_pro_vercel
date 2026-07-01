@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildOlistCrmQuotePayload, buildOlistCustomerPayload } from "@/services/olist/payloads";
+import {
+  buildOlistCrmQuotePayload,
+  buildOlistCustomerPayload,
+  buildOlistInvoicePayload,
+  buildOlistSalesOrderPayload
+} from "@/services/olist/payloads";
 import type { CustomerRow } from "@/repositories/customers";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 
@@ -37,6 +42,27 @@ describe("olist payloads", () => {
           quantity: 100
         }
       ]
+    });
+  });
+
+  it("builds sales order payload with sku and quote price", () => {
+    const payload = buildOlistSalesOrderPayload({ quote: quote(), items: [item()] });
+
+    expect(payload.items[0]).toMatchObject({
+      sku: "BOTTON-55",
+      unit_price: 2.5,
+      total_price: 250
+    });
+    expect(payload.totals.grand_total).toBe(250);
+  });
+
+  it("builds invoice payload with fiscal products by sku", () => {
+    const payload = buildOlistInvoicePayload({ quote: quote(), items: [item()] });
+
+    expect(payload.products[0]).toMatchObject({
+      sku: "BOTTON-55",
+      quantity: 100,
+      unit_price: 2.5
     });
   });
 });
@@ -94,6 +120,8 @@ function quote(): QuoteDetail {
 function item(): QuoteItemRow {
   return {
     id: "item-1",
+    product_variant_id: "variant-1",
+    sku: "BOTTON-55",
     description: "Botton - 55mm",
     quantity: 100,
     unit_price: "2.5000",

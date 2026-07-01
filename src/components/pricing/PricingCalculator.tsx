@@ -30,6 +30,7 @@ import {
 import type { DemoProductVariant } from "@/domain/pricing/defaults";
 import type { PlatformRule, PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
 import { fetchCepAddress, formatCep, normalizeCep, type CepAddress } from "@/lib/cep";
+import { OlistQuoteActions } from "@/components/quotes/OlistQuoteActions";
 
 export type PricingPlatformOption = PlatformRule & {
   name: string;
@@ -124,6 +125,7 @@ export function PricingCalculator({
   const [quickState, setQuickState] = useState<"idle" | "creating_pdf" | "copying_text" | "copied" | "error">("idle");
   const [quickMessage, setQuickMessage] = useState("");
   const [quickText, setQuickText] = useState("");
+  const [lastOlistQuoteId, setLastOlistQuoteId] = useState<string | null>(null);
   const [draftArtworkName, setDraftArtworkName] = useState("Arte 1");
   const [draftItems, setDraftItems] = useState<DraftQuoteItem[]>([]);
   const [draftOpen, setDraftOpen] = useState(false);
@@ -142,6 +144,7 @@ export function PricingCalculator({
       setQuickState("idle");
       setQuickMessage("");
       setQuickText("");
+      setLastOlistQuoteId(null);
       setDraftArtworkName((current) => current || "Arte 1");
     }
   }, [activeVariantCurve, variant]);
@@ -419,6 +422,7 @@ export function PricingCalculator({
     const payload = (await response.json()) as { quote?: { id?: string } };
     const quoteId = payload.quote?.id;
     if (!quoteId) throw new Error("Quote id missing.");
+    setLastOlistQuoteId(quoteId);
     return quoteId;
   }
 
@@ -505,6 +509,7 @@ export function PricingCalculator({
     const payload = (await response.json()) as { quote?: { id?: string } };
     const quoteId = payload.quote?.id;
     if (!quoteId) throw new Error("Quote id missing.");
+    setLastOlistQuoteId(quoteId);
     return quoteId;
   }
 
@@ -754,6 +759,20 @@ export function PricingCalculator({
             readOnly
             value={quickText}
           />
+        ) : null}
+        {!demoMode && !readonlyMode && lastOlistQuoteId ? (
+          <div className="mt-4">
+            <OlistQuoteActions
+              hasCustomer
+              quoteId={lastOlistQuoteId}
+            />
+            <a
+              className="mt-3 inline-flex text-xs font-medium text-cyan-300 hover:text-cyan-200"
+              href={`/quotes/${lastOlistQuoteId}`}
+            >
+              Abrir orçamento completo
+            </a>
+          </div>
         ) : null}
       </div>
 

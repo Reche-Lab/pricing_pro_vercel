@@ -46,6 +46,8 @@ export type QuoteDetail = {
   customer_state: string | null;
   customer_external_olist_id: string | null;
   external_crm_id: string | null;
+  external_olist_order_id?: string | null;
+  external_olist_invoice_id?: string | null;
   created_by_name: string | null;
   public_token_expires_at?: string | null;
   public_viewed_at?: string | null;
@@ -56,6 +58,8 @@ export type QuoteDetail = {
 
 export type QuoteItemRow = {
   id: string;
+  product_variant_id?: string | null;
+  sku?: string | null;
   description: string;
   quantity: number;
   unit_price: string;
@@ -186,6 +190,8 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           c.state as customer_state,
           c.external_olist_id as customer_external_olist_id,
           q.external_crm_id,
+          q.external_olist_order_id,
+          q.external_olist_invoice_id,
           u.name as created_by_name,
           q.public_token_expires_at,
           q.public_viewed_at,
@@ -207,19 +213,22 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
     const items = await client.query<QuoteItemRow>(
       `
         select
-          id,
-          description,
-          quantity,
-          unit_price,
-          total_price,
-          artwork_name,
-          pricing_rule,
-          pricing_group_key,
-          reference_quantity,
-          base_unit_price
-        from quote_items
-        where tenant_id = $1 and quote_id = $2
-        order by created_at asc
+          qi.id,
+          qi.product_variant_id,
+          pv.sku,
+          qi.description,
+          qi.quantity,
+          qi.unit_price,
+          qi.total_price,
+          qi.artwork_name,
+          qi.pricing_rule,
+          qi.pricing_group_key,
+          qi.reference_quantity,
+          qi.base_unit_price
+        from quote_items qi
+        left join product_variants pv on pv.id = qi.product_variant_id and pv.tenant_id = qi.tenant_id
+        where qi.tenant_id = $1 and qi.quote_id = $2
+        order by qi.created_at asc
       `,
       [tenantId, quoteId]
     );
@@ -444,6 +453,37 @@ export async function updateQuoteExternalCrmId(
         values ($1, $2, 'quotes.crm_sync', 'quote', $3, $4)
       `,
       [tenantId, userId, quoteId, JSON.stringify({ externalCrmId })]
+    );
+  });
+}
+
+export async function updateQuoteExternalOlistIds(
+  userId: string,
+  tenantId: string,
+  quoteId: string,
+  input: {
+    orderId?: string | null;
+    invoiceId?: string | null;
+  }
+) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    await client.query(
+      `
+        update quotes
+        set external_olist_order_id = coalesce($3, external_olist_order_id),
+            external_olist_invoice_id = coalesce($4, external_olist_invoice_id),
+            updated_at = now()
+        where tenant_id = $1 and id = $2
+      `,
+      [tenantId, quoteId, input.orderId ?? null, input.invoiceId ?? null]
+    );
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'quotes.olist_external_ids', 'quote', $3, $4)
+      `,
+      [tenantId, userId, quoteId, JSON.stringify(input)]
     );
   });
 }

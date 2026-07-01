@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { CalendarPlus, RefreshCw, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import type { RoleRow, TenantMemberRow } from "@/repositories/users";
 
 const STATUSES = [
@@ -94,6 +94,7 @@ export function UserManagementPanel({
   }
 
   async function removeMember(membershipId: string) {
+    if (!window.confirm("Remover este membro do tenant?")) return;
     setMessage("");
     setLoading(membershipId);
     const response = await fetch(`/api/users/${membershipId}`, { method: "DELETE" });
@@ -106,6 +107,48 @@ export function UserManagementPanel({
     }
 
     router.refresh();
+  }
+
+  async function syncOlistUser(membershipId: string) {
+    if (!window.confirm("Sincronizar este usuário/vendedor no CRM Olist?")) return;
+    setMessage("");
+    setLoading(`${membershipId}:olist`);
+    const response = await fetch(`/api/users/${membershipId}/olist/sync`, { method: "POST" });
+    const data = await response.json().catch(() => null);
+    setLoading("");
+
+    if (!response.ok || !data?.ok) {
+      setMessage(data?.error ?? "Nao foi possivel sincronizar o usuario no Olist.");
+      return;
+    }
+
+    setMessage(data.externalId ? `Usuario sincronizado no Olist: ${data.externalId}` : "Usuario enviado ao Olist.");
+    router.refresh();
+  }
+
+  async function createOlistTask(membershipId: string) {
+    const title = window.prompt("Titulo da tarefa no CRM Olist");
+    if (!title?.trim()) return;
+    const subjectId = window.prompt("ID do assunto/oportunidade no CRM Olist");
+    if (!subjectId?.trim()) return;
+    if (!window.confirm(`Criar tarefa "${title.trim()}" para este usuário no CRM Olist?`)) return;
+
+    setMessage("");
+    setLoading(`${membershipId}:task`);
+    const response = await fetch(`/api/users/${membershipId}/olist/task`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: title.trim(), subjectId: subjectId.trim() })
+    });
+    const data = await response.json().catch(() => null);
+    setLoading("");
+
+    if (!response.ok || !data?.ok) {
+      setMessage(data?.error ?? "Nao foi possivel criar a tarefa no Olist.");
+      return;
+    }
+
+    setMessage(data.externalId ? `Tarefa criada no Olist: ${data.externalId}` : "Tarefa enviada ao Olist.");
   }
 
   return (
@@ -183,11 +226,16 @@ export function UserManagementPanel({
             const isSelf = member.user_id === currentUserId;
             const canEdit = !isSelf && (currentRole === "owner" || member.role_key !== "owner");
             return (
-              <div className="grid gap-3 px-5 py-4 text-sm xl:grid-cols-[1fr_160px_160px_auto]" key={member.membership_id}>
+              <div className="grid gap-3 px-5 py-4 text-sm xl:grid-cols-[1fr_150px_150px_auto]" key={member.membership_id}>
                 <div>
                   <p className="font-medium text-white">{member.name}</p>
                   <p className="text-zinc-500">{member.email}</p>
                   {isSelf ? <p className="mt-1 text-xs text-zinc-400">Usuario atual</p> : null}
+                  {member.external_olist_user_id ? (
+                    <p className="mt-1 text-xs text-cyan-300">Olist: {member.external_olist_user_id}</p>
+                  ) : (
+                    <p className="mt-1 text-xs text-zinc-600">Olist nao vinculado</p>
+                  )}
                 </div>
                 <select
                   className="focus-ring h-10 rounded-md border border-zinc-700 px-3"
@@ -213,15 +261,35 @@ export function UserManagementPanel({
                     </option>
                   ))}
                 </select>
-                <button
-                  className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
-                  disabled={!canEdit || loading === member.membership_id}
-                  onClick={() => removeMember(member.membership_id)}
-                  type="button"
-                >
-                  <Trash2 size={16} />
-                  Remover
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-cyan-400/25 px-3 text-cyan-100 hover:bg-cyan-400/10 disabled:opacity-60"
+                    disabled={loading === `${member.membership_id}:olist`}
+                    onClick={() => syncOlistUser(member.membership_id)}
+                    type="button"
+                  >
+                    <RefreshCw size={16} />
+                    {loading === `${member.membership_id}:olist` ? "Olist..." : "Olist"}
+                  </button>
+                  <button
+                    className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-amber-400/25 px-3 text-amber-100 hover:bg-amber-400/10 disabled:opacity-60"
+                    disabled={loading === `${member.membership_id}:task`}
+                    onClick={() => createOlistTask(member.membership_id)}
+                    type="button"
+                  >
+                    <CalendarPlus size={16} />
+                    Tarefa
+                  </button>
+                  <button
+                    className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
+                    disabled={!canEdit || loading === member.membership_id}
+                    onClick={() => removeMember(member.membership_id)}
+                    type="button"
+                  >
+                    <Trash2 size={16} />
+                    Remover
+                  </button>
+                </div>
               </div>
             );
           })}

@@ -124,7 +124,9 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
               <PublicQuoteLinkButton quoteId={quoteId} />
               <OlistQuoteActions
                 externalCrmId={detail.quote.external_crm_id}
+                externalInvoiceId={detail.quote.external_olist_invoice_id}
                 externalOlistId={detail.quote.customer_external_olist_id}
+                externalOrderId={detail.quote.external_olist_order_id}
                 hasCustomer={Boolean(detail.quote.customer_id)}
                 quoteId={quoteId}
               />

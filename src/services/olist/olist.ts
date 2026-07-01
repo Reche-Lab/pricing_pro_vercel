@@ -1,4 +1,5 @@
-import type { OlistCredentials, OlistRequestOptions, OlistSettings } from "./types";
+import { getServerEnv } from "@/lib/env/server";
+import type { OlistCredentials, OlistOAuthTokenResponse, OlistRequestOptions, OlistSettings } from "./types";
 
 export async function olistRequest<T = unknown>({
   settings,
@@ -8,16 +9,17 @@ export async function olistRequest<T = unknown>({
   method = "POST"
 }: OlistRequestOptions): Promise<T> {
   if (!settings.api_base_url) throw new Error("Olist api_base_url is required.");
-  if (!credentials.apiToken) throw new Error("Olist apiToken is required.");
+  if (!credentials.accessToken && !credentials.apiToken) throw new Error("Olist accessToken is required.");
+  const headers = {
+    accept: "application/json",
+    "content-type": "application/json",
+    ...authHeader(settings, credentials)
+  };
 
   const response = await fetch(`${settings.api_base_url.replace(/\/$/, "")}${withSlash(path)}`, {
     method,
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-      ...authHeader(settings, credentials)
-    },
-    body: JSON.stringify(body)
+    headers,
+    body: method === "GET" || body === undefined ? undefined : JSON.stringify(body)
   });
 
   const text = await response.text();
@@ -48,8 +50,89 @@ export function extractExternalId(data: unknown): string | null {
 function authHeader(settings: OlistSettings, credentials: OlistCredentials) {
   const header = settings.auth_header || "authorization";
   const scheme = settings.auth_scheme ?? "Bearer";
-  const value = scheme === "ApiKey" ? credentials.apiToken : `${scheme} ${credentials.apiToken}`;
+  const token = credentials.accessToken || credentials.apiToken;
+  const value = scheme === "ApiKey" ? token : `${scheme} ${token}`;
   return { [header]: value };
+}
+
+export function buildOlistAuthUrl(settings: OlistSettings, credentials: OlistCredentials, state: string) {
+  if (!credentials.clientId) throw new Error("Olist clientId is required.");
+  const appBaseUrl = requireSetting(settings.app_base_url, "Olist app_base_url is required.");
+  const authorizePath = settings.authorize_path || "/oauth/authorize";
+  const target = new URL(`${appBaseUrl.replace(/\/$/, "")}${withSlash(authorizePath)}`);
+  target.searchParams.set("response_type", "code");
+  target.searchParams.set("client_id", credentials.clientId);
+  target.searchParams.set("redirect_uri", getOlistRedirectUri());
+  target.searchParams.set("state", state);
+  const scopes = settings.scopes?.filter(Boolean) ?? [];
+  if (scopes.length > 0) target.searchParams.set("scope", scopes.join(" "));
+  return target.toString();
+}
+
+export async function exchangeOlistAuthorizationCode(
+  code: string,
+  settings: OlistSettings,
+  credentials: OlistCredentials
+): Promise<OlistOAuthTokenResponse> {
+  return requestOlistToken(settings, credentials, {
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: getOlistRedirectUri()
+  });
+}
+
+export async function refreshOlistToken(
+  settings: OlistSettings,
+  credentials: OlistCredentials
+): Promise<OlistOAuthTokenResponse> {
+  if (!credentials.refreshToken) throw new Error("Olist refreshToken is required.");
+  return requestOlistToken(settings, credentials, {
+    grant_type: "refresh_token",
+    refresh_token: credentials.refreshToken
+  });
+}
+
+function getOlistRedirectUri() {
+  return `${getServerEnv().APP_URL.replace(/\/$/, "")}/api/olist/oauth/callback`;
+}
+
+async function requestOlistToken(
+  settings: OlistSettings,
+  credentials: OlistCredentials,
+  params: Record<string, string>
+): Promise<OlistOAuthTokenResponse> {
+  if (!credentials.clientId) throw new Error("Olist clientId is required.");
+  if (!credentials.clientSecret) throw new Error("Olist clientSecret is required.");
+  const apiBaseUrl = requireSetting(settings.api_base_url, "Olist api_base_url is required.");
+  const tokenPath = settings.token_path || "/oauth/token";
+
+  const body = new URLSearchParams({
+    ...params,
+    client_id: credentials.clientId,
+    client_secret: credentials.clientSecret
+  });
+
+  const response = await fetch(`${apiBaseUrl.replace(/\/$/, "")}${withSlash(tokenPath)}`, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/x-www-form-urlencoded"
+    },
+    body
+  });
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    throw new Error(extractError(data) ?? `Olist token request failed with status ${response.status}.`);
+  }
+  if (!data?.access_token) throw new Error("Olist token response did not include access_token.");
+  return data as OlistOAuthTokenResponse;
+}
+
+function requireSetting(value: string | undefined, message: string) {
+  if (!value) throw new Error(message);
+  return value;
 }
 
 function withSlash(path: string): string {

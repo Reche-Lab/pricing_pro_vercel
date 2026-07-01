@@ -21,6 +21,8 @@ export type TenantMemberRow = {
   member_status: string;
   role_key: string;
   role_name: string;
+  external_olist_user_id: string | null;
+  olist_metadata: Record<string, unknown>;
   joined_at: string | null;
   created_at: string;
 };
@@ -153,6 +155,8 @@ export async function listTenantMembers(userId: string, tenantId: string): Promi
           tm.status as member_status,
           r.key as role_key,
           r.name as role_name,
+          tm.external_olist_user_id,
+          tm.olist_metadata,
           tm.joined_at,
           tm.created_at
         from tenant_members tm
@@ -275,6 +279,8 @@ export async function createOrInviteTenantMember(
           tm.status as member_status,
           r.key as role_key,
           r.name as role_name,
+          tm.external_olist_user_id,
+          tm.olist_metadata,
           tm.joined_at,
           tm.created_at
         from tenant_members tm
@@ -448,6 +454,8 @@ export async function getTenantMember(
           tm.status as member_status,
           r.key as role_key,
           r.name as role_name,
+          tm.external_olist_user_id,
+          tm.olist_metadata,
           tm.joined_at,
           tm.created_at
         from tenant_members tm
@@ -517,6 +525,8 @@ export async function updateTenantMember(
           tm.status as member_status,
           r.key as role_key,
           r.name as role_name,
+          tm.external_olist_user_id,
+          tm.olist_metadata,
           tm.joined_at,
           tm.created_at
         from tenant_members tm
@@ -546,6 +556,44 @@ export async function removeTenantMember(actorUserId: string, tenantId: string, 
         values ($1, $2, 'users.remove_member', 'tenant_member', $3)
       `,
       [tenantId, actorUserId, membershipId]
+    );
+  });
+}
+
+export async function updateTenantMemberOlistLink(
+  actorUserId: string,
+  tenantId: string,
+  membershipId: string,
+  input: {
+    externalOlistUserId?: string | null;
+    metadata?: Record<string, unknown>;
+  }
+): Promise<void> {
+  return withTenantContext(actorUserId, tenantId, async (client) => {
+    const result = await client.query<{ id: string }>(
+      `
+        update tenant_members
+        set external_olist_user_id = coalesce($3, external_olist_user_id),
+            olist_metadata = olist_metadata || $4::jsonb,
+            updated_at = now()
+        where tenant_id = $1 and id = $2
+        returning id
+      `,
+      [tenantId, membershipId, input.externalOlistUserId ?? null, JSON.stringify(input.metadata ?? {})]
+    );
+    if (!result.rows[0]) throw new Error("Tenant member not found.");
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'users.olist_sync', 'tenant_member', $3, $4)
+      `,
+      [
+        tenantId,
+        actorUserId,
+        membershipId,
+        JSON.stringify({ externalOlistUserId: input.externalOlistUserId ?? null, metadata: input.metadata ?? {} })
+      ]
     );
   });
 }
