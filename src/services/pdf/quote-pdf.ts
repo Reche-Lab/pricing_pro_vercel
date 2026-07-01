@@ -199,18 +199,14 @@ async function loadLogo(pdf: PDFDocument, logoUrl: string | null | undefined) {
     if (logoUrl.startsWith("data:image/")) {
       const parsed = parseDataImage(logoUrl);
       if (!parsed) return null;
-      if (parsed.contentType.includes("png")) return pdf.embedPng(parsed.bytes);
-      if (parsed.contentType.includes("jpeg") || parsed.contentType.includes("jpg")) return pdf.embedJpg(parsed.bytes);
-      return null;
+      return embedSupportedLogoImage(pdf, parsed.bytes);
     }
 
     if (!/^https?:\/\//.test(logoUrl)) return null;
     const response = await fetch(logoUrl);
     if (!response.ok) return null;
     const bytes = new Uint8Array(await response.arrayBuffer());
-    const contentType = response.headers.get("content-type") ?? "";
-    if (contentType.includes("png") || logoUrl.toLowerCase().endsWith(".png")) return pdf.embedPng(bytes);
-    return pdf.embedJpg(bytes);
+    return embedSupportedLogoImage(pdf, bytes);
   } catch {
     return null;
   }
@@ -231,6 +227,34 @@ function parseDataImage(value: string) {
     contentType: match[1].toLowerCase(),
     bytes: Uint8Array.from(Buffer.from(match[2], "base64"))
   };
+}
+
+async function embedSupportedLogoImage(pdf: PDFDocument, bytes: Uint8Array) {
+  try {
+    if (isPng(bytes)) return pdf.embedPng(bytes);
+    if (isJpeg(bytes)) return pdf.embedJpg(bytes);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function isPng(bytes: Uint8Array) {
+  return (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  );
+}
+
+function isJpeg(bytes: Uint8Array) {
+  return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
 }
 
 function formatDate(value: string): string {
