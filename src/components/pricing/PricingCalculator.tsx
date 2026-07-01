@@ -37,6 +37,7 @@ export type PricingPlatformOption = PlatformRule & {
 };
 
 type PricingCalculatorProps = {
+  defaultOriginPostalCode?: string;
   variants: DemoProductVariant[];
   platforms: Record<string, PricingPlatformOption>;
   demoMode?: boolean;
@@ -76,7 +77,13 @@ const emptyPlatform: PricingPlatformOption = {
   defaultPricingMode: "interpolated"
 };
 
-export function PricingCalculator({ variants, platforms, demoMode = false, readonlyMode = false }: PricingCalculatorProps) {
+export function PricingCalculator({
+  defaultOriginPostalCode = "",
+  variants,
+  platforms,
+  demoMode = false,
+  readonlyMode = false
+}: PricingCalculatorProps) {
   const router = useRouter();
   const [variantId, setVariantId] = useState(variants[0]?.id ?? "");
   const [quantity, setQuantity] = useState(1);
@@ -92,9 +99,17 @@ export function PricingCalculator({ variants, platforms, demoMode = false, reado
   const [quickCustomerDocument, setQuickCustomerDocument] = useState("");
   const [quickCustomerEmail, setQuickCustomerEmail] = useState("");
   const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
+  const [quickCustomerPostalCode, setQuickCustomerPostalCode] = useState("");
+  const [quickCustomerAddressLine, setQuickCustomerAddressLine] = useState("");
+  const [quickCustomerAddressNumber, setQuickCustomerAddressNumber] = useState("");
+  const [quickCustomerAddressComplement, setQuickCustomerAddressComplement] = useState("");
+  const [quickCustomerDistrict, setQuickCustomerDistrict] = useState("");
+  const [quickCustomerCity, setQuickCustomerCity] = useState("");
+  const [quickCustomerState, setQuickCustomerState] = useState("");
+  const [quickCustomerAddress, setQuickCustomerAddress] = useState<CepAddress | null>(null);
   const [destinationPostalCode, setDestinationPostalCode] = useState("");
   const [destinationAddress, setDestinationAddress] = useState<CepAddress | null>(null);
-  const [originPostalCode, setOriginPostalCode] = useState("");
+  const [originPostalCode, setOriginPostalCode] = useState(formatCep(defaultOriginPostalCode));
   const [originAddress, setOriginAddress] = useState<CepAddress | null>(null);
   const [cepLookupMessage, setCepLookupMessage] = useState("");
   const [shippingService, setShippingService] = useState("manual");
@@ -227,6 +242,10 @@ export function PricingCalculator({ variants, platforms, demoMode = false, reado
   const simulatedChanged = hasCurveChanges(currentCurve, simulatedCurve);
   const persistentActionsDisabled = readonlyMode || (simulatedChanged && !demoMode);
   const quoteActionsDisabled = readonlyMode || (simulatedChanged && !demoMode);
+  const effectiveDestinationPostalCode =
+    normalizeCep(quickCustomerPostalCode).length === 8 ? quickCustomerPostalCode : destinationPostalCode;
+  const effectiveDestinationAddress =
+    normalizeCep(quickCustomerPostalCode).length === 8 ? quickCustomerAddress : destinationAddress;
 
   function updateCurvePoint(index: number, field: "quantity" | "unitPrice", value: number) {
     setSimulatedCurve((current) => {
@@ -268,6 +287,27 @@ export function PricingCalculator({ variants, platforms, demoMode = false, reado
       setOriginAddress(address);
     }
     setCepLookupMessage("Endereço preenchido pelo CEP.");
+  }
+
+  async function lookupCustomerCep() {
+    const digits = normalizeCep(quickCustomerPostalCode);
+    if (digits.length !== 8) return;
+
+    setCepLookupMessage("Buscando endereço do cliente...");
+    const address = await fetchCepAddress(digits).catch(() => null);
+    if (!address) {
+      setCepLookupMessage("CEP do cliente não encontrado. Preencha manualmente.");
+      setQuickCustomerAddress(null);
+      return;
+    }
+
+    setQuickCustomerPostalCode(address.cep);
+    setQuickCustomerAddressLine(address.street);
+    setQuickCustomerDistrict(address.district);
+    setQuickCustomerCity(address.city);
+    setQuickCustomerState(address.state);
+    setQuickCustomerAddress(address);
+    setCepLookupMessage("Endereço do cliente preenchido pelo CEP.");
   }
 
   function resetAnchors() {
@@ -343,6 +383,13 @@ export function PricingCalculator({ variants, platforms, demoMode = false, reado
         customerDocument: quickCustomerDocument,
         customerEmail: quickCustomerEmail,
         customerPhone: quickCustomerPhone,
+        customerPostalCode: quickCustomerPostalCode,
+        customerAddressLine: quickCustomerAddressLine,
+        customerAddressNumber: quickCustomerAddressNumber,
+        customerAddressComplement: quickCustomerAddressComplement,
+        customerDistrict: quickCustomerDistrict,
+        customerCity: quickCustomerCity,
+        customerState: quickCustomerState,
         shippingTotal: includeShipping ? shippingAmount : 0,
         includeCommission,
         includeFixedFee,
@@ -355,11 +402,13 @@ export function PricingCalculator({ variants, platforms, demoMode = false, reado
         }),
         validDays: 7,
         notes: buildQuickQuoteNotes({
-          destinationAddress,
-          destinationPostalCode,
+          destinationAddress: effectiveDestinationAddress,
+          destinationPostalCode: effectiveDestinationPostalCode,
           includeShipping,
           originAddress,
           originPostalCode,
+          customerAddressNumber: quickCustomerAddressNumber,
+          customerAddressComplement: quickCustomerAddressComplement,
           shippingAmount,
           shippingService
         })
@@ -420,6 +469,13 @@ export function PricingCalculator({ variants, platforms, demoMode = false, reado
         customerDocument: quickCustomerDocument,
         customerEmail: quickCustomerEmail,
         customerPhone: quickCustomerPhone,
+        customerPostalCode: quickCustomerPostalCode,
+        customerAddressLine: quickCustomerAddressLine,
+        customerAddressNumber: quickCustomerAddressNumber,
+        customerAddressComplement: quickCustomerAddressComplement,
+        customerDistrict: quickCustomerDistrict,
+        customerCity: quickCustomerCity,
+        customerState: quickCustomerState,
         shippingTotal: includeShipping ? shippingAmount : 0,
         includeCommission,
         includeFixedFee,
@@ -432,11 +488,13 @@ export function PricingCalculator({ variants, platforms, demoMode = false, reado
         }),
         validDays: 7,
         notes: [draftNotes, buildQuickQuoteNotes({
-          destinationAddress,
-          destinationPostalCode,
+          destinationAddress: effectiveDestinationAddress,
+          destinationPostalCode: effectiveDestinationPostalCode,
           includeShipping,
           originAddress,
           originPostalCode,
+          customerAddressNumber: quickCustomerAddressNumber,
+          customerAddressComplement: quickCustomerAddressComplement,
           shippingAmount,
           shippingService
         })].filter(Boolean).join("\n\n")
@@ -766,6 +824,44 @@ export function PricingCalculator({ variants, platforms, demoMode = false, reado
             <Input label="Email" placeholder="Email do cliente" type="email" value={quickCustomerEmail} onChange={setQuickCustomerEmail} />
             <Input label="Telefone" placeholder="Telefone do cliente" value={quickCustomerPhone} onChange={setQuickCustomerPhone} />
           </div>
+          <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
+            <h4 className="mb-3 text-sm font-semibold text-zinc-300">Endereço do cliente</h4>
+            <div className="grid gap-4 md:grid-cols-6">
+              <div className="md:col-span-2">
+                <Input
+                  label="CEP"
+                  placeholder="00000-000"
+                  value={quickCustomerPostalCode}
+                  onBlur={lookupCustomerCep}
+                  onChange={(value) => {
+                    setQuickCustomerPostalCode(formatCep(String(value)));
+                    setQuickCustomerAddress(null);
+                  }}
+                />
+              </div>
+              <div className="md:col-span-4">
+                <Input label="Endereço" value={quickCustomerAddressLine} onChange={setQuickCustomerAddressLine} />
+              </div>
+              <div className="md:col-span-2">
+                <Input label="Número" value={quickCustomerAddressNumber} onChange={setQuickCustomerAddressNumber} />
+              </div>
+              <div className="md:col-span-4">
+                <Input label="Complemento" value={quickCustomerAddressComplement} onChange={setQuickCustomerAddressComplement} />
+              </div>
+              <div className="md:col-span-3">
+                <Input label="Bairro" value={quickCustomerDistrict} onChange={setQuickCustomerDistrict} />
+              </div>
+              <div className="md:col-span-2">
+                <Input label="Cidade" value={quickCustomerCity} onChange={setQuickCustomerCity} />
+              </div>
+              <div className="md:col-span-1">
+                <Input label="UF" value={quickCustomerState} onChange={(value) => setQuickCustomerState(String(value).toUpperCase())} />
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-zinc-500">
+              Se o CEP do cliente estiver preenchido, ele será usado como destino padrão no cálculo/observação do frete.
+            </p>
+          </div>
           <p className="mt-3 text-xs text-zinc-500">Se vazio, entra como cliente nao informado no orcamento rapido.</p>
         </DetailsPanel>
 
@@ -773,7 +869,7 @@ export function PricingCalculator({ variants, platforms, demoMode = false, reado
           <div className="grid gap-4 md:grid-cols-5">
             <Input
               label="CEP destino"
-              placeholder="00000-000"
+              placeholder={effectiveDestinationPostalCode ? "Usando CEP do cliente" : "00000-000"}
               value={destinationPostalCode}
               onBlur={() => lookupShippingCep("destination")}
               onChange={(value) => {
@@ -821,7 +917,7 @@ export function PricingCalculator({ variants, platforms, demoMode = false, reado
           </p>
           {cepLookupMessage ? <p className="mt-2 text-xs text-zinc-500">{cepLookupMessage}</p> : null}
           <div className="mt-3 grid gap-2 md:grid-cols-2">
-            <CepPreview label="Destino" address={destinationAddress} />
+            <CepPreview label={effectiveDestinationPostalCode === quickCustomerPostalCode ? "Destino (cliente)" : "Destino"} address={effectiveDestinationAddress} />
             <CepPreview label="Origem" address={originAddress} />
           </div>
         </DetailsPanel>
@@ -1940,6 +2036,8 @@ function formatDeltaPercent(value: number) {
 }
 
 function buildQuickQuoteNotes(input: {
+  customerAddressComplement: string;
+  customerAddressNumber: string;
   destinationAddress: CepAddress | null;
   destinationPostalCode: string;
   includeShipping: boolean;
@@ -1950,7 +2048,11 @@ function buildQuickQuoteNotes(input: {
 }) {
   const lines = ["Orcamento rapido gerado pelo precificador."];
   if (input.destinationPostalCode) lines.push(`CEP destino: ${input.destinationPostalCode}`);
-  if (input.destinationAddress) lines.push(`Endereco destino: ${formatCepAddress(input.destinationAddress)}`);
+  if (input.destinationAddress) {
+    lines.push(
+      `Endereco destino: ${formatCepAddress(input.destinationAddress, input.customerAddressNumber, input.customerAddressComplement)}`
+    );
+  }
   if (input.originPostalCode) lines.push(`CEP origem: ${input.originPostalCode}`);
   if (input.originAddress) lines.push(`Endereco origem: ${formatCepAddress(input.originAddress)}`);
   if (input.shippingService !== "manual") lines.push(`Servico de frete: ${input.shippingService}`);
@@ -1958,8 +2060,9 @@ function buildQuickQuoteNotes(input: {
   return lines.join("\n");
 }
 
-function formatCepAddress(address: CepAddress) {
-  return [address.street, address.district, address.city, address.state, address.cep].filter(Boolean).join(" - ");
+function formatCepAddress(address: CepAddress, number?: string, complement?: string) {
+  const street = [address.street, number?.trim(), complement?.trim()].filter(Boolean).join(", ");
+  return [street, address.district, address.city, address.state, address.cep].filter(Boolean).join(" - ");
 }
 
 function buildLocalPlatformOverride(input: {

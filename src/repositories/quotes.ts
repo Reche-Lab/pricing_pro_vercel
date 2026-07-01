@@ -82,6 +82,13 @@ export type CreateQuoteInput = {
   customerDocument?: string | null;
   customerEmail?: string | null;
   customerPhone?: string | null;
+  customerPostalCode?: string | null;
+  customerAddressLine?: string | null;
+  customerAddressNumber?: string | null;
+  customerAddressComplement?: string | null;
+  customerDistrict?: string | null;
+  customerCity?: string | null;
+  customerState?: string | null;
   shippingTotal?: number;
   includeCommission?: boolean;
   includeFixedFee?: boolean;
@@ -358,8 +365,21 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
     if (!customerId && input.customerName) {
       const customerResult = await client.query<{ id: string }>(
         `
-          insert into customers (tenant_id, name, document, email, phone)
-          values ($1, $2, $3, $4, $5)
+          insert into customers (
+            tenant_id,
+            name,
+            document,
+            email,
+            phone,
+            postal_code,
+            address_line,
+            address_number,
+            address_complement,
+            district,
+            city,
+            state
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
           returning id
         `,
         [
@@ -367,7 +387,14 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
           input.customerName,
           clean(input.customerDocument),
           clean(input.customerEmail),
-          clean(input.customerPhone)
+          clean(input.customerPhone),
+          clean(input.customerPostalCode),
+          clean(input.customerAddressLine),
+          clean(input.customerAddressNumber),
+          clean(input.customerAddressComplement),
+          clean(input.customerDistrict),
+          clean(input.customerCity),
+          clean(input.customerState)?.toUpperCase() ?? null
         ]
       );
       customerId = customerResult.rows[0].id;
@@ -649,8 +676,21 @@ async function resolveQuoteCustomer(client: pg.PoolClient, tenantId: string, inp
   if (!customerId && input.customerName) {
     const customerResult = await client.query<{ id: string }>(
       `
-        insert into customers (tenant_id, name, document, email, phone)
-        values ($1, $2, $3, $4, $5)
+        insert into customers (
+          tenant_id,
+          name,
+          document,
+          email,
+          phone,
+          postal_code,
+          address_line,
+          address_number,
+          address_complement,
+          district,
+          city,
+          state
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         returning id
       `,
       [
@@ -658,7 +698,14 @@ async function resolveQuoteCustomer(client: pg.PoolClient, tenantId: string, inp
         input.customerName,
         clean(input.customerDocument),
         clean(input.customerEmail),
-        clean(input.customerPhone)
+        clean(input.customerPhone),
+        clean(input.customerPostalCode),
+        clean(input.customerAddressLine),
+        clean(input.customerAddressNumber),
+        clean(input.customerAddressComplement),
+        clean(input.customerDistrict),
+        clean(input.customerCity),
+        clean(input.customerState)?.toUpperCase() ?? null
       ]
     );
     customerId = customerResult.rows[0].id;

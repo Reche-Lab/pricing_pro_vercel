@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Truck } from "lucide-react";
+import { fetchCepAddress, formatCep, normalizeCep, type CepAddress } from "@/lib/cep";
 
 type ShippingVariant = {
   id: string;
@@ -9,6 +10,7 @@ type ShippingVariant = {
 };
 
 type ShippingQuoteFormProps = {
+  defaultOriginPostalCode?: string;
   variants: ShippingVariant[];
 };
 
@@ -32,8 +34,13 @@ type QuoteResponse = {
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
-export function ShippingQuoteForm({ variants }: ShippingQuoteFormProps) {
+export function ShippingQuoteForm({ defaultOriginPostalCode = "", variants }: ShippingQuoteFormProps) {
   const [error, setError] = useState("");
+  const [originPostalCode, setOriginPostalCode] = useState(formatCep(defaultOriginPostalCode));
+  const [destinationPostalCode, setDestinationPostalCode] = useState("");
+  const [originAddress, setOriginAddress] = useState<CepAddress | null>(null);
+  const [destinationAddress, setDestinationAddress] = useState<CepAddress | null>(null);
+  const [cepMessage, setCepMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
 
@@ -51,8 +58,8 @@ export function ShippingQuoteForm({ variants }: ShippingQuoteFormProps) {
         productVariantId: form.get("productVariantId"),
         quantity: Number(form.get("quantity")),
         service: form.get("service"),
-        originPostalCode: form.get("originPostalCode"),
-        destinationPostalCode: form.get("destinationPostalCode"),
+        originPostalCode,
+        destinationPostalCode,
         declaredValue: Number(form.get("declaredValue") || 0)
       })
     });
@@ -66,6 +73,30 @@ export function ShippingQuoteForm({ variants }: ShippingQuoteFormProps) {
     }
 
     setQuote(data as QuoteResponse);
+  }
+
+  async function lookupCep(kind: "origin" | "destination") {
+    const value = kind === "origin" ? originPostalCode : destinationPostalCode;
+    const digits = normalizeCep(value);
+    if (digits.length !== 8) return;
+
+    setCepMessage(kind === "origin" ? "Buscando endereço de origem..." : "Buscando endereço de destino...");
+    const address = await fetchCepAddress(digits).catch(() => null);
+    if (!address) {
+      setCepMessage("CEP não encontrado. Confira o número informado.");
+      if (kind === "origin") setOriginAddress(null);
+      else setDestinationAddress(null);
+      return;
+    }
+
+    if (kind === "origin") {
+      setOriginPostalCode(address.cep);
+      setOriginAddress(address);
+    } else {
+      setDestinationPostalCode(address.cep);
+      setDestinationAddress(address);
+    }
+    setCepMessage("Endereço preenchido pelo CEP.");
   }
 
   return (
@@ -95,9 +126,34 @@ export function ShippingQuoteForm({ variants }: ShippingQuoteFormProps) {
                 <option value="pac">PAC</option>
               </select>
             </label>
-            <Input label="CEP origem" name="originPostalCode" placeholder="00000-000" />
-            <Input label="CEP destino" name="destinationPostalCode" placeholder="00000-000" />
+            <Input
+              label="CEP origem"
+              name="originPostalCode"
+              placeholder="00000-000"
+              value={originPostalCode}
+              onBlur={() => lookupCep("origin")}
+              onChange={(value) => {
+                setOriginPostalCode(formatCep(value));
+                setOriginAddress(null);
+              }}
+            />
+            <Input
+              label="CEP destino"
+              name="destinationPostalCode"
+              placeholder="00000-000"
+              value={destinationPostalCode}
+              onBlur={() => lookupCep("destination")}
+              onChange={(value) => {
+                setDestinationPostalCode(formatCep(value));
+                setDestinationAddress(null);
+              }}
+            />
             <Input defaultValue="0" label="Valor declarado" name="declaredValue" step="0.01" type="number" />
+          </div>
+          {cepMessage ? <p className="text-xs text-zinc-500">{cepMessage}</p> : null}
+          <div className="grid gap-2 md:grid-cols-2">
+            <CepPreview label="Origem" address={originAddress} />
+            <CepPreview label="Destino" address={destinationAddress} />
           </div>
         </div>
         {error ? <p className="mt-4 rounded-md bg-red-400/10 px-3 py-2 text-sm text-red-300">{error}</p> : null}
@@ -140,14 +196,20 @@ function Input({
   type = "text",
   placeholder,
   defaultValue,
-  step
+  onBlur,
+  onChange,
+  step,
+  value
 }: {
   label: string;
   name: string;
   type?: string;
   placeholder?: string;
   defaultValue?: string;
+  onBlur?: () => void;
+  onChange?: (value: string) => void;
   step?: string;
+  value?: string;
 }) {
   return (
     <label className="block">
@@ -157,12 +219,30 @@ function Input({
         defaultValue={defaultValue}
         min={type === "number" ? 0 : undefined}
         name={name}
+        onBlur={onBlur}
+        onChange={onChange ? (event) => onChange(event.target.value) : undefined}
         placeholder={placeholder}
         required
         step={step}
         type={type}
+        value={value}
       />
     </label>
+  );
+}
+
+function CepPreview({ address, label }: { address: CepAddress | null; label: string }) {
+  return (
+    <div className="rounded-md border border-zinc-800 bg-zinc-950/50 p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
+      {address ? (
+        <p className="mt-1 text-sm text-zinc-300">
+          {[address.street, address.district, address.city, address.state, address.cep].filter(Boolean).join(" - ")}
+        </p>
+      ) : (
+        <p className="mt-1 text-sm text-zinc-600">Informe um CEP válido para preencher automaticamente.</p>
+      )}
+    </div>
   );
 }
 
