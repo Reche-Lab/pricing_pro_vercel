@@ -23,6 +23,7 @@ export default async function SuperadminPage() {
       isSuperAdmin={profile.is_super_admin}
       title="Superadmin"
       subtitle="Visão global restrita ao administrador do sistema."
+      tenantLogoUrl={profile.tenant_logo_url}
       tenantName={profile.tenant_name}
     >
       <SuperadminPanel tenants={tenants} users={users} />

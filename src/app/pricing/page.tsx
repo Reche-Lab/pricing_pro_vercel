@@ -35,6 +35,7 @@ export default async function PricingPage() {
     <AppShell
       title="Precificador"
       subtitle="Simulacao de curvas, comissoes e margem por quantidade."
+      tenantLogoUrl={profile.tenant_logo_url}
       tenantName={profile.tenant_name}
     >
       <PricingCalculator

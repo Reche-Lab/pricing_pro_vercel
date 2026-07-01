@@ -22,7 +22,12 @@ export default async function ProductsPage() {
   if (!profile) redirect("/login");
 
   return (
-    <AppShell title="Produtos" subtitle="Cadastro inicial de produtos, variantes e curvas." tenantName={profile.tenant_name}>
+    <AppShell
+      title="Produtos"
+      subtitle="Cadastro inicial de produtos, variantes e curvas."
+      tenantLogoUrl={profile.tenant_logo_url}
+      tenantName={profile.tenant_name}
+    >
       <div className="grid gap-6 xl:grid-cols-[520px_1fr]">
         <ProductForm />
         <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">

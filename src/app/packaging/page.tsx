@@ -24,7 +24,12 @@ export default async function PackagingPage() {
   const variantLabelById = Object.fromEntries(variantOptions.map((variant) => [variant.id, variant.label]));
 
   return (
-    <AppShell title="Embalagens" subtitle="Caixas e capacidades por variante." tenantName={profile.tenant_name}>
+    <AppShell
+      title="Embalagens"
+      subtitle="Caixas e capacidades por variante."
+      tenantLogoUrl={profile.tenant_logo_url}
+      tenantName={profile.tenant_name}
+    >
       <div className="grid gap-6 xl:grid-cols-[480px_1fr]">
         <PackagingForm />
         <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">

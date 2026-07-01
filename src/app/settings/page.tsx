@@ -28,6 +28,7 @@ export default async function SettingsPage({
       isSuperAdmin={profile.is_super_admin}
       title="Configuracoes"
       subtitle="Dados usados em documentos, remetente de frete e integracoes."
+      tenantLogoUrl={profile.tenant_logo_url}
       tenantName={profile.tenant_name}
     >
       <div className="grid max-w-5xl gap-6">

@@ -7,19 +7,36 @@ type AppShellProps = {
   isSuperAdmin?: boolean;
   title: string;
   subtitle?: string;
+  tenantLogoUrl?: string | null;
   tenantName?: string;
 };
 
-export function AppShell({ children, isSuperAdmin = false, title, subtitle, tenantName }: AppShellProps) {
+export function AppShell({ children, isSuperAdmin = false, title, subtitle, tenantLogoUrl, tenantName }: AppShellProps) {
+  const logoFallback = (tenantName ?? "P").slice(0, 1).toUpperCase();
+
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100 lg:grid lg:grid-cols-[280px_1fr]">
       <aside className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/95 px-3 py-3 backdrop-blur lg:top-0 lg:h-screen lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
-        <div className="mb-3 flex items-center justify-between gap-3 lg:mb-6 lg:block">
-          <div className="min-w-0">
-            <p className="truncate text-xs font-semibold uppercase tracking-wide text-amber-400">
-              {tenantName ?? "Pricing Pro"}
-            </p>
-            <p className="mt-0.5 truncate text-base font-semibold text-white lg:mt-1 lg:text-lg">Pricing Pro</p>
+        <div className="mb-3 flex items-center justify-between gap-3 lg:mb-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900">
+              {tenantLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  alt={`Logo ${tenantName ?? "tenant"}`}
+                  className="h-full w-full object-contain p-1"
+                  src={tenantLogoUrl}
+                />
+              ) : (
+                <span className="text-sm font-semibold text-amber-300">{logoFallback}</span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold uppercase tracking-wide text-amber-400">
+                {tenantName ?? "Pricing Pro"}
+              </p>
+              <p className="mt-0.5 truncate text-base font-semibold text-white lg:text-lg">Pricing Pro</p>
+            </div>
           </div>
 
           <form action="/api/auth/logout" className="shrink-0 lg:hidden" method="post">

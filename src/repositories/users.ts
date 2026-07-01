@@ -87,6 +87,7 @@ export async function getSessionProfile(userId: string, tenantId: string) {
       name: string;
       tenant_id: string;
       tenant_name: string;
+      tenant_logo_url: string | null;
       tenant_slug: string;
       role: string;
       is_super_admin: boolean;
@@ -98,6 +99,7 @@ export async function getSessionProfile(userId: string, tenantId: string) {
           u.name,
           t.id as tenant_id,
           t.name as tenant_name,
+          t.logo_url as tenant_logo_url,
           t.slug as tenant_slug,
           r.key as role,
           u.is_super_admin

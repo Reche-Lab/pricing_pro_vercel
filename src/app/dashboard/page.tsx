@@ -23,6 +23,7 @@ export default async function DashboardPage() {
       isSuperAdmin={profile.is_super_admin}
       title="Dashboard"
       subtitle="Visão operacional do atendimento, orçamentos, frete, integrações e saúde do tenant."
+      tenantLogoUrl={profile.tenant_logo_url}
       tenantName={profile.tenant_name}
     >
       <DashboardOverview data={overview} billing={billing} />

@@ -16,7 +16,12 @@ export default async function CustomersPage() {
   if (!profile) redirect("/login");
 
   return (
-    <AppShell title="Clientes" subtitle="Clientes isolados por tenant." tenantName={profile.tenant_name}>
+    <AppShell
+      title="Clientes"
+      subtitle="Clientes isolados por tenant."
+      tenantLogoUrl={profile.tenant_logo_url}
+      tenantName={profile.tenant_name}
+    >
       <div className="grid gap-6 xl:grid-cols-[minmax(520px,640px)_1fr]">
         <CustomerForm />
         <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">

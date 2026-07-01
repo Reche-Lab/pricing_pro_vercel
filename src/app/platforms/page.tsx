@@ -17,7 +17,12 @@ export default async function PlatformsPage() {
   if (!profile) redirect("/login");
 
   return (
-    <AppShell title="Canais" subtitle="Comissoes, taxas e regras comerciais por tenant." tenantName={profile.tenant_name}>
+    <AppShell
+      title="Canais"
+      subtitle="Comissoes, taxas e regras comerciais por tenant."
+      tenantLogoUrl={profile.tenant_logo_url}
+      tenantName={profile.tenant_name}
+    >
       <div className="grid gap-6 xl:grid-cols-[460px_1fr]">
         <PlatformForm />
         <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">

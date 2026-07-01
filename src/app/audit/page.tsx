@@ -22,7 +22,12 @@ export default async function AuditPage() {
     : [[], []];
 
   return (
-    <AppShell title="Auditoria" subtitle="Eventos internos e historico de integracoes." tenantName={profile.tenant_name}>
+    <AppShell
+      title="Auditoria"
+      subtitle="Eventos internos e historico de integracoes."
+      tenantLogoUrl={profile.tenant_logo_url}
+      tenantName={profile.tenant_name}
+    >
       {allowed ? (
         <div className="grid gap-6">
           <AuditTable rows={auditLogs} />

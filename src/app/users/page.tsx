@@ -22,6 +22,7 @@ export default async function UsersPage() {
       isSuperAdmin={profile.is_super_admin}
       title="Usuarios"
       subtitle="Membros e permissoes por tenant."
+      tenantLogoUrl={profile.tenant_logo_url}
       tenantName={profile.tenant_name}
     >
       {allowed ? (

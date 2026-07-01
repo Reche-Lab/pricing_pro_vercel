@@ -18,7 +18,12 @@ export default async function ShippingPage() {
   if (!profile) redirect("/login");
 
   return (
-    <AppShell title="Frete" subtitle="Cotacao Correios por tenant usando embalagens cadastradas." tenantName={profile.tenant_name}>
+    <AppShell
+      title="Frete"
+      subtitle="Cotacao Correios por tenant usando embalagens cadastradas."
+      tenantLogoUrl={profile.tenant_logo_url}
+      tenantName={profile.tenant_name}
+    >
       <ShippingQuoteForm
         defaultOriginPostalCode={tenant?.postal_code ?? ""}
         variants={variants.map((variant) => ({

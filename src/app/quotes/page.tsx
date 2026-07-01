@@ -25,7 +25,12 @@ export default async function QuotesPage() {
   if (!profile) redirect("/login");
 
   return (
-    <AppShell title="Orcamentos" subtitle="Orcamentos persistidos com snapshot de calculo." tenantName={profile.tenant_name}>
+    <AppShell
+      title="Orcamentos"
+      subtitle="Orcamentos persistidos com snapshot de calculo."
+      tenantLogoUrl={profile.tenant_logo_url}
+      tenantName={profile.tenant_name}
+    >
       <div className="grid gap-6 xl:grid-cols-[460px_1fr]">
         <QuoteForm
           customers={customers.map((customer) => ({ id: customer.id, name: customer.name }))}

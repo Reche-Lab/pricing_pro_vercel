@@ -26,6 +26,7 @@ export default async function BillingPage({
       isSuperAdmin={profile.is_super_admin}
       title="Assinatura"
       subtitle="Cobrança mensal do tenant via Mercado Pago."
+      tenantLogoUrl={profile.tenant_logo_url}
       tenantName={profile.tenant_name}
     >
       <BillingPanel billing={billing} returnStatus={params.status} />

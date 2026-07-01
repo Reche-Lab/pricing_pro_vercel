@@ -29,7 +29,12 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
   if (!detail) notFound();
 
   return (
-    <AppShell title="Orcamento" subtitle={`Status: ${detail.quote.status}`} tenantName={profile.tenant_name}>
+    <AppShell
+      title="Orcamento"
+      subtitle={`Status: ${detail.quote.status}`}
+      tenantLogoUrl={profile.tenant_logo_url}
+      tenantName={profile.tenant_name}
+    >
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <section className="grid gap-6">
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5">
