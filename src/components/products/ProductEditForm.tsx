@@ -71,10 +71,10 @@ export function ProductEditForm({ product }: { product: ProductEditValues }) {
         type="button"
       >
         <span className="inline-flex items-center gap-2">
-          <Pencil size={15} />
-          Editar dados do produto
+          <Pencil size={14} />
+          Editar
         </span>
-        <span className="text-xs text-zinc-500">{open ? "Recolher" : "Abrir"}</span>
+        <span className="text-xs text-zinc-500">{open ? "Recolher" : ""}</span>
       </button>
 
       {open ? (

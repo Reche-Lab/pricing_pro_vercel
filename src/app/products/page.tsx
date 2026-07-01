@@ -34,25 +34,32 @@ export default async function ProductsPage() {
           <div className="border-b border-zinc-800 px-5 py-4">
             <h2 className="font-semibold">Produtos cadastrados</h2>
           </div>
-          <div className="divide-y divide-zinc-800">
+          <div className="space-y-3 p-3">
             {products.length === 0 ? (
               <p className="p-5 text-sm text-zinc-500">Nenhum produto cadastrado.</p>
             ) : (
               products.map((item) => (
-                <div className="grid gap-3 px-5 py-4 text-sm" key={item.variant_id}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-white">
+                <div
+                  className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-950/45 p-3 text-sm shadow-sm shadow-black/10 transition-colors hover:border-zinc-700"
+                  key={item.variant_id}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3 border-l-2 border-amber-400/70 pl-3">
+                    <div className="min-w-0">
+                      <p className="break-words text-base font-semibold text-white">
                         {item.product_name} - {item.variant_name}
                       </p>
-                      <p className="text-zinc-500">
-                        {item.product_category} {item.sku ? `- ${item.sku}` : ""}
-                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <span className="rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-400">{item.product_category}</span>
+                        {item.sku ? <span className="rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-400">SKU {item.sku}</span> : null}
+                        {!item.variant_active || !item.product_active ? (
+                          <span className="rounded-md bg-amber-400/10 px-2 py-1 text-xs text-amber-200">Inativo</span>
+                        ) : null}
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-medium text-white">{brl.format(Number(item.unit_cost))}</p>
-                      <p className="text-zinc-500">{Number(item.unit_weight_kg).toFixed(4)} kg/un para frete</p>
-                      <p className="text-zinc-500">
+                    <div className="grid gap-1 text-left sm:text-right">
+                      <p className="font-semibold text-white">{brl.format(Number(item.unit_cost))}</p>
+                      <p className="text-xs text-zinc-500">{Number(item.unit_weight_kg).toFixed(4)} kg/un para frete</p>
+                      <p className="text-xs text-zinc-500">
                         {item.height_cm && item.width_cm && item.length_cm
                           ? `${Number(item.height_cm)} x ${Number(item.width_cm)} x ${Number(item.length_cm)} cm`
                           : "Medidas não cadastradas"}
