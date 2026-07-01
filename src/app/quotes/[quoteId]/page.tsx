@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+import { z } from "zod";
 import { AppShell } from "@/components/layout/AppShell";
 import { MelhorEnvioPayloadPreview } from "@/components/quotes/MelhorEnvioPayloadPreview";
 import { OlistQuoteActions } from "@/components/quotes/OlistQuoteActions";
@@ -19,6 +20,9 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
   if (!session) redirect("/login");
 
   const { quoteId } = await params;
+  const quoteIdParsed = z.string().uuid().safeParse(quoteId);
+  if (!quoteIdParsed.success) notFound();
+
   const [profile, detail, shipments] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
     getQuoteDetail(session.userId, session.tenantId, quoteId),
@@ -141,7 +145,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
               <Detail label="Frete" value={brl.format(Number(detail.quote.shipping_total))} />
               <Detail label="Desconto" value={brl.format(Number(detail.quote.discount_total))} />
               <Detail label="Margem" value={`${Number(detail.quote.margin_percent).toFixed(1)}%`} />
-              <Detail label="Validade" value={detail.quote.valid_until ?? "-"} />
+              <Detail label="Validade" value={formatDate(detail.quote.valid_until)} />
             </dl>
           </div>
         </aside>
@@ -163,4 +167,11 @@ function Detail({ label, value }: { label: string; value: string }) {
       <dd className="font-medium text-white">{value}</dd>
     </div>
   );
+}
+
+function formatDate(value: string | Date | null | undefined) {
+  if (!value) return "-";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(date);
 }

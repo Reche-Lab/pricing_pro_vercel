@@ -433,6 +433,8 @@ function centsToMoney(value: number) {
   return money(value / 100);
 }
 
-function formatDate(value: string) {
-  return dateFormatter.format(new Date(value));
+function formatDate(value: string | Date) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return dateFormatter.format(date);
 }

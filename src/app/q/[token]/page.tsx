@@ -132,6 +132,8 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatDate(value: string) {
-  return dateFormatter.format(new Date(value));
+function formatDate(value: string | Date) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return dateFormatter.format(date);
 }
