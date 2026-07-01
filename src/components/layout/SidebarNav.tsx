@@ -49,7 +49,7 @@ export function SidebarNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean })
         ))}
         {isSuperAdmin ? (
           <NavItem active={isActive(pathname, "/superadmin")} href="/superadmin" icon={Sparkles}>
-            Superadmin
+            Superadmin global
           </NavItem>
         ) : null}
       </div>

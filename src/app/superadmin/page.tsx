@@ -22,7 +22,7 @@ export default async function SuperadminPage() {
     <AppShell
       isSuperAdmin={profile.is_super_admin}
       title="Superadmin"
-      subtitle="Cadastro global de tenants, owners iniciais e acompanhamento de usuarios."
+      subtitle="Visão global restrita ao administrador do sistema."
       tenantName={profile.tenant_name}
     >
       <SuperadminPanel tenants={tenants} users={users} />

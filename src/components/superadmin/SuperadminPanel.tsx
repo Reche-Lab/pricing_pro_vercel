@@ -88,6 +88,25 @@ export function SuperadminPanel({
 
   return (
     <div className="grid gap-6 xl:grid-cols-[440px_1fr]">
+      <section className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-5 xl:col-span-2">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-300">
+              <ShieldCheck size={15} />
+              Acesso exclusivo de superadmin
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-white">Visão global da plataforma</h2>
+            <p className="mt-1 text-sm text-zinc-300">
+              Esta área consolida todos os tenants, usuários globais, trial, vouchers e cobrança. Ela não aparece no menu
+              de usuários comuns.
+            </p>
+          </div>
+          <span className="w-fit rounded-full border border-amber-300/40 bg-zinc-950/70 px-3 py-1 text-xs font-semibold text-amber-200">
+            liaflow.ai@gmail.com
+          </span>
+        </div>
+      </section>
+
       <section className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5">
         <div className="mb-5 flex items-center gap-2">
           <Building2 className="text-amber-400" size={18} />
@@ -154,42 +173,55 @@ export function SuperadminPanel({
 
       <div className="grid gap-6">
         <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
-          <div className="flex items-center gap-2 border-b border-zinc-800 px-5 py-4">
-            <Building2 className="text-zinc-500" size={18} />
-            <h2 className="font-semibold text-white">Tenants</h2>
+          <div className="border-b border-zinc-800 px-5 py-4">
+            <div className="flex items-center gap-2">
+              <Building2 className="text-zinc-500" size={18} />
+              <h2 className="font-semibold text-white">Tenants</h2>
+            </div>
+            <p className="mt-1 text-sm text-zinc-500">
+              Gestão global por tenant: status, assinatura, trial, voucher e quantidade de membros.
+            </p>
           </div>
-          <div className="divide-y divide-zinc-800">
+          <div className="grid gap-4 p-4">
             {tenants.map((tenant) => (
-              <div className="grid gap-4 px-5 py-4 text-sm xl:grid-cols-[1fr_150px_170px_260px]" key={tenant.id}>
-                <div className="min-w-0">
-                  <p className="font-medium text-white">{tenant.name}</p>
-                  <p className="text-zinc-500">{tenant.slug}</p>
-                  <p className="mt-1 text-xs text-zinc-500">
-                    Owner: {tenant.owner_name ? `${tenant.owner_name} (${tenant.owner_email})` : "nao definido"}
-                  </p>
-                </div>
-                <Badge>{tenant.status}</Badge>
-                <div>
-                  <Badge>{billingLabel(tenant.subscription_status ?? tenant.billing_status)}</Badge>
-                  <p className="mt-1 text-xs text-zinc-500">
-                    {tenant.current_period_end ? new Intl.DateTimeFormat("pt-BR").format(new Date(tenant.current_period_end)) : "sem vencimento"}
-                  </p>
-                </div>
-                <div className="grid gap-3">
-                  <p className="text-zinc-400">{tenant.member_count} membros</p>
-                  {tenant.discount_percent && Number(tenant.discount_percent) > 0 ? (
-                    <p className="text-xs text-emerald-300">
-                      Voucher {Number(tenant.discount_percent).toFixed(0)}% até{" "}
-                      {tenant.discount_expires_at ? new Intl.DateTimeFormat("pt-BR").format(new Date(tenant.discount_expires_at)) : "sem data"}
+              <article className="rounded-lg border border-zinc-800 bg-zinc-950/45 p-4" key={tenant.id}>
+                <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr_320px]">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-white">{tenant.name}</p>
+                      <Badge>{tenant.status}</Badge>
+                    </div>
+                    <p className="mt-1 text-zinc-500">{tenant.slug}</p>
+                    <p className="mt-2 text-xs text-zinc-500">
+                      Owner: {tenant.owner_name ? `${tenant.owner_name} (${tenant.owner_email})` : "não definido"}
                     </p>
-                  ) : null}
+                    <p className="mt-1 text-xs text-zinc-500">{tenant.member_count} membro(s)</p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                    <StatusBlock
+                      label="Assinatura"
+                      value={billingLabel(tenant.subscription_status ?? tenant.billing_status)}
+                      detail={tenant.current_period_end ? `Válida até ${new Intl.DateTimeFormat("pt-BR").format(new Date(tenant.current_period_end))}` : "Sem vencimento definido"}
+                    />
+                    <StatusBlock
+                      label="Voucher"
+                      value={tenant.discount_percent && Number(tenant.discount_percent) > 0 ? `${Number(tenant.discount_percent).toFixed(0)}% de desconto` : "Sem voucher ativo"}
+                      detail={
+                        tenant.discount_percent && Number(tenant.discount_percent) > 0
+                          ? `Expira em ${tenant.discount_expires_at ? new Intl.DateTimeFormat("pt-BR").format(new Date(tenant.discount_expires_at)) : "data não definida"}`
+                          : "Use o formulário ao lado para aplicar um desconto por prazo definido."
+                      }
+                    />
+                  </div>
+
                   <TenantBillingActions
                     disabled={billingLoading === tenant.id}
                     tenantId={tenant.id}
                     onSubmit={updateTenantBilling}
                   />
                 </div>
-              </div>
+              </article>
             ))}
             {tenants.length === 0 ? <EmptyState text="Nenhum tenant cadastrado." /> : null}
           </div>
@@ -242,59 +274,84 @@ function TenantBillingActions({
   }
 
   return (
-    <div className="grid gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 p-2">
-      <div className="grid grid-cols-[1fr_auto] gap-2">
-        <input
-          className="focus-ring h-9 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs"
-          min={1}
-          type="number"
-          value={trialDays}
-          onChange={(event) => setTrialDays(Number(event.target.value))}
-        />
-        <button
-          className="focus-ring inline-flex h-9 items-center gap-1 rounded-md border border-zinc-700 px-2 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
-          disabled={disabled}
-          type="button"
-          onClick={() => onSubmit(tenantId, { action: "extend_trial", endsAt: futureDate(trialDays) })}
-        >
-          <TimerReset size={14} />
-          Trial dias
-        </button>
+    <div className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Trial do tenant</p>
+        <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+          <label className="block">
+            <span className="mb-1 block text-[11px] text-zinc-500">Dias a partir de hoje</span>
+            <input
+              className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs"
+              min={1}
+              type="number"
+              value={trialDays}
+              onChange={(event) => setTrialDays(Number(event.target.value))}
+            />
+          </label>
+          <button
+            className="focus-ring mt-5 inline-flex h-9 items-center gap-1 rounded-md border border-zinc-700 px-2 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+            disabled={disabled}
+            type="button"
+            onClick={() => onSubmit(tenantId, { action: "extend_trial", endsAt: futureDate(trialDays) })}
+          >
+            <TimerReset size={14} />
+            Estender
+          </button>
+        </div>
       </div>
-      <div className="grid grid-cols-[70px_1fr_auto] gap-2">
-        <input
-          className="focus-ring h-9 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs"
-          max={100}
-          min={1}
-          type="number"
-          value={discountPercent}
-          onChange={(event) => setDiscountPercent(Number(event.target.value))}
-        />
-        <input
-          className="focus-ring h-9 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs"
-          min={1}
-          type="number"
-          value={voucherDays}
-          onChange={(event) => setVoucherDays(Number(event.target.value))}
-        />
-        <button
-          className="focus-ring inline-flex h-9 items-center gap-1 rounded-md border border-emerald-400/40 px-2 text-xs text-emerald-200 hover:bg-emerald-400/10 disabled:opacity-50"
-          disabled={disabled}
-          type="button"
-          onClick={() =>
-            onSubmit(tenantId, {
-              action: "apply_voucher",
-              discountPercent,
-              expiresAt: futureDate(voucherDays),
-              note: `Voucher ${discountPercent}% por ${voucherDays} dia(s)`
-            })
-          }
-        >
-          <Gift size={14} />
-          Voucher
-        </button>
+
+      <div className="border-t border-zinc-800 pt-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Voucher do tenant</p>
+        <div className="mt-2 grid grid-cols-[1fr_1fr_auto] gap-2">
+          <label className="block">
+            <span className="mb-1 block text-[11px] text-zinc-500">% desconto</span>
+            <input
+              className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs"
+              max={100}
+              min={1}
+              type="number"
+              value={discountPercent}
+              onChange={(event) => setDiscountPercent(Number(event.target.value))}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] text-zinc-500">Duração em dias</span>
+            <input
+              className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs"
+              min={1}
+              type="number"
+              value={voucherDays}
+              onChange={(event) => setVoucherDays(Number(event.target.value))}
+            />
+          </label>
+          <button
+            className="focus-ring mt-5 inline-flex h-9 items-center gap-1 rounded-md border border-emerald-400/40 px-2 text-xs text-emerald-200 hover:bg-emerald-400/10 disabled:opacity-50"
+            disabled={disabled}
+            type="button"
+            onClick={() =>
+              onSubmit(tenantId, {
+                action: "apply_voucher",
+                discountPercent,
+                expiresAt: futureDate(voucherDays),
+                note: `Voucher ${discountPercent}% por ${voucherDays} dia(s)`
+              })
+            }
+          >
+            <Gift size={14} />
+            Aplicar
+          </button>
+        </div>
       </div>
-      <p className="text-[11px] text-zinc-500">Campos: dias de trial, % desconto e dias do voucher.</p>
+    </div>
+  );
+}
+
+function StatusBlock({ detail, label, value }: { detail: string; label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-zinc-800 bg-zinc-950/50 p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="mt-1 text-sm font-medium text-white">{value}</p>
+      <p className="mt-1 text-xs text-zinc-500">{detail}</p>
     </div>
   );
 }
