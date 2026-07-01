@@ -58,7 +58,7 @@ export default async function ProductsPage() {
                     product={{
                       productName: item.product_name,
                       category: item.product_category,
-                      description: item.product_description,
+                      description: item.variant_description ?? item.product_description,
                       productActive: item.product_active,
                       variantId: item.variant_id,
                       variantName: item.variant_name,

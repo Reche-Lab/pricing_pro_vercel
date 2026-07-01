@@ -11,6 +11,7 @@ export type ProductVariantRow = {
   product_description: string | null;
   variant_id: string;
   variant_name: string;
+  variant_description: string | null;
   sku: string | null;
   unit_cost: string;
   unit_weight_kg: string;
@@ -74,6 +75,7 @@ export async function listProductVariants(userId: string, tenantId: string): Pro
           p.description as product_description,
           v.id as variant_id,
           v.name as variant_name,
+          v.description as variant_description,
           v.sku,
           v.unit_cost,
           v.unit_weight_kg,
@@ -145,6 +147,7 @@ export async function listProductsAdmin(userId: string, tenantId: string): Promi
           p.active as product_active,
           v.id as variant_id,
           v.name as variant_name,
+          v.description as variant_description,
           v.sku,
           v.unit_cost,
           v.unit_weight_kg,
@@ -207,6 +210,7 @@ export async function createProductWithVariant(
           tenant_id,
           product_id,
           name,
+          description,
           sku,
           unit_cost,
           unit_weight_kg,
@@ -215,13 +219,14 @@ export async function createProductWithVariant(
           length_cm,
           active
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
         returning id
       `,
       [
         tenantId,
         productId,
         input.variantName,
+        input.description || null,
         input.sku || null,
         input.unitCost,
         input.unitWeightKg,
@@ -307,8 +312,7 @@ export async function updateProductVariant(
         set name = $3,
             slug = $4,
             category = $5,
-            description = $6,
-            active = $7,
+            active = $6,
             updated_at = now()
         where tenant_id = $1 and id = $2
       `,
@@ -318,7 +322,6 @@ export async function updateProductVariant(
         input.productName,
         slug,
         input.category,
-        input.description || null,
         input.productActive
       ]
     );
@@ -327,13 +330,14 @@ export async function updateProductVariant(
       `
         update product_variants
         set name = $3,
-            sku = $4,
-            unit_cost = $5,
-            unit_weight_kg = $6,
-            height_cm = $7,
-            width_cm = $8,
-            length_cm = $9,
-            active = $10,
+            description = $4,
+            sku = $5,
+            unit_cost = $6,
+            unit_weight_kg = $7,
+            height_cm = $8,
+            width_cm = $9,
+            length_cm = $10,
+            active = $11,
             updated_at = now()
         where tenant_id = $1 and id = $2
       `,
@@ -341,6 +345,7 @@ export async function updateProductVariant(
         tenantId,
         variantId,
         input.variantName,
+        input.description || null,
         input.sku || null,
         input.unitCost,
         input.unitWeightKg,
