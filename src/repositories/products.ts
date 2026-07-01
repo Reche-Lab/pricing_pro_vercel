@@ -8,6 +8,7 @@ export type ProductVariantRow = {
   product_name: string;
   product_slug: string;
   product_category: string;
+  product_description: string | null;
   variant_id: string;
   variant_name: string;
   sku: string | null;
@@ -46,6 +47,21 @@ export type PricingCurveInput = PricingCurve & {
   platformRuleId?: string | null;
 };
 
+export type UpdateProductVariantInput = {
+  productName: string;
+  category: string;
+  description?: string | null;
+  productActive: boolean;
+  variantName: string;
+  sku?: string | null;
+  unitCost: number;
+  unitWeightKg: number;
+  heightCm?: number | null;
+  widthCm?: number | null;
+  lengthCm?: number | null;
+  variantActive: boolean;
+};
+
 export async function listProductVariants(userId: string, tenantId: string): Promise<ProductVariantRow[]> {
   return withTenantContext(userId, tenantId, async (client) => {
     const result = await client.query<ProductVariantRow>(
@@ -55,6 +71,7 @@ export async function listProductVariants(userId: string, tenantId: string): Pro
           p.name as product_name,
           p.slug as product_slug,
           p.category as product_category,
+          p.description as product_description,
           v.id as variant_id,
           v.name as variant_name,
           v.sku,
@@ -124,6 +141,7 @@ export async function listProductsAdmin(userId: string, tenantId: string): Promi
           p.name as product_name,
           p.slug as product_slug,
           p.category as product_category,
+          p.description as product_description,
           p.active as product_active,
           v.id as variant_id,
           v.name as variant_name,
@@ -260,6 +278,88 @@ export async function createProductWithVariant(
     );
 
     return { productId, variantId, curveId };
+  });
+}
+
+export async function updateProductVariant(
+  userId: string,
+  tenantId: string,
+  variantId: string,
+  input: UpdateProductVariantInput
+) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const currentResult = await client.query<{ product_id: string }>(
+      `
+        select product_id
+        from product_variants
+        where tenant_id = $1 and id = $2
+        limit 1
+      `,
+      [tenantId, variantId]
+    );
+    const current = currentResult.rows[0];
+    if (!current) throw new Error("Product variant not found.");
+
+    const slug = createProductSlug(input.productName);
+    await client.query(
+      `
+        update products
+        set name = $3,
+            slug = $4,
+            category = $5,
+            description = $6,
+            active = $7,
+            updated_at = now()
+        where tenant_id = $1 and id = $2
+      `,
+      [
+        tenantId,
+        current.product_id,
+        input.productName,
+        slug,
+        input.category,
+        input.description || null,
+        input.productActive
+      ]
+    );
+
+    await client.query(
+      `
+        update product_variants
+        set name = $3,
+            sku = $4,
+            unit_cost = $5,
+            unit_weight_kg = $6,
+            height_cm = $7,
+            width_cm = $8,
+            length_cm = $9,
+            active = $10,
+            updated_at = now()
+        where tenant_id = $1 and id = $2
+      `,
+      [
+        tenantId,
+        variantId,
+        input.variantName,
+        input.sku || null,
+        input.unitCost,
+        input.unitWeightKg,
+        input.heightCm ?? null,
+        input.widthCm ?? null,
+        input.lengthCm ?? null,
+        input.variantActive
+      ]
+    );
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'products.update_variant', 'product_variant', $3, $4)
+      `,
+      [tenantId, userId, variantId, JSON.stringify({ productId: current.product_id, input })]
+    );
+
+    return { productId: current.product_id, variantId };
   });
 }
 

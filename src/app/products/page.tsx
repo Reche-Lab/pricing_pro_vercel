@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { AnchorEditor } from "@/components/products/AnchorEditor";
+import { ProductEditForm } from "@/components/products/ProductEditForm";
 import { ProductForm } from "@/components/products/ProductForm";
 import { getCurrentSession } from "@/lib/auth/session";
 import { listPlatformRules } from "@/repositories/platforms";
@@ -53,6 +54,23 @@ export default async function ProductsPage() {
                       </p>
                     </div>
                   </div>
+                  <ProductEditForm
+                    product={{
+                      productName: item.product_name,
+                      category: item.product_category,
+                      description: item.product_description,
+                      productActive: item.product_active,
+                      variantId: item.variant_id,
+                      variantName: item.variant_name,
+                      sku: item.sku,
+                      unitCost: item.unit_cost,
+                      unitWeightKg: item.unit_weight_kg,
+                      heightCm: item.height_cm,
+                      widthCm: item.width_cm,
+                      lengthCm: item.length_cm,
+                      variantActive: item.variant_active
+                    }}
+                  />
                   <AnchorEditor
                     anchors={item.anchors}
                     mode={item.curve_mode}
