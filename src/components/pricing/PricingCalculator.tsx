@@ -115,6 +115,8 @@ export function PricingCalculator({
   const [cepLookupMessage, setCepLookupMessage] = useState("");
   const [shippingService, setShippingService] = useState("manual");
   const [shippingAmount, setShippingAmount] = useState(0);
+  const [shippingQuoteState, setShippingQuoteState] = useState<"idle" | "loading" | "error">("idle");
+  const [shippingQuoteMessage, setShippingQuoteMessage] = useState("");
   const [includeShipping, setIncludeShipping] = useState(false);
   const [includeCommission, setIncludeCommission] = useState(true);
   const [includeFixedFee, setIncludeFixedFee] = useState(true);
@@ -349,6 +351,69 @@ export function PricingCalculator({
       points: current.points.filter((_, pointIndex) => pointIndex !== index)
     }));
     setSaveState("idle");
+  }
+
+  async function calculateShipping() {
+    if (!simulatedResult) return;
+
+    setShippingQuoteMessage("");
+    setShippingQuoteState("loading");
+
+    const origin = normalizeCep(originPostalCode);
+    const destination = normalizeCep(effectiveDestinationPostalCode);
+    if (origin.length !== 8 || destination.length !== 8) {
+      setShippingQuoteState("error");
+      setShippingQuoteMessage("Informe CEP de origem e destino para calcular o frete.");
+      return;
+    }
+
+    if (shippingService === "manual") {
+      setShippingQuoteState("error");
+      setShippingQuoteMessage("Selecione PAC, SEDEX ou Melhor Envio para calcular automaticamente.");
+      return;
+    }
+
+    if (demoMode) {
+      const demoAmount = shippingService === "sedex" ? 32.9 : shippingService === "pac" ? 22.4 : 24.7;
+      setShippingAmount(demoAmount);
+      setIncludeShipping(true);
+      setShippingQuoteState("idle");
+      setShippingQuoteMessage(`Frete demo calculado: ${brl.format(demoAmount)}.`);
+      return;
+    }
+
+    try {
+      const endpoint = shippingService === "melhor_envio" ? "/api/shipping/melhor-envio/quote" : "/api/shipping/correios";
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          productVariantId: variant.id,
+          quantity,
+          service: shippingService === "sedex" ? "sedex" : "pac",
+          originPostalCode: origin,
+          destinationPostalCode: destination,
+          declaredValue: simulatedResult.subtotal
+        })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) {
+        throw new Error(formatShippingError(data?.error) || "Não foi possível calcular o frete.");
+      }
+
+      const amount = shippingService === "melhor_envio"
+        ? extractMelhorEnvioAmount(data.result)
+        : Number(data.result?.totalFrete ?? 0);
+      if (!Number.isFinite(amount) || amount <= 0) throw new Error("A cotação não retornou valor de frete.");
+
+      setShippingAmount(amount);
+      setIncludeShipping(true);
+      setShippingQuoteState("idle");
+      setShippingQuoteMessage(`Frete calculado: ${brl.format(amount)}${shippingService === "melhor_envio" ? " via Melhor Envio" : ""}.`);
+    } catch (error) {
+      setShippingQuoteState("error");
+      setShippingQuoteMessage(error instanceof Error ? error.message : "Não foi possível calcular o frete.");
+    }
   }
 
   async function saveCurveVersion() {
@@ -920,6 +985,15 @@ export function PricingCalculator({
             </Control>
             <Input label="Frete estimado (R$)" min={0} step={0.01} type="number" value={shippingAmount} onChange={setShippingAmount} />
             <div className="flex flex-col justify-end gap-2">
+              <button
+                className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-cyan-400 px-3 py-2 text-sm font-semibold text-cyan-950 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+                disabled={shippingQuoteState === "loading"}
+                type="button"
+                onClick={calculateShipping}
+              >
+                <Truck size={16} />
+                {shippingQuoteState === "loading" ? "Calculando..." : "Calcular frete"}
+              </button>
               <label className="flex min-h-10 items-center gap-2 text-sm text-zinc-300">
                 <input
                   checked={includeShipping}
@@ -934,6 +1008,11 @@ export function PricingCalculator({
           <p className="mt-3 text-sm text-zinc-400">
             Total com frete: {brl.format(simulatedResult.subtotal + (includeShipping ? shippingAmount : 0))}
           </p>
+          {shippingQuoteMessage ? (
+            <p className={`mt-2 text-xs ${shippingQuoteState === "error" ? "text-red-300" : "text-emerald-300"}`}>
+              {shippingQuoteMessage}
+            </p>
+          ) : null}
           {cepLookupMessage ? <p className="mt-2 text-xs text-zinc-500">{cepLookupMessage}</p> : null}
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             <CepPreview label={effectiveDestinationPostalCode === quickCustomerPostalCode ? "Destino (cliente)" : "Destino"} address={effectiveDestinationAddress} />
@@ -2077,6 +2156,35 @@ function buildQuickQuoteNotes(input: {
   if (input.shippingService !== "manual") lines.push(`Servico de frete: ${input.shippingService}`);
   if (input.includeShipping) lines.push(`Frete incluido: ${brl.format(input.shippingAmount)}`);
   return lines.join("\n");
+}
+
+function extractMelhorEnvioAmount(result: unknown): number {
+  const first = Array.isArray(result) ? result[0] : result;
+  if (!first || typeof first !== "object") return 0;
+  const record = first as Record<string, unknown>;
+  return numberFromUnknown(record.price) || numberFromUnknown(record.custom_price);
+}
+
+function numberFromUnknown(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function formatShippingError(error: unknown): string {
+  if (!error) return "";
+  if (typeof error === "string") return error;
+  if (typeof error === "object") {
+    const flattened = error as { fieldErrors?: Record<string, string[]>; formErrors?: string[] };
+    const fieldErrors = flattened.fieldErrors
+      ? Object.entries(flattened.fieldErrors).flatMap(([field, messages]) => messages.map((message) => `${field}: ${message}`))
+      : [];
+    return [...(flattened.formErrors ?? []), ...fieldErrors].join(" ");
+  }
+  return "";
 }
 
 function formatCepAddress(address: CepAddress, number?: string, complement?: string) {
