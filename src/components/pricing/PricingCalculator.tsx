@@ -38,6 +38,10 @@ export type PricingPlatformOption = PlatformRule & {
 };
 
 type PricingCalculatorProps = {
+  activeShippingServices?: {
+    correios: boolean;
+    melhorEnvio: boolean;
+  };
   defaultOriginPostalCode?: string;
   variants: DemoProductVariant[];
   platforms: Record<string, PricingPlatformOption>;
@@ -65,6 +69,18 @@ type DraftQuoteItem = {
 };
 
 type DraftPricingRule = "per_art_average" | "per_item" | "aggregate_total";
+type ShippingServiceOption = "manual" | "melhor_envio" | "pac" | "sedex";
+type ShippingPackagingSummary = {
+  boxName: string;
+  widthCm: number;
+  lengthCm: number;
+  heightCm: number;
+  boxWeightKg: number;
+  boxesNeeded: number;
+  capacity: number;
+  grossWeightKg: number;
+  grossWeightPerBoxKg: number;
+};
 
 const SIMULATION_QUANTITIES = [1, 10, 25, 50, 100, 250, 500, 1000] as const;
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -79,6 +95,7 @@ const emptyPlatform: PricingPlatformOption = {
 };
 
 export function PricingCalculator({
+  activeShippingServices = { correios: false, melhorEnvio: false },
   defaultOriginPostalCode = "",
   variants,
   platforms,
@@ -113,10 +130,12 @@ export function PricingCalculator({
   const [originPostalCode, setOriginPostalCode] = useState(formatCep(defaultOriginPostalCode));
   const [originAddress, setOriginAddress] = useState<CepAddress | null>(null);
   const [cepLookupMessage, setCepLookupMessage] = useState("");
-  const [shippingService, setShippingService] = useState("manual");
+  const [shippingService, setShippingService] = useState<ShippingServiceOption>(() => defaultShippingService(activeShippingServices));
   const [shippingAmount, setShippingAmount] = useState(0);
   const [shippingQuoteState, setShippingQuoteState] = useState<"idle" | "loading" | "error">("idle");
   const [shippingQuoteMessage, setShippingQuoteMessage] = useState("");
+  const [shippingPackaging, setShippingPackaging] = useState<ShippingPackagingSummary | null>(null);
+  const [includeMelhorEnvioInsurance, setIncludeMelhorEnvioInsurance] = useState(true);
   const [includeShipping, setIncludeShipping] = useState(false);
   const [includeCommission, setIncludeCommission] = useState(true);
   const [includeFixedFee, setIncludeFixedFee] = useState(true);
@@ -357,6 +376,7 @@ export function PricingCalculator({
     if (!simulatedResult) return;
 
     setShippingQuoteMessage("");
+    setShippingPackaging(null);
     setShippingQuoteState("loading");
 
     const origin = normalizeCep(originPostalCode);
@@ -369,7 +389,19 @@ export function PricingCalculator({
 
     if (shippingService === "manual") {
       setShippingQuoteState("error");
-      setShippingQuoteMessage("Selecione PAC, SEDEX ou Melhor Envio para calcular automaticamente.");
+      setShippingQuoteMessage("Outros/manual não calcula automaticamente. Informe o valor do frete estimado.");
+      return;
+    }
+
+    if ((shippingService === "sedex" || shippingService === "pac") && !activeShippingServices.correios) {
+      setShippingQuoteState("error");
+      setShippingQuoteMessage("Correios não está habilitado para este tenant.");
+      return;
+    }
+
+    if (shippingService === "melhor_envio" && !activeShippingServices.melhorEnvio) {
+      setShippingQuoteState("error");
+      setShippingQuoteMessage("Melhor Envio não está habilitado para este tenant.");
       return;
     }
 
@@ -393,7 +425,8 @@ export function PricingCalculator({
           service: shippingService === "sedex" ? "sedex" : "pac",
           originPostalCode: origin,
           destinationPostalCode: destination,
-          declaredValue: simulatedResult.subtotal
+          declaredValue: shippingService === "melhor_envio" && !includeMelhorEnvioInsurance ? 0 : simulatedResult.subtotal,
+          insuranceValue: shippingService === "melhor_envio" && includeMelhorEnvioInsurance ? simulatedResult.subtotal : 0
         })
       });
       const data = await response.json().catch(() => null);
@@ -408,6 +441,7 @@ export function PricingCalculator({
 
       setShippingAmount(amount);
       setIncludeShipping(true);
+      setShippingPackaging(extractShippingPackaging(data.packaging));
       setShippingQuoteState("idle");
       setShippingQuoteMessage(`Frete calculado: ${brl.format(amount)}${shippingService === "melhor_envio" ? " via Melhor Envio" : ""}.`);
     } catch (error) {
@@ -975,12 +1009,16 @@ export function PricingCalculator({
               <select
                 className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm"
                 value={shippingService}
-                onChange={(event) => setShippingService(event.target.value)}
+                onChange={(event) => setShippingService(event.target.value as ShippingServiceOption)}
               >
+                {activeShippingServices.correios ? (
+                  <>
+                    <option value="sedex">SEDEX</option>
+                    <option value="pac">PAC</option>
+                  </>
+                ) : null}
+                {activeShippingServices.melhorEnvio ? <option value="melhor_envio">Melhor Envio</option> : null}
                 <option value="manual">Outros/manual</option>
-                <option value="sedex">SEDEX</option>
-                <option value="pac">PAC</option>
-                <option value="melhor_envio">Melhor Envio</option>
               </select>
             </Control>
             <Input label="Frete estimado (R$)" min={0} step={0.01} type="number" value={shippingAmount} onChange={setShippingAmount} />
@@ -1008,6 +1046,53 @@ export function PricingCalculator({
           <p className="mt-3 text-sm text-zinc-400">
             Total com frete: {brl.format(simulatedResult.subtotal + (includeShipping ? shippingAmount : 0))}
           </p>
+          {shippingPackaging ? (
+            <div className="mt-3 grid gap-2 rounded-lg border border-cyan-400/20 bg-cyan-400/5 p-3 text-sm text-zinc-300 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <span className="block text-xs uppercase tracking-wide text-cyan-200/70">Caixa usada</span>
+                <strong className="mt-1 block text-zinc-100">{shippingPackaging.boxName}</strong>
+              </div>
+              <div>
+                <span className="block text-xs uppercase tracking-wide text-cyan-200/70">Dimensões</span>
+                <strong className="mt-1 block text-zinc-100">
+                  {formatCm(shippingPackaging.widthCm)} x {formatCm(shippingPackaging.lengthCm)} x {formatCm(shippingPackaging.heightCm)} cm
+                </strong>
+              </div>
+              <div>
+                <span className="block text-xs uppercase tracking-wide text-cyan-200/70">Peso do frete</span>
+                <strong className="mt-1 block text-zinc-100">
+                  {formatKg(shippingPackaging.grossWeightPerBoxKg)} por caixa
+                </strong>
+              </div>
+              <div>
+                <span className="block text-xs uppercase tracking-wide text-cyan-200/70">Volumes</span>
+                <strong className="mt-1 block text-zinc-100">
+                  {shippingPackaging.boxesNeeded} caixa{shippingPackaging.boxesNeeded === 1 ? "" : "s"}
+                </strong>
+              </div>
+              <div className="sm:col-span-2 lg:col-span-4">
+                <span className="text-xs text-zinc-500">
+                  Capacidade estimada: {shippingPackaging.capacity} un. por caixa · peso total: {formatKg(shippingPackaging.grossWeightKg)} · peso da caixa vazia: {formatKg(shippingPackaging.boxWeightKg)}
+                </span>
+              </div>
+            </div>
+          ) : null}
+          {shippingService === "melhor_envio" ? (
+            <label className="mt-3 flex w-fit items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm text-zinc-300">
+              <input
+                checked={includeMelhorEnvioInsurance}
+                className="h-4 w-4 accent-cyan-400"
+                type="checkbox"
+                onChange={(event) => setIncludeMelhorEnvioInsurance(event.target.checked)}
+              />
+              Incluir seguro do Melhor Envio sobre {brl.format(simulatedResult.subtotal)}
+            </label>
+          ) : null}
+          {!activeShippingServices.correios && !activeShippingServices.melhorEnvio ? (
+            <p className="mt-2 text-xs text-zinc-500">
+              Nenhuma integração automática de frete está ativa. Use Outros/manual ou configure Melhor Envio/Correios.
+            </p>
+          ) : null}
           {shippingQuoteMessage ? (
             <p className={`mt-2 text-xs ${shippingQuoteState === "error" ? "text-red-300" : "text-emerald-300"}`}>
               {shippingQuoteMessage}
@@ -2165,6 +2250,36 @@ function extractMelhorEnvioAmount(result: unknown): number {
   return numberFromUnknown(record.price) || numberFromUnknown(record.custom_price);
 }
 
+function defaultShippingService(activeShippingServices: NonNullable<PricingCalculatorProps["activeShippingServices"]>): ShippingServiceOption {
+  if (activeShippingServices.melhorEnvio) return "melhor_envio";
+  if (activeShippingServices.correios) return "pac";
+  return "manual";
+}
+
+function extractShippingPackaging(value: unknown): ShippingPackagingSummary | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const box = record.box && typeof record.box === "object" ? (record.box as Record<string, unknown>) : null;
+  if (!box) return null;
+
+  const widthCm = numberFromUnknown(box.widthCm);
+  const lengthCm = numberFromUnknown(box.lengthCm);
+  const heightCm = numberFromUnknown(box.heightCm);
+  if (!widthCm || !lengthCm || !heightCm) return null;
+
+  return {
+    boxName: stringFromUnknown(box.name) ?? "Caixa selecionada",
+    widthCm,
+    lengthCm,
+    heightCm,
+    boxWeightKg: numberFromUnknown(box.weightKg),
+    boxesNeeded: Math.max(1, Math.trunc(numberFromUnknown(record.boxesNeeded) || 1)),
+    capacity: Math.max(0, Math.trunc(numberFromUnknown(record.capacity))),
+    grossWeightKg: numberFromUnknown(record.grossWeightKg),
+    grossWeightPerBoxKg: numberFromUnknown(record.grossWeightPerBoxKg)
+  };
+}
+
 function numberFromUnknown(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
@@ -2172,6 +2287,20 @@ function numberFromUnknown(value: unknown): number {
     return Number.isFinite(parsed) ? parsed : 0;
   }
   return 0;
+}
+
+function stringFromUnknown(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+function formatCm(value: number) {
+  return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(value);
+}
+
+function formatKg(value: number) {
+  return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 3 }).format(value)} kg`;
 }
 
 function formatShippingError(error: unknown): string {

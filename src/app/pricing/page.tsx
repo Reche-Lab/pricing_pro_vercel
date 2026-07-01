@@ -7,16 +7,19 @@ import { listPlatformRules } from "@/repositories/platforms";
 import { getSessionProfile } from "@/repositories/users";
 import { listProductVariants } from "@/repositories/products";
 import { getTenantShippingProfile } from "@/repositories/tenant-settings";
+import { getIntegrationConnection } from "@/repositories/integrations";
 
 export default async function PricingPage() {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
 
-  const [profile, variants, platforms, tenant] = await Promise.all([
+  const [profile, variants, platforms, tenant, correiosConnection, melhorEnvioConnection] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
     listProductVariants(session.userId, session.tenantId),
     listPlatformRules(session.userId, session.tenantId),
-    getTenantShippingProfile(session.userId, session.tenantId)
+    getTenantShippingProfile(session.userId, session.tenantId),
+    getIntegrationConnection(session.userId, session.tenantId, "correios"),
+    getIntegrationConnection(session.userId, session.tenantId, "melhor_envio")
   ]);
 
   if (!profile) redirect("/login");
@@ -39,6 +42,10 @@ export default async function PricingPage() {
       tenantName={profile.tenant_name}
     >
       <PricingCalculator
+        activeShippingServices={{
+          correios: correiosConnection?.status === "active",
+          melhorEnvio: melhorEnvioConnection?.status === "active"
+        }}
         defaultOriginPostalCode={tenant?.postal_code ?? ""}
         variants={mappedVariants}
         platforms={mapPlatforms(platforms)}
