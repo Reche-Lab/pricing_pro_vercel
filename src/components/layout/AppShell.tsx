@@ -1,4 +1,5 @@
 import { LogOut } from "lucide-react";
+import { BillingStatusBanner } from "@/components/billing/BillingStatusBanner";
 import { SidebarNav } from "@/components/layout/SidebarNav";
 
 type AppShellProps = {
@@ -52,7 +53,10 @@ export function AppShell({ children, isSuperAdmin = false, title, subtitle, tena
             {subtitle ? <p className="mt-1 text-sm text-zinc-400">{subtitle}</p> : null}
           </div>
         </header>
-        <div className="mx-auto max-w-7xl px-3 py-4 sm:px-4 sm:py-6 lg:px-8">{children}</div>
+        <div className="mx-auto max-w-7xl px-3 py-4 sm:px-4 sm:py-6 lg:px-8">
+          <BillingStatusBanner />
+          {children}
+        </div>
       </section>
     </main>
   );

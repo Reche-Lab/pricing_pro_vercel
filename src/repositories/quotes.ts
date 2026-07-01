@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "crypto";
 import { calculateQuote } from "@/domain/pricing/pricing";
 import {
   calculateCompositeQuote,
@@ -7,7 +8,7 @@ import {
 import { canTransitionQuoteStatus, createQuoteCalculationSnapshot } from "@/domain/quotes/quotes";
 import type { QuoteStatus } from "@/domain/quotes/types";
 import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
-import { withTenantContext } from "@/lib/db/client";
+import { getPool, withTenantContext } from "@/lib/db/client";
 import type pg from "pg";
 
 export type QuoteRow = {
@@ -46,6 +47,11 @@ export type QuoteDetail = {
   customer_external_olist_id: string | null;
   external_crm_id: string | null;
   created_by_name: string | null;
+  public_token_expires_at?: string | null;
+  public_viewed_at?: string | null;
+  public_accepted_at?: string | null;
+  public_rejected_at?: string | null;
+  customer_decision_note?: string | null;
 };
 
 export type QuoteItemRow = {
@@ -101,6 +107,19 @@ export type CreateQuoteInput = {
   }>;
   validDays?: number;
   notes?: string | null;
+};
+
+export type PublicQuoteTenant = {
+  name: string;
+  logo_url: string | null;
+  company_phone: string | null;
+  company_site: string | null;
+};
+
+export type PublicQuoteDetail = {
+  quote: QuoteDetail;
+  items: QuoteItemRow[];
+  tenant: PublicQuoteTenant;
 };
 
 export async function listQuotes(userId: string, tenantId: string): Promise<QuoteRow[]> {
@@ -167,7 +186,12 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           c.state as customer_state,
           c.external_olist_id as customer_external_olist_id,
           q.external_crm_id,
-          u.name as created_by_name
+          u.name as created_by_name,
+          q.public_token_expires_at,
+          q.public_viewed_at,
+          q.public_accepted_at,
+          q.public_rejected_at,
+          q.customer_decision_note
         from quotes q
         left join customers c on c.id = q.customer_id and c.tenant_id = q.tenant_id
         left join app_users u on u.id = q.created_by
@@ -217,6 +241,184 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
       snapshots: snapshots.rows
     };
   });
+}
+
+export async function createPublicQuoteLink(
+  userId: string,
+  tenantId: string,
+  quoteId: string,
+  validDays = 15
+): Promise<{ token: string; expiresAt: string }> {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const token = randomBytes(32).toString("base64url");
+    const tokenHash = hashPublicToken(token);
+    const days = Math.max(1, Math.min(90, validDays));
+
+    const result = await client.query<{ expires_at: string }>(
+      `
+        update quotes
+        set public_token_hash = $3,
+            public_token_expires_at = now() + ($4::int || ' days')::interval,
+            status = case when status = 'draft' then 'sent' else status end,
+            updated_at = now()
+        where tenant_id = $1
+          and id = $2
+          and status not in ('cancelled', 'expired')
+        returning public_token_expires_at::text as expires_at
+      `,
+      [tenantId, quoteId, tokenHash, days]
+    );
+
+    if (!result.rows[0]) throw new Error("Quote not found or unavailable for public sharing.");
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'quotes.public_link_create', 'quote', $3, $4)
+      `,
+      [tenantId, userId, quoteId, JSON.stringify({ validDays: days })]
+    );
+
+    return { token, expiresAt: result.rows[0].expires_at };
+  });
+}
+
+export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteDetail | null> {
+  const tokenHash = hashPublicToken(token);
+  const client = await getPool().connect();
+  try {
+    const quoteResult = await client.query<QuoteDetail & PublicQuoteTenant>(
+      `
+        select
+          q.id,
+          q.status,
+          q.valid_until::text as valid_until,
+          q.subtotal::text as subtotal,
+          q.shipping_total::text as shipping_total,
+          q.discount_total::text as discount_total,
+          q.grand_total::text as grand_total,
+          q.margin_amount::text as margin_amount,
+          q.margin_percent::text as margin_percent,
+          q.notes,
+          q.created_at::text as created_at,
+          c.id as customer_id,
+          c.name as customer_name,
+          c.document as customer_document,
+          c.email::text as customer_email,
+          c.phone as customer_phone,
+          c.postal_code as customer_postal_code,
+          c.address_line as customer_address_line,
+          c.address_number as customer_address_number,
+          c.address_complement as customer_address_complement,
+          c.district as customer_district,
+          c.city as customer_city,
+          c.state as customer_state,
+          c.external_olist_id as customer_external_olist_id,
+          q.external_crm_id,
+          u.name as created_by_name,
+          q.public_token_expires_at::text as public_token_expires_at,
+          q.public_viewed_at::text as public_viewed_at,
+          q.public_accepted_at::text as public_accepted_at,
+          q.public_rejected_at::text as public_rejected_at,
+          q.customer_decision_note,
+          t.name,
+          t.logo_url,
+          t.company_phone,
+          t.company_site
+        from quotes q
+        join tenants t on t.id = q.tenant_id
+        left join customers c on c.id = q.customer_id and c.tenant_id = q.tenant_id
+        left join app_users u on u.id = q.created_by
+        where q.public_token_hash = $1
+          and q.public_token_expires_at > now()
+          and q.status not in ('cancelled', 'expired')
+        limit 1
+      `,
+      [tokenHash]
+    );
+
+    const quote = quoteResult.rows[0];
+    if (!quote) return null;
+
+    await client.query(
+      "update quotes set public_viewed_at = coalesce(public_viewed_at, now()) where id = $1",
+      [quote.id]
+    );
+
+    const itemsResult = await client.query<QuoteItemRow>(
+      `
+        select
+          id,
+          description,
+          quantity,
+          unit_price::text as unit_price,
+          total_price::text as total_price,
+          artwork_name,
+          pricing_rule,
+          pricing_group_key,
+          reference_quantity,
+          base_unit_price::text as base_unit_price
+        from quote_items
+        where quote_id = $1
+        order by created_at asc
+      `,
+      [quote.id]
+    );
+
+    return {
+      quote,
+      items: itemsResult.rows,
+      tenant: {
+        name: quote.name,
+        logo_url: quote.logo_url,
+        company_phone: quote.company_phone,
+        company_site: quote.company_site
+      }
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export async function decidePublicQuote(
+  token: string,
+  decision: "accepted" | "rejected",
+  note?: string | null
+): Promise<{ id: string; status: QuoteStatus } | null> {
+  const tokenHash = hashPublicToken(token);
+  const client = await getPool().connect();
+  try {
+    const result = await client.query<{ id: string; tenant_id: string; status: QuoteStatus }>(
+      `
+        update quotes
+        set status = $2,
+            public_accepted_at = case when $2 = 'accepted' then now() else public_accepted_at end,
+            public_rejected_at = case when $2 = 'rejected' then now() else public_rejected_at end,
+            customer_decision_note = $3,
+            updated_at = now()
+        where public_token_hash = $1
+          and public_token_expires_at > now()
+          and status in ('draft', 'sent')
+        returning id, tenant_id, status
+      `,
+      [tokenHash, decision, clean(note)]
+    );
+
+    const row = result.rows[0];
+    if (!row) return null;
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, action, entity_type, entity_id, metadata)
+        values ($1, 'quotes.public_decision', 'quote', $2, $3)
+      `,
+      [row.tenant_id, row.id, JSON.stringify({ decision, hasNote: Boolean(clean(note)) })]
+    );
+
+    return { id: row.id, status: row.status };
+  } finally {
+    client.release();
+  }
 }
 
 export async function updateQuoteExternalCrmId(
@@ -844,4 +1046,8 @@ function clean(value: string | null | undefined): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+function hashPublicToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
 }

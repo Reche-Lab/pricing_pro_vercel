@@ -5,6 +5,7 @@ import { MelhorEnvioPayloadPreview } from "@/components/quotes/MelhorEnvioPayloa
 import { OlistQuoteActions } from "@/components/quotes/OlistQuoteActions";
 import { QuoteStatusActions } from "@/components/quotes/QuoteStatusActions";
 import { QuoteWhatsAppButton } from "@/components/quotes/QuoteWhatsAppButton";
+import { PublicQuoteLinkButton } from "@/components/quotes/PublicQuoteLinkButton";
 import { MelhorEnvioShipmentActions } from "@/components/shipments/MelhorEnvioShipmentActions";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getQuoteDetail } from "@/repositories/quotes";
@@ -115,6 +116,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                 Baixar PDF
               </Link>
               <QuoteWhatsAppButton quoteId={quoteId} />
+              <PublicQuoteLinkButton quoteId={quoteId} />
               <OlistQuoteActions
                 externalCrmId={detail.quote.external_crm_id}
                 externalOlistId={detail.quote.customer_external_olist_id}

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
+import { requireWritableBilling } from "@/lib/billing/guard";
 import { createProductWithVariant, listProductVariants } from "@/repositories/products";
 
 const pointSchema = z.object({
@@ -66,6 +67,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ ok: false }, { status: 401 });
+  const billingBlock = await requireWritableBilling(session.userId, session.tenantId);
+  if (billingBlock) return billingBlock;
 
   const body = await request.json().catch(() => null);
   const parsed = createProductSchema.safeParse(body);

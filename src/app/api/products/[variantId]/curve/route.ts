@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
+import { requireWritableBilling } from "@/lib/billing/guard";
 import { createVariantPricingCurveVersion, updateVariantAnchors } from "@/repositories/products";
 
 const pointSchema = z.object({
@@ -26,6 +27,8 @@ const anchorsSchema = z.object({
 export async function PATCH(request: Request, context: { params: Promise<{ variantId: string }> }) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ ok: false }, { status: 401 });
+  const billingBlock = await requireWritableBilling(session.userId, session.tenantId);
+  if (billingBlock) return billingBlock;
 
   const { variantId } = await context.params;
   const params = z.string().uuid().safeParse(variantId);
@@ -46,6 +49,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ varia
 export async function POST(request: Request, context: { params: Promise<{ variantId: string }> }) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ ok: false }, { status: 401 });
+  const billingBlock = await requireWritableBilling(session.userId, session.tenantId);
+  if (billingBlock) return billingBlock;
 
   const { variantId } = await context.params;
   const params = z.string().uuid().safeParse(variantId);

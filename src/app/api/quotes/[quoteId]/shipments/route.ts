@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
+import { requireWritableBilling } from "@/lib/billing/guard";
 import { createShipmentDraft, listQuoteShipments } from "@/repositories/shipments";
 
 const shipmentSchema = z.object({
@@ -15,6 +16,8 @@ const shipmentSchema = z.object({
 export async function GET(_request: Request, context: { params: Promise<{ quoteId: string }> }) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ ok: false }, { status: 401 });
+  const billingBlock = await requireWritableBilling(session.userId, session.tenantId);
+  if (billingBlock) return billingBlock;
 
   const { quoteId } = await context.params;
   const quoteIdParsed = z.string().uuid().safeParse(quoteId);

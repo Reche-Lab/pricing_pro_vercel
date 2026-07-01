@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
+import { requireWritableBilling } from "@/lib/billing/guard";
 import { updatePlatformRule } from "@/repositories/platforms";
 
 const platformSchema = z.object({
@@ -16,6 +17,8 @@ const platformSchema = z.object({
 export async function PATCH(request: Request, context: { params: Promise<{ platformId: string }> }) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ ok: false }, { status: 401 });
+  const billingBlock = await requireWritableBilling(session.userId, session.tenantId);
+  if (billingBlock) return billingBlock;
 
   const { platformId } = await context.params;
   const params = z.string().uuid().safeParse(platformId);

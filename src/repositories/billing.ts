@@ -34,6 +34,16 @@ export type BillingInvoice = {
   provider_payment_id: string | null;
 };
 
+export type BillingAccess = {
+  tenant_id: string;
+  billing_status: string;
+  trial_ends_at: string | null;
+  subscription_status: string | null;
+  current_period_end: string | null;
+  allowed: boolean;
+  reason: string | null;
+};
+
 export async function getBillingOverview(userId: string, tenantId: string): Promise<BillingOverview | null> {
   return withTenantContext(userId, tenantId, async (client) => {
     const result = await client.query<BillingOverview>(
@@ -77,6 +87,80 @@ export async function getBillingOverview(userId: string, tenantId: string): Prom
     );
 
     return result.rows[0] ?? null;
+  });
+}
+
+export async function getBillingAccess(userId: string, tenantId: string): Promise<BillingAccess> {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const result = await client.query<
+      Omit<BillingAccess, "allowed" | "reason"> & {
+        trial_active: boolean;
+        subscription_active: boolean;
+      }
+    >(
+      `
+        select
+          t.id as tenant_id,
+          t.billing_status,
+          t.trial_ends_at::text as trial_ends_at,
+          ts.status as subscription_status,
+          ts.current_period_end::text as current_period_end,
+          (t.billing_status = 'trial' and t.trial_ends_at > now()) as trial_active,
+          (t.billing_status = 'active' and (ts.current_period_end is null or ts.current_period_end > now())) as subscription_active
+        from tenants t
+        left join tenant_subscriptions ts on ts.tenant_id = t.id
+        where t.id = $1
+        limit 1
+      `,
+      [tenantId]
+    );
+
+    const row = result.rows[0];
+    if (!row) {
+      return {
+        tenant_id: tenantId,
+        billing_status: "blocked",
+        trial_ends_at: null,
+        subscription_status: null,
+        current_period_end: null,
+        allowed: false,
+        reason: "Tenant não encontrado."
+      };
+    }
+
+    if (row.billing_status === "cancelled" || row.billing_status === "blocked") {
+      return {
+        ...row,
+        allowed: false,
+        reason: "A assinatura deste tenant está bloqueada. Regularize a cobrança para continuar criando ou alterando dados."
+      };
+    }
+
+    if (row.trial_active || row.subscription_active) {
+      return { ...row, allowed: true, reason: null };
+    }
+
+    if (row.billing_status === "past_due") {
+      return {
+        ...row,
+        allowed: false,
+        reason: "Existe uma cobrança pendente para este tenant. Regularize a assinatura para continuar."
+      };
+    }
+
+    if (row.billing_status === "trial") {
+      return {
+        ...row,
+        allowed: false,
+        reason: "O período de teste deste tenant expirou. Ative a assinatura para continuar."
+      };
+    }
+
+    return {
+      ...row,
+      allowed: false,
+      reason: "A assinatura deste tenant precisa ser regularizada para continuar."
+    };
   });
 }
 
