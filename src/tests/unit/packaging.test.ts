@@ -10,7 +10,7 @@ const boxes: PackagingBox[] = [
     widthCm: 11,
     lengthCm: 17,
     weightKg: 0.03,
-    capacities: { "button-25": 144 }
+    capacities: {}
   },
   {
     id: "medium",
@@ -19,7 +19,7 @@ const boxes: PackagingBox[] = [
     widthCm: 14,
     lengthCm: 21,
     weightKg: 0.057,
-    capacities: { "button-25": 520 }
+    capacities: {}
   }
 ];
 
@@ -29,6 +29,10 @@ describe("packaging domain", () => {
       variantId: "button-25",
       quantity: 100,
       unitWeightKg: 0.004,
+      heightCm: 0.5,
+      widthCm: 2.5,
+      lengthCm: 2.5,
+      clearanceCm: 0,
       boxes
     });
 
@@ -42,12 +46,57 @@ describe("packaging domain", () => {
       variantId: "button-25",
       quantity: 900,
       unitWeightKg: 0.004,
+      heightCm: 0.5,
+      widthCm: 2.5,
+      lengthCm: 2.5,
+      clearanceCm: 0,
       boxes
     });
 
     expect(selected?.box.id).toBe("medium");
     expect(selected?.boxesNeeded).toBe(2);
     expect(selected?.grossWeightKg).toBeCloseTo(3.714, 4);
+  });
+
+  it("rotates the product to fit a compatible box", () => {
+    const selected = selectBestPackage({
+      variantId: "rotated",
+      quantity: 1,
+      unitWeightKg: 0.1,
+      heightCm: 8,
+      widthCm: 4,
+      lengthCm: 10,
+      clearanceCm: 0,
+      boxes: [
+        {
+          id: "flat",
+          name: "10x5x8",
+          heightCm: 10,
+          widthCm: 5,
+          lengthCm: 8,
+          weightKg: 0.02,
+          capacities: {}
+        }
+      ]
+    });
+
+    expect(selected?.box.id).toBe("flat");
+    expect(selected?.capacity).toBe(1);
+  });
+
+  it("returns alternatives for manual box selection", () => {
+    const selected = selectBestPackage({
+      variantId: "button-25",
+      quantity: 50,
+      unitWeightKg: 0.004,
+      heightCm: 0.5,
+      widthCm: 2.5,
+      lengthCm: 2.5,
+      clearanceCm: 0,
+      boxes
+    });
+
+    expect(selected?.alternatives?.[0].box.id).toBe("medium");
   });
 
   it("applies carrier minimum dimensions", () => {

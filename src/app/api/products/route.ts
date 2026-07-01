@@ -31,6 +31,9 @@ const createProductSchema = z.object({
   sku: z.string().trim().optional().nullable(),
   unitCost: z.number().min(0),
   unitWeightKg: z.number().min(0),
+  heightCm: z.number().min(0).optional().nullable(),
+  widthCm: z.number().min(0).optional().nullable(),
+  lengthCm: z.number().min(0).optional().nullable(),
   curve: curveSchema.optional(),
   anchors: anchorsSchema.optional()
 }).transform((input, context) => {

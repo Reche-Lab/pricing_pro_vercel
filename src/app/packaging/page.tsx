@@ -26,10 +26,13 @@ export default async function PackagingPage() {
   return (
     <AppShell title="Embalagens" subtitle="Caixas e capacidades por variante." tenantName={profile.tenant_name}>
       <div className="grid gap-6 xl:grid-cols-[480px_1fr]">
-        <PackagingForm variants={variantOptions} />
+        <PackagingForm />
         <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
           <div className="border-b border-zinc-800 px-5 py-4">
             <h2 className="font-semibold">Embalagens cadastradas</h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              O sistema calcula a melhor caixa usando as medidas do produto, rotações possíveis e uma folga de segurança.
+            </p>
           </div>
           <div className="divide-y divide-zinc-800">
             {boxes.length === 0 ? (
@@ -44,16 +47,22 @@ export default async function PackagingPage() {
                         {Number(box.height_cm)} x {Number(box.width_cm)} x {Number(box.length_cm)} cm
                       </p>
                     </div>
-                    <p className="font-medium text-white">{Number(box.weight_kg).toFixed(3)} kg</p>
+                    <p className="font-medium text-white">{Number(box.weight_kg).toFixed(3)} kg caixa</p>
                   </div>
-                  <div className="grid gap-2 md:grid-cols-2">
-                    {Object.entries(box.capacities ?? {}).map(([variantId, capacity]) => (
-                      <div className="rounded-md bg-zinc-950/60 px-3 py-2" key={variantId}>
-                        <p className="text-xs text-zinc-500">{variantLabelById[variantId] ?? variantId}</p>
-                        <p className="font-medium text-white">{capacity} un.</p>
-                      </div>
-                    ))}
-                  </div>
+                  {Object.keys(box.capacities ?? {}).length > 0 ? (
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {Object.entries(box.capacities ?? {}).map(([variantId, capacity]) => (
+                        <div className="rounded-md bg-zinc-950/60 px-3 py-2" key={variantId}>
+                          <p className="text-xs text-zinc-500">{variantLabelById[variantId] ?? variantId}</p>
+                          <p className="font-medium text-white">{capacity} un. cadastradas anteriormente</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-md bg-zinc-950/60 px-3 py-2 text-xs text-zinc-500">
+                      Capacidade calculada automaticamente no momento da cotação.
+                    </p>
+                  )}
                 </div>
               ))
             )}

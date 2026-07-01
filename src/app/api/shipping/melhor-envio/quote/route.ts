@@ -21,7 +21,9 @@ const quoteSchema = z.object({
   ownHand: z.boolean().optional(),
   receipt: z.boolean().optional(),
   serviceIds: z.array(z.string()).optional(),
-  quoteId: z.string().uuid().optional()
+  quoteId: z.string().uuid().optional(),
+  selectedBoxId: z.string().uuid().optional().nullable(),
+  clearanceCm: z.number().min(0).max(5).optional()
 });
 
 export async function POST(request: Request) {

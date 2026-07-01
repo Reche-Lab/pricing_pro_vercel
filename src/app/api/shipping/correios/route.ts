@@ -16,7 +16,9 @@ const quoteSchema = z.object({
   service: z.enum(["sedex", "pac"]),
   originPostalCode: z.string().min(8),
   destinationPostalCode: z.string().min(8),
-  declaredValue: z.number().min(0).optional()
+  declaredValue: z.number().min(0).optional(),
+  selectedBoxId: z.string().uuid().optional().nullable(),
+  clearanceCm: z.number().min(0).max(5).optional()
 });
 
 export async function POST(request: Request) {
@@ -37,7 +39,9 @@ export async function POST(request: Request) {
   try {
     const packaging = await estimatePackaging(session.userId, session.tenantId, {
       productVariantId: parsed.data.productVariantId,
-      quantity: parsed.data.quantity
+      quantity: parsed.data.quantity,
+      selectedBoxId: parsed.data.selectedBoxId,
+      clearanceCm: parsed.data.clearanceCm
     });
 
     if (!packaging) {

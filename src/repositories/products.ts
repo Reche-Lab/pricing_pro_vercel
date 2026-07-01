@@ -13,6 +13,9 @@ export type ProductVariantRow = {
   sku: string | null;
   unit_cost: string;
   unit_weight_kg: string;
+  height_cm: string | null;
+  width_cm: string | null;
+  length_cm: string | null;
   curve_mode: PricingCurveMode | null;
   anchors: Record<string, number> | null;
   platform_curves?: Record<string, { mode: PricingCurveMode; anchors: Record<string, number> | null }> | null;
@@ -33,6 +36,9 @@ export type CreateProductWithVariantInput = {
   sku?: string | null;
   unitCost: number;
   unitWeightKg: number;
+  heightCm?: number | null;
+  widthCm?: number | null;
+  lengthCm?: number | null;
   curve: PricingCurve;
 };
 
@@ -54,6 +60,9 @@ export async function listProductVariants(userId: string, tenantId: string): Pro
           v.sku,
           v.unit_cost,
           v.unit_weight_kg,
+          v.height_cm,
+          v.width_cm,
+          v.length_cm,
           pc.mode as curve_mode,
           (
             select jsonb_object_agg(pa.quantity::text, pa.unit_price order by pa.quantity)
@@ -121,6 +130,9 @@ export async function listProductsAdmin(userId: string, tenantId: string): Promi
           v.sku,
           v.unit_cost,
           v.unit_weight_kg,
+          v.height_cm,
+          v.width_cm,
+          v.length_cm,
           v.active as variant_active,
           pc.id as curve_id,
           pc.version as curve_version,
@@ -180,9 +192,12 @@ export async function createProductWithVariant(
           sku,
           unit_cost,
           unit_weight_kg,
+          height_cm,
+          width_cm,
+          length_cm,
           active
         )
-        values ($1, $2, $3, $4, $5, $6, true)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
         returning id
       `,
       [
@@ -191,7 +206,10 @@ export async function createProductWithVariant(
         input.variantName,
         input.sku || null,
         input.unitCost,
-        input.unitWeightKg
+        input.unitWeightKg,
+        input.heightCm ?? null,
+        input.widthCm ?? null,
+        input.lengthCm ?? null
       ]
     );
     const variantId = variantResult.rows[0].id;

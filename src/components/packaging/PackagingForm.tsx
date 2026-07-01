@@ -4,16 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Boxes } from "lucide-react";
 
-type PackagingVariant = {
-  id: string;
-  label: string;
-};
-
-type PackagingFormProps = {
-  variants: PackagingVariant[];
-};
-
-export function PackagingForm({ variants }: PackagingFormProps) {
+export function PackagingForm() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -25,11 +16,6 @@ export function PackagingForm({ variants }: PackagingFormProps) {
     setLoading(true);
 
     const form = new FormData(formElement);
-    const capacities = variants.map((variant) => ({
-      productVariantId: variant.id,
-      capacity: Number(form.get(`capacity_${variant.id}`) || 0)
-    }));
-
     const response = await fetch("/api/packaging", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -39,7 +25,7 @@ export function PackagingForm({ variants }: PackagingFormProps) {
         widthCm: Number(form.get("widthCm")),
         lengthCm: Number(form.get("lengthCm")),
         weightKg: Number(form.get("weightKg")),
-        capacities
+        capacities: []
       })
     });
 
@@ -59,29 +45,18 @@ export function PackagingForm({ variants }: PackagingFormProps) {
         <Boxes className="text-amber-400" size={18} />
         <h2 className="font-semibold">Nova embalagem</h2>
       </div>
+      <p className="mb-4 text-sm leading-6 text-zinc-400">
+        Cadastre as caixas disponíveis. A capacidade por produto será calculada automaticamente com base nas medidas
+        da caixa e nas medidas unitárias cadastradas em Produtos. O peso da caixa será somado ao peso dos produtos no
+        cálculo do frete.
+      </p>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Input label="Nome" name="name" placeholder="4x11x17" required />
-        <Input label="Peso da caixa kg" name="weightKg" required step="0.000001" type="number" />
+        <Input label="Peso da caixa kg (frete)" name="weightKg" required step="0.000001" type="number" />
         <Input label="Altura cm" name="heightCm" required step="0.001" type="number" />
         <Input label="Largura cm" name="widthCm" required step="0.001" type="number" />
         <Input label="Comprimento cm" name="lengthCm" required step="0.001" type="number" />
-      </div>
-
-      <div className="mt-4">
-        <p className="mb-2 text-sm font-medium text-zinc-300">Capacidade por variante</p>
-        <div className="grid gap-3 md:grid-cols-2">
-          {variants.map((variant) => (
-            <Input
-              key={variant.id}
-              label={variant.label}
-              min="0"
-              name={`capacity_${variant.id}`}
-              step="1"
-              type="number"
-            />
-          ))}
-        </div>
       </div>
 
       {error ? <p className="mt-4 rounded-md bg-red-400/10 px-3 py-2 text-sm text-red-300">{error}</p> : null}

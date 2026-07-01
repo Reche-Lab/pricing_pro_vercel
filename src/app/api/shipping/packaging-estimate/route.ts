@@ -4,8 +4,24 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { estimatePackaging } from "@/repositories/packaging";
 
 const estimateSchema = z.object({
-  productVariantId: z.string().uuid(),
-  quantity: z.number().int().min(1).max(50000)
+  productVariantId: z.string().uuid().optional(),
+  quantity: z.number().int().min(1).max(50000).optional(),
+  items: z
+    .array(
+      z.object({
+        productVariantId: z.string().uuid(),
+        quantity: z.number().int().min(1).max(50000)
+      })
+    )
+    .min(1)
+    .max(50)
+    .optional(),
+  selectedBoxId: z.string().uuid().optional().nullable(),
+  splitByProduct: z.boolean().optional(),
+  clearanceCm: z.number().min(0).max(5).optional()
+}).refine((input) => Boolean(input.items?.length || (input.productVariantId && input.quantity)), {
+  message: "Provide productVariantId and quantity or items.",
+  path: ["items"]
 });
 
 export async function POST(request: Request) {

@@ -45,7 +45,12 @@ export default async function ProductsPage() {
                     </div>
                     <div className="text-right">
                       <p className="font-medium text-white">{brl.format(Number(item.unit_cost))}</p>
-                      <p className="text-zinc-500">{Number(item.unit_weight_kg).toFixed(4)} kg/un</p>
+                      <p className="text-zinc-500">{Number(item.unit_weight_kg).toFixed(4)} kg/un para frete</p>
+                      <p className="text-zinc-500">
+                        {item.height_cm && item.width_cm && item.length_cm
+                          ? `${Number(item.height_cm)} x ${Number(item.width_cm)} x ${Number(item.length_cm)} cm`
+                          : "Medidas não cadastradas"}
+                      </p>
                     </div>
                   </div>
                   <AnchorEditor

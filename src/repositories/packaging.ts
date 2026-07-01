@@ -19,7 +19,7 @@ export type CreatePackagingBoxInput = {
   widthCm: number;
   lengthCm: number;
   weightKg: number;
-  capacities: Array<{
+  capacities?: Array<{
     productVariantId: string;
     capacity: number;
   }>;
@@ -81,7 +81,7 @@ export async function createPackagingBox(userId: string, tenantId: string, input
 
     const boxId = boxResult.rows[0].id;
 
-    for (const capacity of input.capacities.filter((item) => item.capacity > 0)) {
+    for (const capacity of (input.capacities ?? []).filter((item) => item.capacity > 0)) {
       await client.query(
         `
           insert into packaging_capacities (
@@ -114,20 +114,42 @@ export async function createPackagingBox(userId: string, tenantId: string, input
 export async function estimatePackaging(
   userId: string,
   tenantId: string,
-  input: { productVariantId: string; quantity: number }
+  input: {
+    productVariantId?: string;
+    quantity?: number;
+    items?: Array<{ productVariantId: string; quantity: number }>;
+    selectedBoxId?: string | null;
+    splitByProduct?: boolean;
+    clearanceCm?: number;
+  }
 ) {
   return withTenantContext(userId, tenantId, async (client) => {
-    const variantResult = await client.query<{ id: string; unit_weight_kg: string }>(
+    const requestedItems = input.items?.length
+      ? input.items
+      : input.productVariantId && input.quantity
+        ? [{ productVariantId: input.productVariantId, quantity: input.quantity }]
+        : [];
+    if (requestedItems.length === 0) throw new Error("At least one product item is required.");
+
+    const variantIds = Array.from(new Set(requestedItems.map((item) => item.productVariantId)));
+    const variantResult = await client.query<{
+      id: string;
+      unit_weight_kg: string;
+      height_cm: string | null;
+      width_cm: string | null;
+      length_cm: string | null;
+    }>(
       `
-        select id, unit_weight_kg
+        select id, unit_weight_kg, height_cm, width_cm, length_cm
         from product_variants
-        where tenant_id = $1 and id = $2 and active = true
-        limit 1
+        where tenant_id = $1
+          and id = any($2::uuid[])
+          and active = true
       `,
-      [tenantId, input.productVariantId]
+      [tenantId, variantIds]
     );
-    const variant = variantResult.rows[0];
-    if (!variant) throw new Error("Product variant not found.");
+    const variantsById = new Map(variantResult.rows.map((variant) => [variant.id, variant]));
+    if (variantsById.size !== variantIds.length) throw new Error("Product variant not found.");
 
     const boxResult = await client.query<{
       id: string;
@@ -136,7 +158,6 @@ export async function estimatePackaging(
       width_cm: string;
       length_cm: string;
       weight_kg: string;
-      capacity: number;
     }>(
       `
         select
@@ -145,16 +166,14 @@ export async function estimatePackaging(
           b.height_cm,
           b.width_cm,
           b.length_cm,
-          b.weight_kg,
-          pc.capacity
+          b.weight_kg
         from packaging_boxes b
-        join packaging_capacities pc on pc.packaging_box_id = b.id and pc.tenant_id = b.tenant_id
         where b.tenant_id = $1
           and b.active = true
-          and pc.product_variant_id = $2
+          and ($2::uuid is null or b.id = $2::uuid)
         order by (b.height_cm * b.width_cm * b.length_cm), b.name
       `,
-      [tenantId, input.productVariantId]
+      [tenantId, input.selectedBoxId ?? null]
     );
 
     const boxes: PackagingBox[] = boxResult.rows.map((row) => ({
@@ -164,16 +183,32 @@ export async function estimatePackaging(
       widthCm: Number(row.width_cm),
       lengthCm: Number(row.length_cm),
       weightKg: Number(row.weight_kg),
-      capacities: {
-        [input.productVariantId]: Number(row.capacity)
-      }
+      capacities: {}
     }));
 
+    const items = requestedItems.map((item) => {
+      const variant = variantsById.get(item.productVariantId);
+      if (!variant) throw new Error("Product variant not found.");
+      if (!variant.height_cm || !variant.width_cm || !variant.length_cm) {
+        throw new Error("Product dimensions are required for intelligent packaging.");
+      }
+
+      return {
+        variantId: item.productVariantId,
+        quantity: item.quantity,
+        unitWeightKg: Number(variant.unit_weight_kg),
+        heightCm: Number(variant.height_cm),
+        widthCm: Number(variant.width_cm),
+        lengthCm: Number(variant.length_cm)
+      };
+    });
+
     return selectBestPackage({
-      variantId: input.productVariantId,
-      quantity: input.quantity,
-      unitWeightKg: Number(variant.unit_weight_kg),
-      boxes
+      items,
+      boxes,
+      selectedBoxId: input.selectedBoxId,
+      splitByProduct: input.splitByProduct,
+      clearanceCm: input.clearanceCm
     });
   });
 }

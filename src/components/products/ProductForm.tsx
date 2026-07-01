@@ -62,6 +62,9 @@ export function ProductForm() {
         sku: form.get("sku"),
         unitCost: Number(form.get("unitCost")),
         unitWeightKg: Number(form.get("unitWeightKg")),
+        heightCm: Number(form.get("heightCm") || 0) || null,
+        widthCm: Number(form.get("widthCm") || 0) || null,
+        lengthCm: Number(form.get("lengthCm") || 0) || null,
         curve: {
           mode: curveMode,
           points: curvePoints
@@ -94,7 +97,20 @@ export function ProductForm() {
         <Input label="Variante" name="variantName" placeholder="Redondo 4,5 cm" required />
         <Input label="SKU" name="sku" placeholder="CHAVEIRO-45" />
         <Input label="Custo unitario" name="unitCost" required step="0.0001" type="number" />
-        <Input label="Peso unitario kg" name="unitWeightKg" required step="0.000001" type="number" />
+        <Input label="Peso unitário kg (frete)" name="unitWeightKg" required step="0.000001" type="number" />
+      </div>
+
+      <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
+        <p className="text-sm font-medium text-zinc-300">Medidas unitárias para embalagem</p>
+        <p className="mt-1 text-xs text-zinc-500">
+          Use as dimensões aproximadas do produto pronto. O sistema combina essas medidas com o peso unitário para
+          escolher a menor caixa compatível e calcular o peso líquido do envio.
+        </p>
+        <div className="mt-3 grid gap-4 md:grid-cols-3">
+          <Input label="Altura cm" name="heightCm" step="0.001" type="number" />
+          <Input label="Largura cm" name="widthCm" step="0.001" type="number" />
+          <Input label="Comprimento cm" name="lengthCm" step="0.001" type="number" />
+        </div>
       </div>
 
       <label className="mt-4 block">
