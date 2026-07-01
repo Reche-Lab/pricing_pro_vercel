@@ -18,4 +18,18 @@ describe("olist oauth", () => {
     expect(url).toContain("state=state-123");
     expect(url).not.toContain("erp.olist.com");
   });
+
+  it("normalizes the legacy host even when the saved value includes a path", () => {
+    const url = buildOlistAuthUrl(
+      {
+        app_base_url: "https://erp.olist.com/oauth",
+        authorize_path: "/authorize"
+      },
+      { clientId: "client-id", clientSecret: "client-secret" },
+      "state-456"
+    );
+
+    expect(url).toContain("https://erp.tiny.com.br/authorize");
+    expect(url).not.toContain("erp.olist.com");
+  });
 });

@@ -73,7 +73,12 @@ export function buildOlistAuthUrl(settings: OlistSettings, credentials: OlistCre
 
 export function normalizeOlistAppBaseUrl(value: string) {
   const trimmed = value.trim().replace(/\/$/, "");
-  if (trimmed === "https://erp.olist.com" || trimmed === "http://erp.olist.com") return OLIST_TINY_APP_BASE_URL;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.hostname === "erp.olist.com") return OLIST_TINY_APP_BASE_URL;
+  } catch {
+    return trimmed;
+  }
   return trimmed;
 }
 

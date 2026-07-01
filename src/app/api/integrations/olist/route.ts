@@ -107,7 +107,7 @@ function serializeConnection(
     connected: Boolean(credentials.accessToken || credentials.apiToken),
     status: source.status,
     apiBaseUrl: settings.api_base_url ?? OLIST_API_V3_BASE_URL,
-    appBaseUrl: settings.app_base_url ?? OLIST_APP_BASE_URL,
+    appBaseUrl: normalizeOlistAppBaseUrl(settings.app_base_url ?? OLIST_APP_BASE_URL),
     authorizePath: settings.authorize_path ?? OLIST_DEFAULT_PATHS.authorize,
     tokenPath: settings.token_path ?? OLIST_DEFAULT_PATHS.token,
     path: settings.customer_path ?? OLIST_DEFAULT_PATHS.customer,
