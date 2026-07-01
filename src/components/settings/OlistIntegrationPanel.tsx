@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { KeyRound, Save, Store } from "lucide-react";
+import { KeyRound, Route, Save, Store } from "lucide-react";
 import { OLIST_API_V3_BASE_URL, OLIST_APP_BASE_URL, OLIST_DEFAULT_PATHS } from "@/services/olist/defaults";
 
 type OlistConnectionView = {
@@ -187,20 +187,6 @@ function IntegrationForm({
           <Input defaultValue={connection?.authorizePath ?? OLIST_DEFAULT_PATHS.authorize} label="Authorize path" name="authorizePath" required />
           <Input defaultValue={connection?.tokenPath ?? OLIST_DEFAULT_PATHS.token} label="Token path" name="tokenPath" required />
         </div>
-        <Input defaultValue={connection?.path || defaultPath} label={pathLabel} name="path" placeholder="/api/..." required />
-        {type === "olist" ? (
-          <div className="grid gap-3 md:grid-cols-2">
-            <Input defaultValue={connection?.customerLookupPath ?? OLIST_DEFAULT_PATHS.customerLookup} label="Path consulta cliente" name="customerLookupPath" placeholder="/contatos" />
-            <Input defaultValue={connection?.salesOrderPath ?? OLIST_DEFAULT_PATHS.salesOrder} label="Path pedido de venda" name="salesOrderPath" placeholder="/pedidos" />
-            <Input defaultValue={connection?.invoicePath ?? OLIST_DEFAULT_PATHS.invoice} label="Path gerar nota" name="invoicePath" placeholder="/pedidos/{idPedido}/gerar-nota-fiscal" />
-            <Input defaultValue={connection?.invoiceEmitPath ?? OLIST_DEFAULT_PATHS.invoiceEmit} label="Path autorizar nota" name="invoiceEmitPath" placeholder="/notas/{idNota}/emitir" />
-          </div>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            <Input defaultValue={connection?.userPath ?? OLIST_DEFAULT_PATHS.users} label="Path usuários" name="userPath" placeholder="/usuarios" />
-            <Input defaultValue={connection?.taskPath ?? OLIST_DEFAULT_PATHS.crmTask} label="Path tarefas/agenda" name="taskPath" placeholder="/crm/assuntos/{idAssunto}/acoes" />
-          </div>
-        )}
         <Input defaultValue={connection?.clientId ?? ""} label="Client ID" name="clientId" required />
         <Input label="Client Secret" name="clientSecret" required type="password" />
         <Input defaultValue={connection?.scopes ?? ""} label="Scopes OAuth" name="scopes" placeholder="customers quotes" />
@@ -219,6 +205,34 @@ function IntegrationForm({
           </label>
           <Input defaultValue={connection?.authHeader ?? "authorization"} label="Auth header" name="authHeader" />
         </div>
+        <details className="rounded-md border border-zinc-800 bg-zinc-950/50">
+          <summary className="focus-ring flex cursor-pointer list-none items-center justify-between gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-900/80">
+            <span className="inline-flex items-center gap-2">
+              <Route size={16} className="text-cyan-300" />
+              Endpoints avançados
+            </span>
+            <span className="text-xs font-normal text-zinc-500">recolhido por padrão</span>
+          </summary>
+          <div className="grid gap-3 border-t border-zinc-800 p-3">
+            <p className="text-xs leading-5 text-zinc-500">
+              Mantenha os padrões da API v3, a menos que a Olist/Tiny informe endpoints específicos para o seu app.
+            </p>
+            <Input defaultValue={connection?.path || defaultPath} label={pathLabel} name="path" placeholder="/api/..." required />
+            {type === "olist" ? (
+              <div className="grid gap-3 md:grid-cols-2">
+                <Input defaultValue={connection?.customerLookupPath ?? OLIST_DEFAULT_PATHS.customerLookup} label="Path consulta cliente" name="customerLookupPath" placeholder="/contatos" />
+                <Input defaultValue={connection?.salesOrderPath ?? OLIST_DEFAULT_PATHS.salesOrder} label="Path pedido de venda" name="salesOrderPath" placeholder="/pedidos" />
+                <Input defaultValue={connection?.invoicePath ?? OLIST_DEFAULT_PATHS.invoice} label="Path gerar nota" name="invoicePath" placeholder="/pedidos/{idPedido}/gerar-nota-fiscal" />
+                <Input defaultValue={connection?.invoiceEmitPath ?? OLIST_DEFAULT_PATHS.invoiceEmit} label="Path autorizar nota" name="invoiceEmitPath" placeholder="/notas/{idNota}/emitir" />
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                <Input defaultValue={connection?.userPath ?? OLIST_DEFAULT_PATHS.users} label="Path usuários" name="userPath" placeholder="/usuarios" />
+                <Input defaultValue={connection?.taskPath ?? OLIST_DEFAULT_PATHS.crmTask} label="Path tarefas/agenda" name="taskPath" placeholder="/crm/assuntos/{idAssunto}/acoes" />
+              </div>
+            )}
+          </div>
+        </details>
       </div>
       <button
         className="focus-ring mt-4 inline-flex items-center gap-2 rounded-md bg-zinc-950 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
