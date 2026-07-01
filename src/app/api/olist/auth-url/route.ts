@@ -14,7 +14,23 @@ export async function GET() {
     return NextResponse.json({ ok: false, error: "Olist integration is not configured." }, { status: 409 });
   }
 
-  const credentials = decryptIntegrationCredentials<OlistCredentials>(connection);
+  let credentials: OlistCredentials;
+  try {
+    credentials = decryptIntegrationCredentials<OlistCredentials>(connection);
+  } catch {
+    return NextResponse.json(
+      { ok: false, error: "Salve as credenciais Client ID e Client Secret da Olist antes de conectar o OAuth." },
+      { status: 409 }
+    );
+  }
+
+  if (!credentials.clientId || !credentials.clientSecret) {
+    return NextResponse.json(
+      { ok: false, error: "Informe e salve Client ID e Client Secret da Olist antes de conectar o OAuth." },
+      { status: 409 }
+    );
+  }
+
   const state = randomUUID();
   await createOAuthState(session.userId, session.tenantId, {
     provider: "olist",
@@ -23,6 +39,13 @@ export async function GET() {
     ttlMinutes: 10
   });
 
-  const authUrl = buildOlistAuthUrl(connection.settings as OlistSettings, credentials, state);
-  return NextResponse.json({ ok: true, authUrl });
+  try {
+    const authUrl = buildOlistAuthUrl(connection.settings as OlistSettings, credentials, state);
+    return NextResponse.json({ ok: true, authUrl });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Não foi possível iniciar OAuth Olist." },
+      { status: 409 }
+    );
+  }
 }
