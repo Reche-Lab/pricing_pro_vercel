@@ -26,17 +26,17 @@ export async function POST(_request: Request, context: { params: Promise<{ membe
   const [allowed, member, connection] = await Promise.all([
     userHasPermission(session.userId, session.tenantId, "users:manage"),
     getTenantMember(session.userId, session.tenantId, membershipId),
-    getIntegrationConnection(session.userId, session.tenantId, "olist_crm")
+    getIntegrationConnection(session.userId, session.tenantId, "olist")
   ]);
   if (!allowed) return NextResponse.json({ ok: false, error: "Forbidden." }, { status: 403 });
   if (!member) return NextResponse.json({ ok: false, error: "Member not found." }, { status: 404 });
   if (!connection || connection.status !== "active") {
-    return NextResponse.json({ ok: false, error: "Olist CRM integration is not active." }, { status: 409 });
+    return NextResponse.json({ ok: false, error: "Olist integration is not active." }, { status: 409 });
   }
 
   const settings = connection.settings as OlistSettings;
   const path = settings.user_path;
-  if (!path) return NextResponse.json({ ok: false, error: "Olist CRM user path is not configured." }, { status: 409 });
+  if (!path) return NextResponse.json({ ok: false, error: "Olist user path is not configured." }, { status: 409 });
 
   const payload = buildOlistUserPayload(member);
   const lookupPath = buildUserLookupPath(path, payload);
@@ -53,7 +53,7 @@ export async function POST(_request: Request, context: { params: Promise<{ membe
       metadata: { lastUserSyncAt: new Date().toISOString(), result }
     });
     await logIntegrationEvent(session.userId, session.tenantId, {
-      provider: "olist_crm",
+      provider: "olist",
       operation: "users.sync",
       status: "success",
       externalId,
@@ -62,7 +62,7 @@ export async function POST(_request: Request, context: { params: Promise<{ membe
     return NextResponse.json({ ok: true, externalId, result });
   } catch (error) {
     await logIntegrationEvent(session.userId, session.tenantId, {
-      provider: "olist_crm",
+      provider: "olist",
       operation: "users.sync",
       status: "error",
       message: error instanceof Error ? error.message : "Unknown Olist CRM error",

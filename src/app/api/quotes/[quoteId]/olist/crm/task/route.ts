@@ -35,7 +35,7 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     const result = await sendOlistQuoteOperation({
       userId: loaded.session.userId,
       tenantId: loaded.session.tenantId,
-      provider: "olist_crm",
+      provider: "olist",
       operation: "crm.tasks.create",
       quoteId,
       settings: loaded.settings,

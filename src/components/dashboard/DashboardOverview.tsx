@@ -66,7 +66,6 @@ export function DashboardOverview({ data, billing }: DashboardOverviewProps) {
   const conversionRate = conversionBase > 0 ? (data.metrics.accepted_month / conversionBase) * 100 : 0;
   const melhorEnvio = getIntegrationStatus(data, "melhor_envio");
   const olist = getIntegrationStatus(data, "olist");
-  const olistCrm = getIntegrationStatus(data, "olist_crm");
   const hasSenderAddress = Boolean(
     data.tenantProfile?.postal_code && data.tenantProfile.city && data.tenantProfile.state
   );
@@ -80,7 +79,7 @@ export function DashboardOverview({ data, billing }: DashboardOverviewProps) {
     { label: "Produtos e curvas", done: data.setup.variants_count > 0 && data.setup.variants_without_curve === 0, href: "/products" },
     { label: "Canais de venda", done: data.setup.platforms_count > 0, href: "/platforms" },
     { label: "Embalagens", done: data.setup.packaging_count > 0, href: "/packaging" },
-    { label: "Integrações", done: melhorEnvio === "active" || olist === "active" || olistCrm === "active", href: "/settings" },
+    { label: "Integrações", done: melhorEnvio === "active" || olist === "active", href: "/settings" },
     { label: "Equipe", done: data.setup.active_members > 1 || data.setup.invited_members > 0, href: "/users" }
   ];
   const completedSetup = setupItems.filter((item) => item.done).length;
@@ -242,8 +241,7 @@ export function DashboardOverview({ data, billing }: DashboardOverviewProps) {
 
         <Panel title="Frete e integrações" description="Condições para cálculo e fluxo de envio.">
           <IntegrationRow label="Melhor Envio" status={melhorEnvio} />
-          <IntegrationRow label="Olist clientes" status={olist} />
-          <IntegrationRow label="Olist CRM" status={olistCrm} />
+          <IntegrationRow label="Olist API v3" status={olist} />
           <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm text-zinc-300">CEP/remetente</span>

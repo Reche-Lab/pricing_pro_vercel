@@ -21,20 +21,31 @@ export async function loadQuoteOlistContext(
     return { error: { status: 400, body: { ok: false, error: "Invalid quote id." } } } as const;
   }
 
-  const [detail, connection] = await Promise.all([
+  const [detail, primaryConnection, legacyCrmConnection] = await Promise.all([
     getQuoteDetail(session.userId, session.tenantId, quoteId),
-    getIntegrationConnection(session.userId, session.tenantId, provider)
+    getIntegrationConnection(session.userId, session.tenantId, "olist"),
+    provider === "olist_crm" ? getIntegrationConnection(session.userId, session.tenantId, "olist_crm") : Promise.resolve(null)
   ]);
+  const connection =
+    primaryConnection?.status === "active"
+      ? primaryConnection
+      : legacyCrmConnection?.status === "active"
+        ? legacyCrmConnection
+        : primaryConnection;
   if (!detail) return { error: { status: 404, body: { ok: false, error: "Quote not found." } } } as const;
   if (!connection || connection.status !== "active") {
     return { error: { status: 409, body: { ok: false, error: "Olist integration is not active." } } } as const;
   }
+  const settings = mergeOlistSettings(
+    connection.settings as OlistSettings,
+    legacyCrmConnection?.settings as OlistSettings | undefined
+  );
 
   return {
     session,
     detail,
     connection,
-    settings: connection.settings as OlistSettings,
+    settings,
     credentials: decryptIntegrationCredentials<OlistCredentials>(connection)
   } as const;
 }
@@ -78,4 +89,14 @@ export async function sendOlistQuoteOperation(input: {
     });
     throw error;
   }
+}
+
+function mergeOlistSettings(settings: OlistSettings, legacyCrmSettings?: OlistSettings): OlistSettings {
+  if (!legacyCrmSettings) return settings;
+  return {
+    ...settings,
+    quote_path: settings.quote_path ?? legacyCrmSettings.quote_path,
+    user_path: settings.user_path ?? legacyCrmSettings.user_path,
+    task_path: settings.task_path ?? legacyCrmSettings.task_path
+  };
 }

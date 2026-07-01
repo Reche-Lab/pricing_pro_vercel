@@ -204,7 +204,7 @@ export async function getDashboardOverview(userId: string, tenantId: string): Pr
         select provider, status
         from integration_connections
         where tenant_id = $1
-          and provider in ('melhor_envio', 'olist', 'olist_crm')
+          and provider in ('melhor_envio', 'olist')
         order by provider
       `,
       [tenantId]

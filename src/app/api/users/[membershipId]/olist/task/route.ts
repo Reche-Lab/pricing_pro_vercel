@@ -33,17 +33,17 @@ export async function POST(request: Request, context: { params: Promise<{ member
   const [allowed, member, connection] = await Promise.all([
     userHasPermission(session.userId, session.tenantId, "users:manage"),
     getTenantMember(session.userId, session.tenantId, membershipId),
-    getIntegrationConnection(session.userId, session.tenantId, "olist_crm")
+    getIntegrationConnection(session.userId, session.tenantId, "olist")
   ]);
   if (!allowed) return NextResponse.json({ ok: false, error: "Forbidden." }, { status: 403 });
   if (!member) return NextResponse.json({ ok: false, error: "Member not found." }, { status: 404 });
   if (!connection || connection.status !== "active") {
-    return NextResponse.json({ ok: false, error: "Olist CRM integration is not active." }, { status: 409 });
+    return NextResponse.json({ ok: false, error: "Olist integration is not active." }, { status: 409 });
   }
 
   const settings = connection.settings as OlistSettings;
   const path = replacePathTokens(settings.task_path ?? "", { idAssunto: parsed.data.subjectId });
-  if (!path) return NextResponse.json({ ok: false, error: "Olist CRM task path is not configured." }, { status: 409 });
+  if (!path) return NextResponse.json({ ok: false, error: "Olist task path is not configured." }, { status: 409 });
   if ("error" in path) return NextResponse.json({ ok: false, error: path.error }, { status: 409 });
 
   const payload = buildOlistTaskPayload({
@@ -62,7 +62,7 @@ export async function POST(request: Request, context: { params: Promise<{ member
     });
     const externalId = extractExternalId(result);
     await logIntegrationEvent(session.userId, session.tenantId, {
-      provider: "olist_crm",
+      provider: "olist",
       operation: "tasks.create",
       status: "success",
       externalId,
@@ -71,7 +71,7 @@ export async function POST(request: Request, context: { params: Promise<{ member
     return NextResponse.json({ ok: true, externalId, result });
   } catch (error) {
     await logIntegrationEvent(session.userId, session.tenantId, {
-      provider: "olist_crm",
+      provider: "olist",
       operation: "tasks.create",
       status: "error",
       message: error instanceof Error ? error.message : "Unknown Olist CRM error",

@@ -10,6 +10,7 @@ type OlistConnectionView = {
   status: string;
   apiBaseUrl?: string;
   path?: string;
+  quotePath?: string;
   customerLookupPath?: string;
   salesOrderPath?: string;
   invoicePath?: string;
@@ -28,7 +29,6 @@ type OlistConnectionView = {
 
 type OlistIntegrations = {
   olist: OlistConnectionView;
-  olistCrm: OlistConnectionView;
 };
 
 export function OlistIntegrationPanel() {
@@ -51,21 +51,21 @@ export function OlistIntegrationPanel() {
     if (response.ok && data?.ok) setIntegrations(data.integrations);
   }
 
-  async function save(event: React.FormEvent<HTMLFormElement>, provider: "olist" | "olist_crm") {
+  async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");
-    setLoading(provider);
+    setLoading("olist");
     const form = new FormData(event.currentTarget);
     const response = await fetch("/api/integrations/olist", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        provider,
         apiBaseUrl: form.get("apiBaseUrl"),
         appBaseUrl: form.get("appBaseUrl"),
         authorizePath: form.get("authorizePath"),
         tokenPath: form.get("tokenPath"),
         path: form.get("path"),
+        quotePath: form.get("quotePath") ?? "",
         customerLookupPath: form.get("customerLookupPath") ?? "",
         salesOrderPath: form.get("salesOrderPath") ?? "",
         invoicePath: form.get("invoicePath") ?? "",
@@ -91,10 +91,10 @@ export function OlistIntegrationPanel() {
     await loadIntegrations();
   }
 
-  async function connect(provider: "olist" | "olist_crm") {
+  async function connect() {
     setMessage("");
-    setLoading(`${provider}_oauth`);
-    const response = await fetch(`/api/olist/auth-url?provider=${provider}`);
+    setLoading("olist_oauth");
+    const response = await fetch("/api/olist/auth-url");
     const data = await response.json().catch(() => null);
     setLoading("");
 
@@ -118,28 +118,14 @@ export function OlistIntegrationPanel() {
           {callbackUrl}
         </p>
       </div>
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div>
         <IntegrationForm
           connection={integrations?.olist}
           loading={loading === "olist"}
           oauthLoading={loading === "olist_oauth"}
-          onConnect={() => connect("olist")}
-          onSubmit={(event) => save(event, "olist")}
-          pathLabel="Path para criar cliente"
-          type="olist"
-          defaultPath={OLIST_DEFAULT_PATHS.customer}
-          title="Olist clientes"
-        />
-        <IntegrationForm
-          connection={integrations?.olistCrm}
-          loading={loading === "olist_crm"}
-          oauthLoading={loading === "olist_crm_oauth"}
-          onConnect={() => connect("olist_crm")}
-          onSubmit={(event) => save(event, "olist_crm")}
-          pathLabel="Path para enviar orçamento"
-          type="olist_crm"
-          defaultPath={OLIST_DEFAULT_PATHS.crmQuote}
-          title="CRM Olist"
+          onConnect={connect}
+          onSubmit={save}
+          title="Olist API v3"
         />
       </div>
       {message ? <p className="mt-4 rounded-md bg-zinc-950/60 px-3 py-2 text-sm text-zinc-400">{message}</p> : null}
@@ -149,9 +135,6 @@ export function OlistIntegrationPanel() {
 
 function IntegrationForm({
   title,
-  pathLabel,
-  type,
-  defaultPath,
   connection,
   loading,
   oauthLoading,
@@ -159,9 +142,6 @@ function IntegrationForm({
   onSubmit
 }: {
   title: string;
-  pathLabel: string;
-  type: "olist" | "olist_crm";
-  defaultPath: string;
   connection?: OlistConnectionView;
   loading: boolean;
   oauthLoading: boolean;
@@ -217,20 +197,16 @@ function IntegrationForm({
             <p className="text-xs leading-5 text-zinc-500">
               Mantenha os padrões da API v3, a menos que a Olist/Tiny informe endpoints específicos para o seu app.
             </p>
-            <Input defaultValue={connection?.path || defaultPath} label={pathLabel} name="path" placeholder="/api/..." required />
-            {type === "olist" ? (
-              <div className="grid gap-3 md:grid-cols-2">
-                <Input defaultValue={connection?.customerLookupPath ?? OLIST_DEFAULT_PATHS.customerLookup} label="Path consulta cliente" name="customerLookupPath" placeholder="/contatos" />
-                <Input defaultValue={connection?.salesOrderPath ?? OLIST_DEFAULT_PATHS.salesOrder} label="Path pedido de venda" name="salesOrderPath" placeholder="/pedidos" />
-                <Input defaultValue={connection?.invoicePath ?? OLIST_DEFAULT_PATHS.invoice} label="Path gerar nota" name="invoicePath" placeholder="/pedidos/{idPedido}/gerar-nota-fiscal" />
-                <Input defaultValue={connection?.invoiceEmitPath ?? OLIST_DEFAULT_PATHS.invoiceEmit} label="Path autorizar nota" name="invoiceEmitPath" placeholder="/notas/{idNota}/emitir" />
-              </div>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                <Input defaultValue={connection?.userPath ?? OLIST_DEFAULT_PATHS.users} label="Path usuários" name="userPath" placeholder="/usuarios" />
-                <Input defaultValue={connection?.taskPath ?? OLIST_DEFAULT_PATHS.crmTask} label="Path tarefas/agenda" name="taskPath" placeholder="/crm/assuntos/{idAssunto}/acoes" />
-              </div>
-            )}
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input defaultValue={connection?.path || OLIST_DEFAULT_PATHS.customer} label="Path criar cliente" name="path" placeholder="/contatos" required />
+              <Input defaultValue={connection?.customerLookupPath ?? OLIST_DEFAULT_PATHS.customerLookup} label="Path consulta cliente" name="customerLookupPath" placeholder="/contatos" />
+              <Input defaultValue={connection?.quotePath ?? OLIST_DEFAULT_PATHS.crmQuote} label="Path assunto CRM" name="quotePath" placeholder="/crm/assuntos" />
+              <Input defaultValue={connection?.taskPath ?? OLIST_DEFAULT_PATHS.crmTask} label="Path tarefas/agenda" name="taskPath" placeholder="/crm/assuntos/{idAssunto}/acoes" />
+              <Input defaultValue={connection?.salesOrderPath ?? OLIST_DEFAULT_PATHS.salesOrder} label="Path pedido de venda" name="salesOrderPath" placeholder="/pedidos" />
+              <Input defaultValue={connection?.invoicePath ?? OLIST_DEFAULT_PATHS.invoice} label="Path gerar nota" name="invoicePath" placeholder="/pedidos/{idPedido}/gerar-nota-fiscal" />
+              <Input defaultValue={connection?.invoiceEmitPath ?? OLIST_DEFAULT_PATHS.invoiceEmit} label="Path autorizar nota" name="invoiceEmitPath" placeholder="/notas/{idNota}/emitir" />
+              <Input defaultValue={connection?.userPath ?? OLIST_DEFAULT_PATHS.users} label="Path usuários/vendedores" name="userPath" placeholder="/usuarios" />
+            </div>
           </div>
         </details>
       </div>
