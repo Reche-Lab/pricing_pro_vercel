@@ -11,9 +11,15 @@ import { createShipmentDraft } from "@/repositories/shipments";
 import { quoteMelhorEnvioShipping } from "@/services/melhor-envio/melhor-envio";
 import type { MelhorEnvioCredentials, MelhorEnvioSettings } from "@/services/melhor-envio/types";
 
-const quoteSchema = z.object({
+const shippingItemSchema = z.object({
   productVariantId: z.string().uuid(),
-  quantity: z.number().int().min(1).max(50000),
+  quantity: z.number().int().min(1).max(50000)
+});
+
+const quoteSchema = z.object({
+  productVariantId: z.string().uuid().optional(),
+  quantity: z.number().int().min(1).max(50000).optional(),
+  items: z.array(shippingItemSchema).min(1).max(100).optional(),
   originPostalCode: z.string().min(8),
   destinationPostalCode: z.string().min(8),
   declaredValue: z.number().min(0).optional(),
@@ -24,7 +30,10 @@ const quoteSchema = z.object({
   quoteId: z.string().uuid().optional(),
   selectedBoxId: z.string().uuid().optional().nullable(),
   clearanceCm: z.number().min(0).max(5).optional()
-});
+}).refine(
+  (value) => Boolean(value.items?.length) || (Boolean(value.productVariantId) && typeof value.quantity === "number"),
+  { message: "Informe itens da bandeja ou produto e quantidade." }
+);
 
 export async function POST(request: Request) {
   const session = await getCurrentSession();
@@ -64,6 +73,7 @@ export async function POST(request: Request) {
       metadata: {
         productVariantId: parsed.data.productVariantId,
         quantity: parsed.data.quantity,
+        items: parsed.data.items,
         boxesNeeded: packaging.boxesNeeded
       }
     });

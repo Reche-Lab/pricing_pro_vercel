@@ -10,16 +10,25 @@ import { estimatePackaging } from "@/repositories/packaging";
 import { quoteCorreiosShipping } from "@/services/correios/correios";
 import type { CorreiosCredentials, CorreiosSettings } from "@/services/correios/types";
 
-const quoteSchema = z.object({
+const shippingItemSchema = z.object({
   productVariantId: z.string().uuid(),
-  quantity: z.number().int().min(1).max(50000),
+  quantity: z.number().int().min(1).max(50000)
+});
+
+const quoteSchema = z.object({
+  productVariantId: z.string().uuid().optional(),
+  quantity: z.number().int().min(1).max(50000).optional(),
+  items: z.array(shippingItemSchema).min(1).max(100).optional(),
   service: z.enum(["sedex", "pac"]),
   originPostalCode: z.string().min(8),
   destinationPostalCode: z.string().min(8),
   declaredValue: z.number().min(0).optional(),
   selectedBoxId: z.string().uuid().optional().nullable(),
   clearanceCm: z.number().min(0).max(5).optional()
-});
+}).refine(
+  (value) => Boolean(value.items?.length) || (Boolean(value.productVariantId) && typeof value.quantity === "number"),
+  { message: "Informe itens da bandeja ou produto e quantidade." }
+);
 
 export async function POST(request: Request) {
   const session = await getCurrentSession();
@@ -40,6 +49,7 @@ export async function POST(request: Request) {
     const packaging = await estimatePackaging(session.userId, session.tenantId, {
       productVariantId: parsed.data.productVariantId,
       quantity: parsed.data.quantity,
+      items: parsed.data.items,
       selectedBoxId: parsed.data.selectedBoxId,
       clearanceCm: parsed.data.clearanceCm
     });
@@ -69,6 +79,7 @@ export async function POST(request: Request) {
         service: parsed.data.service,
         productVariantId: parsed.data.productVariantId,
         quantity: parsed.data.quantity,
+        items: parsed.data.items,
         totalFrete: result.totalFrete,
         boxesNeeded: packaging.boxesNeeded
       }
@@ -84,7 +95,8 @@ export async function POST(request: Request) {
       metadata: {
         service: parsed.data.service,
         productVariantId: parsed.data.productVariantId,
-        quantity: parsed.data.quantity
+        quantity: parsed.data.quantity,
+        items: parsed.data.items
       }
     });
 

@@ -253,10 +253,21 @@ export function PricingCalculator({
     );
   }, [currentCurve, effectivePlatform, platform, quantity, simulatedCurve, variant]);
 
-  const draftEstimatedTotal = useMemo(
-    () => draftItems.reduce((sum, item) => sum + item.totalPrice, 0) + (includeShipping ? shippingAmount : 0),
-    [draftItems, includeShipping, shippingAmount]
+  const draftItemsSubtotal = useMemo(
+    () => draftItems.reduce((sum, item) => sum + item.totalPrice, 0),
+    [draftItems]
   );
+  const draftEstimatedTotal = useMemo(
+    () => draftItemsSubtotal + (includeShipping ? shippingAmount : 0),
+    [draftItemsSubtotal, includeShipping, shippingAmount]
+  );
+
+  useEffect(() => {
+    setShippingAmount(0);
+    setIncludeShipping(false);
+    setShippingPackaging(null);
+    setShippingQuoteMessage("");
+  }, [draftItems, quantity, variantId]);
 
   if (!variant || !platform || !currentResult || !simulatedResult) {
     return <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-6">Nenhum produto disponivel.</div>;
@@ -416,17 +427,23 @@ export function PricingCalculator({
 
     try {
       const endpoint = shippingService === "melhor_envio" ? "/api/shipping/melhor-envio/quote" : "/api/shipping/correios";
+      const shippingItems = draftItems.map((item) => ({
+        productVariantId: item.productVariantId,
+        quantity: item.quantity
+      }));
+      const shippingSubtotal = shippingItems.length > 0 ? draftItemsSubtotal : simulatedResult.subtotal;
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           productVariantId: variant.id,
           quantity,
+          items: shippingItems.length > 0 ? shippingItems : undefined,
           service: shippingService === "sedex" ? "sedex" : "pac",
           originPostalCode: origin,
           destinationPostalCode: destination,
-          declaredValue: shippingService === "melhor_envio" && !includeMelhorEnvioInsurance ? 0 : simulatedResult.subtotal,
-          insuranceValue: shippingService === "melhor_envio" && includeMelhorEnvioInsurance ? simulatedResult.subtotal : 0
+          declaredValue: shippingService === "melhor_envio" && !includeMelhorEnvioInsurance ? 0 : shippingSubtotal,
+          insuranceValue: shippingService === "melhor_envio" && includeMelhorEnvioInsurance ? shippingSubtotal : 0
         })
       });
       const data = await response.json().catch(() => null);
@@ -443,7 +460,7 @@ export function PricingCalculator({
       setIncludeShipping(true);
       setShippingPackaging(extractShippingPackaging(data.packaging));
       setShippingQuoteState("idle");
-      setShippingQuoteMessage(`Frete calculado: ${brl.format(amount)}${shippingService === "melhor_envio" ? " via Melhor Envio" : ""}.`);
+      setShippingQuoteMessage(`Frete calculado para ${shippingItems.length > 0 ? "a bandeja de orçamento" : "o item atual"}: ${brl.format(amount)}${shippingService === "melhor_envio" ? " via Melhor Envio" : ""}.`);
     } catch (error) {
       setShippingQuoteState("error");
       setShippingQuoteMessage(error instanceof Error ? error.message : "Não foi possível calcular o frete.");
@@ -1043,8 +1060,16 @@ export function PricingCalculator({
               </label>
             </div>
           </div>
+          <div className="mt-3 rounded-md border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-xs text-zinc-400">
+            Base do cálculo:{" "}
+            <strong className="text-zinc-100">
+              {draftItems.length > 0
+                ? `Bandeja de orçamento (${draftItems.length} item${draftItems.length === 1 ? "" : "s"})`
+                : `Item atual da tela (${quantity} un.)`}
+            </strong>
+          </div>
           <p className="mt-3 text-sm text-zinc-400">
-            Total com frete: {brl.format(simulatedResult.subtotal + (includeShipping ? shippingAmount : 0))}
+            Total com frete: {brl.format((draftItems.length > 0 ? draftItemsSubtotal : simulatedResult.subtotal) + (includeShipping ? shippingAmount : 0))}
           </p>
           {shippingPackaging ? (
             <div className="mt-3 grid gap-2 rounded-lg border border-cyan-400/20 bg-cyan-400/5 p-3 text-sm text-zinc-300 sm:grid-cols-2 lg:grid-cols-4">
@@ -1085,7 +1110,7 @@ export function PricingCalculator({
                 type="checkbox"
                 onChange={(event) => setIncludeMelhorEnvioInsurance(event.target.checked)}
               />
-              Incluir seguro do Melhor Envio sobre {brl.format(simulatedResult.subtotal)}
+              Incluir seguro do Melhor Envio sobre {brl.format(draftItems.length > 0 ? draftItemsSubtotal : simulatedResult.subtotal)}
             </label>
           ) : null}
           {!activeShippingServices.correios && !activeShippingServices.melhorEnvio ? (
