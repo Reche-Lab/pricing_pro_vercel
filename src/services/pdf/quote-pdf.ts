@@ -4,6 +4,7 @@ import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const PAGE_SIZE: [number, number] = [595.28, 841.89];
 const margin = 42;
+const LOGO_BOX = { width: 82, height: 52 };
 
 export async function generateQuotePdf(input: {
   tenantName: string;
@@ -48,8 +49,24 @@ export async function generateQuotePdf(input: {
     if (options?.y === undefined) y -= size + 8;
   };
 
-  if (logo) page.drawImage(logo, { x: margin, y: 744, width: 48, height: 48 });
-  const headerX = logo ? margin + 64 : margin;
+  if (logo) {
+    const fittedLogo = fitImage(logo.width, logo.height, LOGO_BOX.width, LOGO_BOX.height);
+    page.drawRectangle({
+      x: margin,
+      y: 740,
+      width: LOGO_BOX.width,
+      height: LOGO_BOX.height,
+      borderColor: rgb(0.9, 0.9, 0.92),
+      borderWidth: 0.5
+    });
+    page.drawImage(logo, {
+      x: margin + (LOGO_BOX.width - fittedLogo.width) / 2,
+      y: 740 + (LOGO_BOX.height - fittedLogo.height) / 2,
+      width: fittedLogo.width,
+      height: fittedLogo.height
+    });
+  }
+  const headerX = logo ? margin + LOGO_BOX.width + 18 : margin;
   drawText("Proposta Comercial", { x: headerX, y: 774, size: 20, bold: true });
   drawText(tenantName, { x: headerX, y: 754, size: 12, bold: true, color: rgb(0.25, 0.25, 0.27) });
   const companyLine = [input.tenant?.company_document, input.tenant?.company_phone, input.tenant?.company_site]
@@ -177,8 +194,17 @@ export async function generateQuotePdf(input: {
 }
 
 async function loadLogo(pdf: PDFDocument, logoUrl: string | null | undefined) {
-  if (!logoUrl || !/^https?:\/\//.test(logoUrl)) return null;
+  if (!logoUrl) return null;
   try {
+    if (logoUrl.startsWith("data:image/")) {
+      const parsed = parseDataImage(logoUrl);
+      if (!parsed) return null;
+      if (parsed.contentType.includes("png")) return pdf.embedPng(parsed.bytes);
+      if (parsed.contentType.includes("jpeg") || parsed.contentType.includes("jpg")) return pdf.embedJpg(parsed.bytes);
+      return null;
+    }
+
+    if (!/^https?:\/\//.test(logoUrl)) return null;
     const response = await fetch(logoUrl);
     if (!response.ok) return null;
     const bytes = new Uint8Array(await response.arrayBuffer());
@@ -188,6 +214,23 @@ async function loadLogo(pdf: PDFDocument, logoUrl: string | null | undefined) {
   } catch {
     return null;
   }
+}
+
+function fitImage(originalWidth: number, originalHeight: number, maxWidth: number, maxHeight: number) {
+  const scale = Math.min(maxWidth / originalWidth, maxHeight / originalHeight);
+  return {
+    width: originalWidth * scale,
+    height: originalHeight * scale
+  };
+}
+
+function parseDataImage(value: string) {
+  const match = /^data:(image\/(?:png|jpe?g));base64,(.+)$/i.exec(value);
+  if (!match) return null;
+  return {
+    contentType: match[1].toLowerCase(),
+    bytes: Uint8Array.from(Buffer.from(match[2], "base64"))
+  };
 }
 
 function formatDate(value: string): string {

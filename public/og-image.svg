@@ -1,0 +1,30 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#09090B"/>
+  <path d="M0 0H1200V630H0V0Z" fill="url(#bg)"/>
+  <g opacity="0.22">
+    <path d="M120 140H1080M120 220H1080M120 300H1080M120 380H1080M120 460H1080" stroke="#A1A1AA"/>
+    <path d="M200 90V540M360 90V540M520 90V540M680 90V540M840 90V540M1000 90V540" stroke="#A1A1AA"/>
+  </g>
+  <path d="M164 407C244 365 283 313 360 334C455 360 493 239 590 255C694 273 716 184 816 202C886 215 935 177 1036 137" stroke="#FBBF24" stroke-width="10" stroke-linecap="round"/>
+  <path d="M164 458C272 420 341 432 434 386C525 341 608 374 690 318C769 264 861 297 1036 229" stroke="#22D3EE" stroke-width="8" stroke-linecap="round" opacity="0.75"/>
+  <rect x="80" y="72" width="1040" height="486" rx="26" stroke="#3F3F46" stroke-width="2"/>
+  <rect x="116" y="108" width="92" height="92" rx="18" fill="#FBBF24"/>
+  <path d="M162 126L171.9 153.1L201 162L171.9 170.9L162 198L152.1 170.9L123 162L152.1 153.1L162 126Z" fill="#09090B"/>
+  <text x="236" y="148" fill="#FAFAFA" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="800">Pricing Pro</text>
+  <text x="236" y="188" fill="#A1A1AA" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="500">precificação, orçamento, frete e operação comercial</text>
+  <text x="116" y="300" fill="#FAFAFA" font-family="Inter, Arial, sans-serif" font-size="70" font-weight="850">Orçamentos profissionais em poucos cliques</text>
+  <text x="118" y="365" fill="#D4D4D8" font-family="Inter, Arial, sans-serif" font-size="32" font-weight="500">Calcule preços, margem, PDF, WhatsApp e integrações em um só fluxo.</text>
+  <g>
+    <rect x="116" y="434" width="224" height="54" rx="12" fill="#FBBF24"/>
+    <text x="140" y="469" fill="#09090B" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="800">Teste o demo</text>
+    <rect x="360" y="434" width="278" height="54" rx="12" fill="#18181B" stroke="#52525B"/>
+    <text x="386" y="469" fill="#FAFAFA" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700">Console multi-tenant</text>
+  </g>
+  <defs>
+    <radialGradient id="bg" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(980 86) rotate(137.55) scale(764.846 917.177)">
+      <stop stop-color="#164E63"/>
+      <stop offset="0.36" stop-color="#18181B"/>
+      <stop offset="1" stop-color="#09090B"/>
+    </radialGradient>
+  </defs>
+</svg>

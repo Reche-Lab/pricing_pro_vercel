@@ -1,0 +1,16 @@
+{
+  "name": "Pricing Pro",
+  "short_name": "Pricing Pro",
+  "description": "Plataforma multi-tenant para precificação, orçamento, frete, PDF, WhatsApp e integrações comerciais.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090B",
+  "theme_color": "#09090B",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "16x16 32x32 48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}

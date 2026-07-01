@@ -5,6 +5,13 @@ describe("quote PDF", () => {
   it("generates a PDF buffer", async () => {
     const pdf = await generateQuotePdf({
       tenantName: "Ground Shop",
+      tenant: {
+        name: "Ground Shop",
+        logo_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+        company_document: "00.000.000/0001-00",
+        company_phone: "(11) 99999-9999",
+        company_site: "https://example.com"
+      },
       quote: {
         id: "quote-id",
         status: "draft",
