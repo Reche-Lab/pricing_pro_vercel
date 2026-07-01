@@ -17,7 +17,7 @@ export default async function CustomersPage() {
 
   return (
     <AppShell title="Clientes" subtitle="Clientes isolados por tenant." tenantName={profile.tenant_name}>
-      <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(520px,640px)_1fr]">
         <CustomerForm />
         <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
           <div className="border-b border-zinc-800 px-5 py-4">
@@ -28,18 +28,29 @@ export default async function CustomersPage() {
               <p className="p-5 text-sm text-zinc-500">Nenhum cliente cadastrado ainda.</p>
             ) : (
               customers.map((customer) => (
-                <div className="grid gap-1 px-5 py-4 text-sm" key={customer.id}>
-                  <p className="font-medium text-white">{customer.name}</p>
-                  <p className="text-zinc-500">
-                    {[
-                      customer.email,
-                      customer.phone,
-                      customer.postal_code,
-                      customer.city,
-                      customer.state
-                    ].filter(Boolean).join(" - ") ||
-                      "Sem dados adicionais"}
-                  </p>
+                <div className="grid gap-2 px-5 py-4 text-sm" key={customer.id}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium text-white">{customer.name}</p>
+                    {customer.document ? (
+                      <span className="rounded-full border border-zinc-700 bg-zinc-950/60 px-2 py-0.5 text-xs text-zinc-400">
+                        {customer.document}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-1 text-zinc-500">
+                    <p>{[customer.email, customer.phone].filter(Boolean).join(" - ") || "Sem contato cadastrado"}</p>
+                    <p>
+                      {[
+                        customer.address_line,
+                        customer.address_number,
+                        customer.address_complement,
+                        customer.district,
+                        customer.city,
+                        customer.state,
+                        customer.postal_code
+                      ].filter(Boolean).join(" - ") || "Sem endereço cadastrado"}
+                    </p>
+                  </div>
                 </div>
               ))
             )}

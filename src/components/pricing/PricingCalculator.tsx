@@ -29,6 +29,7 @@ import {
 } from "@/domain/pricing/pricing";
 import type { DemoProductVariant } from "@/domain/pricing/defaults";
 import type { PlatformRule, PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
+import { fetchCepAddress, formatCep, normalizeCep, type CepAddress } from "@/lib/cep";
 
 export type PricingPlatformOption = PlatformRule & {
   name: string;
@@ -92,7 +93,10 @@ export function PricingCalculator({ variants, platforms, demoMode = false, reado
   const [quickCustomerEmail, setQuickCustomerEmail] = useState("");
   const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
   const [destinationPostalCode, setDestinationPostalCode] = useState("");
+  const [destinationAddress, setDestinationAddress] = useState<CepAddress | null>(null);
   const [originPostalCode, setOriginPostalCode] = useState("");
+  const [originAddress, setOriginAddress] = useState<CepAddress | null>(null);
+  const [cepLookupMessage, setCepLookupMessage] = useState("");
   const [shippingService, setShippingService] = useState("manual");
   const [shippingAmount, setShippingAmount] = useState(0);
   const [includeShipping, setIncludeShipping] = useState(false);
@@ -242,6 +246,30 @@ export function PricingCalculator({ variants, platforms, demoMode = false, reado
     setQuickText("");
   }
 
+  async function lookupShippingCep(kind: "destination" | "origin") {
+    const value = kind === "destination" ? destinationPostalCode : originPostalCode;
+    const digits = normalizeCep(value);
+    if (digits.length !== 8) return;
+
+    setCepLookupMessage(kind === "destination" ? "Buscando endereço de destino..." : "Buscando endereço de origem...");
+    const address = await fetchCepAddress(digits).catch(() => null);
+    if (!address) {
+      setCepLookupMessage("CEP não encontrado. Confira o número informado.");
+      if (kind === "destination") setDestinationAddress(null);
+      else setOriginAddress(null);
+      return;
+    }
+
+    if (kind === "destination") {
+      setDestinationPostalCode(address.cep);
+      setDestinationAddress(address);
+    } else {
+      setOriginPostalCode(address.cep);
+      setOriginAddress(address);
+    }
+    setCepLookupMessage("Endereço preenchido pelo CEP.");
+  }
+
   function resetAnchors() {
     setSimulatedCurve(currentCurve);
     setSaveState("idle");
@@ -327,8 +355,10 @@ export function PricingCalculator({ variants, platforms, demoMode = false, reado
         }),
         validDays: 7,
         notes: buildQuickQuoteNotes({
+          destinationAddress,
           destinationPostalCode,
           includeShipping,
+          originAddress,
           originPostalCode,
           shippingAmount,
           shippingService
@@ -402,8 +432,10 @@ export function PricingCalculator({ variants, platforms, demoMode = false, reado
         }),
         validDays: 7,
         notes: [draftNotes, buildQuickQuoteNotes({
+          destinationAddress,
           destinationPostalCode,
           includeShipping,
+          originAddress,
           originPostalCode,
           shippingAmount,
           shippingService
@@ -739,8 +771,26 @@ export function PricingCalculator({ variants, platforms, demoMode = false, reado
 
         <DetailsPanel icon={<Truck size={16} />} title="Frete e calculo">
           <div className="grid gap-4 md:grid-cols-5">
-            <Input label="CEP destino" placeholder="00000-000" value={destinationPostalCode} onChange={setDestinationPostalCode} />
-            <Input label="CEP origem" placeholder="Usa padrao configurado" value={originPostalCode} onChange={setOriginPostalCode} />
+            <Input
+              label="CEP destino"
+              placeholder="00000-000"
+              value={destinationPostalCode}
+              onBlur={() => lookupShippingCep("destination")}
+              onChange={(value) => {
+                setDestinationPostalCode(formatCep(String(value)));
+                setDestinationAddress(null);
+              }}
+            />
+            <Input
+              label="CEP origem"
+              placeholder="Usa padrão configurado"
+              value={originPostalCode}
+              onBlur={() => lookupShippingCep("origin")}
+              onChange={(value) => {
+                setOriginPostalCode(formatCep(String(value)));
+                setOriginAddress(null);
+              }}
+            />
             <Control label="Servico">
               <select
                 className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm"
@@ -769,6 +819,11 @@ export function PricingCalculator({ variants, platforms, demoMode = false, reado
           <p className="mt-3 text-sm text-zinc-400">
             Total com frete: {brl.format(simulatedResult.subtotal + (includeShipping ? shippingAmount : 0))}
           </p>
+          {cepLookupMessage ? <p className="mt-2 text-xs text-zinc-500">{cepLookupMessage}</p> : null}
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            <CepPreview label="Destino" address={destinationAddress} />
+            <CepPreview label="Origem" address={originAddress} />
+          </div>
         </DetailsPanel>
 
         <DetailsPanel icon={<Activity size={16} />} title="Ancoragem de precos & Custos">
@@ -1427,6 +1482,7 @@ function Control({ children, label }: { children: React.ReactNode; label: string
 function Input<T extends number | string>({
   label,
   min,
+  onBlur,
   onChange,
   placeholder,
   step,
@@ -1435,6 +1491,7 @@ function Input<T extends number | string>({
 }: {
   label: string;
   min?: number;
+  onBlur?: () => void;
   onChange: (value: T) => void;
   placeholder?: string;
   step?: number;
@@ -1451,12 +1508,28 @@ function Input<T extends number | string>({
         step={step}
         type={type}
         value={value}
+        onBlur={onBlur}
         onChange={(event) => {
           const nextValue = type === "number" ? Number(event.target.value) : event.target.value;
           onChange(nextValue as T);
         }}
       />
     </label>
+  );
+}
+
+function CepPreview({ address, label }: { address: CepAddress | null; label: string }) {
+  return (
+    <div className="rounded-md border border-zinc-800 bg-zinc-950/50 p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
+      {address ? (
+        <p className="mt-1 text-sm text-zinc-300">
+          {[address.street, address.district, address.city, address.state, address.cep].filter(Boolean).join(" - ")}
+        </p>
+      ) : (
+        <p className="mt-1 text-sm text-zinc-600">Informe um CEP válido para preencher automaticamente.</p>
+      )}
+    </div>
   );
 }
 
@@ -1867,18 +1940,26 @@ function formatDeltaPercent(value: number) {
 }
 
 function buildQuickQuoteNotes(input: {
+  destinationAddress: CepAddress | null;
   destinationPostalCode: string;
   includeShipping: boolean;
+  originAddress: CepAddress | null;
   originPostalCode: string;
   shippingAmount: number;
   shippingService: string;
 }) {
   const lines = ["Orcamento rapido gerado pelo precificador."];
   if (input.destinationPostalCode) lines.push(`CEP destino: ${input.destinationPostalCode}`);
+  if (input.destinationAddress) lines.push(`Endereco destino: ${formatCepAddress(input.destinationAddress)}`);
   if (input.originPostalCode) lines.push(`CEP origem: ${input.originPostalCode}`);
+  if (input.originAddress) lines.push(`Endereco origem: ${formatCepAddress(input.originAddress)}`);
   if (input.shippingService !== "manual") lines.push(`Servico de frete: ${input.shippingService}`);
   if (input.includeShipping) lines.push(`Frete incluido: ${brl.format(input.shippingAmount)}`);
   return lines.join("\n");
+}
+
+function formatCepAddress(address: CepAddress) {
+  return [address.street, address.district, address.city, address.state, address.cep].filter(Boolean).join(" - ");
 }
 
 function buildLocalPlatformOverride(input: {
