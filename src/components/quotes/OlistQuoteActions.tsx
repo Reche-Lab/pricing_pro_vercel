@@ -94,7 +94,7 @@ export function OlistQuoteActions({
     setLoading("");
 
     if (!response.ok || !data?.ok) {
-      setMessage(data?.error ?? "Falha na integracao.");
+      setMessage(data?.debugId ? `${data?.error ?? "Falha na integração."} Debug: ${data.debugId}` : data?.error ?? "Falha na integração.");
       return;
     }
 
@@ -114,7 +114,7 @@ export function OlistQuoteActions({
   const invoiceReady = Boolean(invoiceExternalId);
 
   return (
-    <div className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+    <div className="grid gap-4 rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
       <div>
         <p className="text-sm font-semibold text-white">Fluxo Olist</p>
         <p className="mt-1 flex items-start gap-2 text-xs text-zinc-500">
@@ -122,7 +122,7 @@ export function OlistQuoteActions({
           Cada etapa usa os dados e preços deste orçamento. A próxima ação só libera quando a anterior estiver pronta.
         </p>
       </div>
-      <div className="grid gap-2">
+      <div className="grid gap-3 xl:grid-cols-2">
         <FlowAction
           description="Procura ou cadastra o contato usado no orçamento."
           disabled={!hasCustomer}
@@ -176,7 +176,7 @@ export function OlistQuoteActions({
           title="5. Nota fiscal"
         />
       </div>
-      {message ? <p className="text-xs text-zinc-500">{message}</p> : null}
+      {message ? <p className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">{message}</p> : null}
     </div>
   );
 }
@@ -205,7 +205,7 @@ function FlowAction({
   onClick: (action: ActionKey) => void;
 }) {
   return (
-    <div className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-900/60 p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+    <div className="grid min-h-[150px] gap-4 rounded-md border border-zinc-800 bg-zinc-900/60 p-4">
       <div className="min-w-0">
         <p className="flex items-center gap-2 text-sm font-medium text-white">
           {done ? <CheckCircle2 className="text-emerald-300" size={16} /> : disabled ? <Lock className="text-zinc-600" size={16} /> : <Circle className="text-amber-300" size={16} />}
@@ -213,7 +213,7 @@ function FlowAction({
         </p>
         <p className="mt-1 text-xs text-zinc-500">{description}</p>
       </div>
-      <div className="flex flex-wrap gap-2 sm:justify-end">
+      <div className="grid gap-2 sm:grid-cols-2">
         <ActionButton disabled={disabled} icon={icon} label={label} loading={loading} name={primaryName} onClick={onClick} />
         {secondaryName ? (
           <ActionButton disabled={disabled} icon={<UserCheck size={16} />} loading={loading} name={secondaryName} onClick={onClick} />
@@ -241,7 +241,7 @@ function ActionButton({
   const config = ACTIONS[name];
   return (
     <button
-      className="focus-ring inline-flex w-fit items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
+      className="focus-ring inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
       disabled={disabled || loading === name}
       onClick={() => onClick(name)}
       type="button"

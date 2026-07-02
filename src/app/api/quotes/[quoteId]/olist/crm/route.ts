@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { updateQuoteExternalCrmId } from "@/repositories/quotes";
 import { buildOlistCrmQuotePayload } from "@/services/olist/payloads";
-import { loadQuoteOlistContext, sendOlistQuoteOperation } from "../_shared";
+import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOperation } from "../_shared";
 
 export async function POST(_request: Request, context: { params: Promise<{ quoteId: string }> }) {
   const { quoteId } = await context.params;
@@ -29,9 +29,6 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
     }
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Unknown Olist CRM error" },
-      { status: 502 }
-    );
+    return NextResponse.json(olistOperationErrorResponse(error, "Unknown Olist CRM error"), { status: 502 });
   }
 }

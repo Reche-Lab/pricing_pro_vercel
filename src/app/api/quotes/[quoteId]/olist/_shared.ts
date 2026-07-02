@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
 import { getCurrentSession } from "@/lib/auth/session";
 import {
   decryptIntegrationCredentials,
@@ -62,7 +63,17 @@ export async function sendOlistQuoteOperation(input: {
   payload?: unknown;
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 }) {
+  const debugId = randomUUID();
   try {
+    console.info("Olist quote operation started.", {
+      debugId,
+      provider: input.provider,
+      operation: input.operation,
+      quoteId: input.quoteId,
+      method: input.method ?? "POST",
+      path: input.path,
+      payload: input.payload
+    });
     const result = await olistRequest({
       settings: input.settings,
       credentials: input.credentials,
@@ -71,23 +82,80 @@ export async function sendOlistQuoteOperation(input: {
       method: input.method ?? "POST"
     });
     const externalId = extractExternalId(result);
-    await logIntegrationEvent(input.userId, input.tenantId, {
+    await safeLogIntegrationEvent(input.userId, input.tenantId, debugId, {
       provider: input.provider,
       operation: input.operation,
       status: "success",
       externalId,
-      metadata: { quoteId: input.quoteId, payload: input.payload, result }
+      metadata: { quoteId: input.quoteId, path: input.path, payload: input.payload, result }
     });
-    return { ok: true, result, externalId } as const;
+    return { ok: true, result, externalId, debugId } as const;
   } catch (error) {
-    await logIntegrationEvent(input.userId, input.tenantId, {
+    const message = error instanceof Error ? error.message : "Unknown Olist error";
+    console.error("Olist quote operation failed.", {
+      debugId,
+      provider: input.provider,
+      operation: input.operation,
+      quoteId: input.quoteId,
+      method: input.method ?? "POST",
+      path: input.path,
+      payload: input.payload,
+      message,
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    await safeLogIntegrationEvent(input.userId, input.tenantId, debugId, {
       provider: input.provider,
       operation: input.operation,
       status: "error",
-      message: error instanceof Error ? error.message : "Unknown Olist error",
-      metadata: { quoteId: input.quoteId, payload: input.payload }
+      message,
+      metadata: { quoteId: input.quoteId, path: input.path, payload: input.payload }
     });
-    throw error;
+    throw new OlistQuoteOperationError(message, debugId);
+  }
+}
+
+export class OlistQuoteOperationError extends Error {
+  constructor(message: string, public readonly debugId: string) {
+    super(message);
+    this.name = "OlistQuoteOperationError";
+  }
+}
+
+export function olistOperationErrorResponse(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : fallback;
+  const debugId = error instanceof OlistQuoteOperationError ? error.debugId : randomUUID();
+  if (!(error instanceof OlistQuoteOperationError)) {
+    console.error("Unexpected Olist route failure.", {
+      debugId,
+      message,
+      stack: error instanceof Error ? error.stack : undefined
+    });
+  }
+  return { ok: false, error: message, debugId };
+}
+
+async function safeLogIntegrationEvent(
+  userId: string,
+  tenantId: string,
+  debugId: string,
+  input: Parameters<typeof logIntegrationEvent>[2]
+) {
+  try {
+    await logIntegrationEvent(userId, tenantId, {
+      ...input,
+      metadata: {
+        ...(input.metadata ?? {}),
+        debugId
+      }
+    });
+  } catch (error) {
+    console.error("Failed to persist Olist quote integration log.", {
+      debugId,
+      operation: input.operation,
+      status: input.status,
+      message: error instanceof Error ? error.message : "Unknown integration log error",
+      stack: error instanceof Error ? error.stack : undefined
+    });
   }
 }
 

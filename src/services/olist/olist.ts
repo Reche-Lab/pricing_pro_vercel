@@ -20,14 +20,32 @@ export async function olistRequest<T = unknown>({
     ...authHeader(settings, credentials)
   };
 
-  const response = await fetch(`${settings.api_base_url.replace(/\/$/, "")}${withSlash(path)}`, {
+  const url = `${settings.api_base_url.replace(/\/$/, "")}${withSlash(path)}`;
+  const startedAt = Date.now();
+
+  console.info("Olist/Tiny API request prepared.", {
+    method,
+    endpoint: sanitizeUrl(url),
+    hasBody: body !== undefined
+  });
+
+  const response = await fetch(url, {
     method,
     headers,
     body: method === "GET" || body === undefined ? undefined : JSON.stringify(body)
   });
 
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  const data = parseJson(text);
+  console.info("Olist/Tiny API response received.", {
+    method,
+    endpoint: sanitizeUrl(url),
+    status: response.status,
+    ok: response.ok,
+    durationMs: Date.now() - startedAt,
+    error: response.ok ? null : extractError(data) ?? truncate(text)
+  });
+
   if (!response.ok) {
     throw new Error(extractError(data) ?? `Olist request failed with status ${response.status}.`);
   }
@@ -35,7 +53,7 @@ export async function olistRequest<T = unknown>({
 }
 
 export function extractExternalId(data: unknown): string | null {
-  const record = Array.isArray(data) ? data[0] : data;
+  const record = firstRecord(data);
   if (!record || typeof record !== "object") return null;
   const value = findFirstString(record as Record<string, unknown>, [
     "id",
@@ -49,6 +67,17 @@ export function extractExternalId(data: unknown): string | null {
     "external_id"
   ]);
   return value;
+}
+
+function firstRecord(data: unknown): unknown {
+  if (Array.isArray(data)) return data[0];
+  if (!data || typeof data !== "object") return data;
+  const record = data as Record<string, unknown>;
+  if (Array.isArray(record.itens)) return record.itens[0];
+  if (Array.isArray(record.items)) return record.items[0];
+  if (record.data) return firstRecord(record.data);
+  if (record.retorno) return firstRecord(record.retorno);
+  return record;
 }
 
 function authHeader(settings: OlistSettings, credentials: OlistCredentials) {
@@ -179,9 +208,43 @@ function extractError(data: unknown): string | null {
   if (!data || typeof data !== "object") return null;
   const record = data as Record<string, unknown>;
   if (typeof record.message === "string") return record.message;
+  if (typeof record.mensagem === "string") return record.mensagem;
   if (typeof record.error === "string") return record.error;
-  if (Array.isArray(record.errors)) return record.errors.map(String).join("; ");
+  if (typeof record.descricao === "string") return record.descricao;
+  if (Array.isArray(record.errors)) return record.errors.map(formatErrorItem).join("; ");
+  if (Array.isArray(record.erros)) return record.erros.map(formatErrorItem).join("; ");
+  if (record.retorno) return extractError(record.retorno);
   return null;
+}
+
+function formatErrorItem(item: unknown) {
+  if (!item || typeof item !== "object") return String(item);
+  const record = item as Record<string, unknown>;
+  return [
+    record.message,
+    record.mensagem,
+    record.error,
+    record.descricao,
+    record.campo ? `${record.campo}` : null
+  ].filter(Boolean).join(" - ") || JSON.stringify(record);
+}
+
+function parseJson(text: string) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: truncate(text) };
+  }
+}
+
+function sanitizeUrl(value: string) {
+  const url = new URL(value);
+  return `${url.origin}${url.pathname}`;
+}
+
+function truncate(value: string, maxLength = 500) {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
 }
 
 function findFirstString(record: Record<string, unknown>, keys: string[]): string | null {

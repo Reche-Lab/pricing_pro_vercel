@@ -14,13 +14,14 @@ describe("olist payloads", () => {
     const payload = buildOlistCustomerPayload(customer());
 
     expect(payload).toMatchObject({
-      external_reference: "customer-1",
-      name: "Cliente Teste",
-      document: "52998224725",
-      phone: "11999999999",
-      address: {
-        postal_code: "01001000",
-        state: "SP"
+      codigo: "customer-1",
+      nome: "Cliente Teste",
+      cpfCnpj: "52998224725",
+      telefone: "11999999999",
+      email: "cliente@example.com",
+      endereco: {
+        cep: "01001000",
+        uf: "SP"
       }
     });
   });
@@ -29,61 +30,33 @@ describe("olist payloads", () => {
     const payload = buildOlistCrmQuotePayload({ quote: quote(), items: [item()] });
 
     expect(payload).toMatchObject({
-      external_reference: "quote-1",
-      customer: {
-        external_olist_id: "olist-customer-1"
-      },
-      totals: {
-        grand_total: 270,
-        margin_percent: 32
-      },
-      items: [
-        {
-          description: "Botton - 55mm",
-          quantity: 100,
-          artwork_name: "Arte azul"
-        }
-      ]
+      idContato: 12345,
+      descricao: "Orçamento quote-1 - Cliente Teste",
+      data: "2026-06-27"
     });
-    expect(payload.observacoes).toContain("Arte azul");
-    expect(payload.observacoes).toContain("Frete: 20.00");
   });
 
-  it("builds sales order payload with sku and quote price", () => {
+  it("builds sales order payload with Olist product id and quote price", () => {
     const payload = buildOlistSalesOrderPayload({ quote: quote(), items: [item()] });
 
-    expect(payload.items[0]).toMatchObject({
-      sku: "BOTTON-55",
-      unit_price: 2.5,
-      total_price: 250
-    });
     expect(payload.itens[0]).toMatchObject({
-      codigo: "BOTTON-55",
-      valorUnitario: 2.5,
-      valorTotal: 250
+      produto: { id: 98765, tipo: "P" },
+      quantidade: 100,
+      valorUnitario: 2.5
     });
     expect(payload.itens[0].infoAdicional).toContain("Arte azul");
     expect(payload.valorFrete).toBe(20);
-    expect(payload.totals.grand_total).toBe(270);
   });
 
-  it("builds invoice payload with fiscal products by sku", () => {
+  it("builds invoice generation payload", () => {
     const payload = buildOlistInvoicePayload({ quote: quote(), items: [item()] });
 
-    expect(payload.products[0]).toMatchObject({
-      sku: "BOTTON-55",
-      quantity: 100,
-      unit_price: 2.5
-    });
-    expect(payload.itens[0]).toMatchObject({
-      codigo: "BOTTON-55",
-      valorTotal: 250
-    });
-    expect(payload.valorFrete).toBe(20);
+    expect(payload).toEqual({ modelo: 55 });
   });
 
-  it("reports quote items without sku before Olist order/invoice operations", () => {
+  it("reports quote items without numeric Olist product id before order/invoice operations", () => {
     expect(missingOlistSkus([{ ...item(), sku: null }])).toEqual(["Botton - 55mm"]);
+    expect(missingOlistSkus([{ ...item(), sku: "BOTTON-55" }])).toEqual(["Botton - 55mm"]);
   });
 });
 
@@ -131,7 +104,7 @@ function quote(): QuoteDetail {
     customer_district: "Centro",
     customer_city: "Sao Paulo",
     customer_state: "sp",
-    customer_external_olist_id: "olist-customer-1",
+    customer_external_olist_id: "12345",
     external_crm_id: null,
     created_by_name: "Admin"
   };
@@ -141,7 +114,7 @@ function item(): QuoteItemRow {
   return {
     id: "item-1",
     product_variant_id: "variant-1",
-    sku: "BOTTON-55",
+    sku: "98765",
     description: "Botton - 55mm",
     quantity: 100,
     unit_price: "2.5000",

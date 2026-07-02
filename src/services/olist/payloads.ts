@@ -3,11 +3,12 @@ import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 import type { TenantMemberRow } from "@/repositories/users";
 
 export function buildOlistCustomerPayload(customer: CustomerRow) {
-  return {
+  return compactObject({
     codigo: customer.id,
     nome: customer.name,
     tipoPessoa: documentType(customer.document),
     cpfCnpj: digits(customer.document),
+    email: customer.email,
     telefone: digits(customer.phone),
     celular: digits(customer.phone),
     situacao: "B",
@@ -20,23 +21,8 @@ export function buildOlistCustomerPayload(customer: CustomerRow) {
       cep: digits(customer.postal_code),
       uf: customer.state?.toUpperCase(),
       pais: "Brasil"
-    },
-    external_reference: customer.id,
-    name: customer.name,
-    document: digits(customer.document),
-    email: customer.email,
-    phone: digits(customer.phone),
-    address: {
-      postal_code: digits(customer.postal_code),
-      street: customer.address_line,
-      number: customer.address_number,
-      complement: customer.address_complement,
-      district: customer.district,
-      city: customer.city,
-      state: customer.state?.toUpperCase(),
-      country: "BR"
     }
-  };
+  });
 }
 
 export function buildOlistCustomerLookupPayload(quote: QuoteDetail) {
@@ -51,26 +37,15 @@ export function buildOlistCustomerLookupPayload(quote: QuoteDetail) {
 }
 
 export function buildOlistCrmQuotePayload(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
-  const summary = quoteSummary(input);
-  return {
+  return compactObject({
     idContato: numericId(input.quote.customer_external_olist_id),
     descricao: `Orçamento ${input.quote.id} - ${input.quote.customer_name ?? "cliente"}`,
-    data: dateOnly(input.quote.created_at),
-    observacoes: buildOlistNotes(input),
-    external_reference: input.quote.id,
-    status: input.quote.status,
-    customer: summary.customer,
-    totals: summary.totals,
-    valid_until: input.quote.valid_until,
-    notes: input.quote.notes,
-    items: summary.items,
-    quote: summary
-  };
+    data: dateOnly(input.quote.created_at)
+  });
 }
 
 export function buildOlistSalesOrderPayload(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
-  const summary = quoteSummary(input);
-  return {
+  return compactObject({
     idContato: numericId(input.quote.customer_external_olist_id),
     data: dateOnly(input.quote.created_at),
     dataPrevista: dateOnly(input.quote.valid_until),
@@ -79,45 +54,27 @@ export function buildOlistSalesOrderPayload(input: { quote: QuoteDetail; items: 
     valorFrete: money(input.quote.shipping_total),
     valorDesconto: money(input.quote.discount_total),
     enderecoEntrega: quoteDeliveryAddress(input.quote),
-    itens: input.items.map((item) => nativeOrderItem(item)),
-    external_reference: input.quote.id,
-    source: "pricing_pro",
-    customer: summary.customer,
-    totals: summary.totals,
-    items: summary.items,
-    notes: input.quote.notes
-  };
+    ecommerce: { numeroPedidoEcommerce: input.quote.id },
+    itens: input.items.map((item) => nativeOrderItem(item))
+  });
 }
 
 export function buildOlistInvoicePayload(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
-  const summary = quoteSummary(input);
-  return {
+  void input;
+  return compactObject({
     modelo: 55,
-    enviarEmail: true,
-    idPedido: numericId(input.quote.external_olist_order_id),
-    external_reference: input.quote.id,
-    cliente: {
-      id: numericId(input.quote.customer_external_olist_id),
-      nome: input.quote.customer_name,
-      cpfCnpj: digits(input.quote.customer_document),
-      email: input.quote.customer_email,
-      endereco: quoteDeliveryAddress(input.quote)
-    },
-    itens: input.items.map((item) => nativeOrderItem(item)),
-    valorFrete: money(input.quote.shipping_total),
-    valorDesconto: money(input.quote.discount_total),
-    observacoes: buildOlistNotes(input),
-    customer: summary.customer,
-    totals: summary.totals,
-    products: summary.items,
-    fiscal_note: input.quote.notes,
-    quote: summary
+  });
+}
+
+export function buildOlistInvoiceEmitPayload() {
+  return {
+    enviarEmail: true
   };
 }
 
 export function missingOlistSkus(items: QuoteItemRow[]) {
   return items
-    .filter((item) => !item.sku?.trim())
+    .filter((item) => !item.sku?.trim() || !numericId(item.sku))
     .map((item) => item.description || item.id);
 }
 
@@ -146,55 +103,6 @@ export function buildOlistTaskPayload(input: {
   };
 }
 
-function quoteTotals(quote: QuoteDetail) {
-  return {
-    subtotal: money(quote.subtotal),
-    shipping: money(quote.shipping_total),
-    discount: money(quote.discount_total),
-    grand_total: money(quote.grand_total),
-    margin_amount: money(quote.margin_amount),
-    margin_percent: Number(quote.margin_percent)
-  };
-}
-
-function quoteSummary(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
-  return {
-    id: input.quote.id,
-    status: input.quote.status,
-    created_at: input.quote.created_at,
-    valid_until: input.quote.valid_until,
-    customer: {
-      id: input.quote.customer_external_olist_id ?? input.quote.customer_id,
-      local_id: input.quote.customer_id,
-      external_olist_id: input.quote.customer_external_olist_id,
-      name: input.quote.customer_name,
-      document: digits(input.quote.customer_document),
-      email: input.quote.customer_email,
-      phone: digits(input.quote.customer_phone),
-      address: quoteAddress(input.quote)
-    },
-    totals: quoteTotals(input.quote),
-    items: input.items.map((item) => quoteItemProduct(item)),
-    shipping: {
-      total: money(input.quote.shipping_total)
-    },
-    notes: input.quote.notes
-  };
-}
-
-function quoteAddress(quote: QuoteDetail) {
-  return {
-    postal_code: digits(quote.customer_postal_code),
-    street: quote.customer_address_line,
-    number: quote.customer_address_number,
-    complement: quote.customer_address_complement,
-    district: quote.customer_district,
-    city: quote.customer_city,
-    state: quote.customer_state?.toUpperCase(),
-    country: "BR"
-  };
-}
-
 function quoteDeliveryAddress(quote: QuoteDetail) {
   return {
     endereco: quote.customer_address_line,
@@ -211,35 +119,16 @@ function quoteDeliveryAddress(quote: QuoteDetail) {
   };
 }
 
-function quoteItemProduct(item: QuoteItemRow) {
-  return {
-    external_reference: item.id,
-    product_variant_id: item.product_variant_id,
-    sku: item.sku,
-    description: item.description,
-    artwork_name: item.artwork_name,
-    quantity: item.quantity,
-    unit_price: money(item.unit_price),
-    total_price: money(item.total_price),
-    pricing_rule: item.pricing_rule,
-    reference_quantity: item.reference_quantity,
-    base_unit_price: item.base_unit_price ? money(item.base_unit_price) : null
-  };
-}
-
 function nativeOrderItem(item: QuoteItemRow) {
   const numericSku = numericId(item.sku);
-  return {
-    produto: numericSku ? { id: numericSku, tipo: "P" } : { codigo: item.sku, tipo: "P" },
-    codigo: item.sku,
-    descricao: item.description,
+  return compactObject({
+    produto: { id: numericSku, tipo: "P" },
     quantidade: item.quantity,
     valorUnitario: money(item.unit_price),
-    valorTotal: money(item.total_price),
     infoAdicional: [item.description, item.artwork_name ? `Arte: ${item.artwork_name}` : null]
       .filter(Boolean)
       .join(" | ")
-  };
+  });
 }
 
 function buildOlistNotes(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
@@ -279,4 +168,18 @@ function dateOnly(value: string | null | undefined): string | null {
 
 function money(value: string): number {
   return Number(Number(value).toFixed(2));
+}
+
+function compactObject<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => compactObject(item)) as T;
+  }
+
+  if (!value || typeof value !== "object") return value;
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .map(([key, item]) => [key, compactObject(item)])
+      .filter(([, item]) => item !== null && item !== undefined && item !== "")
+  ) as T;
 }

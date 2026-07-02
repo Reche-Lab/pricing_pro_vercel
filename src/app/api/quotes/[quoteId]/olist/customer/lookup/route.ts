@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { updateCustomerExternalOlistId } from "@/repositories/customers";
 import { buildOlistCustomerLookupPayload } from "@/services/olist/payloads";
-import { loadQuoteOlistContext, sendOlistQuoteOperation } from "../../_shared";
+import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOperation } from "../../_shared";
 
 export async function POST(_request: Request, context: { params: Promise<{ quoteId: string }> }) {
   const { quoteId } = await context.params;
@@ -36,10 +36,7 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
     }
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Unknown Olist error" },
-      { status: 502 }
-    );
+    return NextResponse.json(olistOperationErrorResponse(error, "Unknown Olist error"), { status: 502 });
   }
 }
 
@@ -48,7 +45,9 @@ function buildLookupPath(path: string, payload: ReturnType<typeof buildOlistCust
   if (payload.cpfCnpj) params.set("cpfCnpj", payload.cpfCnpj);
   else if (payload.nome) params.set("nome", payload.nome);
   if (payload.celular) params.set("celular", payload.celular);
+  params.set("situacao", "B");
   params.set("limit", "1");
+  params.set("offset", "0");
   const separator = path.includes("?") ? "&" : "?";
   return `${path}${separator}${params.toString()}`;
 }

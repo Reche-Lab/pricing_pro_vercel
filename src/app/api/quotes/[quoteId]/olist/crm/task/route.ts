@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { loadQuoteOlistContext, sendOlistQuoteOperation } from "../../_shared";
+import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOperation } from "../../_shared";
 
 const taskSchema = z.object({
   description: z.string().trim().min(3),
@@ -45,10 +45,7 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     });
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Unknown Olist CRM error" },
-      { status: 502 }
-    );
+    return NextResponse.json(olistOperationErrorResponse(error, "Unknown Olist CRM error"), { status: 502 });
   }
 }
 

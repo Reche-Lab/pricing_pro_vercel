@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { updateQuoteExternalOlistIds } from "@/repositories/quotes";
-import { buildOlistInvoicePayload, missingOlistSkus } from "@/services/olist/payloads";
-import { loadQuoteOlistContext, sendOlistQuoteOperation } from "../_shared";
+import { buildOlistInvoiceEmitPayload, buildOlistInvoicePayload, missingOlistSkus } from "@/services/olist/payloads";
+import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOperation } from "../_shared";
 
 export async function POST(_request: Request, context: { params: Promise<{ quoteId: string }> }) {
   const { quoteId } = await context.params;
@@ -19,12 +19,14 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
   const missingSkus = missingOlistSkus(loaded.detail.items);
   if (missingSkus.length > 0) {
     return NextResponse.json(
-      { ok: false, error: "Todos os itens do orçamento precisam ter SKU antes de gerar nota Olist.", missingSkus },
+      { ok: false, error: "Todos os itens do orçamento precisam ter SKU/ID numérico do produto Olist antes de gerar nota.", missingSkus },
       { status: 409 }
     );
   }
 
-  const payload = buildOlistInvoicePayload({ quote: loaded.detail.quote, items: loaded.detail.items });
+  const payload = hasInvoice
+    ? buildOlistInvoiceEmitPayload()
+    : buildOlistInvoicePayload({ quote: loaded.detail.quote, items: loaded.detail.items });
   try {
     const result = await sendOlistQuoteOperation({
       userId: loaded.session.userId,
@@ -44,10 +46,7 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
     }
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Unknown Olist error" },
-      { status: 502 }
-    );
+    return NextResponse.json(olistOperationErrorResponse(error, "Unknown Olist error"), { status: 502 });
   }
 }
 
