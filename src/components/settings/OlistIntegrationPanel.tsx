@@ -169,7 +169,7 @@ function IntegrationForm({
         </div>
         <Input defaultValue={connection?.clientId ?? ""} label="Client ID" name="clientId" required />
         <Input label="Client Secret" name="clientSecret" required type="password" />
-        <Input defaultValue={connection?.scopes ?? ""} label="Scopes OAuth" name="scopes" placeholder="customers quotes" />
+        <Input defaultValue={connection?.scopes ?? "openid"} label="Scopes OAuth" name="scopes" placeholder="openid" />
         <div className="grid gap-3 md:grid-cols-2">
           <label className="block">
             <span className="mb-1 block text-sm font-medium text-zinc-300">Auth scheme</span>

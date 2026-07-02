@@ -7,7 +7,7 @@ import {
   upsertIntegrationConnection
 } from "@/repositories/integrations";
 import { OLIST_API_V3_BASE_URL, OLIST_APP_BASE_URL, OLIST_DEFAULT_PATHS } from "@/services/olist/defaults";
-import { normalizeOlistAppBaseUrl } from "@/services/olist/olist";
+import { normalizeOlistAppBaseUrl, normalizeOlistScopes } from "@/services/olist/olist";
 import type { OlistCredentials, OlistSettings } from "@/services/olist/types";
 
 const olistIntegrationSchema = z.object({
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
       invoice_emit_path: parsed.data.invoiceEmitPath || OLIST_DEFAULT_PATHS.invoiceEmit,
       user_path: parsed.data.userPath || OLIST_DEFAULT_PATHS.users,
       task_path: parsed.data.taskPath || OLIST_DEFAULT_PATHS.crmTask,
-      scopes: parseScopes(parsed.data.scopes),
+      scopes: normalizeOlistScopes(parseScopes(parsed.data.scopes)),
       api_version: "v3",
       auth_scheme: parsed.data.authScheme,
       auth_header: parsed.data.authHeader
@@ -119,7 +119,7 @@ function serializeConnection(
     userPath: settings.user_path ?? crmSettings?.user_path ?? OLIST_DEFAULT_PATHS.users,
     taskPath: settings.task_path ?? crmSettings?.task_path ?? OLIST_DEFAULT_PATHS.crmTask,
     clientId: credentials.clientId ?? "",
-    scopes: settings.scopes?.join(" ") ?? "",
+    scopes: normalizeOlistScopes(settings.scopes).join(" "),
     apiVersion: settings.api_version ?? "v3",
     authScheme: settings.auth_scheme ?? "Bearer",
     authHeader: settings.auth_header ?? "authorization"

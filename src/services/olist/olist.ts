@@ -1,7 +1,9 @@
 import { getServerEnv } from "@/lib/env/server";
 import type { OlistCredentials, OlistOAuthTokenResponse, OlistRequestOptions, OlistSettings } from "./types";
 
-const OLIST_TINY_APP_BASE_URL = "https://erp.tiny.com.br";
+const OLIST_TINY_APP_BASE_URL = "https://accounts.tiny.com.br";
+const OLIST_TINY_AUTHORIZE_PATH = "/realms/tiny/protocol/openid-connect/auth";
+const OLIST_TINY_TOKEN_PATH = "/realms/tiny/protocol/openid-connect/token";
 
 export async function olistRequest<T = unknown>({
   settings,
@@ -60,14 +62,12 @@ function authHeader(settings: OlistSettings, credentials: OlistCredentials) {
 export function buildOlistAuthUrl(settings: OlistSettings, credentials: OlistCredentials, state: string) {
   if (!credentials.clientId) throw new Error("Olist clientId is required.");
   const appBaseUrl = normalizeOlistAppBaseUrl(requireSetting(settings.app_base_url, "Olist app_base_url is required."));
-  const authorizePath = settings.authorize_path || "/oauth/authorize";
-  const target = new URL(`${appBaseUrl.replace(/\/$/, "")}${withSlash(authorizePath)}`);
+  const target = new URL(resolveOlistOAuthUrl(settings.authorize_path, appBaseUrl, OLIST_TINY_AUTHORIZE_PATH));
   target.searchParams.set("response_type", "code");
   target.searchParams.set("client_id", credentials.clientId);
   target.searchParams.set("redirect_uri", getOlistRedirectUri());
   target.searchParams.set("state", state);
-  const scopes = settings.scopes?.filter(Boolean) ?? [];
-  if (scopes.length > 0) target.searchParams.set("scope", scopes.join(" "));
+  target.searchParams.set("scope", normalizeOlistScopes(settings.scopes).join(" "));
   return target.toString();
 }
 
@@ -75,11 +75,20 @@ export function normalizeOlistAppBaseUrl(value: string) {
   const trimmed = value.trim().replace(/\/$/, "");
   try {
     const parsed = new URL(trimmed);
-    if (parsed.hostname === "erp.olist.com") return OLIST_TINY_APP_BASE_URL;
+    if (parsed.hostname === "erp.olist.com" || parsed.hostname === "erp.tiny.com.br") return OLIST_TINY_APP_BASE_URL;
   } catch {
     return trimmed;
   }
   return trimmed;
+}
+
+export function normalizeOlistScopes(scopes: string[] | undefined) {
+  const cleaned = (scopes ?? []).map((scope) => scope.trim()).filter(Boolean);
+  const legacyScopes = new Set(["all", "customers", "quotes"]);
+  if (cleaned.length === 0 || cleaned.some((scope) => legacyScopes.has(scope.toLowerCase()))) {
+    return ["openid"];
+  }
+  return cleaned;
 }
 
 export async function exchangeOlistAuthorizationCode(
@@ -116,8 +125,8 @@ async function requestOlistToken(
 ): Promise<OlistOAuthTokenResponse> {
   if (!credentials.clientId) throw new Error("Olist clientId is required.");
   if (!credentials.clientSecret) throw new Error("Olist clientSecret is required.");
-  const apiBaseUrl = requireSetting(settings.api_base_url, "Olist api_base_url is required.");
-  const tokenPath = settings.token_path || "/oauth/token";
+  const appBaseUrl = normalizeOlistAppBaseUrl(requireSetting(settings.app_base_url, "Olist app_base_url is required."));
+  const tokenUrl = resolveOlistOAuthUrl(settings.token_path, appBaseUrl, OLIST_TINY_TOKEN_PATH);
 
   const body = new URLSearchParams({
     ...params,
@@ -125,7 +134,7 @@ async function requestOlistToken(
     client_secret: credentials.clientSecret
   });
 
-  const response = await fetch(`${apiBaseUrl.replace(/\/$/, "")}${withSlash(tokenPath)}`, {
+  const response = await fetch(tokenUrl, {
     method: "POST",
     headers: {
       accept: "application/json",
@@ -141,6 +150,20 @@ async function requestOlistToken(
   }
   if (!data?.access_token) throw new Error("Olist token response did not include access_token.");
   return data as OlistOAuthTokenResponse;
+}
+
+function resolveOlistOAuthUrl(value: string | undefined, appBaseUrl: string, defaultPath: string) {
+  const path = value?.trim() || defaultPath;
+  if (/^https?:\/\//i.test(path)) {
+    const parsed = new URL(path);
+    if (parsed.hostname === "erp.olist.com" || parsed.hostname === "erp.tiny.com.br") {
+      return `${OLIST_TINY_APP_BASE_URL}${defaultPath}`;
+    }
+    return path;
+  }
+  if (path === "/oauth/authorize" || path === "/authorize") return `${OLIST_TINY_APP_BASE_URL}${OLIST_TINY_AUTHORIZE_PATH}`;
+  if (path === "/oauth/token" || path === "/token") return `${OLIST_TINY_APP_BASE_URL}${OLIST_TINY_TOKEN_PATH}`;
+  return `${appBaseUrl.replace(/\/$/, "")}${withSlash(path)}`;
 }
 
 function requireSetting(value: string | undefined, message: string) {
