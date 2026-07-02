@@ -26,7 +26,7 @@ export function QuoteWhatsAppButton({ quoteId }: { quoteId: string }) {
   return (
     <div className="grid gap-2">
       <button
-        className="focus-ring inline-flex w-fit items-center gap-2 rounded-md bg-zinc-950 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
+        className="focus-ring inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-zinc-950 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
         disabled={loading}
         onClick={copyText}
         type="button"

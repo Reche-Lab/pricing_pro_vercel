@@ -39,35 +39,46 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
       tenantLogoUrl={profile.tenant_logo_url}
       tenantName={profile.tenant_name}
     >
-      <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
-        <section className="grid gap-6">
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="grid gap-6 xl:grid-cols-[minmax(320px,0.8fr)_minmax(560px,1.2fr)] 2xl:grid-cols-[minmax(360px,0.75fr)_minmax(720px,1.25fr)]">
+        <section className="grid h-fit gap-4">
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
+            <div className="grid gap-4">
               <div>
                 <p className="text-sm text-zinc-500">Cliente</p>
-                <h2 className="text-xl font-semibold text-white">
+                <h2 className="text-lg font-semibold text-white">
                   {detail.quote.customer_name ?? "Cliente nao informado"}
                 </h2>
                 <p className="text-sm text-zinc-500">
                   {[detail.quote.customer_email, detail.quote.customer_phone].filter(Boolean).join(" - ")}
                 </p>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-zinc-500">Total</p>
-                <p className="text-2xl font-semibold text-white">{brl.format(Number(detail.quote.grand_total))}</p>
-              </div>
             </div>
           </div>
 
-          <MelhorEnvioPayloadPreview quoteId={quoteId} />
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
+            <div className="mb-3 flex items-end justify-between gap-4">
+              <div>
+                <h2 className="font-semibold">Resumo</h2>
+                <p className="text-xs text-zinc-500">Totais deste orçamento</p>
+              </div>
+              <p className="text-xl font-semibold text-white">{brl.format(Number(detail.quote.grand_total))}</p>
+            </div>
+            <dl className="grid gap-2 text-sm">
+              <Detail label="Subtotal" value={brl.format(Number(detail.quote.subtotal))} />
+              <Detail label="Frete" value={brl.format(Number(detail.quote.shipping_total))} />
+              <Detail label="Desconto" value={brl.format(Number(detail.quote.discount_total))} />
+              <Detail label="Margem" value={`${Number(detail.quote.margin_percent).toFixed(1)}%`} />
+              <Detail label="Validade" value={formatDate(detail.quote.valid_until)} />
+            </dl>
+          </div>
 
           <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
-            <div className="border-b border-zinc-800 px-5 py-4">
+            <div className="border-b border-zinc-800 px-4 py-3">
               <h2 className="font-semibold">Itens</h2>
             </div>
             <div className="divide-y divide-zinc-800">
               {detail.items.map((item) => (
-                <div className="grid gap-2 px-5 py-4 text-sm md:grid-cols-[1fr_auto]" key={item.id}>
+                <div className="grid gap-2 px-4 py-3 text-sm sm:grid-cols-[1fr_auto]" key={item.id}>
                   <div>
                     <p className="font-medium text-white">{item.description}</p>
                     <p className="text-zinc-500">
@@ -87,15 +98,15 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
           </section>
 
           <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
-            <div className="border-b border-zinc-800 px-5 py-4">
+            <div className="border-b border-zinc-800 px-4 py-3">
               <h2 className="font-semibold">Envios vinculados</h2>
             </div>
             <div className="divide-y divide-zinc-800">
               {shipments.length === 0 ? (
-                <p className="p-5 text-sm text-zinc-500">Nenhum envio vinculado ainda.</p>
+                <p className="p-4 text-sm text-zinc-500">Nenhum envio vinculado ainda.</p>
               ) : (
                 shipments.map((shipment) => (
-                  <div className="grid gap-1 px-5 py-4 text-sm" key={shipment.id}>
+                  <div className="grid gap-1 px-4 py-3 text-sm" key={shipment.id}>
                     <p className="font-medium text-white">
                       {shipment.provider} - {shipment.status}
                     </p>
@@ -112,20 +123,30 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
               )}
             </div>
           </section>
+
+          <MelhorEnvioPayloadPreview quoteId={quoteId} />
         </section>
 
         <aside className="grid h-fit gap-4">
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5">
-            <h2 className="font-semibold">Acoes</h2>
-            <div className="mt-4 grid gap-4">
+            <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h2 className="font-semibold">Acoes</h2>
+                <p className="text-sm text-zinc-500">Gere documentos, compartilhe e envie o orçamento para integrações.</p>
+              </div>
+              <p className="text-lg font-semibold text-white">{brl.format(Number(detail.quote.grand_total))}</p>
+            </div>
+            <div className="mt-5 grid gap-5">
+              <div className="grid gap-3 md:grid-cols-3">
               <Link
-                className="focus-ring inline-flex w-fit rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-950/60"
+                className="focus-ring inline-flex min-h-10 items-center justify-center rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-950/60"
                 href={`/api/quotes/${quoteId}/pdf`}
               >
                 Baixar PDF
               </Link>
               <QuoteWhatsAppButton quoteId={quoteId} />
               <PublicQuoteLinkButton quoteId={quoteId} />
+              </div>
               <OlistQuoteActions
                 externalCrmId={detail.quote.external_crm_id}
                 externalInvoiceId={detail.quote.external_olist_invoice_id}
@@ -136,17 +157,6 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
               />
               <QuoteStatusActions quoteId={quoteId} />
             </div>
-          </div>
-
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5">
-            <h2 className="font-semibold">Resumo</h2>
-            <dl className="mt-3 grid gap-2 text-sm">
-              <Detail label="Subtotal" value={brl.format(Number(detail.quote.subtotal))} />
-              <Detail label="Frete" value={brl.format(Number(detail.quote.shipping_total))} />
-              <Detail label="Desconto" value={brl.format(Number(detail.quote.discount_total))} />
-              <Detail label="Margem" value={`${Number(detail.quote.margin_percent).toFixed(1)}%`} />
-              <Detail label="Validade" value={formatDate(detail.quote.valid_until)} />
-            </dl>
           </div>
         </aside>
       </div>

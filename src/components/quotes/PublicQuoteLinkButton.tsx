@@ -36,7 +36,7 @@ export function PublicQuoteLinkButton({ quoteId }: { quoteId: string }) {
   return (
     <div className="grid gap-2">
       <button
-        className="focus-ring inline-flex w-fit items-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-100 transition-colors hover:bg-cyan-400/20 disabled:opacity-60"
+        className="focus-ring inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-100 transition-colors hover:bg-cyan-400/20 disabled:opacity-60"
         disabled={loading}
         onClick={createLink}
         type="button"
