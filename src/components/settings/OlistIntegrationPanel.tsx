@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { KeyRound, Route, Save, Store } from "lucide-react";
+import { KeyRound, PlayCircle, Route, Save, Store } from "lucide-react";
 import { OLIST_API_V3_BASE_URL, OLIST_APP_BASE_URL, OLIST_DEFAULT_PATHS } from "@/services/olist/defaults";
 
 type OlistConnectionView = {
@@ -128,9 +128,297 @@ export function OlistIntegrationPanel() {
           title="Olist API v3"
         />
       </div>
+      <OlistApiTestLab connected={Boolean(integrations?.olist?.connected)} />
       {message ? <p className="mt-4 rounded-md bg-zinc-950/60 px-3 py-2 text-sm text-zinc-400">{message}</p> : null}
     </section>
   );
+}
+
+type TestPreset = {
+  key: string;
+  label: string;
+  description: string;
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  path: string;
+  query?: Record<string, string | number | boolean>;
+  body?: unknown;
+};
+
+const TEST_PRESETS: TestPreset[] = [
+  {
+    key: "customers-list",
+    label: "Listar clientes",
+    description: "GET /contatos com paginação curta para validar leitura de clientes.",
+    method: "GET",
+    path: "/contatos",
+    query: { situacao: "B", limit: 5, offset: 0 }
+  },
+  {
+    key: "customers-cpf",
+    label: "Consultar cliente por CPF/CNPJ",
+    description: "Troque o CPF/CNPJ no JSON de query antes de executar.",
+    method: "GET",
+    path: "/contatos",
+    query: { cpfCnpj: "00000000000", limit: 1, offset: 0 }
+  },
+  {
+    key: "customers-create",
+    label: "Criar cliente teste",
+    description: "POST /contatos com payload mínimo. Use dados reais apenas quando quiser criar de fato.",
+    method: "POST",
+    path: "/contatos",
+    body: {
+      nome: "Cliente Teste API",
+      tipoPessoa: "F",
+      cpfCnpj: "00000000000",
+      email: "cliente.teste@example.com",
+      celular: "11999999999",
+      situacao: "B"
+    }
+  },
+  {
+    key: "orders-create",
+    label: "Criar pedido",
+    description: "Exige idContato e produto.id numéricos existentes no Olist/Tiny.",
+    method: "POST",
+    path: "/pedidos",
+    body: {
+      idContato: 123,
+      data: "2026-07-02",
+      observacoes: "Pedido teste criado pelo Pricing Pro",
+      itens: [{ produto: { id: 123, tipo: "P" }, quantidade: 1, valorUnitario: 10 }]
+    }
+  },
+  {
+    key: "invoice-create",
+    label: "Gerar nota do pedido",
+    description: "Troque {idPedido} pelo ID numérico do pedido Olist.",
+    method: "POST",
+    path: "/pedidos/{idPedido}/gerar-nota-fiscal",
+    body: { modelo: 55 }
+  },
+  {
+    key: "invoice-emit",
+    label: "Autorizar nota",
+    description: "Troque {idNota} pelo ID numérico da nota Olist.",
+    method: "POST",
+    path: "/notas/{idNota}/emitir",
+    body: { enviarEmail: true }
+  },
+  {
+    key: "crm-subject",
+    label: "Criar assunto CRM",
+    description: "Exige idContato numérico existente.",
+    method: "POST",
+    path: "/crm/assuntos",
+    body: { idContato: 123, descricao: "Orçamento teste Pricing Pro", data: "2026-07-02" }
+  },
+  {
+    key: "crm-task",
+    label: "Criar tarefa CRM",
+    description: "Troque {idAssunto} pelo ID do assunto CRM.",
+    method: "POST",
+    path: "/crm/assuntos/{idAssunto}/acoes",
+    body: { descricao: "Retornar orçamento ao cliente", tipoData: "Q" }
+  },
+  {
+    key: "users-list",
+    label: "Listar usuários",
+    description: "Valida se o token tem acesso ao recurso de usuários.",
+    method: "GET",
+    path: "/usuarios",
+    query: { limit: 5, offset: 0 }
+  },
+  {
+    key: "sellers-list",
+    label: "Listar vendedores",
+    description: "Valida se o token tem acesso ao recurso de vendedores.",
+    method: "GET",
+    path: "/vendedores",
+    query: { limit: 5, offset: 0 }
+  }
+];
+
+function OlistApiTestLab({ connected }: { connected: boolean }) {
+  const [selectedKey, setSelectedKey] = useState(TEST_PRESETS[0].key);
+  const [method, setMethod] = useState<TestPreset["method"]>(TEST_PRESETS[0].method);
+  const [path, setPath] = useState(TEST_PRESETS[0].path);
+  const [queryText, setQueryText] = useState(formatJson(TEST_PRESETS[0].query ?? {}));
+  const [bodyText, setBodyText] = useState(formatJson(TEST_PRESETS[0].body ?? {}));
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<unknown>(null);
+  const [message, setMessage] = useState("");
+
+  function selectPreset(key: string) {
+    const preset = TEST_PRESETS.find((item) => item.key === key);
+    if (!preset) return;
+    setSelectedKey(key);
+    setMethod(preset.method);
+    setPath(preset.path);
+    setQueryText(formatJson(preset.query ?? {}));
+    setBodyText(formatJson(preset.body ?? {}));
+    setMessage("");
+    setResult(null);
+  }
+
+  async function runTest() {
+    setMessage("");
+    setResult(null);
+    const query = parseJsonObject(queryText, "Query JSON");
+    if ("error" in query) {
+      setMessage(query.error);
+      return;
+    }
+    const body = parseJsonObject(bodyText, "Body JSON");
+    if ("error" in body) {
+      setMessage(body.error);
+      return;
+    }
+
+    if (!window.confirm(`Executar ${method} ${path} na API Olist/Tiny deste tenant?`)) return;
+
+    setLoading(true);
+    const response = await fetch("/api/olist/test-call", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        method,
+        path,
+        query: query.value,
+        body: method === "GET" ? undefined : body.value
+      })
+    });
+    const data = await response.json().catch(() => null);
+    setLoading(false);
+
+    if (!response.ok || !data?.ok) {
+      setMessage(data?.debugId ? `${data?.error ?? "Falha no teste Olist."} Debug: ${data.debugId}` : data?.error ?? "Falha no teste Olist.");
+      setResult(data);
+      return;
+    }
+
+    setMessage(data.call?.message ?? "Teste executado.");
+    setResult(data);
+  }
+
+  return (
+    <div className="mt-5 rounded-md border border-zinc-800 bg-zinc-950/50 p-4">
+      <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h3 className="font-medium text-white">Ambiente de testes da API Olist</h3>
+          <p className="mt-1 text-xs text-zinc-500">
+            Execute chamadas isoladas usando o OAuth salvo para este tenant. O retorno aparece humanizado e com JSON bruto para diagnóstico.
+          </p>
+        </div>
+        <span className={`w-fit rounded-full px-3 py-1 text-xs ${connected ? "bg-emerald-400/10 text-emerald-300" : "bg-zinc-800 text-zinc-400"}`}>
+          {connected ? "Pronto para testar" : "Conecte o OAuth primeiro"}
+        </span>
+      </div>
+      <div className="grid gap-4 xl:grid-cols-[280px_1fr]">
+        <div className="grid gap-2">
+          {TEST_PRESETS.map((preset) => (
+            <button
+              className={`focus-ring rounded-md border px-3 py-2 text-left text-sm transition ${
+                selectedKey === preset.key
+                  ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-100"
+                  : "border-zinc-800 bg-zinc-900/70 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900"
+              }`}
+              key={preset.key}
+              onClick={() => selectPreset(preset.key)}
+              type="button"
+            >
+              <span className="block font-medium">{preset.label}</span>
+              <span className="mt-1 block text-xs text-zinc-500">{preset.description}</span>
+            </button>
+          ))}
+        </div>
+        <div className="grid gap-3">
+          <div className="grid gap-3 md:grid-cols-[160px_1fr]">
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-zinc-300">Método</span>
+              <select
+                className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
+                onChange={(event) => setMethod(event.currentTarget.value as TestPreset["method"])}
+                value={method}
+              >
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="PUT">PUT</option>
+                <option value="PATCH">PATCH</option>
+                <option value="DELETE">DELETE</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-zinc-300">Path</span>
+              <input
+                className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
+                onChange={(event) => setPath(event.currentTarget.value)}
+                value={path}
+              />
+            </label>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <JsonEditor label="Query JSON" value={queryText} onChange={setQueryText} />
+            <JsonEditor label="Body JSON" value={bodyText} onChange={setBodyText} />
+          </div>
+          <button
+            className="focus-ring inline-flex w-fit items-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/20 disabled:opacity-60"
+            disabled={!connected || loading}
+            onClick={runTest}
+            type="button"
+          >
+            <PlayCircle size={16} />
+            {loading ? "Testando..." : "Executar teste"}
+          </button>
+          {message ? <p className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300">{message}</p> : null}
+          {result ? (
+            <pre className="max-h-[420px] overflow-auto rounded-md border border-zinc-800 bg-black/40 p-3 text-xs leading-5 text-zinc-300">
+              {formatJson(result)}
+            </pre>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function JsonEditor({
+  label,
+  value,
+  onChange
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm font-medium text-zinc-300">{label}</span>
+      <textarea
+        className="focus-ring min-h-40 w-full rounded-md border border-zinc-700 px-3 py-2 font-mono text-xs"
+        onChange={(event) => onChange(event.currentTarget.value)}
+        spellCheck={false}
+        value={value}
+      />
+    </label>
+  );
+}
+
+function parseJsonObject(value: string, label: string): { value: Record<string, unknown> } | { error: string } {
+  if (!value.trim()) return { value: {} };
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { error: `${label} precisa ser um objeto JSON.` };
+    }
+    return { value: parsed as Record<string, unknown> };
+  } catch {
+    return { error: `${label} inválido. Confira vírgulas, aspas e chaves.` };
+  }
+}
+
+function formatJson(value: unknown) {
+  return JSON.stringify(value ?? {}, null, 2);
 }
 
 function IntegrationForm({
