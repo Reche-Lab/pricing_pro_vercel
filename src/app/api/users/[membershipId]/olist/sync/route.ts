@@ -61,15 +61,40 @@ export async function POST(_request: Request, context: { params: Promise<{ membe
     });
     return NextResponse.json({ ok: true, externalId, result });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown Olist error";
+    if (isOptionalUserSyncFailure(message)) {
+      await updateTenantMemberOlistLink(session.userId, session.tenantId, membershipId, {
+        externalOlistUserId: null,
+        metadata: {
+          lastUserSyncAt: new Date().toISOString(),
+          lastUserSyncStatus: "local_only",
+          lastUserSyncError: message
+        }
+      });
+      await logIntegrationEvent(session.userId, session.tenantId, {
+        provider: "olist",
+        operation: "users.sync",
+        status: "pending",
+        message,
+        metadata: { membershipId, payload, path: lookupPath }
+      });
+      return NextResponse.json({
+        ok: true,
+        externalId: null,
+        warning: "O usuário foi mantido localmente, mas a API Olist/Tiny não retornou um ID de usuário/vendedor para vincular.",
+        detail: message
+      });
+    }
+
     await logIntegrationEvent(session.userId, session.tenantId, {
       provider: "olist",
       operation: "users.sync",
       status: "error",
-      message: error instanceof Error ? error.message : "Unknown Olist CRM error",
+      message,
       metadata: { membershipId, payload, path: lookupPath }
     });
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Unknown Olist CRM error" },
+      { ok: false, error: message },
       { status: 502 }
     );
   }
@@ -83,4 +108,16 @@ function buildUserLookupPath(path: string, payload: ReturnType<typeof buildOlist
   params.set("limit", "1");
   const separator = path.includes("?") ? "&" : "?";
   return `${path}${separator}${params.toString()}`;
+}
+
+function isOptionalUserSyncFailure(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("status 400") ||
+    normalized.includes("status 404") ||
+    normalized.includes("status 405") ||
+    normalized.includes("not found") ||
+    normalized.includes("não encontrado") ||
+    normalized.includes("nao encontrado")
+  );
 }

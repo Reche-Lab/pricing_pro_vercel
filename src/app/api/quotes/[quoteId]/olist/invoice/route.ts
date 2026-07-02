@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { updateQuoteExternalOlistIds } from "@/repositories/quotes";
-import { buildOlistInvoicePayload } from "@/services/olist/payloads";
+import { buildOlistInvoicePayload, missingOlistSkus } from "@/services/olist/payloads";
 import { loadQuoteOlistContext, sendOlistQuoteOperation } from "../_shared";
 
 export async function POST(_request: Request, context: { params: Promise<{ quoteId: string }> }) {
@@ -16,6 +16,13 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
   });
   if (!path) return NextResponse.json({ ok: false, error: "Olist invoice path is not configured." }, { status: 409 });
   if ("error" in path) return NextResponse.json({ ok: false, error: path.error }, { status: 409 });
+  const missingSkus = missingOlistSkus(loaded.detail.items);
+  if (missingSkus.length > 0) {
+    return NextResponse.json(
+      { ok: false, error: "Todos os itens do orçamento precisam ter SKU antes de gerar nota Olist.", missingSkus },
+      { status: 409 }
+    );
+  }
 
   const payload = buildOlistInvoicePayload({ quote: loaded.detail.quote, items: loaded.detail.items });
   try {

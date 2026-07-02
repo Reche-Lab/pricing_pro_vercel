@@ -122,7 +122,7 @@ export function UserManagementPanel({
       return;
     }
 
-    setMessage(data.externalId ? `Usuario sincronizado no Olist: ${data.externalId}` : "Usuario enviado ao Olist.");
+    setMessage(data.warning ?? (data.externalId ? `Usuario sincronizado no Olist: ${data.externalId}` : "Usuario enviado ao Olist."));
     router.refresh();
   }
 

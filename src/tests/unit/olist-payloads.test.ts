@@ -3,7 +3,8 @@ import {
   buildOlistCrmQuotePayload,
   buildOlistCustomerPayload,
   buildOlistInvoicePayload,
-  buildOlistSalesOrderPayload
+  buildOlistSalesOrderPayload,
+  missingOlistSkus
 } from "@/services/olist/payloads";
 import type { CustomerRow } from "@/repositories/customers";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
@@ -33,16 +34,19 @@ describe("olist payloads", () => {
         external_olist_id: "olist-customer-1"
       },
       totals: {
-        grand_total: 250,
+        grand_total: 270,
         margin_percent: 32
       },
       items: [
         {
           description: "Botton - 55mm",
-          quantity: 100
+          quantity: 100,
+          artwork_name: "Arte azul"
         }
       ]
     });
+    expect(payload.observacoes).toContain("Arte azul");
+    expect(payload.observacoes).toContain("Frete: 20.00");
   });
 
   it("builds sales order payload with sku and quote price", () => {
@@ -53,7 +57,14 @@ describe("olist payloads", () => {
       unit_price: 2.5,
       total_price: 250
     });
-    expect(payload.totals.grand_total).toBe(250);
+    expect(payload.itens[0]).toMatchObject({
+      codigo: "BOTTON-55",
+      valorUnitario: 2.5,
+      valorTotal: 250
+    });
+    expect(payload.itens[0].infoAdicional).toContain("Arte azul");
+    expect(payload.valorFrete).toBe(20);
+    expect(payload.totals.grand_total).toBe(270);
   });
 
   it("builds invoice payload with fiscal products by sku", () => {
@@ -64,6 +75,15 @@ describe("olist payloads", () => {
       quantity: 100,
       unit_price: 2.5
     });
+    expect(payload.itens[0]).toMatchObject({
+      codigo: "BOTTON-55",
+      valorTotal: 250
+    });
+    expect(payload.valorFrete).toBe(20);
+  });
+
+  it("reports quote items without sku before Olist order/invoice operations", () => {
+    expect(missingOlistSkus([{ ...item(), sku: null }])).toEqual(["Botton - 55mm"]);
   });
 });
 
@@ -92,9 +112,9 @@ function quote(): QuoteDetail {
     status: "draft",
     valid_until: "2026-07-01",
     subtotal: "250.0000",
-    shipping_total: "0.0000",
+    shipping_total: "20.0000",
     discount_total: "0.0000",
-    grand_total: "250.0000",
+    grand_total: "270.0000",
     margin_amount: "80.0000",
     margin_percent: "32.0000",
     notes: null,
@@ -125,6 +145,7 @@ function item(): QuoteItemRow {
     description: "Botton - 55mm",
     quantity: 100,
     unit_price: "2.5000",
-    total_price: "250.0000"
+    total_price: "250.0000",
+    artwork_name: "Arte azul"
   };
 }

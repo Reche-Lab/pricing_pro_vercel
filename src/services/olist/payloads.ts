@@ -51,91 +51,74 @@ export function buildOlistCustomerLookupPayload(quote: QuoteDetail) {
 }
 
 export function buildOlistCrmQuotePayload(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
+  const summary = quoteSummary(input);
   return {
     idContato: numericId(input.quote.customer_external_olist_id),
     descricao: `Orçamento ${input.quote.id} - ${input.quote.customer_name ?? "cliente"}`,
     data: dateOnly(input.quote.created_at),
-    observacoes: input.quote.notes,
+    observacoes: buildOlistNotes(input),
     external_reference: input.quote.id,
     status: input.quote.status,
-    customer: {
-      id: input.quote.customer_id,
-      external_olist_id: input.quote.customer_external_olist_id,
-      name: input.quote.customer_name,
-      document: digits(input.quote.customer_document),
-      email: input.quote.customer_email,
-      phone: digits(input.quote.customer_phone)
-    },
-    totals: {
-      subtotal: money(input.quote.subtotal),
-      shipping: money(input.quote.shipping_total),
-      discount: money(input.quote.discount_total),
-      grand_total: money(input.quote.grand_total),
-      margin_amount: money(input.quote.margin_amount),
-      margin_percent: Number(input.quote.margin_percent)
-    },
+    customer: summary.customer,
+    totals: summary.totals,
     valid_until: input.quote.valid_until,
     notes: input.quote.notes,
-    items: input.items.map((item) => ({
-      external_reference: item.id,
-      product_variant_id: item.product_variant_id,
-      sku: item.sku,
-      description: item.description,
-      quantity: item.quantity,
-      unit_price: money(item.unit_price),
-      total_price: money(item.total_price)
-    }))
+    items: summary.items,
+    quote: summary
   };
 }
 
 export function buildOlistSalesOrderPayload(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
+  const summary = quoteSummary(input);
   return {
     idContato: numericId(input.quote.customer_external_olist_id),
     data: dateOnly(input.quote.created_at),
     dataPrevista: dateOnly(input.quote.valid_until),
-    observacoes: input.quote.notes,
+    observacoes: buildOlistNotes(input),
     observacoesInternas: `Pricing Pro quote ${input.quote.id}`,
     valorFrete: money(input.quote.shipping_total),
     valorDesconto: money(input.quote.discount_total),
     enderecoEntrega: quoteDeliveryAddress(input.quote),
-    itens: input.items.map((item) => ({
-      produto: numericId(item.sku) ? { id: numericId(item.sku), tipo: "P" } : { codigo: item.sku, tipo: "P" },
-      quantidade: item.quantity,
-      valorUnitario: money(item.unit_price),
-      infoAdicional: [item.description, item.artwork_name ? `Arte: ${item.artwork_name}` : null].filter(Boolean).join(" | ")
-    })),
+    itens: input.items.map((item) => nativeOrderItem(item)),
     external_reference: input.quote.id,
     source: "pricing_pro",
-    customer: {
-      id: input.quote.customer_external_olist_id ?? input.quote.customer_id,
-      name: input.quote.customer_name,
-      document: digits(input.quote.customer_document),
-      email: input.quote.customer_email,
-      phone: digits(input.quote.customer_phone),
-      address: quoteAddress(input.quote)
-    },
-    totals: quoteTotals(input.quote),
-    items: input.items.map((item) => quoteItemProduct(item)),
+    customer: summary.customer,
+    totals: summary.totals,
+    items: summary.items,
     notes: input.quote.notes
   };
 }
 
 export function buildOlistInvoicePayload(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
+  const summary = quoteSummary(input);
   return {
     modelo: 55,
     enviarEmail: true,
+    idPedido: numericId(input.quote.external_olist_order_id),
     external_reference: input.quote.id,
-    customer: {
-      id: input.quote.customer_external_olist_id ?? input.quote.customer_id,
-      name: input.quote.customer_name,
-      document: digits(input.quote.customer_document),
+    cliente: {
+      id: numericId(input.quote.customer_external_olist_id),
+      nome: input.quote.customer_name,
+      cpfCnpj: digits(input.quote.customer_document),
       email: input.quote.customer_email,
-      address: quoteAddress(input.quote)
+      endereco: quoteDeliveryAddress(input.quote)
     },
-    totals: quoteTotals(input.quote),
-    products: input.items.map((item) => quoteItemProduct(item)),
-    fiscal_note: input.quote.notes
+    itens: input.items.map((item) => nativeOrderItem(item)),
+    valorFrete: money(input.quote.shipping_total),
+    valorDesconto: money(input.quote.discount_total),
+    observacoes: buildOlistNotes(input),
+    customer: summary.customer,
+    totals: summary.totals,
+    products: summary.items,
+    fiscal_note: input.quote.notes,
+    quote: summary
   };
+}
+
+export function missingOlistSkus(items: QuoteItemRow[]) {
+  return items
+    .filter((item) => !item.sku?.trim())
+    .map((item) => item.description || item.id);
 }
 
 export function buildOlistUserPayload(member: TenantMemberRow) {
@@ -171,6 +154,31 @@ function quoteTotals(quote: QuoteDetail) {
     grand_total: money(quote.grand_total),
     margin_amount: money(quote.margin_amount),
     margin_percent: Number(quote.margin_percent)
+  };
+}
+
+function quoteSummary(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
+  return {
+    id: input.quote.id,
+    status: input.quote.status,
+    created_at: input.quote.created_at,
+    valid_until: input.quote.valid_until,
+    customer: {
+      id: input.quote.customer_external_olist_id ?? input.quote.customer_id,
+      local_id: input.quote.customer_id,
+      external_olist_id: input.quote.customer_external_olist_id,
+      name: input.quote.customer_name,
+      document: digits(input.quote.customer_document),
+      email: input.quote.customer_email,
+      phone: digits(input.quote.customer_phone),
+      address: quoteAddress(input.quote)
+    },
+    totals: quoteTotals(input.quote),
+    items: input.items.map((item) => quoteItemProduct(item)),
+    shipping: {
+      total: money(input.quote.shipping_total)
+    },
+    notes: input.quote.notes
   };
 }
 
@@ -212,8 +220,40 @@ function quoteItemProduct(item: QuoteItemRow) {
     artwork_name: item.artwork_name,
     quantity: item.quantity,
     unit_price: money(item.unit_price),
-    total_price: money(item.total_price)
+    total_price: money(item.total_price),
+    pricing_rule: item.pricing_rule,
+    reference_quantity: item.reference_quantity,
+    base_unit_price: item.base_unit_price ? money(item.base_unit_price) : null
   };
+}
+
+function nativeOrderItem(item: QuoteItemRow) {
+  const numericSku = numericId(item.sku);
+  return {
+    produto: numericSku ? { id: numericSku, tipo: "P" } : { codigo: item.sku, tipo: "P" },
+    codigo: item.sku,
+    descricao: item.description,
+    quantidade: item.quantity,
+    valorUnitario: money(item.unit_price),
+    valorTotal: money(item.total_price),
+    infoAdicional: [item.description, item.artwork_name ? `Arte: ${item.artwork_name}` : null]
+      .filter(Boolean)
+      .join(" | ")
+  };
+}
+
+function buildOlistNotes(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
+  const itemLines = input.items.map((item, index) => {
+    const art = item.artwork_name ? ` | Arte: ${item.artwork_name}` : "";
+    return `${index + 1}. ${item.sku ?? "sem SKU"} - ${item.description}${art} - ${item.quantity} un. x ${money(item.unit_price).toFixed(2)} = ${money(item.total_price).toFixed(2)}`;
+  });
+  return [
+    input.quote.notes,
+    `Orçamento Pricing Pro: ${input.quote.id}`,
+    `Frete: ${money(input.quote.shipping_total).toFixed(2)}`,
+    `Total final: ${money(input.quote.grand_total).toFixed(2)}`,
+    itemLines.join("\n")
+  ].filter(Boolean).join("\n");
 }
 
 function digits(value: string | null | undefined): string | null {
