@@ -118,7 +118,7 @@ export async function POST(_request: Request, context: { params: Promise<{ membe
         return NextResponse.json({
           ok: true,
           externalId: null,
-          warning: "O usuário foi mantido localmente, mas a API Olist/Tiny não retornou um ID de usuário/vendedor para vincular.",
+          warning: userSyncWarning(message),
           detail: message,
           debugId
         });
@@ -181,12 +181,23 @@ function isOptionalUserSyncFailure(message: string) {
   const normalized = message.toLowerCase();
   return (
     normalized.includes("status 400") ||
+    normalized.includes("status 403") ||
     normalized.includes("status 404") ||
     normalized.includes("status 405") ||
+    normalized.includes("forbidden") ||
     normalized.includes("not found") ||
     normalized.includes("não encontrado") ||
     normalized.includes("nao encontrado")
   );
+}
+
+function userSyncWarning(message: string) {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("status 403") || normalized.includes("forbidden")) {
+    return "O Olist/Tiny negou acesso ao recurso de usuários/vendedores para este token. O usuário foi mantido localmente e as demais integrações podem seguir sem vincular um responsável Olist.";
+  }
+
+  return "O usuário foi mantido localmente, mas a API Olist/Tiny não retornou um ID de usuário/vendedor para vincular.";
 }
 
 async function safeLogIntegrationEvent(
