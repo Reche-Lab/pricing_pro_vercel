@@ -5,9 +5,11 @@ import { buildOlistCustomerLookupPayload } from "@/services/olist/payloads";
 import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOperation } from "../../_shared";
 
 const customerLookupSchema = z.object({
+  mode: z.enum(["nome", "cpfCnpj", "celular"]).optional().default("nome"),
   cpfCnpj: z.string().trim().optional().nullable(),
   celular: z.string().trim().optional().nullable(),
-  nome: z.string().trim().optional().nullable()
+  nome: z.string().trim().optional().nullable(),
+  situacao: z.enum(["", "B", "A", "I", "E"]).optional().default("")
 });
 
 export async function POST(request: Request, context: { params: Promise<{ quoteId: string }> }) {
@@ -25,6 +27,7 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
   const quotePayload = buildOlistCustomerLookupPayload(loaded.detail.quote);
   const payload = {
     ...quotePayload,
+    mode: parsed.data.mode,
     cpfCnpj: parsed.data.cpfCnpj === undefined || parsed.data.cpfCnpj === null
       ? quotePayload.cpfCnpj
       : cleanDigits(parsed.data.cpfCnpj),
@@ -33,7 +36,8 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
       : cleanDigits(parsed.data.celular),
     nome: parsed.data.nome === undefined || parsed.data.nome === null
       ? quotePayload.nome
-      : parsed.data.nome
+      : parsed.data.nome,
+    situacao: parsed.data.situacao || null
   };
   const lookupPath = buildLookupPath(path, payload);
   try {
@@ -67,13 +71,16 @@ function cleanDigits(value: string | null | undefined) {
   return value?.replace(/\D/g, "") ?? "";
 }
 
-function buildLookupPath(path: string, payload: ReturnType<typeof buildOlistCustomerLookupPayload>) {
+function buildLookupPath(path: string, payload: ReturnType<typeof buildOlistCustomerLookupPayload> & {
+  mode?: "nome" | "cpfCnpj" | "celular";
+  situacao?: string | null;
+}) {
   const params = new URLSearchParams();
-  if (payload.cpfCnpj) params.set("cpfCnpj", payload.cpfCnpj);
+  if (payload.mode === "cpfCnpj" && payload.cpfCnpj) params.set("cpfCnpj", payload.cpfCnpj);
+  else if (payload.mode === "celular" && payload.celular) params.set("celular", payload.celular);
   else if (payload.nome) params.set("nome", payload.nome);
-  if (payload.celular) params.set("celular", payload.celular);
-  params.set("situacao", "B");
-  params.set("limit", "1");
+  if (payload.situacao) params.set("situacao", payload.situacao);
+  params.set("limit", "5");
   params.set("offset", "0");
   const separator = path.includes("?") ? "&" : "?";
   return `${path}${separator}${params.toString()}`;

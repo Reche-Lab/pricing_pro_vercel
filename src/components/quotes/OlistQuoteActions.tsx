@@ -424,8 +424,28 @@ function ActionModal({
                     Usar primeiro nome
                   </button>
                 </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-zinc-300">Campo principal</span>
+                    <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="lookupMode" defaultValue="nome">
+                      <option value="nome">Nome</option>
+                      <option value="cpfCnpj">CPF/CNPJ</option>
+                      <option value="celular">Telefone/celular</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-zinc-300">Situação</span>
+                    <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="lookupStatus" defaultValue="">
+                      <option value="">Todas</option>
+                      <option value="B">B - Ativo</option>
+                      <option value="A">A - Ativo com acesso</option>
+                      <option value="I">I - Inativo</option>
+                      <option value="E">E - Excluído</option>
+                    </select>
+                  </label>
+                </div>
                 <p className="text-xs leading-5 text-zinc-500">
-                  A busca prioriza CPF/CNPJ quando informado. Se não houver documento, usa nome e telefone. Para procurar só por nome, limpe CPF/CNPJ e telefone.
+                  A consulta usa apenas o campo principal escolhido para evitar filtros combinados demais. Deixe situação como “Todas” quando não souber se o contato está como B ou A no Olist.
                 </p>
               </div>
             </div>
@@ -571,11 +591,14 @@ function Input({
 
 function buildPayload(action: ActionKey, formData: FormData | undefined, defaultCrmSubject: string): { body?: Record<string, unknown> } | { error: string } {
   if (action === "customerLookup") {
+    const mode = stringField(formData, "lookupMode") || "nome";
     return {
       body: {
+        mode,
         cpfCnpj: digits(stringField(formData, "lookupDocument")),
         celular: digits(stringField(formData, "lookupPhone")),
-        nome: stringField(formData, "lookupName")
+        nome: stringField(formData, "lookupName"),
+        situacao: stringField(formData, "lookupStatus")
       }
     };
   }

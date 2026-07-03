@@ -162,7 +162,7 @@ const TEST_PRESETS: TestPreset[] = [
     description: "GET /contatos com paginação curta para validar leitura de clientes.",
     method: "GET",
     path: "/contatos",
-    query: { situacao: "B", limit: 5, offset: 0 },
+    query: { limit: 5, offset: 0 },
     searchFields: [
       { key: "nome", label: "Nome", placeholder: "Ex.: Angelita", target: "query", parameter: "nome" },
       { key: "cpfCnpj", label: "CPF/CNPJ", placeholder: "Somente números ou formatado", target: "query", parameter: "cpfCnpj", normalize: "digits" },
@@ -177,7 +177,7 @@ const TEST_PRESETS: TestPreset[] = [
     description: "Escolha nome, CPF/CNPJ, telefone ou código e informe um valor conhecido.",
     method: "GET",
     path: "/contatos",
-    query: { situacao: "B", limit: 5, offset: 0 },
+    query: { limit: 5, offset: 0 },
     searchFields: [
       { key: "nome", label: "Nome", placeholder: "Ex.: Angelita", target: "query", parameter: "nome" },
       { key: "cpfCnpj", label: "CPF/CNPJ", placeholder: "Ex.: 00000000000", target: "query", parameter: "cpfCnpj", normalize: "digits" },
