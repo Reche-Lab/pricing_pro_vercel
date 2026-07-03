@@ -4,7 +4,7 @@ import type { TenantMemberRow } from "@/repositories/users";
 
 export function buildOlistCustomerPayload(customer: CustomerRow, options?: { personType?: "F" | "J" | null }) {
   return compactObject({
-    codigo: customer.id,
+    codigo: olistCustomerCode(customer.id),
     nome: customer.name,
     tipoPessoa: options?.personType ?? documentType(customer.document),
     cpfCnpj: digits(customer.document),
@@ -27,7 +27,7 @@ export function buildOlistCustomerPayload(customer: CustomerRow, options?: { per
 
 export function buildOlistCustomerLookupPayload(quote: QuoteDetail) {
   return {
-    codigo: quote.customer_id,
+    codigo: olistCustomerCode(quote.customer_id),
     id: quote.customer_external_olist_id,
     cpfCnpj: digits(quote.customer_document),
     email: quote.customer_email,
@@ -172,6 +172,13 @@ function digits(value: unknown): string | null {
     ? String(value).replace(/\D/g, "")
     : "";
   return output || null;
+}
+
+function olistCustomerCode(value: unknown): string | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const normalized = String(value).replace(/[^a-zA-Z0-9]/g, "");
+  if (!normalized) return null;
+  return `PP${normalized}`.slice(0, 15);
 }
 
 function documentType(value: unknown): "F" | "J" | null {

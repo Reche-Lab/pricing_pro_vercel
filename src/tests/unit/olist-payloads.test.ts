@@ -15,7 +15,7 @@ describe("olist payloads", () => {
     const payload = buildOlistCustomerPayload(customer());
 
     expect(payload).toMatchObject({
-      codigo: "customer-1",
+      codigo: "PPcustomer1",
       nome: "Cliente Teste",
       cpfCnpj: "52998224725",
       telefone: "11999999999",
@@ -25,6 +25,7 @@ describe("olist payloads", () => {
         uf: "SP"
       }
     });
+    expect(payload.codigo).toHaveLength(11);
   });
 
   it("builds CRM quote payload", () => {
