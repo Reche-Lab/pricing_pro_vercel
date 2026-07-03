@@ -36,11 +36,16 @@ export function buildOlistCustomerLookupPayload(quote: QuoteDetail) {
   };
 }
 
-export function buildOlistCrmQuotePayload(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
+export function buildOlistCrmQuotePayload(input: {
+  quote: QuoteDetail;
+  items: QuoteItemRow[];
+  description?: string | null;
+  date?: string | null;
+}) {
   return compactObject({
     idContato: numericId(input.quote.customer_external_olist_id),
-    descricao: `Orçamento ${input.quote.id} - ${input.quote.customer_name ?? "cliente"}`,
-    data: dateOnly(input.quote.created_at)
+    descricao: input.description || `Orçamento ${input.quote.id} - ${input.quote.customer_name ?? "cliente"}`,
+    data: input.date || dateOnly(input.quote.created_at)
   });
 }
 
