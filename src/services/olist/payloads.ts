@@ -2,11 +2,11 @@ import type { CustomerRow } from "@/repositories/customers";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 import type { TenantMemberRow } from "@/repositories/users";
 
-export function buildOlistCustomerPayload(customer: CustomerRow) {
+export function buildOlistCustomerPayload(customer: CustomerRow, options?: { personType?: "F" | "J" | null }) {
   return compactObject({
     codigo: customer.id,
     nome: customer.name,
-    tipoPessoa: documentType(customer.document),
+    tipoPessoa: options?.personType ?? documentType(customer.document),
     cpfCnpj: digits(customer.document),
     email: customer.email,
     telefone: digits(customer.phone),

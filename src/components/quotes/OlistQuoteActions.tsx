@@ -138,6 +138,13 @@ export function OlistQuoteActions({
   customerDocument,
   customerEmail,
   customerPhone,
+  customerPostalCode,
+  customerAddressLine,
+  customerAddressNumber,
+  customerAddressComplement,
+  customerDistrict,
+  customerCity,
+  customerState,
   customerLocalCode,
   externalOlistId,
   externalCrmId,
@@ -154,6 +161,13 @@ export function OlistQuoteActions({
   customerDocument?: string | null;
   customerEmail?: string | null;
   customerPhone?: string | null;
+  customerPostalCode?: string | null;
+  customerAddressLine?: string | null;
+  customerAddressNumber?: string | null;
+  customerAddressComplement?: string | null;
+  customerDistrict?: string | null;
+  customerCity?: string | null;
+  customerState?: string | null;
   customerLocalCode?: string | null;
   externalOlistId?: string | null;
   externalCrmId?: string | null;
@@ -199,6 +213,35 @@ export function OlistQuoteActions({
       codigo: customerLocalCode ?? ""
     }),
     [customerName, customerDocument, customerEmail, customerPhone, customerLocalCode]
+  );
+  const customerCreateDefaults = useMemo(
+    () => ({
+      name: customerName ?? "",
+      document: digits(customerDocument),
+      personType: inferPersonType(customerDocument),
+      email: customerEmail ?? "",
+      phone: digits(customerPhone),
+      postalCode: digits(customerPostalCode),
+      addressLine: customerAddressLine ?? "",
+      addressNumber: customerAddressNumber ?? "",
+      addressComplement: customerAddressComplement ?? "",
+      district: customerDistrict ?? "",
+      city: customerCity ?? "",
+      state: customerState?.toUpperCase() ?? ""
+    }),
+    [
+      customerAddressComplement,
+      customerAddressLine,
+      customerAddressNumber,
+      customerCity,
+      customerDistrict,
+      customerDocument,
+      customerEmail,
+      customerName,
+      customerPhone,
+      customerPostalCode,
+      customerState
+    ]
   );
 
   async function execute(action: ActionKey, formData?: FormData) {
@@ -380,6 +423,7 @@ export function OlistQuoteActions({
       {pendingAction ? (
         <ActionModal
           action={pendingAction}
+          customerCreateDefaults={customerCreateDefaults}
           customerReady={customerReady}
           customerLookupDefaults={customerLookupDefaults}
           defaultCrmSubject={defaultCrmSubject}
@@ -472,6 +516,7 @@ function ActionButton({
 
 function ActionModal({
   action,
+  customerCreateDefaults,
   customerReady,
   customerLookupDefaults,
   defaultCrmSubject,
@@ -487,6 +532,20 @@ function ActionModal({
   responsibleUsers
 }: {
   action: ActionKey;
+  customerCreateDefaults: {
+    name: string;
+    document: string;
+    personType: "F" | "J";
+    email: string;
+    phone: string;
+    postalCode: string;
+    addressLine: string;
+    addressNumber: string;
+    addressComplement: string;
+    district: string;
+    city: string;
+    state: string;
+  };
   customerReady: boolean;
   customerLookupDefaults: {
     name: string;
@@ -671,9 +730,58 @@ function ActionModal({
           ) : null}
 
           {action === "customer" ? (
-            <InfoBox title="Criação de contato">
-              Se o contato ainda não existir, ele será criado no Olist/Tiny com os dados cadastrados neste orçamento.
-            </InfoBox>
+            <div className="grid gap-4">
+              <InfoBox title="Criação de contato">
+                Confira os dados abaixo antes de criar o cliente no Olist/Tiny. Se algo estiver diferente, ajuste diretamente aqui; a alteração vale para esta criação.
+              </InfoBox>
+              <div className="grid gap-4 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
+                <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
+                  <Input label="Nome/Razão social" name="customerName" defaultValue={customerCreateDefaults.name} required />
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-zinc-300">Tipo de pessoa</span>
+                    <select
+                      className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
+                      name="customerPersonType"
+                      defaultValue={customerCreateDefaults.personType}
+                    >
+                      <option value="F">Pessoa física</option>
+                      <option value="J">Pessoa jurídica</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Input label="CPF/CNPJ" name="customerDocument" defaultValue={customerCreateDefaults.document} />
+                  <Input label="Telefone/celular" name="customerPhone" defaultValue={customerCreateDefaults.phone} />
+                  <Input label="E-mail" name="customerEmail" defaultValue={customerCreateDefaults.email} type="email" />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-6">
+                  <div className="sm:col-span-2">
+                    <Input label="CEP" name="customerPostalCode" defaultValue={customerCreateDefaults.postalCode} />
+                  </div>
+                  <div className="sm:col-span-4">
+                    <Input label="Endereço" name="customerAddressLine" defaultValue={customerCreateDefaults.addressLine} />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Input label="Número" name="customerAddressNumber" defaultValue={customerCreateDefaults.addressNumber} />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Input label="Complemento" name="customerAddressComplement" defaultValue={customerCreateDefaults.addressComplement} />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Input label="Bairro" name="customerDistrict" defaultValue={customerCreateDefaults.district} />
+                  </div>
+                  <div className="sm:col-span-4">
+                    <Input label="Cidade" name="customerCity" defaultValue={customerCreateDefaults.city} />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Input label="UF" name="customerState" defaultValue={customerCreateDefaults.state} />
+                  </div>
+                </div>
+                <p className="text-xs leading-5 text-zinc-500">
+                  O Olist receberá estes dados como contato em situação ativa. CPF/CNPJ e telefone serão enviados apenas com números.
+                </p>
+              </div>
+            </div>
           ) : null}
 
           {action === "crm" ? (
@@ -1255,6 +1363,28 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
     };
   }
 
+  if (action === "customer") {
+    const name = stringField(formData, "customerName");
+    const personType = stringField(formData, "customerPersonType");
+    if (!name || name.length < 2) return { error: "Informe o nome do cliente para criar no Olist." };
+    return {
+      body: {
+        name,
+        personType: personType === "J" ? "J" : "F",
+        document: digits(stringField(formData, "customerDocument")),
+        email: stringField(formData, "customerEmail"),
+        phone: digits(stringField(formData, "customerPhone")),
+        postalCode: digits(stringField(formData, "customerPostalCode")),
+        addressLine: stringField(formData, "customerAddressLine"),
+        addressNumber: stringField(formData, "customerAddressNumber"),
+        addressComplement: stringField(formData, "customerAddressComplement"),
+        district: stringField(formData, "customerDistrict"),
+        city: stringField(formData, "customerCity"),
+        state: stringField(formData, "customerState").toUpperCase()
+      }
+    };
+  }
+
   if (action === "crm") {
     const description = stringField(formData, "description") || defaultCrmSubject;
     const date = stringField(formData, "date");
@@ -1298,6 +1428,10 @@ function firstName(value: string | null | undefined) {
 
 function digits(value: string | null | undefined) {
   return value?.replace(/\D/g, "") ?? "";
+}
+
+function inferPersonType(value: string | null | undefined): "F" | "J" {
+  return digits(value).length > 11 ? "J" : "F";
 }
 
 function stringValue(value: unknown) {

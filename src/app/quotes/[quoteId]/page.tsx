@@ -159,7 +159,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5">
             <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
               <div>
-                <h2 className="font-semibold">Acoes</h2>
+                <h2 className="font-semibold">Ações</h2>
                 <p className="text-sm text-zinc-500">Gere documentos, compartilhe e envie o orçamento para integrações.</p>
               </div>
               <p className="text-lg font-semibold text-white">{brl.format(Number(detail.quote.grand_total))}</p>
@@ -186,6 +186,13 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
               <OlistQuoteActions
                 customerDocument={detail.quote.customer_document}
                 customerEmail={detail.quote.customer_email}
+                customerPostalCode={detail.quote.customer_postal_code}
+                customerAddressLine={detail.quote.customer_address_line}
+                customerAddressNumber={detail.quote.customer_address_number}
+                customerAddressComplement={detail.quote.customer_address_complement}
+                customerDistrict={detail.quote.customer_district}
+                customerCity={detail.quote.customer_city}
+                customerState={detail.quote.customer_state}
                 customerLocalCode={detail.quote.customer_id}
                 customerName={detail.quote.customer_name}
                 customerPhone={detail.quote.customer_phone}

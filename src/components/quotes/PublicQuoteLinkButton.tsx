@@ -34,7 +34,7 @@ export function PublicQuoteLinkButton({ quoteId }: { quoteId: string }) {
   }
 
   return (
-    <div className="grid gap-2">
+    <div>
       <button
         className="focus-ring inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-100 transition-colors hover:bg-cyan-400/20 disabled:opacity-60"
         disabled={loading}
@@ -44,22 +44,47 @@ export function PublicQuoteLinkButton({ quoteId }: { quoteId: string }) {
         <Link2 size={16} />
         {loading ? "Gerando link..." : "Link público para aceite"}
       </button>
-      {message ? <p className="text-sm text-zinc-300">{message}</p> : null}
-      {url ? (
-        <div className="grid gap-2 rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
-          <div className="flex items-center gap-2 text-xs text-zinc-400">
-            <Copy size={14} />
-            <span className="break-all">{url}</span>
+      {message || url ? (
+        <div className="fixed bottom-4 right-4 z-50 grid max-w-sm gap-2 rounded-lg border border-zinc-800 bg-zinc-950/95 p-3 text-sm text-zinc-100 shadow-2xl shadow-black/40 backdrop-blur">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-medium text-white">{message || "Link público criado."}</p>
+              {url ? (
+                <p className="mt-1 line-clamp-2 break-all text-xs text-zinc-500">{url}</p>
+              ) : null}
+            </div>
+            <button
+              className="focus-ring rounded-md p-1 text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200"
+              type="button"
+              onClick={() => {
+                setMessage("");
+                setUrl("");
+              }}
+            >
+              ×
+            </button>
           </div>
-          <a
-            className="inline-flex w-fit items-center gap-2 text-xs font-medium text-cyan-200 hover:text-cyan-100"
-            href={url}
-            rel="noreferrer"
-            target="_blank"
-          >
-            Abrir visualização pública
-            <ExternalLink size={13} />
-          </a>
+          {url ? (
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-900"
+                type="button"
+                onClick={() => navigator.clipboard.writeText(url)}
+              >
+                <Copy size={13} />
+                Copiar novamente
+              </button>
+              <a
+                className="focus-ring inline-flex items-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-xs font-medium text-cyan-100 hover:bg-cyan-400/20"
+                href={url}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Abrir visualização pública
+                <ExternalLink size={13} />
+              </a>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
