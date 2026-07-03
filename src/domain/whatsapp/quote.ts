@@ -13,6 +13,7 @@ export function buildQuoteWhatsAppText(input: { quote: QuoteDetail; items: Quote
         [
           `*${item.quantity}x* ${item.description}`,
           item.artwork_name ? `Arte: ${item.artwork_name}` : null,
+          item.artworks?.length ? `Arquivo da arte: ${item.artworks.map((artwork) => artwork.file_name).join(", ")}` : null,
           item.reference_quantity ? `Qtd. referencia: ${item.reference_quantity} (${formatPricingRule(item.pricing_rule)})` : null,
           `${brl.format(Number(item.unit_price))}/un - ${brl.format(Number(item.total_price))}`
         ].filter(Boolean).join("\n")

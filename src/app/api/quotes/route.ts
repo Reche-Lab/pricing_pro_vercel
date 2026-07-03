@@ -4,6 +4,13 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { requireWritableBilling } from "@/lib/billing/guard";
 import { createQuote, listQuotes } from "@/repositories/quotes";
 
+const artworkFileSchema = z.object({
+  fileName: z.string().trim().min(1).max(180),
+  mimeType: z.enum(["image/png", "image/jpeg", "image/jpg", "image/webp", "application/pdf"]),
+  fileSize: z.number().int().min(1).max(5 * 1024 * 1024),
+  dataUrl: z.string().startsWith("data:").max(7_200_000)
+});
+
 const quoteSchema = z.object({
   productVariantId: z.string().uuid().optional(),
   platformRuleId: z.string().uuid(),
@@ -13,9 +20,12 @@ const quoteSchema = z.object({
     z.object({
       productVariantId: z.string().uuid(),
       quantity: z.number().int().min(1).max(50000),
-      artworkName: z.string().trim().max(120).optional().nullable()
+      artworkName: z.string().trim().max(120).optional().nullable(),
+      artworkFile: artworkFileSchema.optional().nullable()
     })
   ).min(1).max(50).optional(),
+  artworkName: z.string().trim().max(120).optional().nullable(),
+  artworkFile: artworkFileSchema.optional().nullable(),
   customerId: z.string().uuid().optional().nullable(),
   customerName: z.string().trim().min(2).optional().nullable(),
   customerDocument: z.string().trim().optional().nullable(),

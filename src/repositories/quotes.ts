@@ -73,6 +73,18 @@ export type QuoteItemRow = {
   pricing_group_key?: string | null;
   reference_quantity?: number | null;
   base_unit_price?: string | null;
+  artworks?: QuoteItemArtworkRow[];
+};
+
+export type QuoteItemArtworkRow = {
+  id: string;
+  quote_item_id: string;
+  artwork_name: string | null;
+  file_name: string;
+  mime_type: string;
+  file_size: number;
+  data_url: string;
+  storage_path: string | null;
 };
 
 export type QuoteSnapshotRow = {
@@ -90,7 +102,10 @@ export type CreateQuoteInput = {
     productVariantId: string;
     quantity: number;
     artworkName?: string | null;
+    artworkFile?: QuoteArtworkFileInput | null;
   }>;
+  artworkName?: string | null;
+  artworkFile?: QuoteArtworkFileInput | null;
   customerId?: string | null;
   customerName?: string | null;
   customerDocument?: string | null;
@@ -115,6 +130,13 @@ export type CreateQuoteInput = {
   }>;
   validDays?: number;
   notes?: string | null;
+};
+
+export type QuoteArtworkFileInput = {
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  dataUrl: string;
 };
 
 export type PublicQuoteTenant = {
@@ -241,6 +263,25 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
       [tenantId, quoteId]
     );
 
+    const artworks = await client.query<QuoteItemArtworkRow>(
+      `
+        select
+          id,
+          quote_item_id,
+          artwork_name,
+          file_name,
+          mime_type,
+          file_size,
+          data_url,
+          storage_path
+        from quote_item_artworks
+        where tenant_id = $1 and quote_id = $2
+        order by created_at asc
+      `,
+      [tenantId, quoteId]
+    );
+    const artworksByItem = groupArtworksByItem(artworks.rows);
+
     const snapshots = await client.query<QuoteSnapshotRow>(
       `
         select id, snapshot, created_at
@@ -254,7 +295,10 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
 
     return {
       quote,
-      items: items.rows,
+      items: items.rows.map((item) => ({
+        ...item,
+        artworks: artworksByItem.get(item.id) ?? []
+      })),
       snapshots: snapshots.rows
     };
   });
@@ -381,10 +425,31 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
       `,
       [quote.id]
     );
+    const artworks = await client.query<QuoteItemArtworkRow>(
+      `
+        select
+          id,
+          quote_item_id,
+          artwork_name,
+          file_name,
+          mime_type,
+          file_size,
+          data_url,
+          storage_path
+        from quote_item_artworks
+        where quote_id = $1
+        order by created_at asc
+      `,
+      [quote.id]
+    );
+    const artworksByItem = groupArtworksByItem(artworks.rows);
 
     return {
       quote,
-      items: itemsResult.rows,
+      items: itemsResult.rows.map((item) => ({
+        ...item,
+        artworks: artworksByItem.get(item.id) ?? []
+      })),
       tenant: {
         name: quote.name,
         logo_url: quote.logo_url,
@@ -759,7 +824,7 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
 
     const quoteId = quoteResult.rows[0].id;
 
-    await client.query(
+    const quoteItemResult = await client.query<{ id: string }>(
       `
         insert into quote_items (
           tenant_id,
@@ -771,6 +836,7 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
           total_price
         )
         values ($1, $2, $3, $4, $5, $6, $7)
+        returning id
       `,
       [
         tenantId,
@@ -782,6 +848,10 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
         calculation.subtotal
       ]
     );
+    await insertQuoteItemArtwork(client, tenantId, userId, quoteId, quoteItemResult.rows[0].id, {
+      artworkName: input.artworkName ?? null,
+      artworkFile: input.artworkFile ?? null
+    });
 
     await client.query(
       `
@@ -905,7 +975,8 @@ async function createCompositeQuoteWithClient(
   const quoteId = quoteResult.rows[0].id;
 
   for (const item of calculation.items) {
-    await client.query(
+    const sourceItem = quoteItems[Number(item.id) - 1];
+    const quoteItemResult = await client.query<{ id: string }>(
       `
         insert into quote_items (
           tenant_id,
@@ -922,6 +993,7 @@ async function createCompositeQuoteWithClient(
           base_unit_price
         )
         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        returning id
       `,
       [
         tenantId,
@@ -938,6 +1010,10 @@ async function createCompositeQuoteWithClient(
         item.baseUnitPrice
       ]
     );
+    await insertQuoteItemArtwork(client, tenantId, userId, quoteId, quoteItemResult.rows[0].id, {
+      artworkName: item.artworkName,
+      artworkFile: sourceItem?.artworkFile ?? null
+    });
   }
 
   await client.query(
@@ -967,6 +1043,79 @@ async function createCompositeQuoteWithClient(
   );
 
   return { id: quoteId, calculation };
+}
+
+async function insertQuoteItemArtwork(
+  client: pg.PoolClient,
+  tenantId: string,
+  userId: string,
+  quoteId: string,
+  quoteItemId: string,
+  input: { artworkName?: string | null; artworkFile?: QuoteArtworkFileInput | null }
+) {
+  const artworkFile = normalizeArtworkFile(input.artworkFile);
+  if (!artworkFile) return;
+
+  await client.query(
+    `
+      insert into quote_item_artworks (
+        tenant_id,
+        quote_id,
+        quote_item_id,
+        artwork_name,
+        file_name,
+        mime_type,
+        file_size,
+        data_url,
+        storage_path,
+        created_by
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `,
+    [
+      tenantId,
+      quoteId,
+      quoteItemId,
+      clean(input.artworkName),
+      artworkFile.fileName,
+      artworkFile.mimeType,
+      artworkFile.fileSize,
+      artworkFile.dataUrl,
+      `quotes/${quoteId}/items/${quoteItemId}/${artworkFile.fileName}`,
+      userId
+    ]
+  );
+}
+
+function normalizeArtworkFile(file: QuoteArtworkFileInput | null | undefined): QuoteArtworkFileInput | null {
+  if (!file) return null;
+  const fileName = clean(file.fileName)?.slice(0, 180);
+  const mimeType = clean(file.mimeType)?.toLowerCase();
+  const fileSize = Number(file.fileSize);
+  const dataUrl = clean(file.dataUrl);
+  const allowedTypes = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "application/pdf"]);
+
+  if (!fileName || !mimeType || !dataUrl) return null;
+  if (!allowedTypes.has(mimeType)) return null;
+  if (!Number.isFinite(fileSize) || fileSize <= 0 || fileSize > 5 * 1024 * 1024) return null;
+  if (!dataUrl.startsWith(`data:${mimeType};base64,`)) return null;
+
+  return {
+    fileName: fileName.replace(/[^\w.\- ()[\]{}@]+/g, "_"),
+    mimeType,
+    fileSize,
+    dataUrl
+  };
+}
+
+function groupArtworksByItem(rows: QuoteItemArtworkRow[]) {
+  const grouped = new Map<string, QuoteItemArtworkRow[]>();
+  for (const row of rows) {
+    const current = grouped.get(row.quote_item_id) ?? [];
+    current.push(row);
+    grouped.set(row.quote_item_id, current);
+  }
+  return grouped;
 }
 
 async function resolveQuoteCustomer(client: pg.PoolClient, tenantId: string, input: CreateQuoteInput) {

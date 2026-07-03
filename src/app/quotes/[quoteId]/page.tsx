@@ -89,6 +89,30 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                       {item.quantity} x {brl.format(Number(item.unit_price))}
                     </p>
                     {item.artwork_name ? <p className="text-zinc-500">Arte: {item.artwork_name}</p> : null}
+                    {item.artworks?.length ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {item.artworks.map((artwork) => (
+                          <div
+                            className="flex max-w-full items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 px-2 py-1.5"
+                            key={artwork.id}
+                          >
+                            {artwork.data_url.startsWith("data:image/") ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                alt=""
+                                className="h-10 w-10 shrink-0 rounded border border-zinc-800 object-cover"
+                                src={artwork.data_url}
+                              />
+                            ) : (
+                              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded border border-zinc-800 text-xs text-zinc-500">
+                                PDF
+                              </span>
+                            )}
+                            <span className="min-w-0 truncate text-xs text-zinc-400">{artwork.file_name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     {item.reference_quantity ? (
                       <p className="text-xs text-amber-300">
                         Qtd. de referencia: {item.reference_quantity} · {formatPricingRule(item.pricing_rule)}

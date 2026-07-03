@@ -8,11 +8,13 @@ import {
   CircleDollarSign,
   Clipboard,
   FileText,
+  Image as ImageIcon,
   Plus,
   ShoppingCart,
   Truck,
   UserRound,
   Trash2,
+  Upload,
   RotateCcw,
   Save,
   TrendingUp,
@@ -63,9 +65,17 @@ type DraftQuoteItem = {
   productVariantId: string;
   productLabel: string;
   artworkName: string;
+  artworkFile?: ArtworkFilePayload | null;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+};
+
+type ArtworkFilePayload = {
+  fileName: string;
+  mimeType: "image/png" | "image/jpeg" | "image/jpg" | "image/webp" | "application/pdf";
+  fileSize: number;
+  dataUrl: string;
 };
 
 type DraftPricingRule = "per_art_average" | "per_item" | "aggregate_total";
@@ -85,6 +95,7 @@ type ShippingPackagingSummary = {
 const SIMULATION_QUANTITIES = [1, 10, 25, 50, 100, 250, 500, 1000] as const;
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const percent = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+const MAX_ARTWORK_FILE_SIZE = 5 * 1024 * 1024;
 const emptyPlatform: PricingPlatformOption = {
   name: "Canal nao configurado",
   commissionRate: 0,
@@ -149,6 +160,8 @@ export function PricingCalculator({
   const [quickText, setQuickText] = useState("");
   const [lastOlistQuoteId, setLastOlistQuoteId] = useState<string | null>(null);
   const [draftArtworkName, setDraftArtworkName] = useState("Arte 1");
+  const [draftArtworkFile, setDraftArtworkFile] = useState<ArtworkFilePayload | null>(null);
+  const [draftArtworkMessage, setDraftArtworkMessage] = useState("");
   const [draftItems, setDraftItems] = useState<DraftQuoteItem[]>([]);
   const [draftOpen, setDraftOpen] = useState(false);
   const [draftPricingRule, setDraftPricingRule] = useState<DraftPricingRule>("per_item");
@@ -563,16 +576,48 @@ export function PricingCalculator({
         productVariantId: variant.id,
         productLabel: `${variant.productName} - ${variant.variantName}`,
         artworkName,
+        artworkFile: draftArtworkFile,
         quantity,
         unitPrice: simulatedResult.finalUnitPrice,
         totalPrice: simulatedResult.subtotal
       }
     ]);
     setDraftArtworkName(`Arte ${draftItems.length + 2}`);
+    setDraftArtworkFile(null);
+    setDraftArtworkMessage("");
     setDraftMessage("Item adicionado a bandeja de orcamento.");
     setDraftAttention(true);
     window.setTimeout(() => setDraftAttention(false), 2600);
     setDraftState("idle");
+  }
+
+  async function handleArtworkFileChange(file: File | null) {
+    setDraftArtworkMessage("");
+    if (!file) {
+      setDraftArtworkFile(null);
+      return;
+    }
+
+    if (!isAllowedArtworkMimeType(file.type)) {
+      setDraftArtworkFile(null);
+      setDraftArtworkMessage("Use PNG, JPG, WebP ou PDF.");
+      return;
+    }
+
+    if (file.size > MAX_ARTWORK_FILE_SIZE) {
+      setDraftArtworkFile(null);
+      setDraftArtworkMessage("Arquivo maior que 5 MB.");
+      return;
+    }
+
+    const dataUrl = await readFileAsDataUrl(file);
+    setDraftArtworkFile({
+      fileName: file.name,
+      mimeType: file.type as ArtworkFilePayload["mimeType"],
+      fileSize: file.size,
+      dataUrl
+    });
+    setDraftArtworkMessage("Arte anexada para o próximo item.");
   }
 
   function removeDraftItem(itemId: string) {
@@ -593,7 +638,8 @@ export function PricingCalculator({
         items: draftItems.map((item) => ({
           productVariantId: item.productVariantId,
           quantity: item.quantity,
-          artworkName: item.artworkName
+          artworkName: item.artworkName,
+          artworkFile: item.artworkFile ?? null
         })),
         customerId: null,
         customerName: quickCustomerName.trim() || "Cliente nao informado",
@@ -945,13 +991,55 @@ export function PricingCalculator({
           </Control>
         </div>
 
-        <div className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-900/70 p-3 md:grid-cols-[1fr_auto] md:items-end">
+        <div className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-900/70 p-3 lg:grid-cols-[minmax(180px,1fr)_minmax(220px,0.85fr)_auto] lg:items-end">
           <Input
             label="Arte/lote para orcamento composto"
             placeholder="Ex.: Logo azul, Arte cliente A"
             value={draftArtworkName}
             onChange={setDraftArtworkName}
           />
+          <div>
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">Arquivo da arte</span>
+            <div className="flex min-h-10 items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2">
+              {draftArtworkFile?.dataUrl.startsWith("data:image/") ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  alt=""
+                  className="h-8 w-8 shrink-0 rounded border border-zinc-800 object-cover"
+                  src={draftArtworkFile.dataUrl}
+                />
+              ) : (
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-zinc-800 text-zinc-500">
+                  <ImageIcon size={15} />
+                </span>
+              )}
+              <label className="focus-ring inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-800">
+                <Upload size={14} />
+                {draftArtworkFile ? "Trocar" : "Anexar"}
+                <input
+                  accept="image/png,image/jpeg,image/webp,application/pdf"
+                  className="sr-only"
+                  type="file"
+                  onChange={(event) => void handleArtworkFileChange(event.target.files?.[0] ?? null)}
+                />
+              </label>
+              {draftArtworkFile ? (
+                <button
+                  className="focus-ring ml-auto inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+                  type="button"
+                  onClick={() => {
+                    setDraftArtworkFile(null);
+                    setDraftArtworkMessage("");
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              ) : null}
+            </div>
+            <p className={`mt-1 min-h-4 text-xs ${draftArtworkMessage.startsWith("Arquivo") || draftArtworkMessage.startsWith("Use") ? "text-amber-300" : "text-zinc-500"}`}>
+              {draftArtworkMessage || (draftArtworkFile ? `${draftArtworkFile.fileName} · ${formatBytes(draftArtworkFile.fileSize)}` : "Opcional, até 5 MB.")}
+            </p>
+          </div>
           <button
             className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-amber-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
             disabled={readonlyMode || (simulatedChanged && !demoMode)}
@@ -1524,6 +1612,25 @@ function QuoteDraftDrawer({
                       <div className="min-w-0">
                         <p className="break-words text-sm font-medium text-white">{item.productLabel}</p>
                         <p className="mt-1 text-xs text-zinc-500">Arte: {item.artworkName}</p>
+                        {item.artworkFile ? (
+                          <div className="mt-2 flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 px-2 py-1.5">
+                            {item.artworkFile.dataUrl.startsWith("data:image/") ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                alt=""
+                                className="h-9 w-9 shrink-0 rounded border border-zinc-800 object-cover"
+                                src={item.artworkFile.dataUrl}
+                              />
+                            ) : (
+                              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded border border-zinc-800 text-zinc-500">
+                                <FileText size={15} />
+                              </span>
+                            )}
+                            <span className="min-w-0 truncate text-xs text-zinc-400">
+                              {item.artworkFile.fileName} · {formatBytes(item.artworkFile.fileSize)}
+                            </span>
+                          </div>
+                        ) : null}
                         <p className="mt-1 text-xs text-zinc-400">
                           {item.quantity} x {brl.format(item.unitPrice)}
                         </p>
@@ -1631,6 +1738,7 @@ function currentDemoItem(
     productVariantId: variant.id,
     productLabel: `${variant.productName} - ${variant.variantName}`,
     artworkName: artworkName.trim() || "Arte 1",
+    artworkFile: null,
     quantity,
     unitPrice,
     totalPrice
@@ -1660,7 +1768,7 @@ function buildDemoWhatsAppText({
     "",
     "*Itens*",
     ...items.map((item, index) =>
-      `${index + 1}. ${item.productLabel}${item.artworkName ? ` (${item.artworkName})` : ""} - ${item.quantity} un. x ${brl.format(item.unitPrice)} = ${brl.format(item.totalPrice)}`
+      `${index + 1}. ${item.productLabel}${item.artworkName ? ` (${item.artworkName})` : ""} - ${item.quantity} un. x ${brl.format(item.unitPrice)} = ${brl.format(item.totalPrice)}${item.artworkFile ? `\n   Arte anexada: ${item.artworkFile.fileName}` : ""}`
     ),
     "",
     `Subtotal: ${brl.format(itemsTotal)}`,
@@ -1693,6 +1801,7 @@ function buildDemoQuoteDocument({
           <td>
             <strong>${escapeHtml(item.productLabel)}</strong>
             <span>${escapeHtml(item.artworkName || "Arte 1")}</span>
+            ${item.artworkFile ? `<span>Arte anexada: ${escapeHtml(item.artworkFile.fileName)}</span>` : ""}
           </td>
           <td>${item.quantity}</td>
           <td>${brl.format(item.unitPrice)}</td>
@@ -2538,4 +2647,23 @@ function buildLocalPlatformOverride(input: {
     sellerShippingCost: input.localSellerShippingCost,
     sellerShippingThreshold: input.sellerShippingThreshold
   };
+}
+
+function isAllowedArtworkMimeType(value: string): value is ArtworkFilePayload["mimeType"] {
+  return ["image/png", "image/jpeg", "image/jpg", "image/webp", "application/pdf"].includes(value);
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Nao foi possivel ler o arquivo."));
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatBytes(value: number) {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }

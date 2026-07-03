@@ -112,6 +112,68 @@ export async function generateQuotePdf(input: {
     [230, 44, 44, 90, 90]
   );
 
+  const attachedArtworks = input.items.flatMap((item) =>
+    (item.artworks ?? []).map((artwork) => ({
+      item,
+      artwork
+    }))
+  );
+  if (attachedArtworks.length) {
+    drawSectionTitle("Artes anexadas");
+    for (const entry of attachedArtworks) {
+      ensureSpace(86);
+      page.drawRectangle({
+        x: margin,
+        y: y - 62,
+        width: pageWidth - margin * 2,
+        height: 68,
+        color: rgb(0.98, 0.98, 0.99)
+      });
+      const embedded = await loadDataImage(pdf, entry.artwork.data_url);
+      if (embedded) {
+        const fitted = fitImage(embedded.width, embedded.height, 54, 54);
+        page.drawImage(embedded, {
+          x: margin + 8 + (54 - fitted.width) / 2,
+          y: y - 55 + (54 - fitted.height) / 2,
+          width: fitted.width,
+          height: fitted.height
+        });
+      } else {
+        page.drawRectangle({
+          x: margin + 8,
+          y: y - 55,
+          width: 54,
+          height: 54,
+          borderColor: rgb(0.82, 0.82, 0.85),
+          borderWidth: 0.5
+        });
+        page.drawText("ARQ", { x: margin + 24, y: y - 28, size: 9, font: bold, color: rgb(0.45, 0.45, 0.48) });
+      }
+      page.drawText(sanitizePdfText(entry.item.description), {
+        x: margin + 74,
+        y: y - 16,
+        size: 9,
+        font: bold,
+        color: rgb(0.12, 0.12, 0.13)
+      });
+      page.drawText(sanitizePdfText(`Arte: ${entry.artwork.artwork_name ?? entry.item.artwork_name ?? "-"}`), {
+        x: margin + 74,
+        y: y - 31,
+        size: 9,
+        font: regular,
+        color: rgb(0.28, 0.28, 0.3)
+      });
+      page.drawText(sanitizePdfText(`Arquivo: ${entry.artwork.file_name}`), {
+        x: margin + 74,
+        y: y - 46,
+        size: 8,
+        font: regular,
+        color: rgb(0.42, 0.42, 0.45)
+      });
+      y -= 78;
+    }
+  }
+
   drawSectionTitle("Resumo");
   const summaryRows = [
     ["Subtotal", brl.format(Number(input.quote.subtotal))],
@@ -210,6 +272,13 @@ async function loadLogo(pdf: PDFDocument, logoUrl: string | null | undefined) {
   } catch {
     return null;
   }
+}
+
+async function loadDataImage(pdf: PDFDocument, dataUrl: string | null | undefined) {
+  if (!dataUrl?.startsWith("data:image/")) return null;
+  const parsed = parseDataImage(dataUrl);
+  if (!parsed) return null;
+  return embedSupportedLogoImage(pdf, parsed.bytes);
 }
 
 function fitImage(originalWidth: number, originalHeight: number, maxWidth: number, maxHeight: number) {
