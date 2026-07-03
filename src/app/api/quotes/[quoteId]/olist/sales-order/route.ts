@@ -13,7 +13,11 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
   const missingSkus = missingOlistSkus(loaded.detail.items);
   if (missingSkus.length > 0) {
     return NextResponse.json(
-      { ok: false, error: "Todos os itens do orçamento precisam ter SKU/ID numérico do produto Olist antes de gerar pedido.", missingSkus },
+      {
+        ok: false,
+        error: "Todos os itens do orçamento precisam ter ID numérico do produto Olist cadastrado em Produtos antes de gerar pedido.",
+        missingSkus
+      },
       { status: 409 }
     );
   }

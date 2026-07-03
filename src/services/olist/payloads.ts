@@ -79,7 +79,7 @@ export function buildOlistInvoiceEmitPayload() {
 
 export function missingOlistSkus(items: QuoteItemRow[]) {
   return items
-    .filter((item) => !item.sku?.trim() || !numericId(item.sku))
+    .filter((item) => !olistProductId(item))
     .map((item) => item.description || item.id);
 }
 
@@ -125,9 +125,9 @@ function quoteDeliveryAddress(quote: QuoteDetail) {
 }
 
 function nativeOrderItem(item: QuoteItemRow) {
-  const numericSku = numericId(item.sku);
+  const productId = olistProductId(item);
   return compactObject({
-    produto: { id: numericSku, tipo: "P" },
+    produto: { id: productId, tipo: "P" },
     quantidade: item.quantity,
     valorUnitario: money(item.unit_price),
     infoAdicional: [item.description, item.artwork_name ? `Arte: ${item.artwork_name}` : null]
@@ -139,7 +139,8 @@ function nativeOrderItem(item: QuoteItemRow) {
 function buildOlistNotes(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
   const itemLines = input.items.map((item, index) => {
     const art = item.artwork_name ? ` | Arte: ${item.artwork_name}` : "";
-    return `${index + 1}. ${item.sku ?? "sem SKU"} - ${item.description}${art} - ${item.quantity} un. x ${money(item.unit_price).toFixed(2)} = ${money(item.total_price).toFixed(2)}`;
+    const olistId = item.external_olist_product_id ? ` | Olist ID: ${item.external_olist_product_id}` : "";
+    return `${index + 1}. SKU ${item.sku ?? "-"}${olistId} - ${item.description}${art} - ${item.quantity} un. x ${money(item.unit_price).toFixed(2)} = ${money(item.total_price).toFixed(2)}`;
   });
   return [
     input.quote.notes,
@@ -164,6 +165,10 @@ function documentType(value: string | null | undefined): "F" | "J" | null {
 function numericId(value: string | null | undefined): number | null {
   if (!value || !/^\d+$/.test(value)) return null;
   return Number(value);
+}
+
+function olistProductId(item: QuoteItemRow): number | null {
+  return numericId(item.external_olist_product_id) ?? numericId(item.sku);
 }
 
 function dateOnly(value: string | null | undefined): string | null {

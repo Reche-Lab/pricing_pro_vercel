@@ -13,6 +13,7 @@ export type ProductVariantRow = {
   variant_name: string;
   variant_description: string | null;
   sku: string | null;
+  external_olist_product_id: string | null;
   unit_cost: string;
   unit_weight_kg: string;
   height_cm: string | null;
@@ -36,6 +37,7 @@ export type CreateProductWithVariantInput = {
   description?: string | null;
   variantName: string;
   sku?: string | null;
+  externalOlistProductId?: string | null;
   unitCost: number;
   unitWeightKg: number;
   heightCm?: number | null;
@@ -55,6 +57,7 @@ export type UpdateProductVariantInput = {
   productActive: boolean;
   variantName: string;
   sku?: string | null;
+  externalOlistProductId?: string | null;
   unitCost: number;
   unitWeightKg: number;
   heightCm?: number | null;
@@ -77,6 +80,7 @@ export async function listProductVariants(userId: string, tenantId: string): Pro
           v.name as variant_name,
           v.description as variant_description,
           v.sku,
+          to_jsonb(v)->>'external_olist_product_id' as external_olist_product_id,
           v.unit_cost,
           v.unit_weight_kg,
           v.height_cm,
@@ -149,6 +153,7 @@ export async function listProductsAdmin(userId: string, tenantId: string): Promi
           v.name as variant_name,
           v.description as variant_description,
           v.sku,
+          to_jsonb(v)->>'external_olist_product_id' as external_olist_product_id,
           v.unit_cost,
           v.unit_weight_kg,
           v.height_cm,
@@ -212,6 +217,7 @@ export async function createProductWithVariant(
           name,
           description,
           sku,
+          external_olist_product_id,
           unit_cost,
           unit_weight_kg,
           height_cm,
@@ -219,7 +225,7 @@ export async function createProductWithVariant(
           length_cm,
           active
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
         returning id
       `,
       [
@@ -228,6 +234,7 @@ export async function createProductWithVariant(
         input.variantName,
         input.description || null,
         input.sku || null,
+        input.externalOlistProductId || null,
         input.unitCost,
         input.unitWeightKg,
         input.heightCm ?? null,
@@ -332,12 +339,13 @@ export async function updateProductVariant(
         set name = $3,
             description = $4,
             sku = $5,
-            unit_cost = $6,
-            unit_weight_kg = $7,
-            height_cm = $8,
-            width_cm = $9,
-            length_cm = $10,
-            active = $11,
+            external_olist_product_id = $6,
+            unit_cost = $7,
+            unit_weight_kg = $8,
+            height_cm = $9,
+            width_cm = $10,
+            length_cm = $11,
+            active = $12,
             updated_at = now()
         where tenant_id = $1 and id = $2
       `,
@@ -347,6 +355,7 @@ export async function updateProductVariant(
         input.variantName,
         input.description || null,
         input.sku || null,
+        input.externalOlistProductId || null,
         input.unitCost,
         input.unitWeightKg,
         input.heightCm ?? null,

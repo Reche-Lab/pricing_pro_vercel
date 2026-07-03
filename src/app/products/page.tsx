@@ -51,6 +51,9 @@ export default async function ProductsPage() {
                       <div className="mt-2 flex flex-wrap gap-2">
                         <span className="rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-400">{item.product_category}</span>
                         {item.sku ? <span className="rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-400">SKU {item.sku}</span> : null}
+                        {item.external_olist_product_id ? (
+                          <span className="rounded-md bg-sky-500/10 px-2 py-1 text-xs text-sky-200">Olist {item.external_olist_product_id}</span>
+                        ) : null}
                         {!item.variant_active || !item.product_active ? (
                           <span className="rounded-md bg-amber-400/10 px-2 py-1 text-xs text-amber-200">Inativo</span>
                         ) : null}
@@ -75,6 +78,7 @@ export default async function ProductsPage() {
                       variantId: item.variant_id,
                       variantName: item.variant_name,
                       sku: item.sku,
+                      externalOlistProductId: item.external_olist_product_id,
                       unitCost: item.unit_cost,
                       unitWeightKg: item.unit_weight_kg,
                       heightCm: item.height_cm,

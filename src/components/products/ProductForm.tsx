@@ -60,6 +60,7 @@ export function ProductForm() {
         description: form.get("description"),
         variantName: form.get("variantName"),
         sku: form.get("sku"),
+        externalOlistProductId: form.get("externalOlistProductId"),
         unitCost: Number(form.get("unitCost")),
         unitWeightKg: Number(form.get("unitWeightKg")),
         heightCm: Number(form.get("heightCm") || 0) || null,
@@ -96,6 +97,7 @@ export function ProductForm() {
         <Input label="Categoria" name="category" placeholder="keychain" required />
         <Input label="Variante" name="variantName" placeholder="Redondo 4,5 cm" required />
         <Input label="SKU" name="sku" placeholder="CHAVEIRO-45" />
+        <Input label="ID produto Olist" name="externalOlistProductId" placeholder="123456789" />
         <Input label="Custo unitario" name="unitCost" required step="0.0001" type="number" />
         <Input label="Peso unitário kg (frete)" name="unitWeightKg" required step="0.000001" type="number" />
       </div>

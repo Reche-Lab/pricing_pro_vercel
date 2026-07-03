@@ -12,6 +12,7 @@ type ProductEditValues = {
   variantId: string;
   variantName: string;
   sku: string | null;
+  externalOlistProductId: string | null;
   unitCost: string;
   unitWeightKg: string;
   heightCm: string | null;
@@ -43,6 +44,7 @@ export function ProductEditForm({ product }: { product: ProductEditValues }) {
         productActive: form.get("productActive") === "on",
         variantName: form.get("variantName"),
         sku: form.get("sku"),
+        externalOlistProductId: form.get("externalOlistProductId"),
         unitCost: Number(form.get("unitCost")),
         unitWeightKg: Number(form.get("unitWeightKg")),
         heightCm: optionalNumber(form.get("heightCm")),
@@ -84,6 +86,7 @@ export function ProductEditForm({ product }: { product: ProductEditValues }) {
             <Input defaultValue={product.category} label="Categoria" name="category" required />
             <Input defaultValue={product.variantName} label="Variante" name="variantName" required />
             <Input defaultValue={product.sku ?? ""} label="SKU" name="sku" />
+            <Input defaultValue={product.externalOlistProductId ?? ""} label="ID produto Olist" name="externalOlistProductId" />
             <Input defaultValue={product.unitCost} label="Custo unitário" name="unitCost" required step="0.0001" type="number" />
             <Input
               defaultValue={product.unitWeightKg}

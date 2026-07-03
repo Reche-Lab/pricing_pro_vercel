@@ -55,8 +55,9 @@ describe("olist payloads", () => {
   });
 
   it("reports quote items without numeric Olist product id before order/invoice operations", () => {
-    expect(missingOlistSkus([{ ...item(), sku: null }])).toEqual(["Botton - 55mm"]);
-    expect(missingOlistSkus([{ ...item(), sku: "BOTTON-55" }])).toEqual(["Botton - 55mm"]);
+    expect(missingOlistSkus([{ ...item(), sku: null, external_olist_product_id: null }])).toEqual(["Botton - 55mm"]);
+    expect(missingOlistSkus([{ ...item(), sku: "BOTTON-55", external_olist_product_id: null }])).toEqual(["Botton - 55mm"]);
+    expect(missingOlistSkus([{ ...item(), sku: "98765", external_olist_product_id: null }])).toEqual([]);
   });
 });
 
@@ -114,7 +115,8 @@ function item(): QuoteItemRow {
   return {
     id: "item-1",
     product_variant_id: "variant-1",
-    sku: "98765",
+    sku: "BOTTON-55",
+    external_olist_product_id: "98765",
     description: "Botton - 55mm",
     quantity: 100,
     unit_price: "2.5000",

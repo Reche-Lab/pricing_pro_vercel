@@ -11,6 +11,7 @@ const updateProductSchema = z.object({
   productActive: z.boolean(),
   variantName: z.string().trim().min(1),
   sku: z.string().trim().optional().nullable(),
+  externalOlistProductId: z.string().trim().optional().nullable(),
   unitCost: z.number().min(0),
   unitWeightKg: z.number().min(0),
   heightCm: z.number().min(0).optional().nullable(),

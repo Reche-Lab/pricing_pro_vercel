@@ -60,6 +60,7 @@ export type QuoteItemRow = {
   id: string;
   product_variant_id?: string | null;
   sku?: string | null;
+  external_olist_product_id?: string | null;
   description: string;
   quantity: number;
   unit_price: string;
@@ -216,6 +217,7 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           qi.id,
           qi.product_variant_id,
           pv.sku,
+          to_jsonb(pv)->>'external_olist_product_id' as external_olist_product_id,
           qi.description,
           qi.quantity,
           qi.unit_price,
