@@ -991,29 +991,31 @@ export function PricingCalculator({
           </Control>
         </div>
 
-        <div className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-900/70 p-3 lg:grid-cols-[minmax(180px,1fr)_minmax(220px,0.85fr)_auto] lg:items-end">
-          <Input
-            label="Arte/lote para orcamento composto"
-            placeholder="Ex.: Logo azul, Arte cliente A"
-            value={draftArtworkName}
-            onChange={setDraftArtworkName}
-          />
+        <div className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-900/70 p-3 lg:grid-cols-[minmax(220px,1fr)_minmax(280px,1fr)_max-content] lg:items-start">
           <div>
+            <Input
+              label="Arte/lote para orcamento composto"
+              placeholder="Ex.: Logo azul, Arte cliente A"
+              value={draftArtworkName}
+              onChange={setDraftArtworkName}
+            />
+          </div>
+          <div className="min-w-0">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">Arquivo da arte</span>
-            <div className="flex min-h-10 items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2">
+            <div className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-2">
               {draftArtworkFile?.dataUrl.startsWith("data:image/") ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   alt=""
-                  className="h-8 w-8 shrink-0 rounded border border-zinc-800 object-cover"
+                  className="h-7 w-7 shrink-0 rounded border border-zinc-800 object-cover"
                   src={draftArtworkFile.dataUrl}
                 />
               ) : (
-                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-zinc-800 text-zinc-500">
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-zinc-800 text-zinc-500">
                   <ImageIcon size={15} />
                 </span>
               )}
-              <label className="focus-ring inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-800">
+              <label className="focus-ring inline-flex h-7 shrink-0 cursor-pointer items-center gap-2 rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-800">
                 <Upload size={14} />
                 {draftArtworkFile ? "Trocar" : "Anexar"}
                 <input
@@ -1025,7 +1027,7 @@ export function PricingCalculator({
               </label>
               {draftArtworkFile ? (
                 <button
-                  className="focus-ring ml-auto inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+                  className="focus-ring ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:bg-zinc-800"
                   type="button"
                   onClick={() => {
                     setDraftArtworkFile(null);
@@ -1036,19 +1038,22 @@ export function PricingCalculator({
                 </button>
               ) : null}
             </div>
-            <p className={`mt-1 min-h-4 text-xs ${draftArtworkMessage.startsWith("Arquivo") || draftArtworkMessage.startsWith("Use") ? "text-amber-300" : "text-zinc-500"}`}>
+            <p className={`mt-1 truncate text-xs ${draftArtworkMessage.startsWith("Arquivo") || draftArtworkMessage.startsWith("Use") ? "text-amber-300" : "text-zinc-500"}`}>
               {draftArtworkMessage || (draftArtworkFile ? `${draftArtworkFile.fileName} · ${formatBytes(draftArtworkFile.fileSize)}` : "Opcional, até 5 MB.")}
             </p>
           </div>
-          <button
-            className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-amber-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
-            disabled={readonlyMode || (simulatedChanged && !demoMode)}
-            type="button"
-            onClick={addCurrentItemToDraft}
-          >
-            <Plus size={16} />
-            Adicionar ao orcamento
-          </button>
+          <div>
+            <span className="mb-1 hidden text-xs font-medium uppercase tracking-wide text-transparent lg:block">Ação</span>
+            <button
+              className="focus-ring inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-amber-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400 lg:w-auto"
+              disabled={readonlyMode || (simulatedChanged && !demoMode)}
+              type="button"
+              onClick={addCurrentItemToDraft}
+            >
+              <Plus size={16} />
+              Adicionar ao orçamento
+            </button>
+          </div>
         </div>
 
         <DetailsPanel icon={<UserRound size={16} />} title="Informacoes do Cliente">
