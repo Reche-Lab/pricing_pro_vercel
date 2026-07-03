@@ -8,7 +8,7 @@ import { OLIST_DEFAULT_PATHS } from "@/services/olist/defaults";
 import type { OlistCredentials, OlistSettings } from "@/services/olist/types";
 
 const searchSchema = z.object({
-  nome: z.string().trim().min(1),
+  nome: z.string().trim().optional().nullable(),
   tipo: z.string().trim().optional().nullable()
 });
 
@@ -36,7 +36,7 @@ export async function POST(request: Request, context: { params: Promise<{ member
   }
 
   const settings = connection.settings as OlistSettings;
-  const paths = searchPaths(settings.user_path, parsed.data.nome, parsed.data.tipo);
+  const paths = searchPaths(settings.user_path, parsed.data.nome ?? "", parsed.data.tipo);
   if (!paths.length) return NextResponse.json({ ok: false, error: "Olist user path is not configured." }, { status: 409 });
 
   const errors: Array<{ path: string; status?: number; message: string }> = [];
@@ -72,6 +72,7 @@ export async function POST(request: Request, context: { params: Promise<{ member
       {
         ok: false,
         error: "Olist não permitiu consultar usuários/vendedores com o token atual. Informe manualmente o ID do responsável Olist.",
+        message: "A chamada está correta pela documentação, mas o token OAuth atual não tem autorização para listar usuários/vendedores.",
         attempts: errors
       },
       { status: 409 }
@@ -95,7 +96,7 @@ function searchPaths(basePath: string | undefined, nome: string, tipo: string | 
 function buildSearchPath(basePath: string | undefined, nome: string, tipo: string | null | undefined) {
   if (!basePath) return null;
   const params = new URLSearchParams();
-  params.set("nome", nome);
+  if (nome.trim()) params.set("nome", nome);
   if (tipo) params.set("tipo", tipo);
   params.set("limit", "10");
   const separator = basePath.includes("?") ? "&" : "?";

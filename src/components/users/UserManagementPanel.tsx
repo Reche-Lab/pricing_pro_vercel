@@ -399,8 +399,8 @@ function OlistUserActionModal({
   const [searchMessage, setSearchMessage] = useState("");
   const [searchResults, setSearchResults] = useState<OlistUserSearchResult[]>([]);
 
-  async function searchOlistUsers() {
-    if (!lookupName.trim()) {
+  async function searchOlistUsers(listAll = false) {
+    if (!listAll && !lookupName.trim()) {
       setSearchMessage("Informe um nome para buscar no Olist.");
       return;
     }
@@ -411,13 +411,13 @@ function OlistUserActionModal({
     const response = await fetch(`/api/users/${member.membership_id}/olist/search`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ nome: lookupName, tipo: lookupType || undefined })
+      body: JSON.stringify({ nome: listAll ? "" : lookupName, tipo: lookupType || undefined })
     });
     const data = await response.json().catch(() => null);
     setSearching(false);
 
     if (!response.ok || !data?.ok) {
-      setSearchMessage(data?.error ?? "Não foi possível buscar usuários no Olist.");
+      setSearchMessage(data?.message ?? data?.error ?? "Não foi possível buscar usuários no Olist.");
       return;
     }
 
@@ -426,7 +426,7 @@ function OlistUserActionModal({
     setSearchMessage(
       [
         data.warning,
-        results.length ? `${results.length} resultado(s) encontrado(s). Selecione um responsável abaixo.` : "Nenhum usuário encontrado para esse nome."
+        results.length ? `${results.length} resultado(s) encontrado(s). Selecione um responsável abaixo.` : "Nenhum usuário encontrado."
       ].filter(Boolean).join(" ")
     );
   }
@@ -474,7 +474,7 @@ function OlistUserActionModal({
                   <option value="manual">Usar ID de responsável existente</option>
                 </select>
               </label>
-              <div className="grid gap-3 sm:grid-cols-[1fr_180px_auto] sm:items-end">
+              <div className="grid gap-3 sm:grid-cols-[1fr_180px_auto_auto] sm:items-end">
                 <label className="block">
                   <span className="mb-1 block text-sm font-medium text-zinc-300">Nome para procurar no Olist</span>
                   <input
@@ -499,10 +499,18 @@ function OlistUserActionModal({
                 <button
                   className="focus-ring inline-flex min-h-10 items-center justify-center rounded-md border border-cyan-400/30 px-4 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/10 disabled:opacity-60"
                   disabled={searching}
-                  onClick={searchOlistUsers}
+                  onClick={() => searchOlistUsers(false)}
                   type="button"
                 >
                   {searching ? "Buscando..." : "Buscar no Olist"}
+                </button>
+                <button
+                  className="focus-ring inline-flex min-h-10 items-center justify-center rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-60"
+                  disabled={searching}
+                  onClick={() => searchOlistUsers(true)}
+                  type="button"
+                >
+                  Listar todos
                 </button>
               </div>
               {searchMessage ? (
