@@ -198,7 +198,9 @@ const TEST_PRESETS: TestPreset[] = [
       { key: "cpfCnpj", label: "CPF/CNPJ", placeholder: "Documento do cliente", target: "query", parameter: "cpfCnpj", normalize: "digits" },
       { key: "codigoCliente", label: "Código cliente", placeholder: "Código do cliente", target: "query", parameter: "codigoCliente" },
       { key: "numeroPedidoEcommerce", label: "Pedido e-commerce", placeholder: "Número externo/e-commerce", target: "query", parameter: "numeroPedidoEcommerce" },
-      { key: "idVendedor", label: "ID vendedor", placeholder: "ID numérico", target: "query", parameter: "idVendedor", normalize: "number" }
+      { key: "idVendedor", label: "ID vendedor", placeholder: "ID numérico", target: "query", parameter: "idVendedor", normalize: "number" },
+      { key: "situacao", label: "Situação", placeholder: "Ex.: aberto, aprovado, faturado", target: "query", parameter: "situacao" },
+      { key: "origemPedido", label: "Origem", placeholder: "Origem do pedido", target: "query", parameter: "origemPedido" }
     ]
   },
   {
@@ -213,7 +215,10 @@ const TEST_PRESETS: TestPreset[] = [
       { key: "cpfCnpj", label: "CPF/CNPJ", placeholder: "Documento do cliente", target: "query", parameter: "cpfCnpj", normalize: "digits" },
       { key: "idVenda", label: "ID venda/pedido", placeholder: "ID numérico da venda", target: "query", parameter: "idVenda", normalize: "number" },
       { key: "idVendedor", label: "ID vendedor", placeholder: "ID numérico", target: "query", parameter: "idVendedor", normalize: "number" },
-      { key: "numeroPedidoEcommerce", label: "Pedido e-commerce", placeholder: "Número externo/e-commerce", target: "query", parameter: "numeroPedidoEcommerce" }
+      { key: "numeroPedidoEcommerce", label: "Pedido e-commerce", placeholder: "Número externo/e-commerce", target: "query", parameter: "numeroPedidoEcommerce" },
+      { key: "tipo", label: "Tipo", placeholder: "Tipo da nota fiscal", target: "query", parameter: "tipo" },
+      { key: "situacao", label: "Situação", placeholder: "Situação da nota", target: "query", parameter: "situacao" },
+      { key: "idFormaEnvio", label: "ID forma envio", placeholder: "ID numérico da forma de envio", target: "query", parameter: "idFormaEnvio", normalize: "number" }
     ]
   },
   {
@@ -227,7 +232,10 @@ const TEST_PRESETS: TestPreset[] = [
       { key: "nomeCliente", label: "Nome do cliente", placeholder: "Ex.: Angelita", target: "query", parameter: "nomeCliente" },
       { key: "idContato", label: "ID contato", placeholder: "ID numérico do contato", target: "query", parameter: "idContato", normalize: "number" },
       { key: "assunto", label: "Texto do assunto", placeholder: "Trecho do assunto", target: "query", parameter: "assunto" },
-      { key: "idUsuarioResponsavel", label: "ID responsável", placeholder: "ID do usuário responsável", target: "query", parameter: "idUsuarioResponsavel", normalize: "number" }
+      { key: "idUsuarioResponsavel", label: "ID responsável", placeholder: "ID do usuário responsável", target: "query", parameter: "idUsuarioResponsavel", normalize: "number" },
+      { key: "situacao", label: "Situação", placeholder: "Situação do assunto", target: "query", parameter: "situacao" },
+      { key: "statusCrm", label: "Status CRM", placeholder: "Status CRM", target: "query", parameter: "statusCrm" },
+      { key: "idEstagio", label: "ID estágio", placeholder: "ID numérico do estágio", target: "query", parameter: "idEstagio", normalize: "number" }
     ]
   },
   {
@@ -241,7 +249,8 @@ const TEST_PRESETS: TestPreset[] = [
       { key: "nome", label: "Nome", placeholder: "Ex.: Botton", target: "query", parameter: "nome" },
       { key: "codigo", label: "Código/SKU", placeholder: "Código do produto", target: "query", parameter: "codigo" },
       { key: "gtin", label: "GTIN", placeholder: "Código GTIN", target: "query", parameter: "gtin", normalize: "number" },
-      { key: "situacao", label: "Situação", placeholder: "A, I ou E", target: "query", parameter: "situacao" }
+      { key: "situacao", label: "Situação", placeholder: "A, I ou E", target: "query", parameter: "situacao" },
+      { key: "idListaPreco", label: "ID lista preço", placeholder: "ID numérico da lista de preço", target: "query", parameter: "idListaPreco", normalize: "number" }
     ]
   },
   {
@@ -476,34 +485,34 @@ function OlistApiTestLab({ connected }: { connected: boolean }) {
             </button>
           ))}
         </div>
-        <div className="grid gap-3">
-          <div className="grid gap-3 md:grid-cols-[160px_1fr]">
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-zinc-300">Método</span>
-              <select
-                className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
-                onChange={(event) => setMethod(event.currentTarget.value as TestPreset["method"])}
-                value={method}
-              >
-                <option value="GET">GET</option>
-                <option value="POST">POST</option>
-                <option value="PUT">PUT</option>
-                <option value="PATCH">PATCH</option>
-                <option value="DELETE">DELETE</option>
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-zinc-300">Path</span>
-              <input
-                className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
-                onChange={(event) => setPath(event.currentTarget.value)}
-                value={path}
-              />
-            </label>
-          </div>
-          {selectedPreset.searchFields?.length ? (
-            <div className="rounded-md border border-cyan-400/20 bg-cyan-400/10 p-3">
-              <div className="grid gap-3 md:grid-cols-[220px_1fr]">
+        <div className="grid gap-3 content-start">
+          <div className="rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
+            <div className="grid gap-3 md:grid-cols-[130px_1fr]">
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-zinc-300">Método</span>
+                <select
+                  className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
+                  onChange={(event) => setMethod(event.currentTarget.value as TestPreset["method"])}
+                  value={method}
+                >
+                  <option value="GET">GET</option>
+                  <option value="POST">POST</option>
+                  <option value="PUT">PUT</option>
+                  <option value="PATCH">PATCH</option>
+                  <option value="DELETE">DELETE</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-zinc-300">Path</span>
+                <input
+                  className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
+                  onChange={(event) => setPath(event.currentTarget.value)}
+                  value={path}
+                />
+              </label>
+            </div>
+            {selectedPreset.searchFields?.length ? (
+              <div className="mt-3 grid gap-3 md:grid-cols-[220px_1fr_auto] md:items-end">
                 <label className="block">
                   <span className="mb-1 block text-sm font-medium text-cyan-100">Pesquisar por</span>
                   <select
@@ -528,25 +537,44 @@ function OlistApiTestLab({ connected }: { connected: boolean }) {
                     value={searchValue}
                   />
                 </label>
+                <button
+                  className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/20 disabled:opacity-60"
+                  disabled={!connected || loading}
+                  onClick={runTest}
+                  type="button"
+                >
+                  <PlayCircle size={16} />
+                  {loading ? "Testando..." : "Executar teste"}
+                </button>
               </div>
-              <p className="mt-2 text-xs leading-5 text-cyan-100/75">
-                O valor informado será aplicado automaticamente no {selectedSearchField?.target === "query" ? "Query JSON" : selectedSearchField?.target === "path" ? "Path" : "Body JSON"} ao executar o teste.
-              </p>
-            </div>
-          ) : null}
-          <div className="grid gap-3 lg:grid-cols-2">
-            <JsonEditor label="Query JSON" value={queryText} onChange={setQueryText} />
-            <JsonEditor label="Body JSON" value={bodyText} onChange={setBodyText} />
+            ) : (
+              <div className="mt-3 flex justify-end">
+                <button
+                  className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/20 disabled:opacity-60"
+                  disabled={!connected || loading}
+                  onClick={runTest}
+                  type="button"
+                >
+                  <PlayCircle size={16} />
+                  {loading ? "Testando..." : "Executar teste"}
+                </button>
+              </div>
+            )}
+            <p className="mt-2 text-xs leading-5 text-zinc-500">
+              {selectedSearchField
+                ? `O valor informado será aplicado automaticamente no ${selectedSearchField.target === "query" ? "Query JSON" : selectedSearchField.target === "path" ? "Path" : "Body JSON"} ao executar o teste.`
+                : "A chamada será executada com os parâmetros atuais."}
+            </p>
           </div>
-          <button
-            className="focus-ring inline-flex w-fit items-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/20 disabled:opacity-60"
-            disabled={!connected || loading}
-            onClick={runTest}
-            type="button"
-          >
-            <PlayCircle size={16} />
-            {loading ? "Testando..." : "Executar teste"}
-          </button>
+          <details className="rounded-md border border-zinc-800 bg-zinc-900/40">
+            <summary className="focus-ring cursor-pointer list-none rounded-md px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-900">
+              JSON avançado
+            </summary>
+            <div className="grid gap-3 border-t border-zinc-800 p-3 lg:grid-cols-2">
+              <JsonEditor label="Query JSON" value={queryText} onChange={setQueryText} />
+              <JsonEditor label="Body JSON" value={bodyText} onChange={setBodyText} />
+            </div>
+          </details>
           {message ? <p className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300">{message}</p> : null}
           {result ? (
             <pre className="max-h-[420px] overflow-auto rounded-md border border-zinc-800 bg-black/40 p-3 text-xs leading-5 text-zinc-300">
