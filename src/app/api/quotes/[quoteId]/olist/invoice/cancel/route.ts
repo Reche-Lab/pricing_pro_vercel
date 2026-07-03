@@ -65,14 +65,15 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
         { status: 409 }
       );
     }
+    const cancelXml = normalizeInvoiceXmlForCancel(xml);
     const formData = new FormData();
-    formData.set("xml", new Blob([xml], { type: "application/xml" }), `nota-${numeroNota}.xml`);
+    formData.set("xml", new Blob([cancelXml.xml], { type: "application/xml" }), `nota-${numeroNota}.xml`);
     for (const [key, value] of Object.entries(payload)) {
       formData.set(key, String(value));
     }
     const payloadForLog = {
       ...payload,
-      xml: `[xml anexado: ${xml.length} caracteres]`,
+      xml: `[xml anexado: ${cancelXml.xml.length} caracteres; raiz=${cancelXml.root}; origem=${cancelXml.sourceRoot}]`,
       motivoInterno: parsed.data.reason
     };
     console.info("Olist invoice cancel payload built.", {
@@ -194,4 +195,36 @@ function findFirstString(data: unknown, keys: string[]): string | null {
     if (found) return found;
   }
   return null;
+}
+
+function normalizeInvoiceXmlForCancel(xml: string) {
+  const sourceRoot = detectXmlRoot(xml);
+  if (sourceRoot === "nfeProc") {
+    const nfe = extractXmlNode(xml, "NFe");
+    if (nfe) {
+      return {
+        xml: nfe,
+        root: detectXmlRoot(nfe) ?? "NFe",
+        sourceRoot
+      };
+    }
+  }
+
+  return {
+    xml,
+    root: sourceRoot ?? "desconhecida",
+    sourceRoot: sourceRoot ?? "desconhecida"
+  };
+}
+
+function detectXmlRoot(xml: string) {
+  const withoutDeclaration = xml.trim().replace(/^<\?xml[\s\S]*?\?>\s*/i, "");
+  const match = /^<([A-Za-z_][\w:.-]*)\b/.exec(withoutDeclaration);
+  if (!match) return null;
+  return match[1].includes(":") ? match[1].split(":").pop() ?? match[1] : match[1];
+}
+
+function extractXmlNode(xml: string, tagName: string) {
+  const match = new RegExp(`<(?:[A-Za-z_][\\w.-]*:)?${tagName}\\b[\\s\\S]*?<\\/(?:[A-Za-z_][\\w.-]*:)?${tagName}>`, "i").exec(xml);
+  return match?.[0]?.trim() ?? null;
 }
