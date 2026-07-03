@@ -14,9 +14,10 @@ export async function olistRequest<T = unknown>({
 }: OlistRequestOptions): Promise<T> {
   if (!settings.api_base_url) throw new Error("Olist api_base_url is required.");
   if (!credentials.accessToken && !credentials.apiToken) throw new Error("Olist accessToken is required.");
+  const multipartBody = isFormData(body);
   const headers = {
     accept: "application/json",
-    "content-type": "application/json",
+    ...(multipartBody ? {} : { "content-type": "application/json" }),
     ...authHeader(settings, credentials)
   };
 
@@ -32,7 +33,7 @@ export async function olistRequest<T = unknown>({
   const response = await fetch(url, {
     method,
     headers,
-    body: method === "GET" || body === undefined ? undefined : JSON.stringify(body)
+    body: method === "GET" || body === undefined ? undefined : multipartBody ? body : JSON.stringify(body)
   });
 
   const text = await response.text();
@@ -97,6 +98,10 @@ function authHeader(settings: OlistSettings, credentials: OlistCredentials) {
   const token = credentials.accessToken || credentials.apiToken;
   const value = scheme === "ApiKey" ? token : `${scheme} ${token}`;
   return { [header]: value };
+}
+
+function isFormData(value: unknown): value is FormData {
+  return typeof FormData !== "undefined" && value instanceof FormData;
 }
 
 export function buildOlistAuthUrl(settings: OlistSettings, credentials: OlistCredentials, state: string) {

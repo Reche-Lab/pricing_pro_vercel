@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildOlistCrmQuotePayload,
   buildOlistCustomerPayload,
+  buildOlistInvoiceCancelPayload,
   buildOlistInvoicePayload,
   buildOlistSalesOrderPayload,
   missingOlistSkus
@@ -52,6 +53,24 @@ describe("olist payloads", () => {
     const payload = buildOlistInvoicePayload({ quote: quote(), items: [item()] });
 
     expect(payload).toEqual({ modelo: 55 });
+  });
+
+  it("builds invoice cancel payload for Olist v3 XML cancel endpoint", () => {
+    const payload = buildOlistInvoiceCancelPayload({
+      numeroNota: "123",
+      serieNota: "1",
+      modeloNota: "55",
+      estornarContas: "S",
+      estornarEstoque: "N"
+    });
+
+    expect(payload).toEqual({
+      numeroNota: "123",
+      serieNota: "1",
+      modeloNota: "55",
+      estornarContas: "S",
+      estornarEstoque: "N"
+    });
   });
 
   it("reports quote items without numeric Olist product id before order/invoice operations", () => {

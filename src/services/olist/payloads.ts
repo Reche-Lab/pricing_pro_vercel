@@ -77,10 +77,20 @@ export function buildOlistInvoiceEmitPayload() {
   };
 }
 
-export function buildOlistInvoiceCancelPayload(input: { reason: string }) {
-  return {
-    motivo: input.reason
-  };
+export function buildOlistInvoiceCancelPayload(input: {
+  numeroNota: string;
+  serieNota?: string | null;
+  modeloNota?: string | null;
+  estornarContas?: "S" | "N";
+  estornarEstoque?: "S" | "N";
+}) {
+  return compactObject({
+    numeroNota: input.numeroNota,
+    serieNota: input.serieNota,
+    modeloNota: input.modeloNota || "55",
+    estornarContas: input.estornarContas || "N",
+    estornarEstoque: input.estornarEstoque || "N"
+  });
 }
 
 export function missingOlistSkus(items: QuoteItemRow[]) {

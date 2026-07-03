@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       sales_order_path: parsed.data.salesOrderPath || OLIST_DEFAULT_PATHS.salesOrder,
       invoice_path: parsed.data.invoicePath || OLIST_DEFAULT_PATHS.invoice,
       invoice_emit_path: parsed.data.invoiceEmitPath || OLIST_DEFAULT_PATHS.invoiceEmit,
-      invoice_cancel_path: parsed.data.invoiceCancelPath || OLIST_DEFAULT_PATHS.invoiceCancel,
+      invoice_cancel_path: normalizeInvoiceCancelPath(parsed.data.invoiceCancelPath),
       user_path: parsed.data.userPath || OLIST_DEFAULT_PATHS.users,
       task_path: parsed.data.taskPath || OLIST_DEFAULT_PATHS.crmTask,
       scopes: normalizeOlistScopes(parseScopes(parsed.data.scopes)),
@@ -118,7 +118,7 @@ function serializeConnection(
     salesOrderPath: settings.sales_order_path ?? OLIST_DEFAULT_PATHS.salesOrder,
     invoicePath: settings.invoice_path ?? OLIST_DEFAULT_PATHS.invoice,
     invoiceEmitPath: settings.invoice_emit_path ?? OLIST_DEFAULT_PATHS.invoiceEmit,
-    invoiceCancelPath: settings.invoice_cancel_path ?? OLIST_DEFAULT_PATHS.invoiceCancel,
+    invoiceCancelPath: normalizeInvoiceCancelPath(settings.invoice_cancel_path),
     userPath: settings.user_path ?? crmSettings?.user_path ?? OLIST_DEFAULT_PATHS.users,
     taskPath: settings.task_path ?? crmSettings?.task_path ?? OLIST_DEFAULT_PATHS.crmTask,
     clientId: credentials.clientId ?? "",
@@ -127,6 +127,11 @@ function serializeConnection(
     authScheme: settings.auth_scheme ?? "Bearer",
     authHeader: settings.auth_header ?? "authorization"
   };
+}
+
+function normalizeInvoiceCancelPath(path: string | undefined) {
+  if (!path || path === "/notas/{idNota}/cancelar") return OLIST_DEFAULT_PATHS.invoiceCancel;
+  return path;
 }
 
 function parseScopes(value: string) {

@@ -5,7 +5,12 @@ import { buildOlistInvoiceCancelPayload } from "@/services/olist/payloads";
 import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOperation } from "../../_shared";
 
 const cancelSchema = z.object({
-  reason: z.string().trim().min(15, "Informe um motivo com pelo menos 15 caracteres.")
+  reason: z.string().trim().min(15, "Informe um motivo com pelo menos 15 caracteres."),
+  numeroNota: z.string().trim().min(1, "Informe o número da nota fiscal."),
+  serieNota: z.string().trim().optional().default(""),
+  modeloNota: z.string().trim().optional().default("55"),
+  estornarContas: z.enum(["S", "N"]).optional().default("N"),
+  estornarEstoque: z.enum(["S", "N"]).optional().default("N")
 });
 
 export async function POST(request: Request, context: { params: Promise<{ quoteId: string }> }) {
@@ -22,17 +27,31 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     return NextResponse.json({ ok: false, error: "Não há nota fiscal Olist vinculada a este orçamento para cancelar." }, { status: 409 });
   }
 
-  const path = replacePathTokens(loaded.settings.invoice_cancel_path ?? OLIST_DEFAULT_PATHS.invoiceCancel, { idNota: invoiceId });
+  const path = replacePathTokens(normalizeInvoiceCancelPath(loaded.settings.invoice_cancel_path), { idNota: invoiceId });
   if (!path) return NextResponse.json({ ok: false, error: "Olist invoice cancel path is not configured." }, { status: 409 });
   if ("error" in path) return NextResponse.json({ ok: false, error: path.error }, { status: 409 });
 
   try {
-    const payload = buildOlistInvoiceCancelPayload({ reason: parsed.data.reason });
+    const payload = buildOlistInvoiceCancelPayload({
+      numeroNota: parsed.data.numeroNota,
+      serieNota: parsed.data.serieNota,
+      modeloNota: parsed.data.modeloNota,
+      estornarContas: parsed.data.estornarContas,
+      estornarEstoque: parsed.data.estornarEstoque
+    });
+    const formData = new FormData();
+    for (const [key, value] of Object.entries(payload)) {
+      formData.set(key, String(value));
+    }
+    const payloadForLog = {
+      ...payload,
+      motivoInterno: parsed.data.reason
+    };
     console.info("Olist invoice cancel payload built.", {
       quoteId,
       invoiceId,
       path: path.value,
-      payload
+      payload: payloadForLog
     });
     const result = await sendOlistQuoteOperation({
       userId: loaded.session.userId,
@@ -43,7 +62,8 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
       settings: loaded.settings,
       credentials: loaded.credentials,
       path: path.value,
-      payload
+      payload: formData,
+      payloadForLog
     });
     console.info("Olist invoice cancel route completed.", {
       quoteId,
@@ -74,4 +94,10 @@ function replacePathTokens(template: string, values: Record<string, string | nul
     output = output.replaceAll(`{${key}}`, encodeURIComponent(value));
   }
   return { value: output } as const;
+}
+
+function normalizeInvoiceCancelPath(path: string | null | undefined) {
+  const cleaned = path?.trim();
+  if (!cleaned || cleaned === "/notas/{idNota}/cancelar") return OLIST_DEFAULT_PATHS.invoiceCancel;
+  return cleaned;
 }

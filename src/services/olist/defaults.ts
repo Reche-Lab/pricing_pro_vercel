@@ -9,7 +9,7 @@ export const OLIST_DEFAULT_PATHS = {
   salesOrder: "/pedidos",
   invoice: "/pedidos/{idPedido}/gerar-nota-fiscal",
   invoiceEmit: "/notas/{idNota}/emitir",
-  invoiceCancel: "/notas/{idNota}/cancelar",
+  invoiceCancel: "/notas/xml/cancelar",
   crmQuote: "/crm/assuntos",
   crmTask: "/crm/assuntos/{idAssunto}/acoes",
   products: "/produtos",

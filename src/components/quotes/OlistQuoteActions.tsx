@@ -579,7 +579,7 @@ function ActionModal({
   return (
     <div className="fixed inset-0 z-50 grid place-items-center overflow-hidden bg-black/70 px-4 py-6 backdrop-blur-sm">
       <form
-        className={`flex max-h-[90vh] w-full min-w-0 flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/50 ${action === "salesOrder" || action === "invoice" ? "max-w-4xl" : "max-w-xl"}`}
+        className={`flex max-h-[90vh] w-full min-w-0 flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/50 ${action === "salesOrder" || action === "invoice" || action === "invoiceCancel" ? "max-w-4xl" : "max-w-xl"}`}
         onSubmit={submit}
       >
         <div className="shrink-0 flex items-start justify-between gap-4 border-b border-zinc-800 p-5">
@@ -731,13 +731,34 @@ function ActionModal({
           {action === "invoiceCancel" ? (
             <div className="grid gap-3">
               <InfoBox title="Cancelamento de nota fiscal">
-                Esta ação enviará uma solicitação de cancelamento para a nota fiscal Olist vinculada a este orçamento. Confira os dados e informe um motivo claro.
+                A API v3 cancela a nota pelo endpoint de XML, usando número, série e modelo da nota. O motivo fica registrado no Pricing Pro/log para auditoria, pois este endpoint do Olist/Tiny não recebe um campo de motivo.
               </InfoBox>
               <InvoiceCancelInfoPanel preview={invoicePreview} />
               <div className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <InfoTile label="Orçamento" value={quoteId} />
-                  <InfoTile label="Nota Olist" value={stringValue(invoiceExternalId)} />
+                  <InfoTile label="ID interno da nota Olist" value={stringValue(invoiceExternalId)} />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Input label="Número da nota" name="numeroNota" required />
+                  <Input label="Série da nota" name="serieNota" />
+                  <Input label="Modelo" name="modeloNota" defaultValue="55" />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-zinc-300">Estornar contas</span>
+                    <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="estornarContas" defaultValue="N">
+                      <option value="N">Não</option>
+                      <option value="S">Sim</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-zinc-300">Estornar estoque</span>
+                    <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="estornarEstoque" defaultValue="N">
+                      <option value="N">Não</option>
+                      <option value="S">Sim</option>
+                    </select>
+                  </label>
                 </div>
                 <label className="block">
                   <span className="mb-1 block text-sm font-medium text-zinc-300">Motivo do cancelamento</span>
@@ -749,7 +770,7 @@ function ActionModal({
                   />
                 </label>
                 <p className="text-xs leading-5 text-zinc-500">
-                  O motivo será enviado no payload como <span className="font-mono text-zinc-300">motivo</span>. Use uma justificativa completa para evitar rejeição pela API.
+                  Use o número fiscal da nota, não o ID interno. Se estiver em dúvida, confira a nota no painel do Olist/Tiny antes de confirmar.
                 </p>
               </div>
             </div>
@@ -1237,8 +1258,14 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
 
   if (action === "invoiceCancel") {
     const reason = stringField(formData, "cancelReason");
+    const numeroNota = stringField(formData, "numeroNota");
+    const serieNota = stringField(formData, "serieNota");
+    const modeloNota = stringField(formData, "modeloNota") || "55";
+    const estornarContas = stringField(formData, "estornarContas") === "S" ? "S" : "N";
+    const estornarEstoque = stringField(formData, "estornarEstoque") === "S" ? "S" : "N";
     if (reason.length < 15) return { error: "Informe um motivo de cancelamento com pelo menos 15 caracteres." };
-    return { body: { reason } };
+    if (!numeroNota) return { error: "Informe o número da nota fiscal para cancelar." };
+    return { body: { reason, numeroNota, serieNota, modeloNota, estornarContas, estornarEstoque } };
   }
 
   return {};

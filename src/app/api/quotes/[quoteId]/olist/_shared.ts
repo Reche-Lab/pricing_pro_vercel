@@ -61,9 +61,11 @@ export async function sendOlistQuoteOperation(input: {
   credentials: OlistCredentials;
   path: string;
   payload?: unknown;
+  payloadForLog?: unknown;
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 }) {
   const debugId = randomUUID();
+  const payloadForLog = input.payloadForLog ?? serializePayload(input.payload);
   try {
     console.info("Olist quote operation started.", {
       debugId,
@@ -72,7 +74,7 @@ export async function sendOlistQuoteOperation(input: {
       quoteId: input.quoteId,
       method: input.method ?? "POST",
       path: input.path,
-      payload: input.payload
+      payload: payloadForLog
     });
     const result = await olistRequest({
       settings: input.settings,
@@ -98,7 +100,7 @@ export async function sendOlistQuoteOperation(input: {
       operation: input.operation,
       status: "success",
       externalId,
-      metadata: { quoteId: input.quoteId, path: input.path, payload: input.payload, result, summary }
+      metadata: { quoteId: input.quoteId, path: input.path, payload: payloadForLog, result, summary }
     });
     return {
       ok: true,
@@ -111,7 +113,7 @@ export async function sendOlistQuoteOperation(input: {
         operation: input.operation,
         method: input.method ?? "POST",
         path: input.path,
-        payload: input.payload,
+        payload: payloadForLog,
         summary
       }
     } as const;
@@ -126,7 +128,7 @@ export async function sendOlistQuoteOperation(input: {
       quoteId: input.quoteId,
       method: input.method ?? "POST",
       path: input.path,
-      payload: input.payload,
+      payload: payloadForLog,
       status,
       response,
       message,
@@ -137,10 +139,20 @@ export async function sendOlistQuoteOperation(input: {
       operation: input.operation,
       status: "error",
       message,
-      metadata: { quoteId: input.quoteId, path: input.path, payload: input.payload, httpStatus: status, response }
+      metadata: { quoteId: input.quoteId, path: input.path, payload: payloadForLog, httpStatus: status, response }
     });
     throw new OlistQuoteOperationError(message, debugId, status, response);
   }
+}
+
+function serializePayload(payload: unknown): unknown {
+  if (typeof FormData !== "undefined" && payload instanceof FormData) {
+    return Object.fromEntries(Array.from(payload.entries()).map(([key, value]) => [
+      key,
+      typeof value === "string" ? value : `[arquivo:${value.name}]`
+    ]));
+  }
+  return payload;
 }
 
 export class OlistQuoteOperationError extends Error {
