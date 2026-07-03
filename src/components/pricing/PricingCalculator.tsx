@@ -116,6 +116,7 @@ export function PricingCalculator({
   const [quickCustomerName, setQuickCustomerName] = useState("");
   const [quickCustomerDocument, setQuickCustomerDocument] = useState("");
   const [quickCustomerEmail, setQuickCustomerEmail] = useState("");
+  const [quickCustomerPhoneDdi, setQuickCustomerPhoneDdi] = useState("+55");
   const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
   const [quickCustomerPostalCode, setQuickCustomerPostalCode] = useState("");
   const [quickCustomerAddressLine, setQuickCustomerAddressLine] = useState("");
@@ -277,6 +278,14 @@ export function PricingCalculator({
   const simulatedChanged = hasCurveChanges(currentCurve, simulatedCurve);
   const persistentActionsDisabled = readonlyMode || (simulatedChanged && !demoMode);
   const quoteActionsDisabled = readonlyMode || (simulatedChanged && !demoMode);
+  const customerValidation = validateCustomerFields({
+    document: quickCustomerDocument,
+    email: quickCustomerEmail,
+    phone: quickCustomerPhone,
+    phoneDdi: quickCustomerPhoneDdi
+  });
+  const customerHasValidationErrors = Object.values(customerValidation.errors).some(Boolean);
+  const customerPhoneForQuote = formatInternationalPhone(quickCustomerPhoneDdi, quickCustomerPhone);
   const effectiveDestinationPostalCode =
     normalizeCep(quickCustomerPostalCode).length === 8 ? quickCustomerPostalCode : destinationPostalCode;
   const effectiveDestinationAddress =
@@ -489,6 +498,7 @@ export function PricingCalculator({
 
   async function createQuickQuote() {
     if (demoMode) return `demo-${Date.now()}`;
+    assertValidCustomerFields(customerValidation);
 
     const response = await fetch("/api/quotes", {
       method: "POST",
@@ -501,7 +511,7 @@ export function PricingCalculator({
         customerName: quickCustomerName.trim() || "Cliente nao informado",
         customerDocument: quickCustomerDocument,
         customerEmail: quickCustomerEmail,
-        customerPhone: quickCustomerPhone,
+        customerPhone: customerPhoneForQuote,
         customerPostalCode: quickCustomerPostalCode,
         customerAddressLine: quickCustomerAddressLine,
         customerAddressNumber: quickCustomerAddressNumber,
@@ -572,6 +582,7 @@ export function PricingCalculator({
   async function createDraftQuote() {
     if (draftItems.length === 0) throw new Error("Draft is empty.");
     if (demoMode) return `demo-${Date.now()}`;
+    assertValidCustomerFields(customerValidation);
 
     const response = await fetch("/api/quotes", {
       method: "POST",
@@ -588,7 +599,7 @@ export function PricingCalculator({
         customerName: quickCustomerName.trim() || "Cliente nao informado",
         customerDocument: quickCustomerDocument,
         customerEmail: quickCustomerEmail,
-        customerPhone: quickCustomerPhone,
+        customerPhone: customerPhoneForQuote,
         customerPostalCode: quickCustomerPostalCode,
         customerAddressLine: quickCustomerAddressLine,
         customerAddressNumber: quickCustomerAddressNumber,
@@ -730,7 +741,7 @@ export function PricingCalculator({
   }
 
   async function generateQuickPdf() {
-    if (quoteActionsDisabled || quickState === "creating_pdf") return;
+    if (quoteActionsDisabled || customerHasValidationErrors || quickState === "creating_pdf") return;
 
     if (!simulatedResult) return;
     const demoItem = currentDemoItem(variant, quantity, simulatedResult.finalUnitPrice, simulatedResult.subtotal, draftArtworkName);
@@ -768,7 +779,7 @@ export function PricingCalculator({
   }
 
   async function copyQuickWhatsAppText() {
-    if (quoteActionsDisabled || quickState === "copying_text") return;
+    if (quoteActionsDisabled || customerHasValidationErrors || quickState === "copying_text") return;
 
     if (!simulatedResult) return;
     const demoItem = currentDemoItem(variant, quantity, simulatedResult.finalUnitPrice, simulatedResult.subtotal, draftArtworkName);
@@ -817,7 +828,7 @@ export function PricingCalculator({
           <div className="grid gap-2 sm:grid-cols-2 xl:w-[520px]">
             <button
               className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-md bg-amber-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
-              disabled={quoteActionsDisabled || quickState === "creating_pdf"}
+              disabled={quoteActionsDisabled || customerHasValidationErrors || quickState === "creating_pdf"}
               type="button"
               onClick={generateQuickPdf}
             >
@@ -826,7 +837,7 @@ export function PricingCalculator({
             </button>
             <button
               className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-md border border-zinc-700 px-4 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:text-zinc-500"
-              disabled={quoteActionsDisabled || quickState === "copying_text"}
+              disabled={quoteActionsDisabled || customerHasValidationErrors || quickState === "copying_text"}
               type="button"
               onClick={copyQuickWhatsAppText}
             >
@@ -955,10 +966,45 @@ export function PricingCalculator({
         <DetailsPanel icon={<UserRound size={16} />} title="Informacoes do Cliente">
           <div className="grid gap-4 md:grid-cols-2">
             <Input label="Nome (cliente)" placeholder="Insira o nome do cliente" value={quickCustomerName} onChange={setQuickCustomerName} />
-            <Input label="CPF/CNPJ" placeholder="000.000.000-00 ou 00.000.000/0000-00" value={quickCustomerDocument} onChange={setQuickCustomerDocument} />
-            <Input label="Email" placeholder="Email do cliente" type="email" value={quickCustomerEmail} onChange={setQuickCustomerEmail} />
-            <Input label="Telefone" placeholder="Telefone do cliente" value={quickCustomerPhone} onChange={setQuickCustomerPhone} />
+            <Input
+              helper={customerValidation.documentType ? `Identificado como ${customerValidation.documentType === "cpf" ? "Pessoa Física" : "Pessoa Jurídica"}.` : "Digite CPF ou CNPJ; o tipo é identificado automaticamente."}
+              error={customerValidation.errors.document}
+              label="CPF/CNPJ"
+              placeholder="000.000.000-00 ou 00.000.000/0000-00"
+              value={quickCustomerDocument}
+              onChange={(value) => setQuickCustomerDocument(formatCpfCnpj(String(value)))}
+            />
+            <Input
+              error={customerValidation.errors.email}
+              label="Email"
+              placeholder="cliente@email.com"
+              type="email"
+              value={quickCustomerEmail}
+              onChange={setQuickCustomerEmail}
+            />
+            <div className="grid gap-3 sm:grid-cols-[110px_1fr]">
+              <Input
+                error={customerValidation.errors.phoneDdi}
+                label="DDI"
+                placeholder="+55"
+                value={quickCustomerPhoneDdi}
+                onChange={(value) => setQuickCustomerPhoneDdi(formatDdi(String(value)))}
+              />
+              <Input
+                error={customerValidation.errors.phone}
+                helper="Aceita fixo com DDD ou celular com DDD."
+                label="Telefone"
+                placeholder="(11) 99999-9999"
+                value={quickCustomerPhone}
+                onChange={(value) => setQuickCustomerPhone(formatBrazilPhone(String(value)))}
+              />
+            </div>
           </div>
+          {customerHasValidationErrors ? (
+            <p className="mt-3 rounded-md border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-xs text-rose-100">
+              Corrija CPF/CNPJ, e-mail ou telefone antes de gerar orçamento, PDF ou texto para WhatsApp.
+            </p>
+          ) : null}
           <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
             <h4 className="mb-3 text-sm font-semibold text-zinc-300">Endereço do cliente</h4>
             <div className="grid gap-4 md:grid-cols-6">
@@ -1349,6 +1395,7 @@ export function PricingCalculator({
       draftState={draftState}
       draftText={draftText}
       includeShipping={includeShipping}
+      invalidCustomerFields={customerHasValidationErrors}
       onClose={() => setDraftOpen(false)}
       onCopyWhatsApp={copyDraftWhatsAppText}
       onCreateQuote={createDraftOnly}
@@ -1373,6 +1420,7 @@ function QuoteDraftDrawer({
   draftState,
   draftText,
   includeShipping,
+  invalidCustomerFields,
   onClose,
   onCopyWhatsApp,
   onCreateQuote,
@@ -1392,6 +1440,7 @@ function QuoteDraftDrawer({
   draftState: "idle" | "creating" | "creating_pdf" | "copying_text" | "copied" | "error";
   draftText: string;
   includeShipping: boolean;
+  invalidCustomerFields: boolean;
   onClose: () => void;
   onCopyWhatsApp: () => void;
   onCreateQuote: () => void;
@@ -1404,7 +1453,7 @@ function QuoteDraftDrawer({
 }) {
   if (!draftOpen) return null;
 
-  const disabled = draftItems.length === 0 || ["creating", "creating_pdf", "copying_text"].includes(draftState);
+  const disabled = invalidCustomerFields || draftItems.length === 0 || ["creating", "creating_pdf", "copying_text"].includes(draftState);
 
   return (
     <div className="fixed inset-0 z-50">
@@ -1521,6 +1570,11 @@ function QuoteDraftDrawer({
           {draftMessage ? (
             <p className={`mb-3 text-sm ${draftState === "error" ? "text-red-300" : "text-emerald-300"}`}>
               {draftMessage}
+            </p>
+          ) : null}
+          {invalidCustomerFields ? (
+            <p className="mb-3 rounded-md border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-xs text-rose-100">
+              Corrija CPF/CNPJ, e-mail ou telefone em Informações do Cliente antes de criar/exportar.
             </p>
           ) : null}
           <div className="grid gap-2 sm:grid-cols-3">
@@ -1784,6 +1838,8 @@ function Control({ children, label }: { children: React.ReactNode; label: string
 }
 
 function Input<T extends number | string>({
+  error,
+  helper,
   label,
   min,
   onBlur,
@@ -1793,6 +1849,8 @@ function Input<T extends number | string>({
   type = "text",
   value
 }: {
+  error?: string | null;
+  helper?: string | null;
   label: string;
   min?: number;
   onBlur?: () => void;
@@ -1806,7 +1864,7 @@ function Input<T extends number | string>({
     <label className="block">
       <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</span>
       <input
-        className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+        className={`focus-ring h-10 w-full rounded-md border bg-zinc-950 px-3 text-sm text-white ${error ? "border-rose-400/60" : "border-zinc-700"}`}
         min={min}
         placeholder={placeholder}
         step={step}
@@ -1818,8 +1876,130 @@ function Input<T extends number | string>({
           onChange(nextValue as T);
         }}
       />
+      {error ? (
+        <span className="mt-1 block text-xs text-rose-300">{error}</span>
+      ) : helper ? (
+        <span className="mt-1 block text-xs text-zinc-500">{helper}</span>
+      ) : null}
     </label>
   );
+}
+
+function validateCustomerFields(input: { document: string; email: string; phone: string; phoneDdi: string }) {
+  const documentDigits = onlyDigits(input.document);
+  const phoneDigits = onlyDigits(input.phone);
+  const ddiDigits = onlyDigits(input.phoneDdi);
+  const documentType = documentDigits.length === 11 ? "cpf" : documentDigits.length === 14 ? "cnpj" : null;
+  const errors = {
+    document: input.document.trim() && !isValidCpfCnpj(documentDigits)
+      ? "Informe um CPF ou CNPJ válido."
+      : null,
+    email: input.email.trim() && !isValidEmail(input.email)
+      ? "Informe um e-mail válido."
+      : null,
+    phoneDdi: input.phoneDdi.trim() && !ddiDigits
+      ? "Informe o DDI com código numérico."
+      : null,
+    phone: input.phone.trim() && !isValidBrazilPhone(phoneDigits)
+      ? "Informe telefone fixo ou celular com DDD."
+      : null
+  };
+
+  return { documentType, errors };
+}
+
+function assertValidCustomerFields(validation: ReturnType<typeof validateCustomerFields>) {
+  const hasErrors = Object.values(validation.errors).some(Boolean);
+  if (hasErrors) throw new Error("Invalid customer fields.");
+}
+
+function formatCpfCnpj(value: string) {
+  const digits = onlyDigits(value).slice(0, 14);
+  if (digits.length <= 11) {
+    return digits
+      .replace(/^(\d{3})(\d)/, "$1.$2")
+      .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+      .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, "$1.$2.$3-$4");
+  }
+  return digits
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})(\d)/, "$1.$2.$3/$4")
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, "$1.$2.$3/$4-$5");
+}
+
+function formatBrazilPhone(value: string) {
+  const digits = onlyDigits(value).slice(0, 11);
+  if (digits.length <= 10) {
+    return digits
+      .replace(/^(\d{2})(\d)/, "($1) $2")
+      .replace(/^(\(\d{2}\) \d{4})(\d)/, "$1-$2");
+  }
+  return digits
+    .replace(/^(\d{2})(\d)/, "($1) $2")
+    .replace(/^(\(\d{2}\) \d{5})(\d)/, "$1-$2");
+}
+
+function formatDdi(value: string) {
+  const digits = onlyDigits(value).slice(0, 4);
+  return digits ? `+${digits}` : "";
+}
+
+function formatInternationalPhone(ddi: string, phone: string) {
+  const ddiDigits = onlyDigits(ddi || "55") || "55";
+  const phoneDigits = onlyDigits(phone);
+  return phoneDigits ? `+${ddiDigits} ${formatBrazilPhone(phoneDigits)}` : "";
+}
+
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim());
+}
+
+function isValidBrazilPhone(digits: string) {
+  if (digits.length !== 10 && digits.length !== 11) return false;
+  const ddd = Number(digits.slice(0, 2));
+  if (ddd < 11 || ddd > 99) return false;
+  if (digits.length === 11) return digits[2] === "9";
+  return true;
+}
+
+function isValidCpfCnpj(digits: string) {
+  if (digits.length === 11) return isValidCpf(digits);
+  if (digits.length === 14) return isValidCnpj(digits);
+  return false;
+}
+
+function isValidCpf(digits: string) {
+  if (/^(\d)\1+$/.test(digits)) return false;
+  let sum = 0;
+  for (let index = 0; index < 9; index += 1) sum += Number(digits[index]) * (10 - index);
+  let check = 11 - (sum % 11);
+  if (check >= 10) check = 0;
+  if (check !== Number(digits[9])) return false;
+  sum = 0;
+  for (let index = 0; index < 10; index += 1) sum += Number(digits[index]) * (11 - index);
+  check = 11 - (sum % 11);
+  if (check >= 10) check = 0;
+  return check === Number(digits[10]);
+}
+
+function isValidCnpj(digits: string) {
+  if (/^(\d)\1+$/.test(digits)) return false;
+  const firstWeights = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  const secondWeights = [6, ...firstWeights];
+  const first = calculateCnpjDigit(digits.slice(0, 12), firstWeights);
+  const second = calculateCnpjDigit(digits.slice(0, 12) + first, secondWeights);
+  return `${first}${second}` === digits.slice(12);
+}
+
+function calculateCnpjDigit(base: string, weights: number[]) {
+  const sum = weights.reduce((total, weight, index) => total + Number(base[index]) * weight, 0);
+  const rest = sum % 11;
+  return rest < 2 ? 0 : 11 - rest;
 }
 
 function CepPreview({ address, label }: { address: CepAddress | null; label: string }) {
