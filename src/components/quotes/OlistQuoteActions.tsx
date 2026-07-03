@@ -86,6 +86,9 @@ type CustomerLookupState = {
 export function OlistQuoteActions({
   quoteId,
   hasCustomer,
+  customerName,
+  customerDocument,
+  customerPhone,
   externalOlistId,
   externalCrmId,
   externalOrderId,
@@ -93,6 +96,9 @@ export function OlistQuoteActions({
 }: {
   quoteId: string;
   hasCustomer: boolean;
+  customerName?: string | null;
+  customerDocument?: string | null;
+  customerPhone?: string | null;
   externalOlistId?: string | null;
   externalCrmId?: string | null;
   externalOrderId?: string | null;
@@ -116,6 +122,15 @@ export function OlistQuoteActions({
   const defaultCrmSubject = useMemo(
     () => `Orçamento ${quoteId}`,
     [quoteId]
+  );
+  const customerLookupDefaults = useMemo(
+    () => ({
+      name: customerName ?? "",
+      firstName: firstName(customerName),
+      document: digits(customerDocument),
+      phone: digits(customerPhone)
+    }),
+    [customerName, customerDocument, customerPhone]
   );
 
   async function execute(action: ActionKey, formData?: FormData) {
@@ -247,6 +262,7 @@ export function OlistQuoteActions({
         <ActionModal
           action={pendingAction}
           customerReady={customerReady}
+          customerLookupDefaults={customerLookupDefaults}
           defaultCrmSubject={defaultCrmSubject}
           invoiceReady={invoiceReady}
           loading={loading === pendingAction}
@@ -332,6 +348,7 @@ function ActionButton({
 function ActionModal({
   action,
   customerReady,
+  customerLookupDefaults,
   defaultCrmSubject,
   invoiceReady,
   loading,
@@ -340,6 +357,12 @@ function ActionModal({
 }: {
   action: ActionKey;
   customerReady: boolean;
+  customerLookupDefaults: {
+    name: string;
+    firstName: string;
+    document: string;
+    phone: string;
+  };
   defaultCrmSubject: string;
   invoiceReady: boolean;
   loading: boolean;
@@ -377,9 +400,35 @@ function ActionModal({
 
         <div className="grid gap-4 p-5">
           {action === "customerLookup" ? (
-            <InfoBox title="Consulta sem alteração de dados">
-              O sistema vai procurar um contato no Olist/Tiny usando CPF/CNPJ, telefone ou nome do cliente deste orçamento.
-            </InfoBox>
+            <div className="grid gap-4">
+              <InfoBox title="Consulta sem alteração de dados">
+                O sistema vai procurar um contato no Olist/Tiny usando os critérios abaixo. Você pode encurtar o nome ou ajustar o texto para compensar diferenças de cadastro.
+              </InfoBox>
+              <div className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
+                <p className="text-sm font-medium text-white">Valores que serão pesquisados</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Input label="CPF/CNPJ" name="lookupDocument" defaultValue={customerLookupDefaults.document} />
+                  <Input label="Telefone/celular" name="lookupPhone" defaultValue={customerLookupDefaults.phone} />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                  <Input label="Nome para busca" name="lookupName" defaultValue={customerLookupDefaults.name} />
+                  <button
+                    className="focus-ring rounded-md border border-zinc-700 px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-950"
+                    onClick={(event) => {
+                      const form = event.currentTarget.form;
+                      const input = form?.elements.namedItem("lookupName");
+                      if (input instanceof HTMLInputElement) input.value = customerLookupDefaults.firstName || customerLookupDefaults.name;
+                    }}
+                    type="button"
+                  >
+                    Usar primeiro nome
+                  </button>
+                </div>
+                <p className="text-xs leading-5 text-zinc-500">
+                  A busca prioriza CPF/CNPJ quando informado. Se não houver documento, usa nome e telefone. Para procurar só por nome, limpe CPF/CNPJ e telefone.
+                </p>
+              </div>
+            </div>
           ) : null}
 
           {action === "customer" ? (
@@ -521,6 +570,16 @@ function Input({
 }
 
 function buildPayload(action: ActionKey, formData: FormData | undefined, defaultCrmSubject: string): { body?: Record<string, unknown> } | { error: string } {
+  if (action === "customerLookup") {
+    return {
+      body: {
+        cpfCnpj: digits(stringField(formData, "lookupDocument")),
+        celular: digits(stringField(formData, "lookupPhone")),
+        nome: stringField(formData, "lookupName")
+      }
+    };
+  }
+
   if (action === "crm") {
     const description = stringField(formData, "description") || defaultCrmSubject;
     const date = stringField(formData, "date");
@@ -535,6 +594,14 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
   }
 
   return {};
+}
+
+function firstName(value: string | null | undefined) {
+  return value?.trim().split(/\s+/)[0] ?? "";
+}
+
+function digits(value: string | null | undefined) {
+  return value?.replace(/\D/g, "") ?? "";
 }
 
 function stringField(formData: FormData | undefined, key: string) {
