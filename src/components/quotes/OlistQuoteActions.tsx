@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent, ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarPlus,
@@ -92,6 +92,19 @@ type OlistActionResult = {
   externalId?: string | null;
   path?: string | null;
   summary?: Record<string, unknown> | null;
+};
+
+type SalesOrderPreviewState = {
+  loading: boolean;
+  error: string | null;
+  data: {
+    path?: string;
+    method?: string;
+    quote?: Record<string, unknown>;
+    items?: Array<Record<string, unknown>>;
+    payload?: unknown;
+    missingSkus?: string[];
+  } | null;
 };
 
 export function OlistQuoteActions({
@@ -343,6 +356,7 @@ export function OlistQuoteActions({
           loading={loading === pendingAction}
           onClose={() => setPendingAction(null)}
           onSubmit={(formData) => execute(pendingAction, formData)}
+          quoteId={quoteId}
           responsibleUsers={responsibleUsers ?? []}
         />
       ) : null}
@@ -430,6 +444,7 @@ function ActionModal({
   loading,
   onClose,
   onSubmit,
+  quoteId,
   responsibleUsers
 }: {
   action: ActionKey;
@@ -447,6 +462,7 @@ function ActionModal({
   loading: boolean;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
+  quoteId: string;
   responsibleUsers: Array<{
     id: string;
     name: string;
@@ -454,6 +470,42 @@ function ActionModal({
   }>;
 }) {
   const config = ACTIONS[action];
+  const [salesOrderPreview, setSalesOrderPreview] = useState<SalesOrderPreviewState>({
+    loading: false,
+    error: null,
+    data: null
+  });
+
+  useEffect(() => {
+    if (action !== "salesOrder") return;
+    let cancelled = false;
+    setSalesOrderPreview({ loading: true, error: null, data: null });
+    fetch(`/api/quotes/${encodeURIComponent(quoteId)}/olist/sales-order/preview`)
+      .then(async (response) => {
+        const data = await response.json().catch(() => null);
+        if (cancelled) return;
+        if (!response.ok || !data?.ok) {
+          setSalesOrderPreview({
+            loading: false,
+            error: data?.error ?? "Não foi possível montar a prévia do pedido.",
+            data: data ?? null
+          });
+          return;
+        }
+        setSalesOrderPreview({ loading: false, error: null, data });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setSalesOrderPreview({
+          loading: false,
+          error: error instanceof Error ? error.message : "Não foi possível montar a prévia do pedido.",
+          data: null
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [action, quoteId]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -463,7 +515,7 @@ function ActionModal({
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6 backdrop-blur-sm">
       <form
-        className="w-full max-w-xl rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/50"
+        className={`w-full rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/50 ${action === "salesOrder" ? "max-w-4xl" : "max-w-xl"}`}
         onSubmit={submit}
       >
         <div className="flex items-start justify-between gap-4 border-b border-zinc-800 p-5">
@@ -593,9 +645,12 @@ function ActionModal({
           ) : null}
 
           {action === "salesOrder" ? (
-            <InfoBox title="Pedido de venda">
-              Esta ação usa os itens do orçamento, quantidades, preços finais e IDs numéricos de produto Olist/Tiny cadastrados como SKU.
-            </InfoBox>
+            <div className="grid gap-3">
+              <InfoBox title="Pedido de venda">
+                Esta ação usa cliente Olist, itens do orçamento, quantidades, preços finais, frete, desconto e IDs numéricos dos produtos Olist cadastrados em Produtos.
+              </InfoBox>
+              <SalesOrderPreviewPanel preview={salesOrderPreview} />
+            </div>
           ) : null}
 
           {action === "invoice" ? (
@@ -618,13 +673,96 @@ function ActionModal({
           </button>
           <button
             className="focus-ring rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-cyan-300 disabled:opacity-60"
-            disabled={loading || (action === "crm" && !customerReady)}
+            disabled={
+              loading ||
+              (action === "crm" && !customerReady) ||
+              (action === "salesOrder" && (salesOrderPreview.loading || Boolean(salesOrderPreview.error)))
+            }
             type="submit"
           >
             {loading ? config.loading : config.submitLabel}
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }) {
+  if (preview.loading) {
+    return (
+      <div className="rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-3 text-sm text-zinc-300">
+        Montando prévia do pedido com os dados atuais do orçamento...
+      </div>
+    );
+  }
+
+  if (preview.error) {
+    return (
+      <div className="grid gap-3 rounded-md border border-rose-400/25 bg-rose-400/10 px-3 py-3 text-sm text-rose-100">
+        <p className="font-semibold">Prévia do pedido não concluída</p>
+        <p className="text-rose-100/80">{preview.error}</p>
+        {preview.data?.missingSkus?.length ? (
+          <div className="rounded-md bg-black/20 px-3 py-2 text-xs">
+            <p className="font-semibold">Itens sem ID produto Olist</p>
+            <ul className="mt-2 grid gap-1">
+              {preview.data.missingSkus.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  const data = preview.data;
+  const quote = data?.quote ?? {};
+  const items = data?.items ?? [];
+  const payload = data?.payload as Record<string, unknown> | null | undefined;
+
+  return (
+    <div className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <InfoTile label="Endpoint" value={`${data?.method ?? "POST"} ${data?.path ?? "-"}`} />
+        <InfoTile label="Cliente Olist" value={stringValue(quote.customerExternalOlistId)} />
+        <InfoTile label="Frete" value={currencyLike(quote.shippingTotal)} />
+        <InfoTile label="Desconto" value={currencyLike(quote.discountTotal)} />
+        <InfoTile label="Total do orçamento" value={currencyLike(quote.grandTotal)} />
+        <InfoTile label="Validade" value={stringValue(quote.validUntil)} />
+      </div>
+
+      <div className="rounded-md border border-zinc-800 bg-zinc-950/60">
+        <div className="border-b border-zinc-800 px-3 py-2">
+          <p className="text-sm font-medium text-white">Itens enviados ao Olist</p>
+        </div>
+        <div className="grid gap-2 p-3">
+          {items.length ? items.map((item, index) => (
+            <div className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3 text-xs" key={String(item.id ?? index)}>
+              <p className="text-sm font-semibold text-white">{String(item.description ?? "Item sem descrição")}</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                <InfoTile compact label="ID produto Olist" value={stringValue(item.externalOlistProductId)} />
+                <InfoTile compact label="SKU" value={stringValue(item.sku)} />
+                <InfoTile compact label="Arte" value={stringValue(item.artworkName)} />
+                <InfoTile compact label="Quantidade" value={stringValue(item.quantity)} />
+                <InfoTile compact label="Preço unitário" value={currencyLike(item.unitPrice)} />
+                <InfoTile compact label="Preço total" value={currencyLike(item.totalPrice)} />
+              </div>
+            </div>
+          )) : (
+            <p className="text-sm text-zinc-500">Nenhum item encontrado no orçamento.</p>
+          )}
+        </div>
+      </div>
+
+      <details className="rounded-md border border-zinc-800 bg-zinc-950/60">
+        <summary className="focus-ring cursor-pointer list-none rounded-md px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-900">
+          Ver JSON que será enviado ao Olist
+        </summary>
+        <pre className="max-h-80 overflow-auto border-t border-zinc-800 p-3 text-xs leading-5 text-zinc-300">
+          {JSON.stringify(payload ?? {}, null, 2)}
+        </pre>
+      </details>
     </div>
   );
 }
@@ -697,6 +835,15 @@ function CustomerLookupResult({
       ) : (
         <p className="mt-2 text-xs opacity-80">Nenhum contato correspondente foi retornado pela API.</p>
       )}
+    </div>
+  );
+}
+
+function InfoTile({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
+  return (
+    <div className={`rounded-md bg-black/20 ${compact ? "px-2 py-2" : "px-3 py-2"}`}>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="mt-1 break-words text-sm font-medium text-zinc-100">{value}</p>
     </div>
   );
 }
@@ -830,6 +977,17 @@ function firstName(value: string | null | undefined) {
 
 function digits(value: string | null | undefined) {
   return value?.replace(/\D/g, "") ?? "";
+}
+
+function stringValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "-";
+  return String(value);
+}
+
+function currencyLike(value: unknown) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return stringValue(value);
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(numeric);
 }
 
 function stringField(formData: FormData | undefined, key: string) {

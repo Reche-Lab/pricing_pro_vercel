@@ -151,32 +151,39 @@ function buildOlistNotes(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
   ].filter(Boolean).join("\n");
 }
 
-function digits(value: string | null | undefined): string | null {
-  const output = value?.replace(/\D/g, "") ?? "";
+function digits(value: unknown): string | null {
+  const output = typeof value === "string" || typeof value === "number"
+    ? String(value).replace(/\D/g, "")
+    : "";
   return output || null;
 }
 
-function documentType(value: string | null | undefined): "F" | "J" | null {
+function documentType(value: unknown): "F" | "J" | null {
   const cleaned = digits(value);
   if (!cleaned) return null;
   return cleaned.length > 11 ? "J" : "F";
 }
 
-function numericId(value: string | null | undefined): number | null {
-  if (!value || !/^\d+$/.test(value)) return null;
-  return Number(value);
+function numericId(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const normalized = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!normalized || !/^\d+$/.test(normalized)) return null;
+  return Number(normalized);
 }
 
 function olistProductId(item: QuoteItemRow): number | null {
   return numericId(item.external_olist_product_id) ?? numericId(item.sku);
 }
 
-function dateOnly(value: string | null | undefined): string | null {
+function dateOnly(value: unknown): string | null {
   if (!value) return null;
-  return value.slice(0, 10);
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === "number") return new Date(value).toISOString().slice(0, 10);
+  if (typeof value === "string") return value.slice(0, 10);
+  return null;
 }
 
-function money(value: string): number {
+function money(value: unknown): number {
   return Number(Number(value).toFixed(2));
 }
 

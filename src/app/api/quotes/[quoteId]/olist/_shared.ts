@@ -83,6 +83,16 @@ export async function sendOlistQuoteOperation(input: {
     });
     const externalId = extractExternalId(result);
     const summary = summarizeOlistResult(result);
+    console.info("Olist quote operation succeeded.", {
+      debugId,
+      provider: input.provider,
+      operation: input.operation,
+      quoteId: input.quoteId,
+      method: input.method ?? "POST",
+      path: input.path,
+      externalId,
+      summary
+    });
     await safeLogIntegrationEvent(input.userId, input.tenantId, debugId, {
       provider: input.provider,
       operation: input.operation,
