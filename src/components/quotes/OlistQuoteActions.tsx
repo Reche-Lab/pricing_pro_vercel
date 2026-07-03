@@ -143,6 +143,9 @@ export function OlistQuoteActions({
   externalCrmId,
   externalOrderId,
   externalInvoiceId,
+  externalInvoiceNumber,
+  externalInvoiceSeries,
+  externalInvoiceModel,
   responsibleUsers
 }: {
   quoteId: string;
@@ -156,6 +159,9 @@ export function OlistQuoteActions({
   externalCrmId?: string | null;
   externalOrderId?: string | null;
   externalInvoiceId?: string | null;
+  externalInvoiceNumber?: string | null;
+  externalInvoiceSeries?: string | null;
+  externalInvoiceModel?: string | null;
   responsibleUsers?: Array<{
     id: string;
     name: string;
@@ -378,6 +384,9 @@ export function OlistQuoteActions({
           customerLookupDefaults={customerLookupDefaults}
           defaultCrmSubject={defaultCrmSubject}
           invoiceExternalId={invoiceExternalId}
+          invoiceNumber={externalInvoiceNumber ?? null}
+          invoiceSeries={externalInvoiceSeries ?? null}
+          invoiceModel={externalInvoiceModel ?? null}
           invoiceReady={invoiceReady}
           loading={loading === pendingAction}
           onClose={() => setPendingAction(null)}
@@ -467,6 +476,9 @@ function ActionModal({
   customerLookupDefaults,
   defaultCrmSubject,
   invoiceExternalId,
+  invoiceNumber,
+  invoiceSeries,
+  invoiceModel,
   invoiceReady,
   loading,
   onClose,
@@ -486,6 +498,9 @@ function ActionModal({
   };
   defaultCrmSubject: string;
   invoiceExternalId: string | null;
+  invoiceNumber: string | null;
+  invoiceSeries: string | null;
+  invoiceModel: string | null;
   invoiceReady: boolean;
   loading: boolean;
   onClose: () => void;
@@ -740,9 +755,9 @@ function ActionModal({
                   <InfoTile label="ID interno da nota Olist" value={stringValue(invoiceExternalId)} />
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <Input label="Número da nota" name="numeroNota" required />
-                  <Input label="Série da nota" name="serieNota" />
-                  <Input label="Modelo" name="modeloNota" defaultValue="55" />
+                  <Input label="Número da nota" name="numeroNota" defaultValue={invoiceNumber ?? ""} required />
+                  <Input label="Série da nota" name="serieNota" defaultValue={invoiceSeries ?? ""} />
+                  <Input label="Modelo" name="modeloNota" defaultValue={invoiceModel ?? "55"} />
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block">
@@ -770,7 +785,9 @@ function ActionModal({
                   />
                 </label>
                 <p className="text-xs leading-5 text-zinc-500">
-                  Use o número fiscal da nota, não o ID interno. Se estiver em dúvida, confira a nota no painel do Olist/Tiny antes de confirmar.
+                  {invoiceNumber
+                    ? "Os dados fiscais foram preenchidos com o que ficou salvo após gerar/autorizar a nota. Confira antes de confirmar."
+                    : "Ainda não temos o número fiscal salvo. Use o número fiscal da nota, não o ID interno. Se estiver em dúvida, confira a nota no painel do Olist/Tiny antes de confirmar."}
                 </p>
               </div>
             </div>
@@ -944,6 +961,8 @@ function InvoicePreviewPanel({ preview }: { preview: InvoicePreviewState }) {
         <InfoTile label="Nota Olist" value={stringValue(quote.externalOlistInvoiceId)} />
         <InfoTile label="Cliente Olist" value={stringValue(quote.customerExternalOlistId)} />
         <InfoTile label="Total da nota/orçamento" value={currencyLike(quote.grandTotal)} />
+        <InfoTile label="Número fiscal" value={stringValue(quote.externalOlistInvoiceNumber)} />
+        <InfoTile label="Série/modelo" value={`${stringValue(quote.externalOlistInvoiceSeries)} / ${stringValue(quote.externalOlistInvoiceModel)}`} />
       </div>
 
       <div className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-950/60 p-3">
@@ -1045,6 +1064,8 @@ function InvoiceCancelInfoPanel({ preview }: { preview: InvoicePreviewState }) {
       <p className="text-sm font-medium text-white">Nota que será cancelada</p>
       <div className="grid gap-3 sm:grid-cols-3">
         <InfoTile compact label="Nota Olist" value={stringValue(quote.externalOlistInvoiceId)} />
+        <InfoTile compact label="Número fiscal" value={stringValue(quote.externalOlistInvoiceNumber)} />
+        <InfoTile compact label="Série/modelo" value={`${stringValue(quote.externalOlistInvoiceSeries)} / ${stringValue(quote.externalOlistInvoiceModel)}`} />
         <InfoTile compact label="Pedido Olist" value={stringValue(quote.externalOlistOrderId)} />
         <InfoTile compact label="Cliente Olist" value={stringValue(quote.customerExternalOlistId)} />
         <InfoTile compact label="Produtos" value={currencyLike(quote.subtotal)} />

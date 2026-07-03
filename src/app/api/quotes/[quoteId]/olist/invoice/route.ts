@@ -51,9 +51,13 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
       path: path.value,
       payload
     });
-    if (!hasInvoice && result.externalId) {
+    const fiscalFields = extractInvoiceFiscalFields(result.result);
+    if ((!hasInvoice && result.externalId) || fiscalFields.number || fiscalFields.series || fiscalFields.model) {
       await updateQuoteExternalOlistIds(loaded.session.userId, loaded.session.tenantId, quoteId, {
-        invoiceId: result.externalId
+        invoiceId: !hasInvoice ? result.externalId : null,
+        invoiceNumber: fiscalFields.number,
+        invoiceSeries: fiscalFields.series,
+        invoiceModel: fiscalFields.model
       });
     }
     console.info("Olist invoice route completed.", {
@@ -72,6 +76,37 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
     });
     return NextResponse.json(olistOperationErrorResponse(error, "Unknown Olist error"), { status: 502 });
   }
+}
+
+function extractInvoiceFiscalFields(data: unknown) {
+  return {
+    number: findFirstString(data, ["numeroNota", "numero", "numeroNf", "numeroNfe", "numeroDocumento"]),
+    series: findFirstString(data, ["serieNota", "serie", "serieNf", "serieNfe"]),
+    model: findFirstString(data, ["modeloNota", "modelo", "modeloNf", "modeloNfe"])
+  };
+}
+
+function findFirstString(data: unknown, keys: string[]): string | null {
+  if (data === null || data === undefined) return null;
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      const found = findFirstString(item, keys);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof data !== "object") return null;
+  const record = data as Record<string, unknown>;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  for (const value of Object.values(record)) {
+    const found = findFirstString(value, keys);
+    if (found) return found;
+  }
+  return null;
 }
 
 function replacePathTokens(template: string, values: Record<string, string | null | undefined>) {

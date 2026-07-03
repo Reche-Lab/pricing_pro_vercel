@@ -6,7 +6,7 @@ import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOpera
 
 const cancelSchema = z.object({
   reason: z.string().trim().min(15, "Informe um motivo com pelo menos 15 caracteres."),
-  numeroNota: z.string().trim().min(1, "Informe o número da nota fiscal."),
+  numeroNota: z.string().trim().optional().default(""),
   serieNota: z.string().trim().optional().default(""),
   modeloNota: z.string().trim().optional().default("55"),
   estornarContas: z.enum(["S", "N"]).optional().default("N"),
@@ -32,10 +32,19 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
   if ("error" in path) return NextResponse.json({ ok: false, error: path.error }, { status: 409 });
 
   try {
+    const numeroNota = parsed.data.numeroNota || loaded.detail.quote.external_olist_invoice_number || "";
+    const serieNota = parsed.data.serieNota || loaded.detail.quote.external_olist_invoice_series || "";
+    const modeloNota = parsed.data.modeloNota || loaded.detail.quote.external_olist_invoice_model || "55";
+    if (!numeroNota) {
+      return NextResponse.json(
+        { ok: false, error: "Informe o número da nota fiscal para cancelar. O ID interno da nota Olist não substitui o número fiscal." },
+        { status: 400 }
+      );
+    }
     const payload = buildOlistInvoiceCancelPayload({
-      numeroNota: parsed.data.numeroNota,
-      serieNota: parsed.data.serieNota,
-      modeloNota: parsed.data.modeloNota,
+      numeroNota,
+      serieNota,
+      modeloNota,
       estornarContas: parsed.data.estornarContas,
       estornarEstoque: parsed.data.estornarEstoque
     });

@@ -48,6 +48,9 @@ export type QuoteDetail = {
   external_crm_id: string | null;
   external_olist_order_id?: string | null;
   external_olist_invoice_id?: string | null;
+  external_olist_invoice_number?: string | null;
+  external_olist_invoice_series?: string | null;
+  external_olist_invoice_model?: string | null;
   created_by_name: string | null;
   public_token_expires_at?: string | null;
   public_viewed_at?: string | null;
@@ -193,6 +196,9 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           q.external_crm_id,
           to_jsonb(q)->>'external_olist_order_id' as external_olist_order_id,
           to_jsonb(q)->>'external_olist_invoice_id' as external_olist_invoice_id,
+          to_jsonb(q)->>'external_olist_invoice_number' as external_olist_invoice_number,
+          to_jsonb(q)->>'external_olist_invoice_series' as external_olist_invoice_series,
+          to_jsonb(q)->>'external_olist_invoice_model' as external_olist_invoice_model,
           u.name as created_by_name,
           q.public_token_expires_at,
           q.public_viewed_at,
@@ -466,6 +472,9 @@ export async function updateQuoteExternalOlistIds(
   input: {
     orderId?: string | null;
     invoiceId?: string | null;
+    invoiceNumber?: string | null;
+    invoiceSeries?: string | null;
+    invoiceModel?: string | null;
   }
 ) {
   return withTenantContext(userId, tenantId, async (client) => {
@@ -474,10 +483,21 @@ export async function updateQuoteExternalOlistIds(
         update quotes
         set external_olist_order_id = coalesce($3, external_olist_order_id),
             external_olist_invoice_id = coalesce($4, external_olist_invoice_id),
+            external_olist_invoice_number = coalesce($5, external_olist_invoice_number),
+            external_olist_invoice_series = coalesce($6, external_olist_invoice_series),
+            external_olist_invoice_model = coalesce($7, external_olist_invoice_model),
             updated_at = now()
         where tenant_id = $1 and id = $2
       `,
-      [tenantId, quoteId, input.orderId ?? null, input.invoiceId ?? null]
+      [
+        tenantId,
+        quoteId,
+        input.orderId ?? null,
+        input.invoiceId ?? null,
+        input.invoiceNumber ?? null,
+        input.invoiceSeries ?? null,
+        input.invoiceModel ?? null
+      ]
     );
 
     await client.query(
