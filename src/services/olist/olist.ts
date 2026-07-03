@@ -218,6 +218,10 @@ function withSlash(path: string): string {
 function extractError(data: unknown): string | null {
   if (!data || typeof data !== "object") return null;
   const record = data as Record<string, unknown>;
+  if (Array.isArray(record.detalhes)) {
+    const details = record.detalhes.map(formatErrorItem).filter(Boolean).join("; ");
+    return [record.mensagem, details].filter(Boolean).join(": ");
+  }
   if (typeof record.message === "string") return record.message;
   if (typeof record.mensagem === "string") return record.mensagem;
   if (typeof record.error === "string") return record.error;

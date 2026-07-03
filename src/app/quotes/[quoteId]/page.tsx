@@ -11,7 +11,7 @@ import { MelhorEnvioShipmentActions } from "@/components/shipments/MelhorEnvioSh
 import { getCurrentSession } from "@/lib/auth/session";
 import { getQuoteDetail } from "@/repositories/quotes";
 import { listQuoteShipments } from "@/repositories/shipments";
-import { getSessionProfile } from "@/repositories/users";
+import { getSessionProfile, listTenantMembers } from "@/repositories/users";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -23,10 +23,11 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
   const quoteIdParsed = z.string().uuid().safeParse(quoteId);
   if (!quoteIdParsed.success) notFound();
 
-  const [profile, detail, shipments] = await Promise.all([
+  const [profile, detail, shipments, members] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
     getQuoteDetail(session.userId, session.tenantId, quoteId),
-    listQuoteShipments(session.userId, session.tenantId, quoteId)
+    listQuoteShipments(session.userId, session.tenantId, quoteId),
+    listTenantMembers(session.userId, session.tenantId)
   ]);
 
   if (!profile) redirect("/login");
@@ -159,6 +160,13 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                 externalOrderId={detail.quote.external_olist_order_id}
                 hasCustomer={Boolean(detail.quote.customer_id)}
                 quoteId={quoteId}
+                responsibleUsers={members
+                  .filter((member) => member.member_status === "active" && member.external_olist_user_id)
+                  .map((member) => ({
+                    id: member.external_olist_user_id as string,
+                    name: member.name,
+                    email: member.email
+                  }))}
               />
               <QuoteStatusActions quoteId={quoteId} />
             </div>

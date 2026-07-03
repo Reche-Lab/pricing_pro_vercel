@@ -4,7 +4,10 @@ import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOpera
 
 const taskSchema = z.object({
   description: z.string().trim().min(3),
-  dueAt: z.string().trim().optional().nullable()
+  dueAt: z.string().trim().optional().nullable(),
+  dueDate: z.string().trim().optional().nullable(),
+  dueTime: z.string().trim().optional().nullable(),
+  responsibleExternalId: z.string().trim().optional().nullable()
 });
 
 export async function POST(request: Request, context: { params: Promise<{ quoteId: string }> }) {
@@ -25,11 +28,15 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
   if (!path) return NextResponse.json({ ok: false, error: "Olist CRM task path is not configured." }, { status: 409 });
   if ("error" in path) return NextResponse.json({ ok: false, error: path.error }, { status: 409 });
 
-  const payload = {
+  const scheduledAt = formatOlistDateTime(parsed.data.dueAt, parsed.data.dueDate, parsed.data.dueTime);
+  const responsibleId = numericId(parsed.data.responsibleExternalId);
+  const payload = compactObject({
     descricao: parsed.data.description,
-    tipoData: parsed.data.dueAt ? "D" : "Q",
-    data: parsed.data.dueAt ?? null
-  };
+    tipoData: scheduledAt ? "D" : "Q",
+    data: scheduledAt,
+    idUsuarioResponsavel: responsibleId,
+    dataCriacao: today()
+  });
 
   try {
     const result = await sendOlistQuoteOperation({
@@ -47,6 +54,35 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
   } catch (error) {
     return NextResponse.json(olistOperationErrorResponse(error, "Unknown Olist CRM error"), { status: 502 });
   }
+}
+
+function formatOlistDateTime(dueAt: string | null | undefined, dueDate: string | null | undefined, dueTime: string | null | undefined) {
+  const raw = dueAt?.trim();
+  if (raw) {
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)) return raw;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return `${raw} 09:00:00`;
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw)) return raw.replace("T", " ").slice(0, 19).padEnd(19, ":00");
+  }
+
+  const date = dueDate?.trim();
+  if (!date) return null;
+  const time = dueTime?.trim() || "09:00";
+  return `${date} ${time.length === 5 ? `${time}:00` : time}`;
+}
+
+function numericId(value: string | null | undefined) {
+  if (!value || !/^\d+$/.test(value)) return null;
+  return Number(value);
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function compactObject<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, item]) => item !== null && item !== undefined && item !== "")
+  ) as T;
 }
 
 function replacePathTokens(template: string, values: Record<string, string | null | undefined>) {

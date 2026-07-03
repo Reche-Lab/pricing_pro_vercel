@@ -105,7 +105,8 @@ export function OlistQuoteActions({
   externalOlistId,
   externalCrmId,
   externalOrderId,
-  externalInvoiceId
+  externalInvoiceId,
+  responsibleUsers
 }: {
   quoteId: string;
   hasCustomer: boolean;
@@ -118,6 +119,11 @@ export function OlistQuoteActions({
   externalCrmId?: string | null;
   externalOrderId?: string | null;
   externalInvoiceId?: string | null;
+  responsibleUsers?: Array<{
+    id: string;
+    name: string;
+    email: string;
+  }>;
 }) {
   const router = useRouter();
   const [message, setMessage] = useState("");
@@ -337,6 +343,7 @@ export function OlistQuoteActions({
           loading={loading === pendingAction}
           onClose={() => setPendingAction(null)}
           onSubmit={(formData) => execute(pendingAction, formData)}
+          responsibleUsers={responsibleUsers ?? []}
         />
       ) : null}
     </div>
@@ -422,7 +429,8 @@ function ActionModal({
   invoiceReady,
   loading,
   onClose,
-  onSubmit
+  onSubmit,
+  responsibleUsers
 }: {
   action: ActionKey;
   customerReady: boolean;
@@ -439,6 +447,11 @@ function ActionModal({
   loading: boolean;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
+  responsibleUsers: Array<{
+    id: string;
+    name: string;
+    email: string;
+  }>;
 }) {
   const config = ACTIONS[action];
 
@@ -555,7 +568,27 @@ function ActionModal({
                   required
                 />
               </label>
-              <Input label="Data prevista" name="dueAt" type="date" />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input label="Data prevista" name="dueDate" type="date" />
+                <Input label="Horário" name="dueTime" type="time" />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-zinc-300">Responsável CRM</span>
+                  <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="responsibleExternalId" defaultValue={responsibleUsers[0]?.id ?? ""}>
+                    <option value="">Sem responsável</option>
+                    {responsibleUsers.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} - Olist {user.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <Input label="ID responsável manual" name="responsibleExternalIdManual" />
+              </div>
+              <p className="text-xs leading-5 text-zinc-500">
+                Para aparecer na agenda de um usuário do CRM, vincule o usuário em Configurações &gt; Usuários &gt; Olist, ou informe manualmente o ID do responsável.
+              </p>
             </div>
           ) : null}
 
@@ -774,9 +807,18 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
 
   if (action === "crmTask") {
     const description = stringField(formData, "description");
-    const dueAt = stringField(formData, "dueAt");
+    const dueDate = stringField(formData, "dueDate");
+    const dueTime = stringField(formData, "dueTime");
+    const responsibleExternalId = stringField(formData, "responsibleExternalIdManual") || stringField(formData, "responsibleExternalId");
     if (!description || description.length < 3) return { error: "Informe uma descrição para a tarefa CRM." };
-    return { body: { description, dueAt: dueAt || undefined } };
+    return {
+      body: {
+        description,
+        dueDate: dueDate || undefined,
+        dueTime: dueTime || undefined,
+        responsibleExternalId: responsibleExternalId || undefined
+      }
+    };
   }
 
   return {};
