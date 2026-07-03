@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Save } from "lucide-react";
+import { OlistProductLookupButton } from "./OlistProductLookupButton";
 
 type ProductEditValues = {
   productName: string;
@@ -86,7 +87,10 @@ export function ProductEditForm({ product }: { product: ProductEditValues }) {
             <Input defaultValue={product.category} label="Categoria" name="category" required />
             <Input defaultValue={product.variantName} label="Variante" name="variantName" required />
             <Input defaultValue={product.sku ?? ""} label="SKU" name="sku" />
-            <Input defaultValue={product.externalOlistProductId ?? ""} label="ID produto Olist" name="externalOlistProductId" />
+            <div className="grid gap-2">
+              <Input defaultValue={product.externalOlistProductId ?? ""} label="ID produto Olist" name="externalOlistProductId" />
+              <OlistProductLookupButton />
+            </div>
             <Input defaultValue={product.unitCost} label="Custo unitário" name="unitCost" required step="0.0001" type="number" />
             <Input
               defaultValue={product.unitWeightKg}

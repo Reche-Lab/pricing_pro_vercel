@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { PackagePlus, Plus, Trash2 } from "lucide-react";
 import type { PricingCurveMode, PricingCurvePoint } from "@/domain/pricing/types";
+import { OlistProductLookupButton } from "./OlistProductLookupButton";
 
 const ANCHORS = [1, 10, 50, 100, 500, 1000] as const;
 const initialPoints = ANCHORS.map((quantity) => ({ quantity, unitPrice: 0 }));
@@ -97,7 +98,10 @@ export function ProductForm() {
         <Input label="Categoria" name="category" placeholder="keychain" required />
         <Input label="Variante" name="variantName" placeholder="Redondo 4,5 cm" required />
         <Input label="SKU" name="sku" placeholder="CHAVEIRO-45" />
-        <Input label="ID produto Olist" name="externalOlistProductId" placeholder="123456789" />
+        <div className="grid gap-2">
+          <Input label="ID produto Olist" name="externalOlistProductId" placeholder="123456789" />
+          <OlistProductLookupButton />
+        </div>
         <Input label="Custo unitario" name="unitCost" required step="0.0001" type="number" />
         <Input label="Peso unitário kg (frete)" name="unitWeightKg" required step="0.000001" type="number" />
       </div>

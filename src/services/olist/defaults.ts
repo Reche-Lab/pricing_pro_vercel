@@ -11,6 +11,7 @@ export const OLIST_DEFAULT_PATHS = {
   invoiceEmit: "/notas/{idNota}/emitir",
   crmQuote: "/crm/assuntos",
   crmTask: "/crm/assuntos/{idAssunto}/acoes",
+  products: "/produtos",
   users: "/usuarios",
   sellers: "/vendedores"
 } as const;
