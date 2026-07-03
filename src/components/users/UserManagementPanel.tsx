@@ -134,8 +134,8 @@ export function UserManagementPanel({
   }
 
   async function syncOlistUser(member: TenantMemberRow, formData: FormData) {
-    const mode = stringField(formData, "mode") === "manual" ? "manual" : "lookup";
     const externalOlistUserId = stringField(formData, "externalOlistUserId");
+    const mode = externalOlistUserId || stringField(formData, "mode") === "manual" ? "manual" : "lookup";
     const lookupName = stringField(formData, "lookupName") || member.name;
     const type = stringField(formData, "type");
 
@@ -423,7 +423,12 @@ function OlistUserActionModal({
 
     const results = Array.isArray(data.results) ? data.results as OlistUserSearchResult[] : [];
     setSearchResults(results);
-    setSearchMessage(results.length ? `${results.length} resultado(s) encontrado(s). Selecione um responsável abaixo.` : "Nenhum usuário encontrado para esse nome.");
+    setSearchMessage(
+      [
+        data.warning,
+        results.length ? `${results.length} resultado(s) encontrado(s). Selecione um responsável abaixo.` : "Nenhum usuário encontrado para esse nome."
+      ].filter(Boolean).join(" ")
+    );
   }
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
