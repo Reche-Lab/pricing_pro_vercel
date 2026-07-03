@@ -513,12 +513,12 @@ function ActionModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-hidden bg-black/70 px-4 py-6 backdrop-blur-sm">
       <form
-        className={`w-full rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/50 ${action === "salesOrder" ? "max-w-4xl" : "max-w-xl"}`}
+        className={`flex max-h-[90vh] w-full min-w-0 flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/50 ${action === "salesOrder" ? "max-w-4xl" : "max-w-xl"}`}
         onSubmit={submit}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-zinc-800 p-5">
+        <div className="shrink-0 flex items-start justify-between gap-4 border-b border-zinc-800 p-5">
           <div>
             <h3 className="text-base font-semibold text-white">
               {action === "invoice" && invoiceReady ? "Autorizar nota Olist" : config.title}
@@ -534,7 +534,7 @@ function ActionModal({
           </button>
         </div>
 
-        <div className="grid gap-4 p-5">
+        <div className="grid min-h-0 gap-4 overflow-y-auto overflow-x-hidden p-5">
           {action === "customerLookup" ? (
             <div className="grid gap-4">
               <InfoBox title="Consulta sem alteração de dados">
@@ -662,7 +662,7 @@ function ActionModal({
           ) : null}
         </div>
 
-        <div className="flex flex-col-reverse gap-2 border-t border-zinc-800 p-5 sm:flex-row sm:justify-end">
+        <div className="shrink-0 flex flex-col-reverse gap-2 border-t border-zinc-800 bg-zinc-950 p-5 sm:flex-row sm:justify-end">
           <button
             className="focus-ring rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-900"
             disabled={loading}
@@ -722,7 +722,7 @@ function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }
   const payload = data?.payload as Record<string, unknown> | null | undefined;
 
   return (
-    <div className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
+    <div className="grid min-w-0 gap-3 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <InfoTile label="Endpoint" value={`${data?.method ?? "POST"} ${data?.path ?? "-"}`} />
         <InfoTile label="Cliente Olist" value={stringValue(quote.customerExternalOlistId)} />
@@ -732,15 +732,31 @@ function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }
         <InfoTile label="Validade" value={stringValue(quote.validUntil)} />
       </div>
 
-      <div className="rounded-md border border-zinc-800 bg-zinc-950/60">
-        <div className="border-b border-zinc-800 px-3 py-2">
+      <div className="min-w-0 rounded-md border border-zinc-800 bg-zinc-950/60">
+        <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-3 py-2">
           <p className="text-sm font-medium text-white">Itens enviados ao Olist</p>
+          <span className="rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-400">{items.length} item(ns)</span>
         </div>
         <div className="grid gap-2 p-3">
           {items.length ? items.map((item, index) => (
-            <div className="rounded-md border border-zinc-800 bg-zinc-900/70 p-3 text-xs" key={String(item.id ?? index)}>
-              <p className="text-sm font-semibold text-white">{String(item.description ?? "Item sem descrição")}</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            <details className="group min-w-0 rounded-md border border-zinc-800 bg-zinc-900/70 text-xs" key={String(item.id ?? index)}>
+              <summary className="focus-ring flex cursor-pointer list-none items-center justify-between gap-3 rounded-md px-3 py-3 hover:bg-zinc-900">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-white">
+                    {index + 1}. {String(item.description ?? "Item sem descrição")}
+                  </span>
+                  <span className="mt-1 block truncate text-xs text-zinc-500">
+                    {stringValue(item.quantity)} un. x {currencyLike(item.unitPrice)} | ID Olist {stringValue(item.externalOlistProductId)}
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-md border border-zinc-700 px-2 py-1 text-[11px] font-medium text-zinc-400 group-open:hidden">
+                  Abrir
+                </span>
+                <span className="hidden shrink-0 rounded-md border border-zinc-700 px-2 py-1 text-[11px] font-medium text-zinc-400 group-open:inline">
+                  Recolher
+                </span>
+              </summary>
+              <div className="grid min-w-0 gap-2 border-t border-zinc-800 p-3 sm:grid-cols-3">
                 <InfoTile compact label="ID produto Olist" value={stringValue(item.externalOlistProductId)} />
                 <InfoTile compact label="SKU" value={stringValue(item.sku)} />
                 <InfoTile compact label="Arte" value={stringValue(item.artworkName)} />
@@ -748,20 +764,22 @@ function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }
                 <InfoTile compact label="Preço unitário" value={currencyLike(item.unitPrice)} />
                 <InfoTile compact label="Preço total" value={currencyLike(item.totalPrice)} />
               </div>
-            </div>
+            </details>
           )) : (
             <p className="text-sm text-zinc-500">Nenhum item encontrado no orçamento.</p>
           )}
         </div>
       </div>
 
-      <details className="rounded-md border border-zinc-800 bg-zinc-950/60">
+      <details className="min-w-0 rounded-md border border-zinc-800 bg-zinc-950/60">
         <summary className="focus-ring cursor-pointer list-none rounded-md px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-900">
           Ver JSON que será enviado ao Olist
         </summary>
-        <pre className="max-h-80 overflow-auto border-t border-zinc-800 p-3 text-xs leading-5 text-zinc-300">
+        <div className="max-w-full overflow-hidden border-t border-zinc-800">
+          <pre className="max-h-80 max-w-full overflow-auto whitespace-pre-wrap break-words p-3 text-xs leading-5 text-zinc-300">
           {JSON.stringify(payload ?? {}, null, 2)}
-        </pre>
+          </pre>
+        </div>
       </details>
     </div>
   );
@@ -841,7 +859,7 @@ function CustomerLookupResult({
 
 function InfoTile({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
-    <div className={`rounded-md bg-black/20 ${compact ? "px-2 py-2" : "px-3 py-2"}`}>
+    <div className={`min-w-0 rounded-md bg-black/20 ${compact ? "px-2 py-2" : "px-3 py-2"}`}>
       <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">{label}</p>
       <p className="mt-1 break-words text-sm font-medium text-zinc-100">{value}</p>
     </div>
