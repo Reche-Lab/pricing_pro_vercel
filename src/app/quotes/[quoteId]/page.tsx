@@ -149,6 +149,8 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
               </div>
               <OlistQuoteActions
                 customerDocument={detail.quote.customer_document}
+                customerEmail={detail.quote.customer_email}
+                customerLocalCode={detail.quote.customer_id}
                 customerName={detail.quote.customer_name}
                 customerPhone={detail.quote.customer_phone}
                 externalCrmId={detail.quote.external_crm_id}

@@ -80,7 +80,18 @@ type CustomerLookupState = {
   status: LookupStatus;
   externalId: string | null;
   summary: Record<string, unknown> | null;
+  criteria?: Record<string, unknown> | null;
   raw: unknown;
+};
+
+type OlistActionResult = {
+  tone: "success" | "error" | "info";
+  title: string;
+  message: string;
+  debugId?: string | null;
+  externalId?: string | null;
+  path?: string | null;
+  summary?: Record<string, unknown> | null;
 };
 
 export function OlistQuoteActions({
@@ -88,7 +99,9 @@ export function OlistQuoteActions({
   hasCustomer,
   customerName,
   customerDocument,
+  customerEmail,
   customerPhone,
+  customerLocalCode,
   externalOlistId,
   externalCrmId,
   externalOrderId,
@@ -98,7 +111,9 @@ export function OlistQuoteActions({
   hasCustomer: boolean;
   customerName?: string | null;
   customerDocument?: string | null;
+  customerEmail?: string | null;
   customerPhone?: string | null;
+  customerLocalCode?: string | null;
   externalOlistId?: string | null;
   externalCrmId?: string | null;
   externalOrderId?: string | null;
@@ -113,6 +128,7 @@ export function OlistQuoteActions({
   const [invoiceExternalId, setInvoiceExternalId] = useState(externalInvoiceId ?? null);
   const [pendingAction, setPendingAction] = useState<ActionKey | null>(null);
   const [customerLookup, setCustomerLookup] = useState<CustomerLookupState | null>(null);
+  const [actionResult, setActionResult] = useState<OlistActionResult | null>(null);
 
   const customerReady = Boolean(customerExternalId);
   const crmReady = Boolean(crmExternalId);
@@ -128,9 +144,11 @@ export function OlistQuoteActions({
       name: customerName ?? "",
       firstName: firstName(customerName),
       document: digits(customerDocument),
-      phone: digits(customerPhone)
+      phone: digits(customerPhone),
+      email: customerEmail ?? "",
+      codigo: customerLocalCode ?? ""
     }),
-    [customerName, customerDocument, customerPhone]
+    [customerName, customerDocument, customerEmail, customerPhone, customerLocalCode]
   );
 
   async function execute(action: ActionKey, formData?: FormData) {
@@ -152,20 +170,40 @@ export function OlistQuoteActions({
     setLoading("");
 
     if (!response.ok || !data?.ok) {
-      setMessage(data?.debugId ? `${data?.error ?? "Falha na integração."} Debug: ${data.debugId}` : data?.error ?? "Falha na integração.");
+      const errorMessage = data?.error ?? "Falha na integração.";
+      setMessage(data?.debugId ? `${errorMessage} Debug: ${data.debugId}` : errorMessage);
+      setActionResult({
+        tone: "error",
+        title: `${config.title} não concluído`,
+        message: errorMessage,
+        debugId: data?.debugId ?? null,
+        summary: data?.responseSummary ?? null
+      });
       return;
     }
 
     if (action === "customerLookup") {
       const found = Boolean(data.externalId);
+      const lookupSummary = summarizeCustomer(data.result) ?? data.call?.summary ?? null;
       setCustomerLookup({
         status: found ? "found" : "not_found",
         externalId: data.externalId ?? null,
-        summary: summarizeCustomer(data.result),
+        summary: lookupSummary,
+        criteria: data.lookup?.criteria ?? null,
         raw: data.result
       });
       if (found) setCustomerExternalId(data.externalId);
-      setMessage(found ? `Cliente encontrado no Olist. ID: ${data.externalId}` : "Nenhum cliente correspondente foi encontrado no Olist. Você pode criar um novo cliente.");
+      const lookupMessage = data.message ?? (found ? `Cliente encontrado no Olist. ID: ${data.externalId}` : "Nenhum cliente correspondente foi encontrado no Olist. Você pode criar um novo cliente.");
+      setMessage(lookupMessage);
+      setActionResult({
+        tone: found ? "success" : "info",
+        title: found ? "Cliente encontrado no Olist" : "Cliente não encontrado",
+        message: lookupMessage,
+        debugId: data.debugId ?? null,
+        externalId: data.externalId ?? null,
+        path: data.lookup?.path ?? data.call?.path ?? null,
+        summary: lookupSummary
+      });
       setPendingAction(null);
       router.refresh();
       return;
@@ -177,7 +215,7 @@ export function OlistQuoteActions({
         setCustomerLookup({
           status: "created",
           externalId: data.externalId,
-          summary: summarizeCustomer(data.result),
+          summary: summarizeCustomer(data.result) ?? data.call?.summary ?? null,
           raw: data.result
         });
       }
@@ -185,7 +223,17 @@ export function OlistQuoteActions({
       if (action === "salesOrder") setOrderExternalId(data.externalId);
       if (action === "invoice" && !invoiceExternalId) setInvoiceExternalId(data.externalId);
     }
-    setMessage(data.externalId ? `${config.success} ID: ${data.externalId}` : config.success);
+    const successMessage = data.message ?? (data.externalId ? `${config.success} ID: ${data.externalId}` : config.success);
+    setMessage(successMessage);
+    setActionResult({
+      tone: "success",
+      title: config.title,
+      message: successMessage,
+      debugId: data.debugId ?? null,
+      externalId: data.externalId ?? null,
+      path: data.call?.path ?? null,
+      summary: data.call?.summary ?? summarizeCustomer(data.result)
+    });
     setPendingAction(null);
     router.refresh();
   }
@@ -201,6 +249,7 @@ export function OlistQuoteActions({
       </div>
 
       {customerLookup ? <CustomerLookupResult lookup={customerLookup} /> : null}
+      {actionResult ? <OlistActionResultPanel result={actionResult} /> : null}
 
       <div className="grid gap-3 xl:grid-cols-2">
         <FlowAction
@@ -362,6 +411,8 @@ function ActionModal({
     firstName: string;
     document: string;
     phone: string;
+    email: string;
+    codigo: string;
   };
   defaultCrmSubject: string;
   invoiceReady: boolean;
@@ -409,6 +460,8 @@ function ActionModal({
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Input label="CPF/CNPJ" name="lookupDocument" defaultValue={customerLookupDefaults.document} />
                   <Input label="Telefone/celular" name="lookupPhone" defaultValue={customerLookupDefaults.phone} />
+                  <Input label="E-mail" name="lookupEmail" defaultValue={customerLookupDefaults.email} />
+                  <Input label="Código/local" name="lookupCodigo" defaultValue={customerLookupDefaults.codigo} />
                 </div>
                 <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
                   <Input label="Nome para busca" name="lookupName" defaultValue={customerLookupDefaults.name} />
@@ -431,6 +484,8 @@ function ActionModal({
                       <option value="nome">Nome</option>
                       <option value="cpfCnpj">CPF/CNPJ</option>
                       <option value="celular">Telefone/celular</option>
+                      <option value="email">E-mail</option>
+                      <option value="codigo">Código</option>
                     </select>
                   </label>
                   <label className="block">
@@ -537,6 +592,16 @@ function CustomerLookupResult({ lookup }: { lookup: CustomerLookupState }) {
     <div className={`rounded-md border px-3 py-3 ${tone}`}>
       <p className="text-sm font-semibold">{title}</p>
       {lookup.externalId ? <p className="mt-1 text-xs opacity-80">ID Olist: {lookup.externalId}</p> : null}
+      {lookup.criteria ? (
+        <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+          {Object.entries(lookup.criteria).map(([key, value]) => (
+            <div className="rounded-md bg-black/20 px-2 py-2" key={key}>
+              <dt className="text-[11px] uppercase tracking-wide opacity-60">{key}</dt>
+              <dd className="mt-1 break-words font-medium">{String(value ?? "-")}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
       {lookup.summary ? (
         <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
           {Object.entries(lookup.summary).map(([key, value]) => (
@@ -549,6 +614,52 @@ function CustomerLookupResult({ lookup }: { lookup: CustomerLookupState }) {
       ) : (
         <p className="mt-2 text-xs opacity-80">Nenhum contato correspondente foi retornado pela API.</p>
       )}
+    </div>
+  );
+}
+
+function OlistActionResultPanel({ result }: { result: OlistActionResult }) {
+  const tone =
+    result.tone === "error"
+      ? "border-rose-400/25 bg-rose-400/10 text-rose-100"
+      : result.tone === "info"
+        ? "border-amber-400/25 bg-amber-400/10 text-amber-100"
+        : "border-cyan-400/25 bg-cyan-400/10 text-cyan-100";
+
+  return (
+    <div className={`rounded-md border px-3 py-3 ${tone}`}>
+      <p className="text-sm font-semibold">{result.title}</p>
+      <p className="mt-1 text-xs leading-5 opacity-85">{result.message}</p>
+      <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+        {result.externalId ? (
+          <div className="rounded-md bg-black/20 px-2 py-2">
+            <span className="block text-[11px] uppercase tracking-wide opacity-60">ID externo</span>
+            <span className="mt-1 block break-words font-medium">{result.externalId}</span>
+          </div>
+        ) : null}
+        {result.debugId ? (
+          <div className="rounded-md bg-black/20 px-2 py-2">
+            <span className="block text-[11px] uppercase tracking-wide opacity-60">Debug</span>
+            <span className="mt-1 block break-words font-medium">{result.debugId}</span>
+          </div>
+        ) : null}
+        {result.path ? (
+          <div className="rounded-md bg-black/20 px-2 py-2 sm:col-span-2">
+            <span className="block text-[11px] uppercase tracking-wide opacity-60">Path usado</span>
+            <span className="mt-1 block break-words font-medium">{result.path}</span>
+          </div>
+        ) : null}
+      </div>
+      {result.summary ? (
+        <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+          {Object.entries(result.summary).map(([key, value]) => (
+            <div className="rounded-md bg-black/20 px-2 py-2" key={key}>
+              <dt className="text-[11px] uppercase tracking-wide opacity-60">{key}</dt>
+              <dd className="mt-1 break-words font-medium">{String(value)}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
     </div>
   );
 }
@@ -597,6 +708,8 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
         mode,
         cpfCnpj: digits(stringField(formData, "lookupDocument")),
         celular: digits(stringField(formData, "lookupPhone")),
+        email: stringField(formData, "lookupEmail"),
+        codigo: stringField(formData, "lookupCodigo"),
         nome: stringField(formData, "lookupName"),
         situacao: stringField(formData, "lookupStatus")
       }

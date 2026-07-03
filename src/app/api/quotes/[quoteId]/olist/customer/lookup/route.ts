@@ -5,9 +5,11 @@ import { buildOlistCustomerLookupPayload } from "@/services/olist/payloads";
 import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOperation } from "../../_shared";
 
 const customerLookupSchema = z.object({
-  mode: z.enum(["nome", "cpfCnpj", "celular"]).optional().default("nome"),
+  mode: z.enum(["nome", "cpfCnpj", "celular", "email", "codigo"]).optional().default("nome"),
   cpfCnpj: z.string().trim().optional().nullable(),
   celular: z.string().trim().optional().nullable(),
+  email: z.string().trim().optional().nullable(),
+  codigo: z.string().trim().optional().nullable(),
   nome: z.string().trim().optional().nullable(),
   situacao: z.enum(["", "B", "A", "I", "E"]).optional().default("")
 });
@@ -34,6 +36,12 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     celular: parsed.data.celular === undefined || parsed.data.celular === null
       ? quotePayload.celular
       : cleanDigits(parsed.data.celular),
+    email: parsed.data.email === undefined || parsed.data.email === null
+      ? quotePayload.email
+      : parsed.data.email,
+    codigo: parsed.data.codigo === undefined || parsed.data.codigo === null
+      ? quotePayload.codigo
+      : parsed.data.codigo,
     nome: parsed.data.nome === undefined || parsed.data.nome === null
       ? quotePayload.nome
       : parsed.data.nome,
@@ -53,6 +61,13 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
       payload,
       method: "GET"
     });
+    const response = {
+      ...result,
+      lookup: {
+        criteria: publicLookupCriteria(payload),
+        path: lookupPath
+      }
+    };
     if (result.externalId && loaded.detail.quote.customer_id) {
       await updateCustomerExternalOlistId(
         loaded.session.userId,
@@ -61,7 +76,7 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
         result.externalId
       );
     }
-    return NextResponse.json(result);
+    return NextResponse.json(response);
   } catch (error) {
     return NextResponse.json(olistOperationErrorResponse(error, "Unknown Olist error"), { status: 502 });
   }
@@ -72,16 +87,39 @@ function cleanDigits(value: string | null | undefined) {
 }
 
 function buildLookupPath(path: string, payload: ReturnType<typeof buildOlistCustomerLookupPayload> & {
-  mode?: "nome" | "cpfCnpj" | "celular";
+  mode?: "nome" | "cpfCnpj" | "celular" | "email" | "codigo";
   situacao?: string | null;
 }) {
   const params = new URLSearchParams();
   if (payload.mode === "cpfCnpj" && payload.cpfCnpj) params.set("cpfCnpj", payload.cpfCnpj);
   else if (payload.mode === "celular" && payload.celular) params.set("celular", payload.celular);
+  else if (payload.mode === "email" && payload.email) params.set("email", payload.email);
+  else if (payload.mode === "codigo" && payload.codigo) params.set("codigo", payload.codigo);
   else if (payload.nome) params.set("nome", payload.nome);
   if (payload.situacao) params.set("situacao", payload.situacao);
   params.set("limit", "5");
   params.set("offset", "0");
   const separator = path.includes("?") ? "&" : "?";
   return `${path}${separator}${params.toString()}`;
+}
+
+function publicLookupCriteria(payload: ReturnType<typeof buildOlistCustomerLookupPayload> & {
+  mode?: "nome" | "cpfCnpj" | "celular" | "email" | "codigo";
+  situacao?: string | null;
+}) {
+  const mode = payload.mode ?? "nome";
+  const value = mode === "cpfCnpj"
+    ? payload.cpfCnpj
+    : mode === "celular"
+      ? payload.celular
+      : mode === "email"
+        ? payload.email
+        : mode === "codigo"
+          ? payload.codigo
+          : payload.nome;
+  return {
+    campo: mode,
+    valor: value ?? null,
+    situacao: payload.situacao || "todas"
+  };
 }

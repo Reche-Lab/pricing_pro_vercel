@@ -47,9 +47,20 @@ export async function olistRequest<T = unknown>({
   });
 
   if (!response.ok) {
-    throw new Error(extractError(data) ?? `Olist request failed with status ${response.status}.`);
+    throw new OlistRequestError(extractError(data) ?? `Olist request failed with status ${response.status}.`, response.status, data);
   }
   return data as T;
+}
+
+export class OlistRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly data: unknown
+  ) {
+    super(message);
+    this.name = "OlistRequestError";
+  }
 }
 
 export function extractExternalId(data: unknown): string | null {
