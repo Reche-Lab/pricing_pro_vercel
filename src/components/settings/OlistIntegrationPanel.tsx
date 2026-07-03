@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { KeyRound, PlayCircle, Route, Save, Store } from "lucide-react";
+import { KeyRound, PlayCircle, Route, Save, Store, X } from "lucide-react";
 import { OLIST_API_V3_BASE_URL, OLIST_APP_BASE_URL, OLIST_DEFAULT_PATHS } from "@/services/olist/defaults";
 
 type OlistConnectionView = {
@@ -153,6 +153,16 @@ type SearchField = {
   parameter: string;
   normalize?: "digits" | "number" | "text";
   bodyPath?: Array<string | number>;
+};
+
+type PreparedOlistTestRequest = {
+  method: TestPreset["method"];
+  path: string;
+  query: Record<string, unknown>;
+  body: Record<string, unknown>;
+  presetLabel: string;
+  searchLabel?: string;
+  searchValue?: string;
 };
 
 const TEST_PRESETS: TestPreset[] = [
@@ -382,6 +392,7 @@ function OlistApiTestLab({ connected }: { connected: boolean }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<unknown>(null);
   const [message, setMessage] = useState("");
+  const [pendingRequest, setPendingRequest] = useState<PreparedOlistTestRequest | null>(null);
 
   const selectedPreset = TEST_PRESETS.find((item) => item.key === selectedKey) ?? TEST_PRESETS[0];
   const selectedSearchField = selectedPreset.searchFields?.find((field) => field.key === searchFieldKey) ?? selectedPreset.searchFields?.[0] ?? null;
@@ -398,9 +409,10 @@ function OlistApiTestLab({ connected }: { connected: boolean }) {
     setSearchValue("");
     setMessage("");
     setResult(null);
+    setPendingRequest(null);
   }
 
-  async function runTest() {
+  function prepareTest() {
     setMessage("");
     setResult(null);
     const query = parseJsonObject(queryText, "Query JSON");
@@ -428,17 +440,28 @@ function OlistApiTestLab({ connected }: { connected: boolean }) {
       return;
     }
 
-    if (!window.confirm(`Executar ${method} ${request.path} na API Olist/Tiny deste tenant?`)) return;
+    setPendingRequest({
+      method,
+      path: request.path,
+      query: request.query,
+      body: request.body,
+      presetLabel: selectedPreset.label,
+      searchLabel: selectedSearchField?.label,
+      searchValue: searchValue.trim() || undefined
+    });
+  }
 
+  async function executeTest(request: PreparedOlistTestRequest) {
+    setPendingRequest(null);
     setLoading(true);
     const response = await fetch("/api/olist/test-call", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        method,
+        method: request.method,
         path: request.path,
         query: request.query,
-        body: method === "GET" ? undefined : request.body
+        body: request.method === "GET" ? undefined : request.body
       })
     });
     const data = await response.json().catch(() => null);
@@ -537,10 +560,10 @@ function OlistApiTestLab({ connected }: { connected: boolean }) {
                     value={searchValue}
                   />
                 </label>
-                <button
+              <button
                   className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/20 disabled:opacity-60"
                   disabled={!connected || loading}
-                  onClick={runTest}
+                  onClick={prepareTest}
                   type="button"
                 >
                   <PlayCircle size={16} />
@@ -552,7 +575,7 @@ function OlistApiTestLab({ connected }: { connected: boolean }) {
                 <button
                   className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/20 disabled:opacity-60"
                   disabled={!connected || loading}
-                  onClick={runTest}
+                  onClick={prepareTest}
                   type="button"
                 >
                   <PlayCircle size={16} />
@@ -583,6 +606,105 @@ function OlistApiTestLab({ connected }: { connected: boolean }) {
           ) : null}
         </div>
       </div>
+      {pendingRequest ? (
+        <OlistTestConfirmModal
+          loading={loading}
+          onClose={() => setPendingRequest(null)}
+          onConfirm={() => executeTest(pendingRequest)}
+          request={pendingRequest}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function OlistTestConfirmModal({
+  request,
+  loading,
+  onClose,
+  onConfirm
+}: {
+  request: PreparedOlistTestRequest;
+  loading: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6 backdrop-blur-sm">
+      <div className="w-full max-w-2xl rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/50">
+        <div className="flex items-start justify-between gap-4 border-b border-zinc-800 p-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">Confirmação Olist/Tiny</p>
+            <h3 className="mt-1 text-base font-semibold text-white">Executar teste de API</h3>
+            <p className="mt-1 text-sm leading-5 text-zinc-500">
+              Esta chamada será feita usando o OAuth salvo para este tenant. Use dados reais apenas quando quiser consultar ou criar registros no Olist/Tiny.
+            </p>
+          </div>
+          <button
+            className="focus-ring rounded-md p-2 text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200"
+            disabled={loading}
+            onClick={onClose}
+            type="button"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="grid gap-3 p-5">
+          <div className="grid gap-3 md:grid-cols-[140px_1fr]">
+            <InfoTile label="Preset" value={request.presetLabel} />
+            <InfoTile label="Endpoint" value={`${request.method} ${request.path}`} />
+          </div>
+          {request.searchLabel || request.searchValue ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              <InfoTile label="Campo de busca" value={request.searchLabel ?? "-"} />
+              <InfoTile label="Valor" value={request.searchValue ?? "-"} />
+            </div>
+          ) : null}
+          <details className="rounded-md border border-zinc-800 bg-zinc-900/40">
+            <summary className="focus-ring cursor-pointer list-none rounded-md px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-900">
+              Prévia técnica da chamada
+            </summary>
+            <pre className="max-h-64 overflow-auto border-t border-zinc-800 p-3 text-xs leading-5 text-zinc-300">
+              {formatJson({
+                method: request.method,
+                path: request.path,
+                query: request.query,
+                body: request.method === "GET" ? undefined : request.body
+              })}
+            </pre>
+          </details>
+        </div>
+
+        <div className="flex flex-col-reverse gap-2 border-t border-zinc-800 p-5 sm:flex-row sm:justify-end">
+          <button
+            className="focus-ring rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-60"
+            disabled={loading}
+            onClick={onClose}
+            type="button"
+          >
+            Cancelar
+          </button>
+          <button
+            className="focus-ring inline-flex items-center justify-center gap-2 rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-cyan-300 disabled:opacity-60"
+            disabled={loading}
+            onClick={onConfirm}
+            type="button"
+          >
+            <PlayCircle size={16} />
+            {loading ? "Executando..." : "Executar teste"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="mt-1 break-words text-sm font-medium text-zinc-100">{value}</p>
     </div>
   );
 }
