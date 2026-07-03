@@ -25,6 +25,14 @@ type OlistUserResult = {
   detail?: string | null;
 };
 
+type OlistUserSearchResult = {
+  id: string | null;
+  nome: string | null;
+  email: string | null;
+  tipo: string | null;
+  situacao: string | null;
+};
+
 export function UserManagementPanel({
   members,
   roles,
@@ -384,6 +392,39 @@ function OlistUserActionModal({
   const member = action.member;
   const isSync = action.type === "sync";
   const loadingKey = isSync ? `${member.membership_id}:olist` : `${member.membership_id}:task`;
+  const [lookupName, setLookupName] = useState(member.name);
+  const [lookupType, setLookupType] = useState(member.role_key === "sales" ? "vendedor" : "");
+  const [externalOlistUserId, setExternalOlistUserId] = useState(member.external_olist_user_id ?? "");
+  const [searching, setSearching] = useState(false);
+  const [searchMessage, setSearchMessage] = useState("");
+  const [searchResults, setSearchResults] = useState<OlistUserSearchResult[]>([]);
+
+  async function searchOlistUsers() {
+    if (!lookupName.trim()) {
+      setSearchMessage("Informe um nome para buscar no Olist.");
+      return;
+    }
+
+    setSearchMessage("");
+    setSearchResults([]);
+    setSearching(true);
+    const response = await fetch(`/api/users/${member.membership_id}/olist/search`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ nome: lookupName, tipo: lookupType || undefined })
+    });
+    const data = await response.json().catch(() => null);
+    setSearching(false);
+
+    if (!response.ok || !data?.ok) {
+      setSearchMessage(data?.error ?? "Não foi possível buscar usuários no Olist.");
+      return;
+    }
+
+    const results = Array.isArray(data.results) ? data.results as OlistUserSearchResult[] : [];
+    setSearchResults(results);
+    setSearchMessage(results.length ? `${results.length} resultado(s) encontrado(s). Selecione um responsável abaixo.` : "Nenhum usuário encontrado para esse nome.");
+  }
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -428,17 +469,73 @@ function OlistUserActionModal({
                   <option value="manual">Usar ID de responsável existente</option>
                 </select>
               </label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Input defaultValue={member.name} label="Nome para procurar no Olist" name="lookupName" />
+              <div className="grid gap-3 sm:grid-cols-[1fr_180px_auto] sm:items-end">
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-zinc-300">Nome para procurar no Olist</span>
+                  <input
+                    className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
+                    name="lookupName"
+                    onChange={(event) => setLookupName(event.currentTarget.value)}
+                    value={lookupName}
+                  />
+                </label>
                 <label className="block">
                   <span className="mb-1 block text-sm font-medium text-zinc-300">Tipo</span>
-                  <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="type" defaultValue={member.role_key === "sales" ? "vendedor" : ""}>
+                  <select
+                    className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
+                    name="type"
+                    onChange={(event) => setLookupType(event.currentTarget.value)}
+                    value={lookupType}
+                  >
                     <option value="">Usuário</option>
                     <option value="vendedor">Vendedor</option>
                   </select>
                 </label>
+                <button
+                  className="focus-ring inline-flex min-h-10 items-center justify-center rounded-md border border-cyan-400/30 px-4 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/10 disabled:opacity-60"
+                  disabled={searching}
+                  onClick={searchOlistUsers}
+                  type="button"
+                >
+                  {searching ? "Buscando..." : "Buscar no Olist"}
+                </button>
               </div>
-              <Input defaultValue={member.external_olist_user_id ?? ""} label="ID do responsável Olist" name="externalOlistUserId" />
+              {searchMessage ? (
+                <p className="rounded-md border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-xs leading-5 text-zinc-300">{searchMessage}</p>
+              ) : null}
+              {searchResults.length ? (
+                <div className="grid gap-2 rounded-md border border-zinc-800 bg-zinc-900/50 p-2">
+                  {searchResults.map((result, index) => (
+                    <button
+                      className={`focus-ring rounded-md border px-3 py-2 text-left text-sm transition ${
+                        result.id && externalOlistUserId === result.id
+                          ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-100"
+                          : "border-zinc-800 bg-zinc-950/60 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-950"
+                      }`}
+                      disabled={!result.id}
+                      key={`${result.id ?? "sem-id"}-${index}`}
+                      onClick={() => {
+                        if (result.id) setExternalOlistUserId(result.id);
+                      }}
+                      type="button"
+                    >
+                      <span className="block font-medium">{result.nome ?? "Usuário sem nome"}</span>
+                      <span className="mt-1 block text-xs text-zinc-500">
+                        {[result.email, result.tipo, result.situacao, result.id ? `ID ${result.id}` : "sem ID retornado"].filter(Boolean).join(" · ")}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-zinc-300">ID do responsável Olist selecionado</span>
+                <input
+                  className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
+                  name="externalOlistUserId"
+                  onChange={(event) => setExternalOlistUserId(event.currentTarget.value)}
+                  value={externalOlistUserId}
+                />
+              </label>
               <p className="rounded-md border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">
                 A API v3 expõe consulta de usuários/vendedores. Se o responsável ainda não existir no Olist, crie-o no Olist e informe o ID aqui para vincular.
               </p>
