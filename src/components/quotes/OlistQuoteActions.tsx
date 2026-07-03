@@ -107,6 +107,21 @@ type SalesOrderPreviewState = {
   } | null;
 };
 
+type InvoicePreviewState = {
+  loading: boolean;
+  error: string | null;
+  data: {
+    mode?: "create" | "emit";
+    title?: string;
+    path?: string;
+    method?: string;
+    quote?: Record<string, unknown>;
+    items?: Array<Record<string, unknown>>;
+    payload?: unknown;
+    missingSkus?: string[];
+  } | null;
+};
+
 export function OlistQuoteActions({
   quoteId,
   hasCustomer,
@@ -475,6 +490,11 @@ function ActionModal({
     error: null,
     data: null
   });
+  const [invoicePreview, setInvoicePreview] = useState<InvoicePreviewState>({
+    loading: false,
+    error: null,
+    data: null
+  });
 
   useEffect(() => {
     if (action !== "salesOrder") return;
@@ -507,6 +527,37 @@ function ActionModal({
     };
   }, [action, quoteId]);
 
+  useEffect(() => {
+    if (action !== "invoice") return;
+    let cancelled = false;
+    setInvoicePreview({ loading: true, error: null, data: null });
+    fetch(`/api/quotes/${encodeURIComponent(quoteId)}/olist/invoice/preview`)
+      .then(async (response) => {
+        const data = await response.json().catch(() => null);
+        if (cancelled) return;
+        if (!response.ok || !data?.ok) {
+          setInvoicePreview({
+            loading: false,
+            error: data?.error ?? "Não foi possível montar a prévia da nota.",
+            data: data ?? null
+          });
+          return;
+        }
+        setInvoicePreview({ loading: false, error: null, data });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setInvoicePreview({
+          loading: false,
+          error: error instanceof Error ? error.message : "Não foi possível montar a prévia da nota.",
+          data: null
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [action, quoteId]);
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onSubmit(new FormData(event.currentTarget));
@@ -515,7 +566,7 @@ function ActionModal({
   return (
     <div className="fixed inset-0 z-50 grid place-items-center overflow-hidden bg-black/70 px-4 py-6 backdrop-blur-sm">
       <form
-        className={`flex max-h-[90vh] w-full min-w-0 flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/50 ${action === "salesOrder" ? "max-w-4xl" : "max-w-xl"}`}
+        className={`flex max-h-[90vh] w-full min-w-0 flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/50 ${action === "salesOrder" || action === "invoice" ? "max-w-4xl" : "max-w-xl"}`}
         onSubmit={submit}
       >
         <div className="shrink-0 flex items-start justify-between gap-4 border-b border-zinc-800 p-5">
@@ -654,11 +705,14 @@ function ActionModal({
           ) : null}
 
           {action === "invoice" ? (
-            <InfoBox title={invoiceReady ? "Autorizar nota existente" : "Gerar nota fiscal"}>
-              {invoiceReady
-                ? "A nota já foi gerada. Esta ação solicita a autorização/emissão no Olist/Tiny."
-                : "Esta ação gera uma nota fiscal a partir do pedido de venda Olist já criado."}
-            </InfoBox>
+            <div className="grid gap-3">
+              <InfoBox title={invoiceReady ? "Autorizar nota existente" : "Gerar nota fiscal"}>
+                {invoiceReady
+                  ? "A nota já foi gerada. Esta ação solicita a autorização/emissão no Olist/Tiny."
+                  : "Esta ação gera uma nota fiscal a partir do pedido de venda Olist já criado."}
+              </InfoBox>
+              <InvoicePreviewPanel preview={invoicePreview} />
+            </div>
           ) : null}
         </div>
 
@@ -676,7 +730,8 @@ function ActionModal({
             disabled={
               loading ||
               (action === "crm" && !customerReady) ||
-              (action === "salesOrder" && (salesOrderPreview.loading || Boolean(salesOrderPreview.error)))
+              (action === "salesOrder" && (salesOrderPreview.loading || Boolean(salesOrderPreview.error))) ||
+              (action === "invoice" && (invoicePreview.loading || Boolean(invoicePreview.error)))
             }
             type="submit"
           >
@@ -778,6 +833,109 @@ function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }
         <div className="max-w-full overflow-hidden border-t border-zinc-800">
           <pre className="max-h-80 max-w-full overflow-auto whitespace-pre-wrap break-words p-3 text-xs leading-5 text-zinc-300">
           {JSON.stringify(payload ?? {}, null, 2)}
+          </pre>
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function InvoicePreviewPanel({ preview }: { preview: InvoicePreviewState }) {
+  if (preview.loading) {
+    return (
+      <div className="rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-3 text-sm text-zinc-300">
+        Montando prévia da nota fiscal com os dados atuais do orçamento...
+      </div>
+    );
+  }
+
+  if (preview.error) {
+    return (
+      <div className="grid gap-3 rounded-md border border-rose-400/25 bg-rose-400/10 px-3 py-3 text-sm text-rose-100">
+        <p className="font-semibold">Prévia da nota não concluída</p>
+        <p className="text-rose-100/80">{preview.error}</p>
+        {preview.data?.missingSkus?.length ? (
+          <div className="rounded-md bg-black/20 px-3 py-2 text-xs">
+            <p className="font-semibold">Itens sem ID produto Olist</p>
+            <ul className="mt-2 grid gap-1">
+              {preview.data.missingSkus.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  const data = preview.data;
+  const quote = data?.quote ?? {};
+  const items = data?.items ?? [];
+  const payload = data?.payload as Record<string, unknown> | null | undefined;
+
+  return (
+    <div className="grid min-w-0 gap-3 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <InfoTile label="Operação" value={data?.mode === "emit" ? "Autorizar nota existente" : "Gerar nota fiscal"} />
+        <InfoTile label="Endpoint" value={`${data?.method ?? "POST"} ${data?.path ?? "-"}`} />
+        <InfoTile label="Pedido Olist" value={stringValue(quote.externalOlistOrderId)} />
+        <InfoTile label="Nota Olist" value={stringValue(quote.externalOlistInvoiceId)} />
+        <InfoTile label="Cliente Olist" value={stringValue(quote.customerExternalOlistId)} />
+        <InfoTile label="Total do orçamento" value={currencyLike(quote.grandTotal)} />
+      </div>
+
+      {data?.mode === "create" ? (
+        <div className="min-w-0 rounded-md border border-zinc-800 bg-zinc-950/60">
+          <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-3 py-2">
+            <p className="text-sm font-medium text-white">Itens usados como origem da nota</p>
+            <span className="rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-400">{items.length} item(ns)</span>
+          </div>
+          <div className="grid gap-2 p-3">
+            {items.length ? items.map((item, index) => (
+              <details className="group min-w-0 rounded-md border border-zinc-800 bg-zinc-900/70 text-xs" key={String(item.id ?? index)}>
+                <summary className="focus-ring flex cursor-pointer list-none items-center justify-between gap-3 rounded-md px-3 py-3 hover:bg-zinc-900">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-white">
+                      {index + 1}. {String(item.description ?? "Item sem descrição")}
+                    </span>
+                    <span className="mt-1 block truncate text-xs text-zinc-500">
+                      {stringValue(item.quantity)} un. x {currencyLike(item.unitPrice)} | ID Olist {stringValue(item.externalOlistProductId)}
+                    </span>
+                  </span>
+                  <span className="shrink-0 rounded-md border border-zinc-700 px-2 py-1 text-[11px] font-medium text-zinc-400 group-open:hidden">
+                    Abrir
+                  </span>
+                  <span className="hidden shrink-0 rounded-md border border-zinc-700 px-2 py-1 text-[11px] font-medium text-zinc-400 group-open:inline">
+                    Recolher
+                  </span>
+                </summary>
+                <div className="grid min-w-0 gap-2 border-t border-zinc-800 p-3 sm:grid-cols-3">
+                  <InfoTile compact label="ID produto Olist" value={stringValue(item.externalOlistProductId)} />
+                  <InfoTile compact label="SKU" value={stringValue(item.sku)} />
+                  <InfoTile compact label="Arte" value={stringValue(item.artworkName)} />
+                  <InfoTile compact label="Quantidade" value={stringValue(item.quantity)} />
+                  <InfoTile compact label="Preço unitário" value={currencyLike(item.unitPrice)} />
+                  <InfoTile compact label="Preço total" value={currencyLike(item.totalPrice)} />
+                </div>
+              </details>
+            )) : (
+              <p className="text-sm text-zinc-500">Nenhum item encontrado no orçamento.</p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <InfoBox title="Autorização da nota">
+          Esta etapa usa a nota já gerada no Olist e envia apenas a solicitação de emissão/autorização.
+        </InfoBox>
+      )}
+
+      <details className="min-w-0 rounded-md border border-zinc-800 bg-zinc-950/60">
+        <summary className="focus-ring cursor-pointer list-none rounded-md px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-900">
+          Ver JSON que será enviado ao Olist
+        </summary>
+        <div className="max-w-full overflow-hidden border-t border-zinc-800">
+          <pre className="max-h-80 max-w-full overflow-auto whitespace-pre-wrap break-words p-3 text-xs leading-5 text-zinc-300">
+            {JSON.stringify(payload ?? {}, null, 2)}
           </pre>
         </div>
       </details>

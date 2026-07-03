@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import { updateQuoteExternalOlistIds } from "@/repositories/quotes";
 import { buildOlistInvoiceEmitPayload, buildOlistInvoicePayload, missingOlistSkus } from "@/services/olist/payloads";
-import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOperation } from "../_shared";
+import { loadQuoteOlistContext, olistOperationErrorResponse } from "../../_shared";
 
-export async function POST(_request: Request, context: { params: Promise<{ quoteId: string }> }) {
+export async function GET(_request: Request, context: { params: Promise<{ quoteId: string }> }) {
   const { quoteId } = await context.params;
   const loaded = await loadQuoteOlistContext(quoteId, "olist");
   if ("error" in loaded && loaded.error) return NextResponse.json(loaded.error.body, { status: loaded.error.status });
@@ -16,13 +15,15 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
   });
   if (!path) return NextResponse.json({ ok: false, error: "Olist invoice path is not configured." }, { status: 409 });
   if ("error" in path) return NextResponse.json({ ok: false, error: path.error }, { status: 409 });
+
   const missingSkus = missingOlistSkus(loaded.detail.items);
   if (missingSkus.length > 0) {
     return NextResponse.json(
       {
         ok: false,
         error: "Todos os itens do orçamento precisam ter ID numérico do produto Olist cadastrado em Produtos antes de gerar nota.",
-        missingSkus
+        missingSkus,
+        items: summarizeItems(loaded.detail.items)
       },
       { status: 409 }
     );
@@ -32,46 +33,56 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
     const payload = hasInvoice
       ? buildOlistInvoiceEmitPayload()
       : buildOlistInvoicePayload({ quote: loaded.detail.quote, items: loaded.detail.items });
-    console.info("Olist invoice payload built.", {
-      quoteId,
+
+    return NextResponse.json({
+      ok: true,
       mode: hasInvoice ? "emit" : "create",
+      title: hasInvoice ? "Autorizar nota existente" : "Gerar nota fiscal do pedido",
       path: path.value,
-      orderId: loaded.detail.quote.external_olist_order_id,
-      invoiceId: loaded.detail.quote.external_olist_invoice_id,
+      method: "POST",
+      quote: {
+        id: loaded.detail.quote.id,
+        customerName: loaded.detail.quote.customer_name,
+        customerExternalOlistId: loaded.detail.quote.customer_external_olist_id,
+        externalOlistOrderId: loaded.detail.quote.external_olist_order_id,
+        externalOlistInvoiceId: loaded.detail.quote.external_olist_invoice_id,
+        shippingTotal: loaded.detail.quote.shipping_total,
+        discountTotal: loaded.detail.quote.discount_total,
+        grandTotal: loaded.detail.quote.grand_total
+      },
+      items: summarizeItems(loaded.detail.items),
       payload
     });
-    const result = await sendOlistQuoteOperation({
-      userId: loaded.session.userId,
-      tenantId: loaded.session.tenantId,
-      provider: "olist",
-      operation: hasInvoice ? "invoices.emit" : "invoices.create",
-      quoteId,
-      settings: loaded.settings,
-      credentials: loaded.credentials,
-      path: path.value,
-      payload
-    });
-    if (!hasInvoice && result.externalId) {
-      await updateQuoteExternalOlistIds(loaded.session.userId, loaded.session.tenantId, quoteId, {
-        invoiceId: result.externalId
-      });
-    }
-    console.info("Olist invoice route completed.", {
-      quoteId,
-      mode: hasInvoice ? "emit" : "create",
-      externalId: result.externalId,
-      debugId: result.debugId
-    });
-    return NextResponse.json(result);
   } catch (error) {
-    console.error("Olist invoice route failed.", {
+    console.error("Olist invoice preview failed.", {
       quoteId,
-      mode: hasInvoice ? "emit" : "create",
-      message: error instanceof Error ? error.message : "Unknown invoice error",
+      message: error instanceof Error ? error.message : "Unknown invoice preview error",
       stack: error instanceof Error ? error.stack : undefined
     });
-    return NextResponse.json(olistOperationErrorResponse(error, "Unknown Olist error"), { status: 502 });
+    return NextResponse.json(olistOperationErrorResponse(error, "Falha ao montar prévia da nota Olist."), { status: 500 });
   }
+}
+
+function summarizeItems(items: Array<{
+  id: string;
+  description: string;
+  sku?: string | null;
+  external_olist_product_id?: string | null;
+  quantity: number;
+  unit_price: string;
+  total_price: string;
+  artwork_name?: string | null;
+}>) {
+  return items.map((item) => ({
+    id: item.id,
+    description: item.description,
+    sku: item.sku,
+    externalOlistProductId: item.external_olist_product_id,
+    quantity: item.quantity,
+    unitPrice: item.unit_price,
+    totalPrice: item.total_price,
+    artworkName: item.artwork_name
+  }));
 }
 
 function replacePathTokens(template: string, values: Record<string, string | null | undefined>) {
