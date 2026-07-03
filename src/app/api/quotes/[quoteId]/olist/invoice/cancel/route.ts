@@ -48,12 +48,24 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
       estornarContas: parsed.data.estornarContas,
       estornarEstoque: parsed.data.estornarEstoque
     });
+    const xml = await fetchInvoiceXml({
+      userId: loaded.session.userId,
+      tenantId: loaded.session.tenantId,
+      quoteId,
+      invoiceId,
+      settings: loaded.settings,
+      credentials: loaded.credentials
+    });
     const formData = new FormData();
+    if (xml) {
+      formData.set("xml", new Blob([xml], { type: "application/xml" }), `nota-${numeroNota}.xml`);
+    }
     for (const [key, value] of Object.entries(payload)) {
       formData.set(key, String(value));
     }
     const payloadForLog = {
       ...payload,
+      xml: xml ? `[xml anexado: ${xml.length} caracteres]` : "[xml não disponível]",
       motivoInterno: parsed.data.reason
     };
     console.info("Olist invoice cancel payload built.", {
@@ -109,4 +121,70 @@ function normalizeInvoiceCancelPath(path: string | null | undefined) {
   const cleaned = path?.trim();
   if (!cleaned || cleaned === "/notas/{idNota}/cancelar") return OLIST_DEFAULT_PATHS.invoiceCancel;
   return cleaned;
+}
+
+async function fetchInvoiceXml(input: {
+  userId: string;
+  tenantId: string;
+  quoteId: string;
+  invoiceId: string;
+  settings: Parameters<typeof sendOlistQuoteOperation>[0]["settings"];
+  credentials: Parameters<typeof sendOlistQuoteOperation>[0]["credentials"];
+}) {
+  const xmlPath = replacePathTokens(OLIST_DEFAULT_PATHS.invoiceXml, { idNota: input.invoiceId });
+  if (!xmlPath || "error" in xmlPath) return null;
+
+  try {
+    const result = await sendOlistQuoteOperation({
+      userId: input.userId,
+      tenantId: input.tenantId,
+      provider: "olist",
+      operation: "invoices.xml.get",
+      quoteId: input.quoteId,
+      settings: input.settings,
+      credentials: input.credentials,
+      path: xmlPath.value,
+      method: "GET"
+    });
+    const xml = findFirstString(result.result, ["xmlNfe", "xml", "xmlNota", "conteudo"]);
+    if (!xml) {
+      console.warn("Olist invoice XML response did not include XML content.", {
+        quoteId: input.quoteId,
+        invoiceId: input.invoiceId,
+        debugId: result.debugId
+      });
+    }
+    return xml;
+  } catch (error) {
+    console.warn("Olist invoice XML lookup failed before cancel. Continuing with number/series payload.", {
+      quoteId: input.quoteId,
+      invoiceId: input.invoiceId,
+      message: error instanceof Error ? error.message : "Unknown Olist invoice XML lookup error",
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    return null;
+  }
+}
+
+function findFirstString(data: unknown, keys: string[]): string | null {
+  if (data === null || data === undefined) return null;
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      const found = findFirstString(item, keys);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof data !== "object") return null;
+  const record = data as Record<string, unknown>;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  for (const value of Object.values(record)) {
+    const found = findFirstString(value, keys);
+    if (found) return found;
+  }
+  return null;
 }

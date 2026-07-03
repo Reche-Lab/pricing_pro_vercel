@@ -4,10 +4,11 @@ import { getCurrentSession } from "@/lib/auth/session";
 import {
   decryptIntegrationCredentials,
   getIntegrationConnection,
-  logIntegrationEvent
+  logIntegrationEvent,
+  updateIntegrationCredentials
 } from "@/repositories/integrations";
 import { getQuoteDetail } from "@/repositories/quotes";
-import { extractExternalId, OlistRequestError, olistRequest } from "@/services/olist/olist";
+import { extractExternalId, OlistRequestError, olistRequest, refreshOlistToken } from "@/services/olist/olist";
 import type { OlistCredentials, OlistSettings } from "@/services/olist/types";
 
 export async function loadQuoteOlistContext(
@@ -76,13 +77,7 @@ export async function sendOlistQuoteOperation(input: {
       path: input.path,
       payload: payloadForLog
     });
-    const result = await olistRequest({
-      settings: input.settings,
-      credentials: input.credentials,
-      path: input.path,
-      body: input.payload,
-      method: input.method ?? "POST"
-    });
+    const result = await sendOlistRequestWithRefresh(input);
     const externalId = extractExternalId(result);
     const summary = summarizeOlistResult(result);
     console.info("Olist quote operation succeeded.", {
@@ -142,6 +137,72 @@ export async function sendOlistQuoteOperation(input: {
       metadata: { quoteId: input.quoteId, path: input.path, payload: payloadForLog, httpStatus: status, response }
     });
     throw new OlistQuoteOperationError(message, debugId, status, response);
+  }
+}
+
+async function sendOlistRequestWithRefresh(input: {
+  userId: string;
+  tenantId: string;
+  provider: "olist" | "olist_crm";
+  settings: OlistSettings;
+  credentials: OlistCredentials;
+  path: string;
+  payload?: unknown;
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+}) {
+  try {
+    return await olistRequest({
+      settings: input.settings,
+      credentials: input.credentials,
+      path: input.path,
+      body: input.payload,
+      method: input.method ?? "POST"
+    });
+  } catch (error) {
+    if (!(error instanceof OlistRequestError) || error.status !== 401 || !input.credentials.refreshToken) {
+      throw error;
+    }
+
+    console.info("Olist request returned 401. Trying OAuth token refresh once.", {
+      provider: input.provider,
+      path: input.path,
+      method: input.method ?? "POST"
+    });
+    const token = await refreshOlistToken(input.settings, input.credentials);
+    const refreshedCredentials: OlistCredentials = {
+      ...input.credentials,
+      accessToken: token.access_token,
+      refreshToken: token.refresh_token ?? input.credentials.refreshToken
+    };
+
+    await updateIntegrationCredentials(input.userId, input.tenantId, {
+      provider: input.provider,
+      credentials: refreshedCredentials,
+      status: "active"
+    });
+    await logIntegrationEvent(input.userId, input.tenantId, {
+      provider: input.provider,
+      operation: "oauth.refresh_token",
+      status: "success",
+      metadata: {
+        tokenType: token.token_type,
+        expiresIn: token.expires_in,
+        scope: token.scope
+      }
+    });
+
+    console.info("Olist OAuth token refreshed. Retrying request once.", {
+      provider: input.provider,
+      path: input.path,
+      method: input.method ?? "POST"
+    });
+    return await olistRequest({
+      settings: input.settings,
+      credentials: refreshedCredentials,
+      path: input.path,
+      body: input.payload,
+      method: input.method ?? "POST"
+    });
   }
 }
 
@@ -242,7 +303,7 @@ function humanizeOlistSuccess(operation: string, externalId: string | null, summ
 }
 
 function humanizeOlistError(message: string, status?: number) {
-  if (status === 401) return `Olist/Tiny recusou a autenticação. Reconecte o OAuth. Detalhe: ${message}`;
+  if (status === 401) return `Olist/Tiny recusou a autenticação. O sistema tentou usar/renovar o token OAuth, mas a chamada continuou não autorizada. Reconecte o OAuth e confira se o aplicativo tem permissão para o módulo usado, especialmente Notas Fiscais. Detalhe: ${message}`;
   if (status === 403) return `Olist/Tiny negou permissão para este recurso. Verifique permissões do aplicativo/token. Detalhe: ${message}`;
   if (status === 404) return `Olist/Tiny não encontrou o endpoint ou recurso solicitado. Confira o path configurado. Detalhe: ${message}`;
   if (status === 422 || status === 400) return `Olist/Tiny recusou os dados enviados. Detalhe: ${message}`;
