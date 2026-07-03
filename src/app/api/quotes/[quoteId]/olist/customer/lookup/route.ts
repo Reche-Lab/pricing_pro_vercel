@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { updateCustomerExternalOlistId } from "@/repositories/customers";
 import { buildOlistCustomerLookupPayload } from "@/services/olist/payloads";
 import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOperation } from "../../_shared";
 
@@ -68,14 +67,6 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
         path: lookupPath
       }
     };
-    if (result.externalId && loaded.detail.quote.customer_id) {
-      await updateCustomerExternalOlistId(
-        loaded.session.userId,
-        loaded.session.tenantId,
-        loaded.detail.quote.customer_id,
-        result.externalId
-      );
-    }
     return NextResponse.json(response);
   } catch (error) {
     return NextResponse.json(olistOperationErrorResponse(error, "Unknown Olist error"), { status: 502 });

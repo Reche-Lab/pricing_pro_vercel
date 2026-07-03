@@ -129,6 +129,7 @@ export function OlistQuoteActions({
   const [pendingAction, setPendingAction] = useState<ActionKey | null>(null);
   const [customerLookup, setCustomerLookup] = useState<CustomerLookupState | null>(null);
   const [actionResult, setActionResult] = useState<OlistActionResult | null>(null);
+  const [usingCustomer, setUsingCustomer] = useState(false);
 
   const customerReady = Boolean(customerExternalId);
   const crmReady = Boolean(crmExternalId);
@@ -192,18 +193,9 @@ export function OlistQuoteActions({
         criteria: data.lookup?.criteria ?? null,
         raw: data.result
       });
-      if (found) setCustomerExternalId(data.externalId);
       const lookupMessage = data.message ?? (found ? `Cliente encontrado no Olist. ID: ${data.externalId}` : "Nenhum cliente correspondente foi encontrado no Olist. Você pode criar um novo cliente.");
       setMessage(lookupMessage);
-      setActionResult({
-        tone: found ? "success" : "info",
-        title: found ? "Cliente encontrado no Olist" : "Cliente não encontrado",
-        message: lookupMessage,
-        debugId: data.debugId ?? null,
-        externalId: data.externalId ?? null,
-        path: data.lookup?.path ?? data.call?.path ?? null,
-        summary: lookupSummary
-      });
+      setActionResult(null);
       setPendingAction(null);
       router.refresh();
       return;
@@ -238,6 +230,27 @@ export function OlistQuoteActions({
     router.refresh();
   }
 
+  async function useFoundCustomer(externalId: string) {
+    setMessage("");
+    setUsingCustomer(true);
+    const response = await fetch(`/api/quotes/${quoteId}/olist/customer/use`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ externalId })
+    });
+    const data = await response.json().catch(() => null);
+    setUsingCustomer(false);
+
+    if (!response.ok || !data?.ok) {
+      setMessage(data?.error ?? "Não foi possível vincular o cliente Olist.");
+      return;
+    }
+
+    setCustomerExternalId(externalId);
+    setMessage(data.message ?? `Cliente Olist vinculado. ID: ${externalId}.`);
+    router.refresh();
+  }
+
   return (
     <div className="grid gap-4 rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
       <div>
@@ -248,7 +261,14 @@ export function OlistQuoteActions({
         </p>
       </div>
 
-      {customerLookup ? <CustomerLookupResult lookup={customerLookup} /> : null}
+      {customerLookup ? (
+        <CustomerLookupResult
+          activeExternalId={customerExternalId}
+          loading={usingCustomer}
+          lookup={customerLookup}
+          onUseCustomer={useFoundCustomer}
+        />
+      ) : null}
       {actionResult ? <OlistActionResultPanel result={actionResult} /> : null}
 
       <div className="grid gap-3 xl:grid-cols-2">
@@ -576,7 +596,17 @@ function ActionModal({
   );
 }
 
-function CustomerLookupResult({ lookup }: { lookup: CustomerLookupState }) {
+function CustomerLookupResult({
+  lookup,
+  activeExternalId,
+  loading,
+  onUseCustomer
+}: {
+  lookup: CustomerLookupState;
+  activeExternalId: string | null;
+  loading: boolean;
+  onUseCustomer: (externalId: string) => void;
+}) {
   const title =
     lookup.status === "found"
       ? "Cliente encontrado no Olist"
@@ -590,8 +620,28 @@ function CustomerLookupResult({ lookup }: { lookup: CustomerLookupState }) {
 
   return (
     <div className={`rounded-md border px-3 py-3 ${tone}`}>
-      <p className="text-sm font-semibold">{title}</p>
-      {lookup.externalId ? <p className="mt-1 text-xs opacity-80">ID Olist: {lookup.externalId}</p> : null}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold">{title}</p>
+          {lookup.externalId ? <p className="mt-1 text-xs opacity-80">ID Olist: {lookup.externalId}</p> : null}
+        </div>
+        {lookup.externalId ? (
+          activeExternalId === lookup.externalId ? (
+            <span className="w-fit rounded-full border border-emerald-300/30 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-100">
+              Cliente em uso
+            </span>
+          ) : (
+            <button
+              className="focus-ring inline-flex min-h-9 w-fit items-center justify-center rounded-md border border-emerald-300/40 bg-emerald-300/10 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-300/20 disabled:opacity-60"
+              disabled={loading}
+              onClick={() => onUseCustomer(lookup.externalId as string)}
+              type="button"
+            >
+              {loading ? "Vinculando..." : "Usar este cliente"}
+            </button>
+          )
+        ) : null}
+      </div>
       {lookup.criteria ? (
         <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
           {Object.entries(lookup.criteria).map(([key, value]) => (
