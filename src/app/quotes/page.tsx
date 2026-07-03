@@ -1,13 +1,14 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
+import { DeleteQuoteButton } from "@/components/quotes/DeleteQuoteButton";
 import { QuoteForm } from "@/components/quotes/QuoteForm";
 import { getCurrentSession } from "@/lib/auth/session";
 import { listCustomers } from "@/repositories/customers";
 import { listPlatformRules } from "@/repositories/platforms";
 import { listProductVariants } from "@/repositories/products";
 import { listQuotes } from "@/repositories/quotes";
-import { getSessionProfile } from "@/repositories/users";
+import { getSessionProfile, userHasPermission } from "@/repositories/users";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -23,6 +24,7 @@ export default async function QuotesPage() {
     listQuotes(session.userId, session.tenantId)
   ]);
   if (!profile) redirect("/login");
+  const canDeleteQuotes = await userHasPermission(session.userId, session.tenantId, "quotes:delete");
 
   return (
     <AppShell
@@ -50,7 +52,7 @@ export default async function QuotesPage() {
               <p className="p-5 text-sm text-zinc-500">Nenhum orcamento criado ainda.</p>
             ) : (
               quotes.map((quote) => (
-                <div className="grid gap-1 px-5 py-4 text-sm md:grid-cols-[1fr_auto] md:items-center" key={quote.id}>
+                <div className="grid gap-3 px-5 py-4 text-sm md:grid-cols-[1fr_auto] md:items-center" key={quote.id}>
                   <div>
                     <Link className="font-medium text-white hover:underline" href={`/quotes/${quote.id}`}>
                       {quote.customer_name ?? "Cliente nao informado"}
@@ -59,7 +61,16 @@ export default async function QuotesPage() {
                       Status: {quote.status} - Margem: {Number(quote.margin_percent).toFixed(1)}%
                     </p>
                   </div>
-                  <p className="text-lg font-semibold text-white">{brl.format(Number(quote.grand_total))}</p>
+                  <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                    <p className="text-lg font-semibold text-white">{brl.format(Number(quote.grand_total))}</p>
+                    {canDeleteQuotes ? (
+                      <DeleteQuoteButton
+                        customerName={quote.customer_name}
+                        quoteId={quote.id}
+                        total={brl.format(Number(quote.grand_total))}
+                      />
+                    ) : null}
+                  </div>
                 </div>
               ))
             )}

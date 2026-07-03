@@ -746,7 +746,7 @@ function ActionModal({
           {action === "invoiceCancel" ? (
             <div className="grid gap-3">
               <InfoBox title="Cancelamento de nota fiscal">
-                A API v3 cancela a nota pelo endpoint de XML, usando número, série e modelo da nota. O motivo fica registrado no Pricing Pro/log para auditoria, pois este endpoint do Olist/Tiny não recebe um campo de motivo.
+                A API v3 só cancela notas já autorizadas, porque exige o XML da nota fiscal. Se a nota ainda estiver pendente, autorize/emita a nota antes de solicitar o cancelamento.
               </InfoBox>
               <InvoiceCancelInfoPanel preview={invoicePreview} />
               <div className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">

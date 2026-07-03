@@ -56,16 +56,23 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
       settings: loaded.settings,
       credentials: loaded.credentials
     });
-    const formData = new FormData();
-    if (xml) {
-      formData.set("xml", new Blob([xml], { type: "application/xml" }), `nota-${numeroNota}.xml`);
+    if (!xml) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "A nota ainda não possui XML autorizado no Olist/Tiny. Autorize/emitia a nota fiscal primeiro; depois disso o cancelamento poderá usar o XML exigido pela API."
+        },
+        { status: 409 }
+      );
     }
+    const formData = new FormData();
+    formData.set("xml", new Blob([xml], { type: "application/xml" }), `nota-${numeroNota}.xml`);
     for (const [key, value] of Object.entries(payload)) {
       formData.set(key, String(value));
     }
     const payloadForLog = {
       ...payload,
-      xml: xml ? `[xml anexado: ${xml.length} caracteres]` : "[xml não disponível]",
+      xml: `[xml anexado: ${xml.length} caracteres]`,
       motivoInterno: parsed.data.reason
     };
     console.info("Olist invoice cancel payload built.", {

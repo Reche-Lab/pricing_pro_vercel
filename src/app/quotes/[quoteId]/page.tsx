@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { z } from "zod";
 import { AppShell } from "@/components/layout/AppShell";
+import { DeleteQuoteButton } from "@/components/quotes/DeleteQuoteButton";
 import { MelhorEnvioPayloadPreview } from "@/components/quotes/MelhorEnvioPayloadPreview";
 import { OlistQuoteActions } from "@/components/quotes/OlistQuoteActions";
 import { QuoteStatusActions } from "@/components/quotes/QuoteStatusActions";
@@ -11,7 +12,7 @@ import { MelhorEnvioShipmentActions } from "@/components/shipments/MelhorEnvioSh
 import { getCurrentSession } from "@/lib/auth/session";
 import { getQuoteDetail } from "@/repositories/quotes";
 import { listQuoteShipments } from "@/repositories/shipments";
-import { getSessionProfile, listTenantMembers } from "@/repositories/users";
+import { getSessionProfile, listTenantMembers, userHasPermission } from "@/repositories/users";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -23,11 +24,12 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
   const quoteIdParsed = z.string().uuid().safeParse(quoteId);
   if (!quoteIdParsed.success) notFound();
 
-  const [profile, detail, shipments, members] = await Promise.all([
+  const [profile, detail, shipments, members, canDeleteQuotes] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
     getQuoteDetail(session.userId, session.tenantId, quoteId),
     listQuoteShipments(session.userId, session.tenantId, quoteId),
-    listTenantMembers(session.userId, session.tenantId)
+    listTenantMembers(session.userId, session.tenantId),
+    userHasPermission(session.userId, session.tenantId, "quotes:delete")
   ]);
 
   if (!profile) redirect("/login");
@@ -147,6 +149,14 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
               </Link>
               <QuoteWhatsAppButton quoteId={quoteId} />
               <PublicQuoteLinkButton quoteId={quoteId} />
+              {canDeleteQuotes ? (
+                <DeleteQuoteButton
+                  customerName={detail.quote.customer_name}
+                  quoteId={quoteId}
+                  redirectTo="/quotes"
+                  total={brl.format(Number(detail.quote.grand_total))}
+                />
+              ) : null}
               </div>
               <OlistQuoteActions
                 customerDocument={detail.quote.customer_document}

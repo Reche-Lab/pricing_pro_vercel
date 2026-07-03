@@ -549,6 +549,40 @@ export async function updateQuoteStatus(
   });
 }
 
+export async function deleteQuote(userId: string, tenantId: string, quoteId: string) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const result = await client.query<{ id: string; customer_id: string | null; grand_total: string }>(
+      `
+        delete from quotes
+        where tenant_id = $1 and id = $2
+        returning id, customer_id, grand_total
+      `,
+      [tenantId, quoteId]
+    );
+
+    const deleted = result.rows[0] ?? null;
+    if (!deleted) return null;
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'quotes.delete', 'quote', $3, $4)
+      `,
+      [
+        tenantId,
+        userId,
+        quoteId,
+        JSON.stringify({
+          customerId: deleted.customer_id,
+          grandTotal: deleted.grand_total
+        })
+      ]
+    );
+
+    return deleted;
+  });
+}
+
 export async function createQuote(userId: string, tenantId: string, input: CreateQuoteInput) {
   return withTenantContext(userId, tenantId, async (client) => {
     if (input.items?.length) {
