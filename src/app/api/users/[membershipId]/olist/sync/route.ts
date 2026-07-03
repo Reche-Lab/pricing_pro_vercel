@@ -16,7 +16,14 @@ import { extractExternalId, olistRequest } from "@/services/olist/olist";
 import { buildOlistUserPayload } from "@/services/olist/payloads";
 import type { OlistCredentials, OlistSettings } from "@/services/olist/types";
 
-export async function POST(_request: Request, context: { params: Promise<{ membershipId: string }> }) {
+const syncSchema = z.object({
+  mode: z.enum(["lookup", "manual"]).optional().default("lookup"),
+  externalOlistUserId: z.string().trim().optional().nullable(),
+  lookupName: z.string().trim().optional().nullable(),
+  type: z.string().trim().optional().nullable()
+});
+
+export async function POST(request: Request, context: { params: Promise<{ membershipId: string }> }) {
   const debugId = randomUUID();
   let session: Awaited<ReturnType<typeof getCurrentSession>> | null = null;
   let membershipId = "unknown";
@@ -30,6 +37,12 @@ export async function POST(_request: Request, context: { params: Promise<{ membe
     const parsed = z.string().uuid().safeParse(membershipId);
     if (!parsed.success) {
       return NextResponse.json({ ok: false, error: "Invalid membership id.", debugId }, { status: 400 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const syncInput = syncSchema.safeParse(body ?? {});
+    if (!syncInput.success) {
+      return NextResponse.json({ ok: false, error: syncInput.error.flatten(), debugId }, { status: 400 });
     }
 
     const [allowed, member, connection] = await Promise.all([
@@ -69,7 +82,36 @@ export async function POST(_request: Request, context: { params: Promise<{ membe
       );
     }
 
-    const payload = buildOlistUserPayload(member);
+    const payload = {
+      ...buildOlistUserPayload(member),
+      id: syncInput.data.externalOlistUserId || member.external_olist_user_id,
+      nome: syncInput.data.lookupName || member.name,
+      tipo: syncInput.data.type ?? (member.role_key === "sales" ? "vendedor" : "")
+    };
+    if (syncInput.data.mode === "manual") {
+      if (!payload.id || !/^\d+$/.test(payload.id)) {
+        return NextResponse.json({ ok: false, error: "Informe um ID numérico do usuário/responsável Olist.", debugId }, { status: 400 });
+      }
+      await updateTenantMemberOlistLink(session.userId, session.tenantId, membershipId, {
+        externalOlistUserId: payload.id,
+        metadata: { lastUserSyncAt: new Date().toISOString(), mode: "manual", payload }
+      });
+      await safeLogIntegrationEvent(session.userId, session.tenantId, debugId, {
+        provider: "olist",
+        operation: "users.sync",
+        status: "success",
+        externalId: payload.id,
+        metadata: { membershipId, payload, mode: "manual" }
+      });
+      return NextResponse.json({
+        ok: true,
+        externalId: payload.id,
+        debugId,
+        message: `Usuário local vinculado ao responsável Olist ${payload.id}.`,
+        detail: "O ID informado será usado como responsável nas próximas tarefas CRM."
+      });
+    }
+
     const lookupPath = buildUserLookupPath(path, payload);
     try {
       const result = await olistRequest({
@@ -90,7 +132,20 @@ export async function POST(_request: Request, context: { params: Promise<{ membe
         externalId,
         metadata: { membershipId, payload, path: lookupPath, result }
       });
-      return NextResponse.json({ ok: true, externalId, result, debugId });
+      return NextResponse.json({
+        ok: true,
+        externalId,
+        result,
+        debugId,
+        message: externalId
+          ? `Usuário vinculado ao responsável Olist ${externalId}.`
+          : "Consulta concluída, mas nenhum usuário/responsável Olist foi retornado.",
+        lookup: {
+          path: lookupPath,
+          nome: payload.nome,
+          tipo: payload.tipo || null
+        }
+      });
     } catch (error) {
       const message = errorMessage(error, "Unknown Olist error");
       if (isOptionalUserSyncFailure(message)) {

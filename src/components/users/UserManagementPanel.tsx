@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarPlus, RefreshCw, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { CalendarPlus, RefreshCw, ShieldCheck, Trash2, UserPlus, X } from "lucide-react";
 import type { RoleRow, TenantMemberRow } from "@/repositories/users";
 
 const STATUSES = [
@@ -10,6 +10,20 @@ const STATUSES = [
   { key: "invited", label: "Convidado" },
   { key: "blocked", label: "Bloqueado" }
 ] as const;
+
+type OlistUserAction =
+  | { type: "sync"; member: TenantMemberRow }
+  | { type: "task"; member: TenantMemberRow }
+  | null;
+
+type OlistUserResult = {
+  tone: "success" | "error" | "info";
+  title: string;
+  message: string;
+  debugId?: string | null;
+  externalId?: string | null;
+  detail?: string | null;
+};
 
 export function UserManagementPanel({
   members,
@@ -30,6 +44,8 @@ export function UserManagementPanel({
   const [inviteUrl, setInviteUrl] = useState("");
   const [newMemberStatus, setNewMemberStatus] = useState<"active" | "invited">("invited");
   const [loading, setLoading] = useState("");
+  const [olistAction, setOlistAction] = useState<OlistUserAction>(null);
+  const [olistResult, setOlistResult] = useState<OlistUserResult | null>(null);
 
   async function createMember(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -109,46 +125,89 @@ export function UserManagementPanel({
     router.refresh();
   }
 
-  async function syncOlistUser(membershipId: string) {
-    if (!window.confirm("Sincronizar este usuário/vendedor no CRM Olist?")) return;
-    setMessage("");
-    setLoading(`${membershipId}:olist`);
-    const response = await fetch(`/api/users/${membershipId}/olist/sync`, { method: "POST" });
-    const data = await response.json().catch(() => null);
-    setLoading("");
-
-    if (!response.ok || !data?.ok) {
-      setMessage(data?.error ?? "Nao foi possivel sincronizar o usuario no Olist.");
-      return;
-    }
-
-    setMessage(data.warning ?? (data.externalId ? `Usuario sincronizado no Olist: ${data.externalId}` : "Usuario enviado ao Olist."));
-    router.refresh();
-  }
-
-  async function createOlistTask(membershipId: string) {
-    const title = window.prompt("Titulo da tarefa no CRM Olist");
-    if (!title?.trim()) return;
-    const subjectId = window.prompt("ID do assunto/oportunidade no CRM Olist");
-    if (!subjectId?.trim()) return;
-    if (!window.confirm(`Criar tarefa "${title.trim()}" para este usuário no CRM Olist?`)) return;
+  async function syncOlistUser(member: TenantMemberRow, formData: FormData) {
+    const mode = stringField(formData, "mode") === "manual" ? "manual" : "lookup";
+    const externalOlistUserId = stringField(formData, "externalOlistUserId");
+    const lookupName = stringField(formData, "lookupName") || member.name;
+    const type = stringField(formData, "type");
 
     setMessage("");
-    setLoading(`${membershipId}:task`);
-    const response = await fetch(`/api/users/${membershipId}/olist/task`, {
+    setOlistResult(null);
+    setLoading(`${member.membership_id}:olist`);
+    const response = await fetch(`/api/users/${member.membership_id}/olist/sync`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ title: title.trim(), subjectId: subjectId.trim() })
+      body: JSON.stringify({ mode, externalOlistUserId, lookupName, type })
     });
     const data = await response.json().catch(() => null);
     setLoading("");
 
     if (!response.ok || !data?.ok) {
-      setMessage(data?.error ?? "Nao foi possivel criar a tarefa no Olist.");
+      setOlistResult({
+        tone: "error",
+        title: "Vínculo Olist não concluído",
+        message: data?.error ?? "Não foi possível vincular o usuário no Olist.",
+        debugId: data?.debugId ?? null
+      });
       return;
     }
 
-    setMessage(data.externalId ? `Tarefa criada no Olist: ${data.externalId}` : "Tarefa enviada ao Olist.");
+    setOlistResult({
+      tone: data.warning ? "info" : "success",
+      title: data.externalId ? "Usuário vinculado ao Olist" : "Usuário sem vínculo Olist",
+      message: data.warning ?? data.message ?? (data.externalId ? `Usuário vinculado ao Olist: ${data.externalId}` : "Consulta enviada ao Olist."),
+      debugId: data.debugId ?? null,
+      externalId: data.externalId ?? null,
+      detail: data.detail ?? data.lookup?.path ?? null
+    });
+    setOlistAction(null);
+    router.refresh();
+  }
+
+  async function createOlistTask(member: TenantMemberRow, formData: FormData) {
+    const title = stringField(formData, "title");
+    const subjectId = stringField(formData, "subjectId");
+    const description = stringField(formData, "description");
+    const dueDate = stringField(formData, "dueDate");
+    const dueTime = stringField(formData, "dueTime");
+    if (!title || title.length < 3) {
+      setOlistResult({ tone: "error", title: "Tarefa incompleta", message: "Informe um título com pelo menos 3 caracteres." });
+      return;
+    }
+    if (!subjectId) {
+      setOlistResult({ tone: "error", title: "Tarefa incompleta", message: "Informe o ID do assunto CRM Olist." });
+      return;
+    }
+
+    setMessage("");
+    setOlistResult(null);
+    setLoading(`${member.membership_id}:task`);
+    const response = await fetch(`/api/users/${member.membership_id}/olist/task`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title, subjectId, description, dueDate, dueTime })
+    });
+    const data = await response.json().catch(() => null);
+    setLoading("");
+
+    if (!response.ok || !data?.ok) {
+      setOlistResult({
+        tone: "error",
+        title: "Tarefa CRM não criada",
+        message: data?.error ?? "Não foi possível criar a tarefa no Olist.",
+        debugId: data?.debugId ?? null
+      });
+      return;
+    }
+
+    setOlistResult({
+      tone: "success",
+      title: "Tarefa CRM criada",
+      message: data.message ?? (data.externalId ? `Tarefa criada no Olist: ${data.externalId}` : "Tarefa enviada ao Olist."),
+      externalId: data.externalId ?? null,
+      detail: data.call?.path ?? null
+    });
+    setOlistAction(null);
   }
 
   return (
@@ -265,20 +324,20 @@ export function UserManagementPanel({
                   <button
                     className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-cyan-400/25 px-3 text-cyan-100 hover:bg-cyan-400/10 disabled:opacity-60"
                     disabled={loading === `${member.membership_id}:olist`}
-                    onClick={() => syncOlistUser(member.membership_id)}
+                    onClick={() => setOlistAction({ type: "sync", member })}
                     type="button"
                   >
                     <RefreshCw size={16} />
-                    {loading === `${member.membership_id}:olist` ? "Olist..." : "Olist"}
+                    {loading === `${member.membership_id}:olist` ? "Vinculando..." : "Vincular Olist"}
                   </button>
                   <button
                     className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-amber-400/25 px-3 text-amber-100 hover:bg-amber-400/10 disabled:opacity-60"
                     disabled={loading === `${member.membership_id}:task`}
-                    onClick={() => createOlistTask(member.membership_id)}
+                    onClick={() => setOlistAction({ type: "task", member })}
                     type="button"
                   >
                     <CalendarPlus size={16} />
-                    Tarefa
+                    Criar tarefa CRM
                   </button>
                   <button
                     className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
@@ -295,8 +354,173 @@ export function UserManagementPanel({
           })}
         </div>
       </section>
+      {olistResult ? <OlistUserResultPanel result={olistResult} onClose={() => setOlistResult(null)} /> : null}
+      {olistAction ? (
+        <OlistUserActionModal
+          action={olistAction}
+          loading={loading}
+          onClose={() => setOlistAction(null)}
+          onSubmit={(formData) => {
+            if (olistAction.type === "sync") void syncOlistUser(olistAction.member, formData);
+            else void createOlistTask(olistAction.member, formData);
+          }}
+        />
+      ) : null}
     </div>
   );
+}
+
+function OlistUserActionModal({
+  action,
+  loading,
+  onClose,
+  onSubmit
+}: {
+  action: Exclude<OlistUserAction, null>;
+  loading: string;
+  onClose: () => void;
+  onSubmit: (formData: FormData) => void;
+}) {
+  const member = action.member;
+  const isSync = action.type === "sync";
+  const loadingKey = isSync ? `${member.membership_id}:olist` : `${member.membership_id}:task`;
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSubmit(new FormData(event.currentTarget));
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6 backdrop-blur-sm">
+      <form className="w-full max-w-2xl rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/50" onSubmit={submit}>
+        <div className="flex items-start justify-between gap-4 border-b border-zinc-800 p-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">Olist CRM</p>
+            <h3 className="mt-1 text-base font-semibold text-white">
+              {isSync ? "Vincular usuário ao CRM Olist" : "Criar tarefa para usuário no CRM"}
+            </h3>
+            <p className="mt-1 text-sm leading-5 text-zinc-500">
+              {isSync
+                ? `Defina qual responsável do Olist será usado para ${member.name}.`
+                : `A tarefa será criada no assunto CRM informado e vinculada ao responsável Olist de ${member.name}.`}
+            </p>
+          </div>
+          <button className="focus-ring rounded-md p-2 text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200" onClick={onClose} type="button">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="grid gap-4 p-5">
+          <div className="rounded-md border border-zinc-800 bg-zinc-900/60 p-3 text-sm">
+            <p className="font-medium text-white">{member.name}</p>
+            <p className="text-zinc-500">{member.email}</p>
+            <p className="mt-1 text-xs text-cyan-300">
+              {member.external_olist_user_id ? `Responsável Olist atual: ${member.external_olist_user_id}` : "Ainda sem responsável Olist vinculado"}
+            </p>
+          </div>
+
+          {isSync ? (
+            <div className="grid gap-3">
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-zinc-300">Como vincular</span>
+                <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="mode" defaultValue={member.external_olist_user_id ? "manual" : "lookup"}>
+                  <option value="lookup">Procurar no Olist pelo nome</option>
+                  <option value="manual">Usar ID de responsável existente</option>
+                </select>
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input defaultValue={member.name} label="Nome para procurar no Olist" name="lookupName" />
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-zinc-300">Tipo</span>
+                  <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="type" defaultValue={member.role_key === "sales" ? "vendedor" : ""}>
+                    <option value="">Usuário</option>
+                    <option value="vendedor">Vendedor</option>
+                  </select>
+                </label>
+              </div>
+              <Input defaultValue={member.external_olist_user_id ?? ""} label="ID do responsável Olist" name="externalOlistUserId" />
+              <p className="rounded-md border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">
+                A API v3 expõe consulta de usuários/vendedores. Se o responsável ainda não existir no Olist, crie-o no Olist e informe o ID aqui para vincular.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              <Input label="ID do assunto CRM Olist" name="subjectId" required />
+              <Input defaultValue={`Retornar contato com ${member.name}`} label="Título da tarefa" name="title" required />
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-zinc-300">Descrição</span>
+                <textarea
+                  className="focus-ring min-h-24 w-full rounded-md border border-zinc-700 px-3 py-2"
+                  name="description"
+                  placeholder="Detalhe a próxima ação que deve aparecer na agenda do CRM"
+                />
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input label="Data prevista" name="dueDate" type="date" />
+                <Input label="Horário" name="dueTime" type="time" />
+              </div>
+              {!member.external_olist_user_id ? (
+                <p className="rounded-md border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">
+                  Este usuário ainda não tem responsável Olist vinculado. A tarefa pode ser criada, mas não ficará atribuída a ele até o vínculo ser configurado.
+                </p>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col-reverse gap-2 border-t border-zinc-800 p-5 sm:flex-row sm:justify-end">
+          <button className="focus-ring rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-900" disabled={loading === loadingKey} onClick={onClose} type="button">
+            Cancelar
+          </button>
+          <button className="focus-ring rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-cyan-300 disabled:opacity-60" disabled={loading === loadingKey} type="submit">
+            {loading === loadingKey ? "Processando..." : isSync ? "Vincular responsável" : "Criar tarefa CRM"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function OlistUserResultPanel({ result, onClose }: { result: OlistUserResult; onClose: () => void }) {
+  const tone =
+    result.tone === "error"
+      ? "border-rose-400/25 bg-rose-400/10 text-rose-100"
+      : result.tone === "info"
+        ? "border-amber-400/25 bg-amber-400/10 text-amber-100"
+        : "border-cyan-400/25 bg-cyan-400/10 text-cyan-100";
+
+  return (
+    <div className={`rounded-lg border p-4 ${tone}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">{result.title}</p>
+          <p className="mt-1 text-xs leading-5 opacity-85">{result.message}</p>
+        </div>
+        <button className="focus-ring rounded-md p-1 opacity-70 hover:bg-black/20 hover:opacity-100" onClick={onClose} type="button">
+          <X size={16} />
+        </button>
+      </div>
+      <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+        {result.externalId ? <ResultItem label="ID Olist" value={result.externalId} /> : null}
+        {result.debugId ? <ResultItem label="Debug" value={result.debugId} /> : null}
+        {result.detail ? <ResultItem label="Detalhe" value={result.detail} wide /> : null}
+      </dl>
+    </div>
+  );
+}
+
+function ResultItem({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
+  return (
+    <div className={`rounded-md bg-black/20 px-2 py-2 ${wide ? "sm:col-span-2" : ""}`}>
+      <dt className="text-[11px] uppercase tracking-wide opacity-60">{label}</dt>
+      <dd className="mt-1 break-words font-medium">{value}</dd>
+    </div>
+  );
+}
+
+function stringField(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function Input({
@@ -304,19 +528,22 @@ function Input({
   name,
   type = "text",
   required = false,
-  minLength
+  minLength,
+  defaultValue
 }: {
   label: string;
   name: string;
   type?: string;
   required?: boolean;
   minLength?: number;
+  defaultValue?: string;
 }) {
   return (
     <label className="block">
       <span className="mb-1 block text-sm font-medium text-zinc-300">{label}</span>
       <input
         className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
+        defaultValue={defaultValue}
         minLength={minLength}
         name={name}
         required={required}

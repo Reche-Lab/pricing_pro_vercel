@@ -15,6 +15,8 @@ const taskSchema = z.object({
   title: z.string().trim().min(3),
   description: z.string().trim().optional().nullable(),
   dueAt: z.string().trim().optional().nullable(),
+  dueDate: z.string().trim().optional().nullable(),
+  dueTime: z.string().trim().optional().nullable(),
   subjectId: z.string().trim().optional().nullable()
 });
 
@@ -50,7 +52,7 @@ export async function POST(request: Request, context: { params: Promise<{ member
     member,
     title: parsed.data.title,
     description: parsed.data.description,
-    dueAt: parsed.data.dueAt
+    dueAt: formatOlistDateTime(parsed.data.dueAt, parsed.data.dueDate, parsed.data.dueTime)
   });
 
   try {
@@ -68,7 +70,16 @@ export async function POST(request: Request, context: { params: Promise<{ member
       externalId,
       metadata: { membershipId, subjectId: parsed.data.subjectId, payload, result }
     });
-    return NextResponse.json({ ok: true, externalId, result });
+    return NextResponse.json({
+      ok: true,
+      externalId,
+      result,
+      message: externalId ? `Tarefa criada no Olist. ID: ${externalId}.` : "Tarefa enviada ao Olist.",
+      call: {
+        path: path.value,
+        payload
+      }
+    });
   } catch (error) {
     await logIntegrationEvent(session.userId, session.tenantId, {
       provider: "olist",
@@ -82,6 +93,20 @@ export async function POST(request: Request, context: { params: Promise<{ member
       { status: 502 }
     );
   }
+}
+
+function formatOlistDateTime(dueAt: string | null | undefined, dueDate: string | null | undefined, dueTime: string | null | undefined) {
+  const raw = dueAt?.trim();
+  if (raw) {
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)) return raw;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return `${raw} 09:00:00`;
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw)) return raw.replace("T", " ").slice(0, 19).padEnd(19, ":00");
+  }
+
+  const date = dueDate?.trim();
+  if (!date) return null;
+  const time = dueTime?.trim() || "09:00";
+  return `${date} ${time.length === 5 ? `${time}:00` : time}`;
 }
 
 function replacePathTokens(template: string, values: Record<string, string | null | undefined>) {
