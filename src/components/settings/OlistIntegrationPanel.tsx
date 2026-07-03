@@ -142,6 +142,17 @@ type TestPreset = {
   path: string;
   query?: Record<string, string | number | boolean>;
   body?: unknown;
+  searchFields?: SearchField[];
+};
+
+type SearchField = {
+  key: string;
+  label: string;
+  placeholder: string;
+  target: "query" | "path" | "body";
+  parameter: string;
+  normalize?: "digits" | "number" | "text";
+  bodyPath?: Array<string | number>;
 };
 
 const TEST_PRESETS: TestPreset[] = [
@@ -151,15 +162,100 @@ const TEST_PRESETS: TestPreset[] = [
     description: "GET /contatos com paginação curta para validar leitura de clientes.",
     method: "GET",
     path: "/contatos",
-    query: { situacao: "B", limit: 5, offset: 0 }
+    query: { situacao: "B", limit: 5, offset: 0 },
+    searchFields: [
+      { key: "nome", label: "Nome", placeholder: "Ex.: Angelita", target: "query", parameter: "nome" },
+      { key: "cpfCnpj", label: "CPF/CNPJ", placeholder: "Somente números ou formatado", target: "query", parameter: "cpfCnpj", normalize: "digits" },
+      { key: "celular", label: "Celular", placeholder: "Ex.: 11999999999", target: "query", parameter: "celular", normalize: "digits" },
+      { key: "codigo", label: "Código", placeholder: "Código exato do contato", target: "query", parameter: "codigo" },
+      { key: "idVendedor", label: "ID vendedor", placeholder: "ID numérico do vendedor", target: "query", parameter: "idVendedor", normalize: "number" }
+    ]
   },
   {
     key: "customers-cpf",
-    label: "Consultar cliente por CPF/CNPJ",
-    description: "Troque o CPF/CNPJ no JSON de query antes de executar.",
+    label: "Consultar cliente",
+    description: "Escolha nome, CPF/CNPJ, telefone ou código e informe um valor conhecido.",
     method: "GET",
     path: "/contatos",
-    query: { cpfCnpj: "00000000000", limit: 1, offset: 0 }
+    query: { situacao: "B", limit: 5, offset: 0 },
+    searchFields: [
+      { key: "nome", label: "Nome", placeholder: "Ex.: Angelita", target: "query", parameter: "nome" },
+      { key: "cpfCnpj", label: "CPF/CNPJ", placeholder: "Ex.: 00000000000", target: "query", parameter: "cpfCnpj", normalize: "digits" },
+      { key: "celular", label: "Telefone/celular", placeholder: "Ex.: 11999999999", target: "query", parameter: "celular", normalize: "digits" },
+      { key: "codigo", label: "Código", placeholder: "Código exato do contato", target: "query", parameter: "codigo" }
+    ]
+  },
+  {
+    key: "orders-list",
+    label: "Listar pedidos",
+    description: "Consulta pedidos por número, cliente, CPF/CNPJ, vendedor ou número de e-commerce.",
+    method: "GET",
+    path: "/pedidos",
+    query: { limit: 5, offset: 0 },
+    searchFields: [
+      { key: "numero", label: "Número do pedido", placeholder: "Ex.: 1234", target: "query", parameter: "numero", normalize: "number" },
+      { key: "nomeCliente", label: "Nome do cliente", placeholder: "Ex.: Angelita", target: "query", parameter: "nomeCliente" },
+      { key: "cpfCnpj", label: "CPF/CNPJ", placeholder: "Documento do cliente", target: "query", parameter: "cpfCnpj", normalize: "digits" },
+      { key: "codigoCliente", label: "Código cliente", placeholder: "Código do cliente", target: "query", parameter: "codigoCliente" },
+      { key: "numeroPedidoEcommerce", label: "Pedido e-commerce", placeholder: "Número externo/e-commerce", target: "query", parameter: "numeroPedidoEcommerce" },
+      { key: "idVendedor", label: "ID vendedor", placeholder: "ID numérico", target: "query", parameter: "idVendedor", normalize: "number" }
+    ]
+  },
+  {
+    key: "invoices-list",
+    label: "Listar notas",
+    description: "Consulta notas fiscais por número, CPF/CNPJ, venda, vendedor ou pedido e-commerce.",
+    method: "GET",
+    path: "/notas",
+    query: { limit: 5, offset: 0 },
+    searchFields: [
+      { key: "numero", label: "Número da nota", placeholder: "Ex.: 123", target: "query", parameter: "numero", normalize: "number" },
+      { key: "cpfCnpj", label: "CPF/CNPJ", placeholder: "Documento do cliente", target: "query", parameter: "cpfCnpj", normalize: "digits" },
+      { key: "idVenda", label: "ID venda/pedido", placeholder: "ID numérico da venda", target: "query", parameter: "idVenda", normalize: "number" },
+      { key: "idVendedor", label: "ID vendedor", placeholder: "ID numérico", target: "query", parameter: "idVendedor", normalize: "number" },
+      { key: "numeroPedidoEcommerce", label: "Pedido e-commerce", placeholder: "Número externo/e-commerce", target: "query", parameter: "numeroPedidoEcommerce" }
+    ]
+  },
+  {
+    key: "crm-subjects-list",
+    label: "Listar assuntos CRM",
+    description: "Pesquisa assuntos CRM por cliente, contato, texto do assunto ou usuário responsável.",
+    method: "GET",
+    path: "/crm/assuntos",
+    query: { limit: 5, offset: 0 },
+    searchFields: [
+      { key: "nomeCliente", label: "Nome do cliente", placeholder: "Ex.: Angelita", target: "query", parameter: "nomeCliente" },
+      { key: "idContato", label: "ID contato", placeholder: "ID numérico do contato", target: "query", parameter: "idContato", normalize: "number" },
+      { key: "assunto", label: "Texto do assunto", placeholder: "Trecho do assunto", target: "query", parameter: "assunto" },
+      { key: "idUsuarioResponsavel", label: "ID responsável", placeholder: "ID do usuário responsável", target: "query", parameter: "idUsuarioResponsavel", normalize: "number" }
+    ]
+  },
+  {
+    key: "products-list",
+    label: "Listar produtos",
+    description: "Consulta produtos por nome, código, GTIN ou situação.",
+    method: "GET",
+    path: "/produtos",
+    query: { limit: 5, offset: 0 },
+    searchFields: [
+      { key: "nome", label: "Nome", placeholder: "Ex.: Botton", target: "query", parameter: "nome" },
+      { key: "codigo", label: "Código/SKU", placeholder: "Código do produto", target: "query", parameter: "codigo" },
+      { key: "gtin", label: "GTIN", placeholder: "Código GTIN", target: "query", parameter: "gtin", normalize: "number" },
+      { key: "situacao", label: "Situação", placeholder: "A, I ou E", target: "query", parameter: "situacao" }
+    ]
+  },
+  {
+    key: "services-list",
+    label: "Listar serviços",
+    description: "Consulta serviços por nome, código ou situação.",
+    method: "GET",
+    path: "/servicos",
+    query: { limit: 5, offset: 0 },
+    searchFields: [
+      { key: "nome", label: "Nome", placeholder: "Ex.: Impressão", target: "query", parameter: "nome" },
+      { key: "codigo", label: "Código", placeholder: "Código do serviço", target: "query", parameter: "codigo" },
+      { key: "situacao", label: "Situação", placeholder: "A, I ou E", target: "query", parameter: "situacao" }
+    ]
   },
   {
     key: "customers-create",
@@ -187,7 +283,11 @@ const TEST_PRESETS: TestPreset[] = [
       data: "2026-07-02",
       observacoes: "Pedido teste criado pelo Pricing Pro",
       itens: [{ produto: { id: 123, tipo: "P" }, quantidade: 1, valorUnitario: 10 }]
-    }
+    },
+    searchFields: [
+      { key: "idContato", label: "ID contato", placeholder: "ID numérico do contato", target: "body", parameter: "idContato", normalize: "number", bodyPath: ["idContato"] },
+      { key: "idProduto", label: "ID produto", placeholder: "ID numérico do produto", target: "body", parameter: "idProduto", normalize: "number", bodyPath: ["itens", 0, "produto", "id"] }
+    ]
   },
   {
     key: "invoice-create",
@@ -195,7 +295,10 @@ const TEST_PRESETS: TestPreset[] = [
     description: "Troque {idPedido} pelo ID numérico do pedido Olist.",
     method: "POST",
     path: "/pedidos/{idPedido}/gerar-nota-fiscal",
-    body: { modelo: 55 }
+    body: { modelo: 55 },
+    searchFields: [
+      { key: "idPedido", label: "ID pedido", placeholder: "ID numérico do pedido", target: "path", parameter: "idPedido", normalize: "number" }
+    ]
   },
   {
     key: "invoice-emit",
@@ -203,7 +306,10 @@ const TEST_PRESETS: TestPreset[] = [
     description: "Troque {idNota} pelo ID numérico da nota Olist.",
     method: "POST",
     path: "/notas/{idNota}/emitir",
-    body: { enviarEmail: true }
+    body: { enviarEmail: true },
+    searchFields: [
+      { key: "idNota", label: "ID nota", placeholder: "ID numérico da nota", target: "path", parameter: "idNota", normalize: "number" }
+    ]
   },
   {
     key: "crm-subject",
@@ -211,7 +317,11 @@ const TEST_PRESETS: TestPreset[] = [
     description: "Exige idContato numérico existente.",
     method: "POST",
     path: "/crm/assuntos",
-    body: { idContato: 123, descricao: "Orçamento teste Pricing Pro", data: "2026-07-02" }
+    body: { idContato: 123, descricao: "Orçamento teste Pricing Pro", data: "2026-07-02" },
+    searchFields: [
+      { key: "idContato", label: "ID contato", placeholder: "ID numérico do contato", target: "body", parameter: "idContato", normalize: "number", bodyPath: ["idContato"] },
+      { key: "descricao", label: "Descrição", placeholder: "Descrição do assunto", target: "body", parameter: "descricao", bodyPath: ["descricao"] }
+    ]
   },
   {
     key: "crm-task",
@@ -219,7 +329,11 @@ const TEST_PRESETS: TestPreset[] = [
     description: "Troque {idAssunto} pelo ID do assunto CRM.",
     method: "POST",
     path: "/crm/assuntos/{idAssunto}/acoes",
-    body: { descricao: "Retornar orçamento ao cliente", tipoData: "Q" }
+    body: { descricao: "Retornar orçamento ao cliente", tipoData: "Q" },
+    searchFields: [
+      { key: "idAssunto", label: "ID assunto", placeholder: "ID numérico do assunto CRM", target: "path", parameter: "idAssunto", normalize: "number" },
+      { key: "descricao", label: "Descrição da tarefa", placeholder: "Ex.: Retornar orçamento", target: "body", parameter: "descricao", bodyPath: ["descricao"] }
+    ]
   },
   {
     key: "users-list",
@@ -227,7 +341,12 @@ const TEST_PRESETS: TestPreset[] = [
     description: "Valida se o token tem acesso ao recurso de usuários.",
     method: "GET",
     path: "/usuarios",
-    query: { limit: 5, offset: 0 }
+    query: { limit: 5, offset: 0 },
+    searchFields: [
+      { key: "nome", label: "Nome", placeholder: "Ex.: Admin", target: "query", parameter: "nome" },
+      { key: "id", label: "ID usuário", placeholder: "ID do usuário", target: "query", parameter: "id" },
+      { key: "tipo", label: "Tipo", placeholder: "vendedor, contador ou vazio", target: "query", parameter: "tipo" }
+    ]
   },
   {
     key: "sellers-list",
@@ -235,7 +354,11 @@ const TEST_PRESETS: TestPreset[] = [
     description: "Valida se o token tem acesso ao recurso de vendedores.",
     method: "GET",
     path: "/vendedores",
-    query: { limit: 5, offset: 0 }
+    query: { limit: 5, offset: 0 },
+    searchFields: [
+      { key: "nome", label: "Nome", placeholder: "Ex.: Angelita", target: "query", parameter: "nome" },
+      { key: "codigo", label: "Código", placeholder: "Código completo do vendedor", target: "query", parameter: "codigo" }
+    ]
   }
 ];
 
@@ -245,9 +368,14 @@ function OlistApiTestLab({ connected }: { connected: boolean }) {
   const [path, setPath] = useState(TEST_PRESETS[0].path);
   const [queryText, setQueryText] = useState(formatJson(TEST_PRESETS[0].query ?? {}));
   const [bodyText, setBodyText] = useState(formatJson(TEST_PRESETS[0].body ?? {}));
+  const [searchFieldKey, setSearchFieldKey] = useState(TEST_PRESETS[0].searchFields?.[0]?.key ?? "");
+  const [searchValue, setSearchValue] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<unknown>(null);
   const [message, setMessage] = useState("");
+
+  const selectedPreset = TEST_PRESETS.find((item) => item.key === selectedKey) ?? TEST_PRESETS[0];
+  const selectedSearchField = selectedPreset.searchFields?.find((field) => field.key === searchFieldKey) ?? selectedPreset.searchFields?.[0] ?? null;
 
   function selectPreset(key: string) {
     const preset = TEST_PRESETS.find((item) => item.key === key);
@@ -257,6 +385,8 @@ function OlistApiTestLab({ connected }: { connected: boolean }) {
     setPath(preset.path);
     setQueryText(formatJson(preset.query ?? {}));
     setBodyText(formatJson(preset.body ?? {}));
+    setSearchFieldKey(preset.searchFields?.[0]?.key ?? "");
+    setSearchValue("");
     setMessage("");
     setResult(null);
   }
@@ -275,7 +405,21 @@ function OlistApiTestLab({ connected }: { connected: boolean }) {
       return;
     }
 
-    if (!window.confirm(`Executar ${method} ${path} na API Olist/Tiny deste tenant?`)) return;
+    const request = applySearchToRequest({
+      preset: selectedPreset,
+      path,
+      query: query.value,
+      body: body.value,
+      searchField: selectedSearchField,
+      searchValue
+    });
+
+    if ("error" in request) {
+      setMessage(request.error);
+      return;
+    }
+
+    if (!window.confirm(`Executar ${method} ${request.path} na API Olist/Tiny deste tenant?`)) return;
 
     setLoading(true);
     const response = await fetch("/api/olist/test-call", {
@@ -283,9 +427,9 @@ function OlistApiTestLab({ connected }: { connected: boolean }) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         method,
-        path,
-        query: query.value,
-        body: method === "GET" ? undefined : body.value
+        path: request.path,
+        query: request.query,
+        body: method === "GET" ? undefined : request.body
       })
     });
     const data = await response.json().catch(() => null);
@@ -357,6 +501,39 @@ function OlistApiTestLab({ connected }: { connected: boolean }) {
               />
             </label>
           </div>
+          {selectedPreset.searchFields?.length ? (
+            <div className="rounded-md border border-cyan-400/20 bg-cyan-400/10 p-3">
+              <div className="grid gap-3 md:grid-cols-[220px_1fr]">
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-cyan-100">Pesquisar por</span>
+                  <select
+                    className="focus-ring w-full rounded-md border border-cyan-400/30 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                    onChange={(event) => {
+                      setSearchFieldKey(event.currentTarget.value);
+                      setSearchValue("");
+                    }}
+                    value={searchFieldKey}
+                  >
+                    {selectedPreset.searchFields.map((field) => (
+                      <option key={field.key} value={field.key}>{field.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-cyan-100">Valor para testar</span>
+                  <input
+                    className="focus-ring w-full rounded-md border border-cyan-400/30 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                    onChange={(event) => setSearchValue(event.currentTarget.value)}
+                    placeholder={selectedSearchField?.placeholder}
+                    value={searchValue}
+                  />
+                </label>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-cyan-100/75">
+                O valor informado será aplicado automaticamente no {selectedSearchField?.target === "query" ? "Query JSON" : selectedSearchField?.target === "path" ? "Path" : "Body JSON"} ao executar o teste.
+              </p>
+            </div>
+          ) : null}
           <div className="grid gap-3 lg:grid-cols-2">
             <JsonEditor label="Query JSON" value={queryText} onChange={setQueryText} />
             <JsonEditor label="Body JSON" value={bodyText} onChange={setBodyText} />
@@ -419,6 +596,93 @@ function parseJsonObject(value: string, label: string): { value: Record<string, 
 
 function formatJson(value: unknown) {
   return JSON.stringify(value ?? {}, null, 2);
+}
+
+function applySearchToRequest({
+  preset,
+  path,
+  query,
+  body,
+  searchField,
+  searchValue
+}: {
+  preset: TestPreset;
+  path: string;
+  query: Record<string, unknown>;
+  body: Record<string, unknown>;
+  searchField: SearchField | null;
+  searchValue: string;
+}): { path: string; query: Record<string, unknown>; body: Record<string, unknown> } | { error: string } {
+  const output = {
+    path,
+    query: { ...query },
+    body: cloneRecord(body)
+  };
+  if (!searchField || !searchValue.trim()) return output;
+
+  const normalized = normalizeSearchValue(searchValue, searchField);
+  if (normalized === null) return { error: `Informe um valor válido para ${searchField.label}.` };
+
+  for (const field of preset.searchFields ?? []) {
+    if (field.target === "query") delete output.query[field.parameter];
+  }
+
+  if (searchField.target === "query") {
+    output.query[searchField.parameter] = normalized;
+    return output;
+  }
+
+  if (searchField.target === "path") {
+    output.path = output.path.replaceAll(`{${searchField.parameter}}`, encodeURIComponent(String(normalized)));
+    return output;
+  }
+
+  if (searchField.target === "body") {
+    setNestedValue(output.body, searchField.bodyPath ?? [searchField.parameter], normalized);
+    return output;
+  }
+
+  return output;
+}
+
+function normalizeSearchValue(value: string, field: SearchField) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (field.normalize === "digits") return trimmed.replace(/\D/g, "") || null;
+  if (field.normalize === "number") {
+    const number = Number(trimmed.replace(/\D/g, ""));
+    return Number.isFinite(number) && number > 0 ? number : null;
+  }
+  return trimmed;
+}
+
+function cloneRecord(value: Record<string, unknown>) {
+  return JSON.parse(JSON.stringify(value ?? {})) as Record<string, unknown>;
+}
+
+function setNestedValue(target: Record<string, unknown>, path: Array<string | number>, value: unknown) {
+  let current: Record<string, unknown> | unknown[] = target;
+  path.forEach((segment, index) => {
+    const isLast = index === path.length - 1;
+    if (isLast) {
+      if (Array.isArray(current) && typeof segment === "number") current[segment] = value;
+      else if (!Array.isArray(current)) current[String(segment)] = value;
+      return;
+    }
+
+    const nextSegment = path[index + 1];
+    if (Array.isArray(current) && typeof segment === "number") {
+      if (current[segment] === undefined) current[segment] = typeof nextSegment === "number" ? [] : {};
+      current = current[segment] as Record<string, unknown> | unknown[];
+      return;
+    }
+
+    if (!Array.isArray(current)) {
+      const key = String(segment);
+      if (current[key] === undefined) current[key] = typeof nextSegment === "number" ? [] : {};
+      current = current[key] as Record<string, unknown> | unknown[];
+    }
+  });
 }
 
 function IntegrationForm({
