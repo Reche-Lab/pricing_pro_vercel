@@ -67,13 +67,13 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     }
     const cancelXml = normalizeInvoiceXmlForCancel(xml);
     const formData = new FormData();
-    formData.set("xml", new Blob([cancelXml.xml], { type: "application/xml" }), `nota-${numeroNota}.xml`);
+    formData.set("xml", new Blob([cancelXml.xml], { type: "text/xml" }), `nota-${numeroNota}.xml`);
     for (const [key, value] of Object.entries(payload)) {
       formData.set(key, String(value));
     }
     const payloadForLog = {
       ...payload,
-      xml: `[xml anexado: ${cancelXml.xml.length} caracteres; raiz=${cancelXml.root}; origem=${cancelXml.sourceRoot}]`,
+      xml: `[xml anexado: ${cancelXml.xml.length} caracteres; mime=text/xml; raiz=${cancelXml.root}; origem=${cancelXml.sourceRoot}]`,
       motivoInterno: parsed.data.reason
     };
     console.info("Olist invoice cancel payload built.", {
