@@ -24,7 +24,8 @@ export default async function QuotesPage() {
     listQuotes(session.userId, session.tenantId)
   ]);
   if (!profile) redirect("/login");
-  const canDeleteQuotes = await userHasPermission(session.userId, session.tenantId, "quotes:delete");
+  const canDeleteQuotes =
+    profile.role === "owner" || (await userHasPermission(session.userId, session.tenantId, "quotes:delete"));
 
   return (
     <AppShell

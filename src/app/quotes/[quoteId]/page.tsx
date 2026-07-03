@@ -24,7 +24,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
   const quoteIdParsed = z.string().uuid().safeParse(quoteId);
   if (!quoteIdParsed.success) notFound();
 
-  const [profile, detail, shipments, members, canDeleteQuotes] = await Promise.all([
+  const [profile, detail, shipments, members, canDeleteQuotesByPermission] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
     getQuoteDetail(session.userId, session.tenantId, quoteId),
     listQuoteShipments(session.userId, session.tenantId, quoteId),
@@ -34,6 +34,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
 
   if (!profile) redirect("/login");
   if (!detail) notFound();
+  const canDeleteQuotes = profile.role === "owner" || canDeleteQuotesByPermission;
 
   return (
     <AppShell
@@ -140,23 +141,23 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
               <p className="text-lg font-semibold text-white">{brl.format(Number(detail.quote.grand_total))}</p>
             </div>
             <div className="mt-5 grid gap-5">
-              <div className="grid gap-3 md:grid-cols-3">
-              <Link
-                className="focus-ring inline-flex min-h-10 items-center justify-center rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-950/60"
-                href={`/api/quotes/${quoteId}/pdf`}
-              >
-                Baixar PDF
-              </Link>
-              <QuoteWhatsAppButton quoteId={quoteId} />
-              <PublicQuoteLinkButton quoteId={quoteId} />
-              {canDeleteQuotes ? (
-                <DeleteQuoteButton
-                  customerName={detail.quote.customer_name}
-                  quoteId={quoteId}
-                  redirectTo="/quotes"
-                  total={brl.format(Number(detail.quote.grand_total))}
-                />
-              ) : null}
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <Link
+                  className="focus-ring inline-flex min-h-10 items-center justify-center rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-950/60"
+                  href={`/api/quotes/${quoteId}/pdf`}
+                >
+                  Baixar PDF
+                </Link>
+                <QuoteWhatsAppButton quoteId={quoteId} />
+                <PublicQuoteLinkButton quoteId={quoteId} />
+                {canDeleteQuotes ? (
+                  <DeleteQuoteButton
+                    customerName={detail.quote.customer_name}
+                    quoteId={quoteId}
+                    redirectTo="/quotes"
+                    total={brl.format(Number(detail.quote.grand_total))}
+                  />
+                ) : null}
               </div>
               <OlistQuoteActions
                 customerDocument={detail.quote.customer_document}

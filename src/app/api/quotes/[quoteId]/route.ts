@@ -12,7 +12,7 @@ export async function DELETE(_request: Request, context: { params: Promise<{ quo
   const parsed = z.string().uuid().safeParse(quoteId);
   if (!parsed.success) return NextResponse.json({ ok: false, error: "Invalid quote id." }, { status: 400 });
 
-  const allowed = await userHasPermission(session.userId, session.tenantId, "quotes:delete");
+  const allowed = session.role === "owner" || (await userHasPermission(session.userId, session.tenantId, "quotes:delete"));
   if (!allowed) return NextResponse.json({ ok: false, error: "Forbidden." }, { status: 403 });
 
   const deleted = await deleteQuote(session.userId, session.tenantId, quoteId);
@@ -20,4 +20,3 @@ export async function DELETE(_request: Request, context: { params: Promise<{ quo
 
   return NextResponse.json({ ok: true, quote: deleted });
 }
-
