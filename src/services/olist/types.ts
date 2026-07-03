@@ -9,6 +9,7 @@ export type OlistSettings = {
   sales_order_path?: string;
   invoice_path?: string;
   invoice_emit_path?: string;
+  invoice_cancel_path?: string;
   user_path?: string;
   task_path?: string;
   scopes?: string[];

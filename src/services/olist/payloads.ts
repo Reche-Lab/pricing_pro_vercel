@@ -77,6 +77,12 @@ export function buildOlistInvoiceEmitPayload() {
   };
 }
 
+export function buildOlistInvoiceCancelPayload(input: { reason: string }) {
+  return {
+    motivo: input.reason
+  };
+}
+
 export function missingOlistSkus(items: QuoteItemRow[]) {
   return items
     .filter((item) => !olistProductId(item))

@@ -70,6 +70,15 @@ const ACTIONS = {
     label: "Emitir nota",
     loading: "Emitindo...",
     submitLabel: "Continuar"
+  },
+  invoiceCancel: {
+    url: "invoice/cancel",
+    title: "Cancelar nota fiscal",
+    description: "Solicita o cancelamento da nota fiscal vinculada a este orçamento no Olist/Tiny.",
+    success: "Cancelamento solicitado.",
+    label: "Cancelar nota",
+    loading: "Cancelando...",
+    submitLabel: "Solicitar cancelamento"
   }
 } as const;
 
@@ -356,6 +365,7 @@ export function OlistQuoteActions({
           loading={loading}
           onClick={setPendingAction}
           primaryName="invoice"
+          secondaryName={invoiceReady ? "invoiceCancel" : undefined}
           title="5. Nota fiscal"
         />
       </div>
@@ -367,6 +377,7 @@ export function OlistQuoteActions({
           customerReady={customerReady}
           customerLookupDefaults={customerLookupDefaults}
           defaultCrmSubject={defaultCrmSubject}
+          invoiceExternalId={invoiceExternalId}
           invoiceReady={invoiceReady}
           loading={loading === pendingAction}
           onClose={() => setPendingAction(null)}
@@ -455,6 +466,7 @@ function ActionModal({
   customerReady,
   customerLookupDefaults,
   defaultCrmSubject,
+  invoiceExternalId,
   invoiceReady,
   loading,
   onClose,
@@ -473,6 +485,7 @@ function ActionModal({
     codigo: string;
   };
   defaultCrmSubject: string;
+  invoiceExternalId: string | null;
   invoiceReady: boolean;
   loading: boolean;
   onClose: () => void;
@@ -528,7 +541,7 @@ function ActionModal({
   }, [action, quoteId]);
 
   useEffect(() => {
-    if (action !== "invoice") return;
+    if (action !== "invoice" && action !== "invoiceCancel") return;
     let cancelled = false;
     setInvoicePreview({ loading: true, error: null, data: null });
     fetch(`/api/quotes/${encodeURIComponent(quoteId)}/olist/invoice/preview`)
@@ -714,6 +727,33 @@ function ActionModal({
               <InvoicePreviewPanel preview={invoicePreview} />
             </div>
           ) : null}
+
+          {action === "invoiceCancel" ? (
+            <div className="grid gap-3">
+              <InfoBox title="Cancelamento de nota fiscal">
+                Esta ação enviará uma solicitação de cancelamento para a nota fiscal Olist vinculada a este orçamento. Confira os dados e informe um motivo claro.
+              </InfoBox>
+              <InvoiceCancelInfoPanel preview={invoicePreview} />
+              <div className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <InfoTile label="Orçamento" value={quoteId} />
+                  <InfoTile label="Nota Olist" value={stringValue(invoiceExternalId)} />
+                </div>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-zinc-300">Motivo do cancelamento</span>
+                  <textarea
+                    className="focus-ring min-h-28 w-full rounded-md border border-zinc-700 px-3 py-2"
+                    name="cancelReason"
+                    placeholder="Ex.: Cliente desistiu da compra antes do envio dos produtos."
+                    required
+                  />
+                </label>
+                <p className="text-xs leading-5 text-zinc-500">
+                  O motivo será enviado no payload como <span className="font-mono text-zinc-300">motivo</span>. Use uma justificativa completa para evitar rejeição pela API.
+                </p>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="shrink-0 flex flex-col-reverse gap-2 border-t border-zinc-800 bg-zinc-950 p-5 sm:flex-row sm:justify-end">
@@ -731,7 +771,8 @@ function ActionModal({
               loading ||
               (action === "crm" && !customerReady) ||
               (action === "salesOrder" && (salesOrderPreview.loading || Boolean(salesOrderPreview.error))) ||
-              (action === "invoice" && (invoicePreview.loading || Boolean(invoicePreview.error)))
+              (action === "invoice" && (invoicePreview.loading || Boolean(invoicePreview.error))) ||
+              (action === "invoiceCancel" && (!invoiceReady || invoicePreview.loading || Boolean(invoicePreview.error)))
             }
             type="submit"
           >
@@ -881,48 +922,63 @@ function InvoicePreviewPanel({ preview }: { preview: InvoicePreviewState }) {
         <InfoTile label="Pedido Olist" value={stringValue(quote.externalOlistOrderId)} />
         <InfoTile label="Nota Olist" value={stringValue(quote.externalOlistInvoiceId)} />
         <InfoTile label="Cliente Olist" value={stringValue(quote.customerExternalOlistId)} />
-        <InfoTile label="Total do orçamento" value={currencyLike(quote.grandTotal)} />
+        <InfoTile label="Total da nota/orçamento" value={currencyLike(quote.grandTotal)} />
+      </div>
+
+      <div className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-950/60 p-3">
+        <p className="text-sm font-medium text-white">Composição do valor herdada do pedido</p>
+        <div className="grid gap-3 sm:grid-cols-4">
+          <InfoTile compact label="Produtos" value={currencyLike(quote.subtotal)} />
+          <InfoTile compact label="Frete" value={currencyLike(quote.shippingTotal)} />
+          <InfoTile compact label="Desconto" value={currencyLike(quote.discountTotal)} />
+          <InfoTile compact label="Total" value={currencyLike(quote.grandTotal)} />
+        </div>
       </div>
 
       {data?.mode === "create" ? (
-        <div className="min-w-0 rounded-md border border-zinc-800 bg-zinc-950/60">
-          <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-3 py-2">
-            <p className="text-sm font-medium text-white">Itens usados como origem da nota</p>
-            <span className="rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-400">{items.length} item(ns)</span>
-          </div>
-          <div className="grid gap-2 p-3">
-            {items.length ? items.map((item, index) => (
-              <details className="group min-w-0 rounded-md border border-zinc-800 bg-zinc-900/70 text-xs" key={String(item.id ?? index)}>
-                <summary className="focus-ring flex cursor-pointer list-none items-center justify-between gap-3 rounded-md px-3 py-3 hover:bg-zinc-900">
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-white">
-                      {index + 1}. {String(item.description ?? "Item sem descrição")}
+        <>
+          <InfoBox title="Como a Olist gera esta nota">
+            O endpoint de geração da nota usa o pedido de venda Olist já criado. Por isso o JSON enviado agora é curto: os itens, preços, desconto e frete abaixo vêm do pedido Olist {stringValue(quote.externalOlistOrderId)}.
+          </InfoBox>
+          <div className="min-w-0 rounded-md border border-zinc-800 bg-zinc-950/60">
+            <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-3 py-2">
+              <p className="text-sm font-medium text-white">Itens usados como origem da nota</p>
+              <span className="rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-400">{items.length} item(ns)</span>
+            </div>
+            <div className="grid gap-2 p-3">
+              {items.length ? items.map((item, index) => (
+                <details className="group min-w-0 rounded-md border border-zinc-800 bg-zinc-900/70 text-xs" key={String(item.id ?? index)}>
+                  <summary className="focus-ring flex cursor-pointer list-none items-center justify-between gap-3 rounded-md px-3 py-3 hover:bg-zinc-900">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-white">
+                        {index + 1}. {String(item.description ?? "Item sem descrição")}
+                      </span>
+                      <span className="mt-1 block truncate text-xs text-zinc-500">
+                        {stringValue(item.quantity)} un. x {currencyLike(item.unitPrice)} | ID Olist {stringValue(item.externalOlistProductId)}
+                      </span>
                     </span>
-                    <span className="mt-1 block truncate text-xs text-zinc-500">
-                      {stringValue(item.quantity)} un. x {currencyLike(item.unitPrice)} | ID Olist {stringValue(item.externalOlistProductId)}
+                    <span className="shrink-0 rounded-md border border-zinc-700 px-2 py-1 text-[11px] font-medium text-zinc-400 group-open:hidden">
+                      Abrir
                     </span>
-                  </span>
-                  <span className="shrink-0 rounded-md border border-zinc-700 px-2 py-1 text-[11px] font-medium text-zinc-400 group-open:hidden">
-                    Abrir
-                  </span>
-                  <span className="hidden shrink-0 rounded-md border border-zinc-700 px-2 py-1 text-[11px] font-medium text-zinc-400 group-open:inline">
-                    Recolher
-                  </span>
-                </summary>
-                <div className="grid min-w-0 gap-2 border-t border-zinc-800 p-3 sm:grid-cols-3">
-                  <InfoTile compact label="ID produto Olist" value={stringValue(item.externalOlistProductId)} />
-                  <InfoTile compact label="SKU" value={stringValue(item.sku)} />
-                  <InfoTile compact label="Arte" value={stringValue(item.artworkName)} />
-                  <InfoTile compact label="Quantidade" value={stringValue(item.quantity)} />
-                  <InfoTile compact label="Preço unitário" value={currencyLike(item.unitPrice)} />
-                  <InfoTile compact label="Preço total" value={currencyLike(item.totalPrice)} />
-                </div>
-              </details>
-            )) : (
-              <p className="text-sm text-zinc-500">Nenhum item encontrado no orçamento.</p>
-            )}
+                    <span className="hidden shrink-0 rounded-md border border-zinc-700 px-2 py-1 text-[11px] font-medium text-zinc-400 group-open:inline">
+                      Recolher
+                    </span>
+                  </summary>
+                  <div className="grid min-w-0 gap-2 border-t border-zinc-800 p-3 sm:grid-cols-3">
+                    <InfoTile compact label="ID produto Olist" value={stringValue(item.externalOlistProductId)} />
+                    <InfoTile compact label="SKU" value={stringValue(item.sku)} />
+                    <InfoTile compact label="Arte" value={stringValue(item.artworkName)} />
+                    <InfoTile compact label="Quantidade" value={stringValue(item.quantity)} />
+                    <InfoTile compact label="Preço unitário" value={currencyLike(item.unitPrice)} />
+                    <InfoTile compact label="Preço total" value={currencyLike(item.totalPrice)} />
+                  </div>
+                </details>
+              )) : (
+                <p className="text-sm text-zinc-500">Nenhum item encontrado no orçamento.</p>
+              )}
+            </div>
           </div>
-        </div>
+        </>
       ) : (
         <InfoBox title="Autorização da nota">
           Esta etapa usa a nota já gerada no Olist e envia apenas a solicitação de emissão/autorização.
@@ -939,6 +995,41 @@ function InvoicePreviewPanel({ preview }: { preview: InvoicePreviewState }) {
           </pre>
         </div>
       </details>
+    </div>
+  );
+}
+
+function InvoiceCancelInfoPanel({ preview }: { preview: InvoicePreviewState }) {
+  if (preview.loading) {
+    return (
+      <div className="rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-3 text-sm text-zinc-300">
+        Carregando dados da nota fiscal...
+      </div>
+    );
+  }
+
+  if (preview.error) {
+    return (
+      <div className="rounded-md border border-rose-400/25 bg-rose-400/10 px-3 py-3 text-sm text-rose-100">
+        <p className="font-semibold">Dados da nota indisponíveis</p>
+        <p className="mt-1 text-rose-100/80">{preview.error}</p>
+      </div>
+    );
+  }
+
+  const quote = preview.data?.quote ?? {};
+
+  return (
+    <div className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
+      <p className="text-sm font-medium text-white">Nota que será cancelada</p>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <InfoTile compact label="Nota Olist" value={stringValue(quote.externalOlistInvoiceId)} />
+        <InfoTile compact label="Pedido Olist" value={stringValue(quote.externalOlistOrderId)} />
+        <InfoTile compact label="Cliente Olist" value={stringValue(quote.customerExternalOlistId)} />
+        <InfoTile compact label="Produtos" value={currencyLike(quote.subtotal)} />
+        <InfoTile compact label="Frete" value={currencyLike(quote.shippingTotal)} />
+        <InfoTile compact label="Total" value={currencyLike(quote.grandTotal)} />
+      </div>
     </div>
   );
 }
@@ -1142,6 +1233,12 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
         responsibleExternalId: responsibleExternalId || undefined
       }
     };
+  }
+
+  if (action === "invoiceCancel") {
+    const reason = stringField(formData, "cancelReason");
+    if (reason.length < 15) return { error: "Informe um motivo de cancelamento com pelo menos 15 caracteres." };
+    return { body: { reason } };
   }
 
   return {};

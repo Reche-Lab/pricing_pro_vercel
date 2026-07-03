@@ -225,6 +225,7 @@ function humanizeOlistSuccess(operation: string, externalId: string | null, summ
   if (operation === "sales_orders.create") return externalId ? `Pedido de venda criado. ID: ${externalId}.` : "Pedido de venda enviado ao Olist/Tiny.";
   if (operation === "invoices.create") return externalId ? `Nota fiscal gerada. ID: ${externalId}.` : "Solicitação de geração de nota enviada ao Olist/Tiny.";
   if (operation === "invoices.emit") return "Solicitação de autorização da nota enviada ao Olist/Tiny.";
+  if (operation === "invoices.cancel") return "Solicitação de cancelamento da nota enviada ao Olist/Tiny.";
   return externalId ? `Operação concluída. ID: ${externalId}.` : "Operação Olist/Tiny concluída.";
 }
 

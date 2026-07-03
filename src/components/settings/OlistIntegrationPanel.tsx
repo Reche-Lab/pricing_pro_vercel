@@ -15,6 +15,7 @@ type OlistConnectionView = {
   salesOrderPath?: string;
   invoicePath?: string;
   invoiceEmitPath?: string;
+  invoiceCancelPath?: string;
   userPath?: string;
   taskPath?: string;
   authScheme?: "Bearer" | "Token" | "ApiKey";
@@ -70,6 +71,7 @@ export function OlistIntegrationPanel() {
         salesOrderPath: form.get("salesOrderPath") ?? "",
         invoicePath: form.get("invoicePath") ?? "",
         invoiceEmitPath: form.get("invoiceEmitPath") ?? "",
+        invoiceCancelPath: form.get("invoiceCancelPath") ?? "",
         userPath: form.get("userPath") ?? "",
         taskPath: form.get("taskPath") ?? "",
         clientId: form.get("clientId"),
@@ -907,6 +909,7 @@ function IntegrationForm({
               <Input defaultValue={connection?.salesOrderPath ?? OLIST_DEFAULT_PATHS.salesOrder} label="Path pedido de venda" name="salesOrderPath" placeholder="/pedidos" />
               <Input defaultValue={connection?.invoicePath ?? OLIST_DEFAULT_PATHS.invoice} label="Path gerar nota" name="invoicePath" placeholder="/pedidos/{idPedido}/gerar-nota-fiscal" />
               <Input defaultValue={connection?.invoiceEmitPath ?? OLIST_DEFAULT_PATHS.invoiceEmit} label="Path autorizar nota" name="invoiceEmitPath" placeholder="/notas/{idNota}/emitir" />
+              <Input defaultValue={connection?.invoiceCancelPath ?? OLIST_DEFAULT_PATHS.invoiceCancel} label="Path cancelar nota" name="invoiceCancelPath" placeholder="/notas/{idNota}/cancelar" />
               <Input defaultValue={connection?.userPath ?? OLIST_DEFAULT_PATHS.users} label="Path usuários/vendedores" name="userPath" placeholder="/usuarios" />
             </div>
           </div>

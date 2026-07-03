@@ -46,6 +46,7 @@ export async function GET(_request: Request, context: { params: Promise<{ quoteI
         customerExternalOlistId: loaded.detail.quote.customer_external_olist_id,
         externalOlistOrderId: loaded.detail.quote.external_olist_order_id,
         externalOlistInvoiceId: loaded.detail.quote.external_olist_invoice_id,
+        subtotal: loaded.detail.quote.subtotal,
         shippingTotal: loaded.detail.quote.shipping_total,
         discountTotal: loaded.detail.quote.discount_total,
         grandTotal: loaded.detail.quote.grand_total
