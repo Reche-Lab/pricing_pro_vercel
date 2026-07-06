@@ -13,6 +13,17 @@ export type SuperadminTenantRow = {
   discount_percent: number | null;
   discount_expires_at: string | null;
   member_count: number;
+  members: Array<{
+    membership_id: string;
+    user_id: string;
+    name: string | null;
+    email: string;
+    role_key: string | null;
+    role_name: string | null;
+    member_status: string;
+    is_super_admin: boolean;
+    joined_at: string | null;
+  }>;
   created_at: string;
 };
 
@@ -43,22 +54,54 @@ export async function listSuperadminTenants(): Promise<SuperadminTenantRow[]> {
         t.name,
         t.slug,
         t.status,
-        owner.name as owner_name,
-        owner.email::text as owner_email,
+        owner.owner_name,
+        owner.owner_email,
         t.billing_status,
         ts.status as subscription_status,
         ts.current_period_end,
         ts.discount_percent,
         ts.discount_expires_at,
-        count(tm_all.id)::int as member_count,
+        coalesce(members.member_count, 0)::int as member_count,
+        coalesce(members.members, '[]'::jsonb) as members,
         t.created_at
       from tenants t
-      left join tenant_members tm_owner on tm_owner.tenant_id = t.id and tm_owner.status = 'active'
-      left join roles r_owner on r_owner.id = tm_owner.role_id and r_owner.key = 'owner'
-      left join app_users owner on owner.id = tm_owner.user_id
-      left join tenant_members tm_all on tm_all.tenant_id = t.id
+      left join lateral (
+        select
+          u.name as owner_name,
+          u.email::text as owner_email
+        from tenant_members tm
+        join roles r on r.id = tm.role_id and r.key = 'owner'
+        join app_users u on u.id = tm.user_id
+        where tm.tenant_id = t.id
+          and tm.status = 'active'
+        order by tm.created_at asc
+        limit 1
+      ) owner on true
+      left join lateral (
+        select
+          count(tm.id)::int as member_count,
+          jsonb_agg(
+            jsonb_build_object(
+              'membership_id', tm.id,
+              'user_id', u.id,
+              'name', u.name,
+              'email', u.email::text,
+              'role_key', r.key,
+              'role_name', r.name,
+              'member_status', tm.status,
+              'is_super_admin', u.is_super_admin,
+              'joined_at', tm.joined_at
+            )
+            order by
+              case r.key when 'owner' then 0 when 'admin' then 1 when 'sales' then 2 else 3 end,
+              u.name
+          ) as members
+        from tenant_members tm
+        join app_users u on u.id = tm.user_id
+        left join roles r on r.id = tm.role_id
+        where tm.tenant_id = t.id
+      ) members on true
       left join tenant_subscriptions ts on ts.tenant_id = t.id
-      group by t.id, owner.name, owner.email, ts.status, ts.current_period_end, ts.discount_percent, ts.discount_expires_at
       order by t.created_at desc
     `
   );

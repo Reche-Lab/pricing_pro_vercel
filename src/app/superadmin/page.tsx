@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { SuperadminPanel } from "@/components/superadmin/SuperadminPanel";
 import { getCurrentSession } from "@/lib/auth/session";
-import { isSuperAdmin, listSuperadminTenants, listSuperadminUsers } from "@/repositories/superadmin";
+import { isSuperAdmin, listSuperadminTenants } from "@/repositories/superadmin";
 import { getSessionProfile } from "@/repositories/users";
 
 export default async function SuperadminPage() {
@@ -16,7 +16,7 @@ export default async function SuperadminPage() {
   if (!profile) redirect("/login");
   if (!allowed) redirect("/dashboard");
 
-  const [tenants, users] = await Promise.all([listSuperadminTenants(), listSuperadminUsers()]);
+  const tenants = await listSuperadminTenants();
 
   return (
     <AppShell
@@ -26,7 +26,7 @@ export default async function SuperadminPage() {
       tenantLogoUrl={profile.tenant_logo_url}
       tenantName={profile.tenant_name}
     >
-      <SuperadminPanel tenants={tenants} users={users} />
+      <SuperadminPanel tenants={tenants} />
     </AppShell>
   );
 }

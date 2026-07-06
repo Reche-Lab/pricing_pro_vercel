@@ -2,15 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Copy, Gift, Mail, ShieldCheck, TimerReset, Users } from "lucide-react";
-import type { SuperadminTenantRow, SuperadminUserRow } from "@/repositories/superadmin";
+import { Building2, Copy, Gift, ShieldCheck, TimerReset, Users } from "lucide-react";
+import type { SuperadminTenantRow } from "@/repositories/superadmin";
 
 export function SuperadminPanel({
-  tenants,
-  users
+  tenants
 }: {
   tenants: SuperadminTenantRow[];
-  users: SuperadminUserRow[];
 }) {
   const router = useRouter();
   const [tenantName, setTenantName] = useState("");
@@ -97,8 +95,8 @@ export function SuperadminPanel({
             </p>
             <h2 className="mt-2 text-xl font-semibold text-white">Visão global da plataforma</h2>
             <p className="mt-1 text-sm text-zinc-300">
-              Esta área consolida todos os tenants, usuários globais, trial, vouchers e cobrança. Ela não aparece no menu
-              de usuários comuns.
+              Esta área consolida todos os tenants. Cada card mostra assinatura, trial, voucher e os usuários vinculados
+              ao tenant sem misturar com a operação dos usuários comuns.
             </p>
           </div>
           <span className="w-fit rounded-full border border-amber-300/40 bg-zinc-950/70 px-3 py-1 text-xs font-semibold text-amber-200">
@@ -179,74 +177,108 @@ export function SuperadminPanel({
               <h2 className="font-semibold text-white">Tenants</h2>
             </div>
             <p className="mt-1 text-sm text-zinc-500">
-              Gestão global por tenant: status, assinatura, trial, voucher e quantidade de membros.
+              Um card por tenant. Usuários, trial e voucher ficam recolhidos para manter a visão limpa.
             </p>
           </div>
           <div className="grid gap-4 p-4">
             {tenants.map((tenant) => (
-              <article className="rounded-lg border border-zinc-800 bg-zinc-950/45 p-4" key={tenant.id}>
-                <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr_320px]">
+              <article className="rounded-lg border border-zinc-800 bg-zinc-950/45" key={tenant.id}>
+                <div className="grid gap-4 p-4 lg:grid-cols-[1fr_auto] lg:items-start">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-white">{tenant.name}</p>
+                      <p className="text-base font-semibold text-white">{tenant.name}</p>
                       <Badge>{tenant.status}</Badge>
+                      <Badge>{billingLabel(tenant.subscription_status ?? tenant.billing_status)}</Badge>
                     </div>
-                    <p className="mt-1 text-zinc-500">{tenant.slug}</p>
-                    <p className="mt-2 text-xs text-zinc-500">
-                      Owner: {tenant.owner_name ? `${tenant.owner_name} (${tenant.owner_email})` : "não definido"}
-                    </p>
-                    <p className="mt-1 text-xs text-zinc-500">{tenant.member_count} membro(s)</p>
+                    <p className="mt-1 text-sm text-zinc-500">{tenant.slug}</p>
+                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 sm:grid-cols-3">
+                      <SummaryPill
+                        label="Owner"
+                        value={tenant.owner_name ? `${tenant.owner_name} (${tenant.owner_email})` : "não definido"}
+                      />
+                      <SummaryPill label="Usuários" value={`${tenant.member_count} membro(s)`} />
+                      <SummaryPill
+                        label="Voucher"
+                        value={tenant.discount_percent && Number(tenant.discount_percent) > 0 ? `${Number(tenant.discount_percent).toFixed(0)}% ativo` : "sem voucher"}
+                      />
+                    </div>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                  <div className="grid min-w-[220px] gap-2 text-xs">
                     <StatusBlock
                       label="Assinatura"
                       value={billingLabel(tenant.subscription_status ?? tenant.billing_status)}
                       detail={tenant.current_period_end ? `Válida até ${new Intl.DateTimeFormat("pt-BR").format(new Date(tenant.current_period_end))}` : "Sem vencimento definido"}
                     />
-                    <StatusBlock
-                      label="Voucher"
-                      value={tenant.discount_percent && Number(tenant.discount_percent) > 0 ? `${Number(tenant.discount_percent).toFixed(0)}% de desconto` : "Sem voucher ativo"}
-                      detail={
-                        tenant.discount_percent && Number(tenant.discount_percent) > 0
-                          ? `Expira em ${tenant.discount_expires_at ? new Intl.DateTimeFormat("pt-BR").format(new Date(tenant.discount_expires_at)) : "data não definida"}`
-                          : "Use o formulário ao lado para aplicar um desconto por prazo definido."
-                      }
-                    />
                   </div>
+                </div>
 
-                  <TenantBillingActions
-                    disabled={billingLoading === tenant.id}
-                    tenantId={tenant.id}
-                    onSubmit={updateTenantBilling}
-                  />
+                <div className="grid gap-3 border-t border-zinc-800 p-4">
+                  <details className="rounded-md border border-zinc-800 bg-zinc-900/50">
+                    <summary className="focus-ring flex cursor-pointer list-none items-center justify-between gap-3 rounded-md px-3 py-3 text-sm font-medium text-zinc-200 hover:bg-zinc-900">
+                      <span className="inline-flex items-center gap-2">
+                        <Users size={15} />
+                        Usuários deste tenant
+                      </span>
+                      <span className="text-xs text-zinc-500">{tenant.member_count} membro(s)</span>
+                    </summary>
+                    <div className="grid gap-2 border-t border-zinc-800 p-3">
+                      {tenant.members.length ? tenant.members.map((member) => (
+                        <div
+                          className="grid gap-2 rounded-md bg-zinc-950/60 px-3 py-2 text-sm sm:grid-cols-[1fr_auto_auto] sm:items-center"
+                          key={member.membership_id}
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-white">{member.name ?? "Usuário sem nome"}</p>
+                            <p className="truncate text-xs text-zinc-500">{member.email}</p>
+                          </div>
+                          <Badge>{member.role_name ?? member.role_key ?? "sem função"}</Badge>
+                          <Badge>{member.is_super_admin ? "superadmin" : member.member_status}</Badge>
+                        </div>
+                      )) : <EmptyState text="Nenhum usuário vinculado a este tenant." />}
+                    </div>
+                  </details>
+
+                  <details className="rounded-md border border-zinc-800 bg-zinc-900/50">
+                    <summary className="focus-ring flex cursor-pointer list-none items-center justify-between gap-3 rounded-md px-3 py-3 text-sm font-medium text-zinc-200 hover:bg-zinc-900">
+                      <span className="inline-flex items-center gap-2">
+                        <Gift size={15} />
+                        Trial, voucher e cobrança
+                      </span>
+                      <span className="text-xs text-zinc-500">
+                        {tenant.discount_percent && Number(tenant.discount_percent) > 0
+                          ? `Voucher ${Number(tenant.discount_percent).toFixed(0)}%`
+                          : "Sem voucher"}
+                      </span>
+                    </summary>
+                    <div className="grid gap-4 border-t border-zinc-800 p-3 lg:grid-cols-[1fr_340px]">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <StatusBlock
+                          label="Trial/assinatura"
+                          value={billingLabel(tenant.subscription_status ?? tenant.billing_status)}
+                          detail={tenant.current_period_end ? `Válida até ${new Intl.DateTimeFormat("pt-BR").format(new Date(tenant.current_period_end))}` : "Sem vencimento definido"}
+                        />
+                        <StatusBlock
+                          label="Voucher"
+                          value={tenant.discount_percent && Number(tenant.discount_percent) > 0 ? `${Number(tenant.discount_percent).toFixed(0)}% de desconto` : "Sem voucher ativo"}
+                          detail={
+                            tenant.discount_percent && Number(tenant.discount_percent) > 0
+                              ? `Expira em ${tenant.discount_expires_at ? new Intl.DateTimeFormat("pt-BR").format(new Date(tenant.discount_expires_at)) : "data não definida"}`
+                              : "Aplique um desconto por prazo definido para este tenant."
+                          }
+                        />
+                      </div>
+                      <TenantBillingActions
+                        disabled={billingLoading === tenant.id}
+                        tenantId={tenant.id}
+                        onSubmit={updateTenantBilling}
+                      />
+                    </div>
+                  </details>
                 </div>
               </article>
             ))}
             {tenants.length === 0 ? <EmptyState text="Nenhum tenant cadastrado." /> : null}
-          </div>
-        </section>
-
-        <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
-          <div className="flex items-center gap-2 border-b border-zinc-800 px-5 py-4">
-            <Users className="text-zinc-500" size={18} />
-            <h2 className="font-semibold text-white">Usuarios globais</h2>
-          </div>
-          <div className="divide-y divide-zinc-800">
-            {users.map((user) => (
-              <div className="grid gap-3 px-5 py-4 text-sm lg:grid-cols-[1fr_150px_150px]" key={user.id}>
-                <div className="min-w-0">
-                  <p className="font-medium text-white">{user.name}</p>
-                  <p className="text-zinc-500">{user.email}</p>
-                </div>
-                <Badge>{user.status}</Badge>
-                <p className="flex items-center gap-2 text-zinc-400">
-                  {user.is_super_admin ? <Mail className="text-amber-400" size={15} /> : null}
-                  {user.is_super_admin ? "Superadmin" : `${user.tenant_count} tenants`}
-                </p>
-              </div>
-            ))}
-            {users.length === 0 ? <EmptyState text="Nenhum usuario encontrado." /> : null}
           </div>
         </section>
       </div>
@@ -352,6 +384,15 @@ function StatusBlock({ detail, label, value }: { detail: string; label: string; 
       <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
       <p className="mt-1 text-sm font-medium text-white">{value}</p>
       <p className="mt-1 text-xs text-zinc-500">{detail}</p>
+    </div>
+  );
+}
+
+function SummaryPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-md border border-zinc-800 bg-zinc-950/50 px-3 py-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600">{label}</p>
+      <p className="mt-1 truncate text-xs font-medium text-zinc-300">{value}</p>
     </div>
   );
 }
