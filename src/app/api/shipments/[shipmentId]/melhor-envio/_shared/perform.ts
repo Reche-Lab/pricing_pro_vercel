@@ -89,16 +89,38 @@ export async function performShipmentMelhorEnvioOperation(
 }
 
 function extractShipmentFields(result: unknown) {
-  const record = Array.isArray(result) ? (result[0] as unknown) : result;
+  const record = firstRecord(result);
   if (!record || typeof record !== "object") return {};
   const data = record as Record<string, unknown>;
 
   return {
-    providerShipmentId: stringOrNull(data.id) ?? stringOrNull(data.order_id),
-    providerOrderId: stringOrNull(data.order_id) ?? stringOrNull(data.protocol),
-    trackingCode: stringOrNull(data.tracking) ?? stringOrNull(data.tracking_code),
-    labelUrl: stringOrNull(data.url) ?? stringOrNull(data.label_url)
+    providerShipmentId: pickString(data, ["id", "order_id", "orderId"]),
+    providerOrderId: pickString(data, ["order_id", "orderId", "protocol", "protocol_id"]),
+    trackingCode: pickString(data, ["tracking", "tracking_code", "trackingCode"]),
+    labelUrl: pickString(data, ["url", "label_url", "labelUrl", "print_url"])
   };
+}
+
+function firstRecord(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(firstRecord).find(Boolean) ?? null;
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if (["id", "order_id", "orderId", "protocol", "tracking", "url"].some((key) => record[key] !== undefined)) {
+    return record;
+  }
+  for (const item of Object.values(record)) {
+    const nested = firstRecord(item);
+    if (nested) return nested;
+  }
+  return record;
+}
+
+function pickString(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = stringOrNull(record[key]);
+    if (value) return value;
+  }
+  return null;
 }
 
 function stringOrNull(value: unknown): string | null {

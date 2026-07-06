@@ -3,12 +3,12 @@ import Link from "next/link";
 import { z } from "zod";
 import { AppShell } from "@/components/layout/AppShell";
 import { DeleteQuoteButton } from "@/components/quotes/DeleteQuoteButton";
+import { MelhorEnvioQuoteLabelActions } from "@/components/quotes/MelhorEnvioQuoteLabelActions";
 import { MelhorEnvioPayloadPreview } from "@/components/quotes/MelhorEnvioPayloadPreview";
 import { OlistQuoteActions } from "@/components/quotes/OlistQuoteActions";
 import { QuoteStatusActions } from "@/components/quotes/QuoteStatusActions";
 import { QuoteWhatsAppButton } from "@/components/quotes/QuoteWhatsAppButton";
 import { PublicQuoteLinkButton } from "@/components/quotes/PublicQuoteLinkButton";
-import { MelhorEnvioShipmentActions } from "@/components/shipments/MelhorEnvioShipmentActions";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getQuoteDetail } from "@/repositories/quotes";
 import { listQuoteShipments } from "@/repositories/shipments";
@@ -143,9 +143,6 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                       {brl.format(Number(shipment.shipping_amount))}
                     </p>
                     {shipment.tracking_code ? <p className="text-zinc-500">Rastreio: {shipment.tracking_code}</p> : null}
-                    {shipment.provider === "melhor_envio" ? (
-                      <MelhorEnvioShipmentActions shipmentId={shipment.id} />
-                    ) : null}
                   </div>
                 ))
               )}
@@ -216,6 +213,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                     email: member.email
                   }))}
               />
+              <MelhorEnvioQuoteLabelActions quoteId={quoteId} shipments={shipments} />
               <QuoteStatusActions quoteId={quoteId} />
             </div>
           </div>
