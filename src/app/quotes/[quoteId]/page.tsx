@@ -205,6 +205,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                 externalOrderId={detail.quote.external_olist_order_id}
                 hasCustomer={Boolean(detail.quote.customer_id)}
                 quoteId={quoteId}
+                shipments={shipments}
                 responsibleUsers={members
                   .filter((member) => member.member_status === "active" && member.external_olist_user_id)
                   .map((member) => ({

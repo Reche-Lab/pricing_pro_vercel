@@ -591,6 +591,7 @@ export async function markQuoteOlistFulfillment(
     note?: string | null;
     responsibleExternalId?: string | null;
     orderId?: string | null;
+    shipment?: unknown;
   }
 ) {
   return withTenantContext(userId, tenantId, async (client) => {
@@ -599,6 +600,7 @@ export async function markQuoteOlistFulfillment(
       provider: "olist",
       orderId: input.orderId ?? null,
       responsibleExternalId: input.responsibleExternalId ?? null,
+      shipment: input.shipment ?? null,
       markedAt: new Date().toISOString()
     };
 

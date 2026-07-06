@@ -3,6 +3,7 @@
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { ShipmentRow } from "@/repositories/shipments";
 import {
   CalendarPlus,
   CheckCircle2,
@@ -135,6 +136,7 @@ type InvoicePreviewState = {
     path?: string;
     method?: string;
     quote?: Record<string, unknown>;
+    shipment?: Record<string, unknown> | null;
     items?: Array<Record<string, unknown>>;
     payload?: unknown;
     missingSkus?: string[];
@@ -166,6 +168,7 @@ export function OlistQuoteActions({
   fulfillmentStatus,
   fulfillmentSentAt,
   fulfillmentNote,
+  shipments,
   responsibleUsers
 }: {
   quoteId: string;
@@ -192,6 +195,7 @@ export function OlistQuoteActions({
   fulfillmentStatus?: string | null;
   fulfillmentSentAt?: string | null;
   fulfillmentNote?: string | null;
+  shipments?: ShipmentRow[];
   responsibleUsers?: Array<{
     id: string;
     name: string;
@@ -473,6 +477,7 @@ export function OlistQuoteActions({
           fulfillmentReady={fulfillmentReady}
           fulfillmentSentAt={fulfillmentState.sentAt}
           orderExternalId={orderExternalId}
+          shipments={shipments ?? []}
           loading={loading === pendingAction}
           onClose={() => setPendingAction(null)}
           onSubmit={(formData) => execute(pendingAction, formData)}
@@ -570,6 +575,7 @@ function ActionModal({
   fulfillmentReady,
   fulfillmentSentAt,
   orderExternalId,
+  shipments,
   loading,
   onClose,
   onSubmit,
@@ -610,6 +616,7 @@ function ActionModal({
   fulfillmentReady: boolean;
   fulfillmentSentAt: string | null;
   orderExternalId: string | null;
+  shipments: ShipmentRow[];
   loading: boolean;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
@@ -631,6 +638,7 @@ function ActionModal({
     error: null,
     data: null
   });
+  const melhorEnvioShipment = useMemo(() => selectBestMelhorEnvioShipment(shipments), [shipments]);
 
   useEffect(() => {
     if (action !== "salesOrder") return;
@@ -901,6 +909,7 @@ function ActionModal({
                   <InfoTile label="Enviado em" value={formatDateTime(fulfillmentSentAt)} />
                   <InfoTile label="Próxima etapa" value="Comprar/gerar etiqueta de envio" />
                 </div>
+                <ShipmentInfoPanel shipment={melhorEnvioShipment} title="Etiqueta/frete vinculado à expedição" />
                 <label className="block">
                   <span className="mb-1 block text-sm font-medium text-zinc-300">Responsável pela expedição</span>
                   <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="responsibleExternalId" defaultValue={responsibleUsers[0]?.id ?? ""}>
@@ -1172,6 +1181,11 @@ function InvoicePreviewPanel({ preview }: { preview: InvoicePreviewState }) {
         </div>
       </div>
 
+      <ShipmentInfoPanel
+        shipment={preview.data?.shipment ?? null}
+        title="Etiqueta/frete vinculado à nota"
+      />
+
       {data?.mode === "create" ? (
         <>
           <InfoBox title="Como a Olist gera esta nota">
@@ -1271,6 +1285,116 @@ function InvoiceCancelInfoPanel({ preview }: { preview: InvoicePreviewState }) {
       </div>
     </div>
   );
+}
+
+function ShipmentInfoPanel({
+  shipment,
+  title
+}: {
+  shipment: ShipmentRow | Record<string, unknown> | null;
+  title: string;
+}) {
+  const summary = summarizeShipmentForUi(shipment);
+
+  if (!summary) {
+    return (
+      <div className="rounded-md border border-amber-400/20 bg-amber-400/10 px-3 py-3 text-sm text-amber-100">
+        <p className="font-medium">{title}</p>
+        <p className="mt-1 text-xs leading-5 text-amber-100/80">
+          Nenhuma etiqueta Melhor Envio está vinculada a este orçamento ainda. Gere a etiqueta após enviar para expedição para manter o frete e o rastreio conectados ao pedido.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-3 rounded-md border border-emerald-400/20 bg-emerald-400/10 p-3 text-emerald-100">
+      <div>
+        <p className="text-sm font-medium">{title}</p>
+        <p className="mt-1 text-xs leading-5 text-emerald-100/80">
+          Estas informações são usadas como conferência operacional. A nota fiscal no Olist é gerada a partir do pedido de venda, então o frete fiscal continua vindo do pedido.
+        </p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <InfoTile compact label="Serviço" value={summary.service} />
+        <InfoTile compact label="Status etiqueta" value={summary.status} />
+        <InfoTile compact label="Valor frete" value={currencyLike(summary.amount)} />
+        <InfoTile compact label="Rastreio" value={summary.tracking} />
+        <InfoTile compact label="Etiqueta" value={summary.labelUrl ? "Link/arquivo disponível" : "-"} />
+        <InfoTile compact label="Caixa" value={summary.box} />
+        <InfoTile compact label="Dimensões" value={summary.dimensions} />
+        <InfoTile compact label="Peso bruto" value={summary.weight} />
+        <InfoTile compact label="Volumes" value={summary.volumes} />
+      </div>
+    </div>
+  );
+}
+
+function selectBestMelhorEnvioShipment(shipments: ShipmentRow[]) {
+  const priority = new Map([
+    ["printed", 6],
+    ["label_generated", 5],
+    ["paid", 4],
+    ["cart", 3],
+    ["quoted", 2],
+    ["error", 1]
+  ]);
+
+  return shipments
+    .filter((shipment) => shipment.provider === "melhor_envio")
+    .sort((a, b) => (priority.get(b.status) ?? 0) - (priority.get(a.status) ?? 0))[0] ?? null;
+}
+
+function summarizeShipmentForUi(shipment: ShipmentRow | Record<string, unknown> | null) {
+  if (!shipment) return null;
+  const record = shipment as Record<string, unknown>;
+  const packageRecord = record.package && typeof record.package === "object"
+    ? record.package as Record<string, unknown>
+    : null;
+  const packagingSnapshot = record.packaging_snapshot && typeof record.packaging_snapshot === "object"
+    ? record.packaging_snapshot as Record<string, unknown>
+    : null;
+  const box = packagingSnapshot?.box && typeof packagingSnapshot.box === "object"
+    ? packagingSnapshot.box as Record<string, unknown>
+    : null;
+
+  const service = stringValue(record.serviceName ?? record.service_name ?? record.serviceCode ?? record.service_code ?? "Melhor Envio");
+  const status = shipmentStatusLabel(stringValue(record.status));
+  const amount = record.shippingAmount ?? record.shipping_amount;
+  const tracking = stringValue(record.trackingCode ?? record.tracking_code);
+  const labelUrl = stringValue(record.labelUrl ?? record.label_url) !== "-" ? stringValue(record.labelUrl ?? record.label_url) : "";
+  const boxName = stringValue(packageRecord?.boxName ?? box?.name);
+  const width = packageRecord?.widthCm ?? box?.widthCm;
+  const length = packageRecord?.lengthCm ?? box?.lengthCm;
+  const height = packageRecord?.heightCm ?? box?.heightCm;
+  const grossWeight = packageRecord?.grossWeightKg ?? packagingSnapshot?.grossWeightKg;
+  const boxesNeeded = packageRecord?.boxesNeeded ?? packagingSnapshot?.boxesNeeded;
+
+  return {
+    service,
+    status,
+    amount,
+    tracking,
+    labelUrl,
+    box: boxName,
+    dimensions: width && length && height ? `${width} x ${length} x ${height} cm` : "-",
+    weight: grossWeight ? `${Number(grossWeight).toFixed(3)} kg` : "-",
+    volumes: boxesNeeded ? String(boxesNeeded) : "-"
+  };
+}
+
+function shipmentStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    quoted: "Frete cotado",
+    cart: "No carrinho",
+    paid: "Etiqueta comprada",
+    label_generated: "Etiqueta gerada",
+    printed: "Pronta para impressão",
+    posted: "Postado",
+    delivered: "Entregue",
+    error: "Erro"
+  };
+  return labels[status] ?? status;
 }
 
 function CustomerLookupResult({
