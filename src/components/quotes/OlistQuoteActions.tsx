@@ -12,6 +12,7 @@ import {
   ReceiptText,
   Send,
   ShoppingCart,
+  Truck,
   UserCheck,
   X
 } from "lucide-react";
@@ -61,6 +62,15 @@ const ACTIONS = {
     label: "Gerar pedido",
     loading: "Gerando...",
     submitLabel: "Gerar pedido"
+  },
+  fulfillment: {
+    url: "fulfillment",
+    title: "Enviar para expedição",
+    description: "Marca o pedido de venda Olist como pronto para separação e envio.",
+    success: "Pedido enviado para expedição.",
+    label: "Enviar para expedição",
+    loading: "Enviando...",
+    submitLabel: "Confirmar expedição"
   },
   invoice: {
     url: "invoice",
@@ -153,6 +163,9 @@ export function OlistQuoteActions({
   externalInvoiceNumber,
   externalInvoiceSeries,
   externalInvoiceModel,
+  fulfillmentStatus,
+  fulfillmentSentAt,
+  fulfillmentNote,
   responsibleUsers
 }: {
   quoteId: string;
@@ -176,6 +189,9 @@ export function OlistQuoteActions({
   externalInvoiceNumber?: string | null;
   externalInvoiceSeries?: string | null;
   externalInvoiceModel?: string | null;
+  fulfillmentStatus?: string | null;
+  fulfillmentSentAt?: string | null;
+  fulfillmentNote?: string | null;
   responsibleUsers?: Array<{
     id: string;
     name: string;
@@ -189,6 +205,10 @@ export function OlistQuoteActions({
   const [crmExternalId, setCrmExternalId] = useState(externalCrmId ?? null);
   const [orderExternalId, setOrderExternalId] = useState(externalOrderId ?? null);
   const [invoiceExternalId, setInvoiceExternalId] = useState(externalInvoiceId ?? null);
+  const [fulfillmentState, setFulfillmentState] = useState({
+    status: fulfillmentStatus ?? "not_sent",
+    sentAt: fulfillmentSentAt ?? null
+  });
   const [pendingAction, setPendingAction] = useState<ActionKey | null>(null);
   const [customerLookup, setCustomerLookup] = useState<CustomerLookupState | null>(null);
   const [actionResult, setActionResult] = useState<OlistActionResult | null>(null);
@@ -197,6 +217,7 @@ export function OlistQuoteActions({
   const customerReady = Boolean(customerExternalId);
   const crmReady = Boolean(crmExternalId);
   const orderReady = Boolean(orderExternalId);
+  const fulfillmentReady = fulfillmentState.status === "sent_to_fulfillment";
   const invoiceReady = Boolean(invoiceExternalId);
 
   const defaultCrmSubject = useMemo(
@@ -307,6 +328,12 @@ export function OlistQuoteActions({
       if (action === "salesOrder") setOrderExternalId(data.externalId);
       if (action === "invoice" && !invoiceExternalId) setInvoiceExternalId(data.externalId);
     }
+    if (action === "fulfillment") {
+      setFulfillmentState({
+        status: data.fulfillmentStatus ?? "sent_to_fulfillment",
+        sentAt: data.sentAt ?? new Date().toISOString()
+      });
+    }
     const successMessage = data.message ?? (data.externalId ? `${config.success} ID: ${data.externalId}` : config.success);
     setMessage(successMessage);
     setActionResult({
@@ -406,6 +433,16 @@ export function OlistQuoteActions({
           title="4. Pedido de venda"
         />
         <FlowAction
+          description="Confirma que o pedido Olist está pronto para separação e envio."
+          disabled={!orderReady}
+          done={fulfillmentReady}
+          icon={<Truck size={16} />}
+          loading={loading}
+          onClick={setPendingAction}
+          primaryName="fulfillment"
+          title="5. Expedição Olist"
+        />
+        <FlowAction
           description={invoiceReady ? "Autoriza a nota fiscal já gerada para este pedido." : "Gera a nota fiscal a partir do pedido de venda."}
           disabled={!orderReady}
           done={invoiceReady}
@@ -415,7 +452,7 @@ export function OlistQuoteActions({
           onClick={setPendingAction}
           primaryName="invoice"
           secondaryName={invoiceReady ? "invoiceCancel" : undefined}
-          title="5. Nota fiscal"
+          title="6. Nota fiscal"
         />
       </div>
       {message ? <p className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">{message}</p> : null}
@@ -432,6 +469,10 @@ export function OlistQuoteActions({
           invoiceSeries={externalInvoiceSeries ?? null}
           invoiceModel={externalInvoiceModel ?? null}
           invoiceReady={invoiceReady}
+          fulfillmentNote={fulfillmentNote ?? null}
+          fulfillmentReady={fulfillmentReady}
+          fulfillmentSentAt={fulfillmentState.sentAt}
+          orderExternalId={orderExternalId}
           loading={loading === pendingAction}
           onClose={() => setPendingAction(null)}
           onSubmit={(formData) => execute(pendingAction, formData)}
@@ -525,6 +566,10 @@ function ActionModal({
   invoiceSeries,
   invoiceModel,
   invoiceReady,
+  fulfillmentNote,
+  fulfillmentReady,
+  fulfillmentSentAt,
+  orderExternalId,
   loading,
   onClose,
   onSubmit,
@@ -561,6 +606,10 @@ function ActionModal({
   invoiceSeries: string | null;
   invoiceModel: string | null;
   invoiceReady: boolean;
+  fulfillmentNote: string | null;
+  fulfillmentReady: boolean;
+  fulfillmentSentAt: string | null;
+  orderExternalId: string | null;
   loading: boolean;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
@@ -840,6 +889,45 @@ function ActionModal({
             </div>
           ) : null}
 
+          {action === "fulfillment" ? (
+            <div className="grid gap-4">
+              <InfoBox title="Expedição do pedido">
+                Esta etapa registra que o pedido de venda Olist está pronto para separação e envio. Ela não altera a nota fiscal nem compra etiqueta; a etiqueta Melhor Envio entra na próxima etapa logística.
+              </InfoBox>
+              <div className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <InfoTile label="Pedido de venda Olist" value={stringValue(orderExternalId)} />
+                  <InfoTile label="Status atual" value={fulfillmentReady ? "Enviado para expedição" : "Ainda não enviado"} />
+                  <InfoTile label="Enviado em" value={formatDateTime(fulfillmentSentAt)} />
+                  <InfoTile label="Próxima etapa" value="Comprar/gerar etiqueta de envio" />
+                </div>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-zinc-300">Responsável pela expedição</span>
+                  <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="responsibleExternalId" defaultValue={responsibleUsers[0]?.id ?? ""}>
+                    <option value="">Sem responsável Olist definido</option>
+                    {responsibleUsers.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} - Olist {user.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-zinc-300">Observação para expedição</span>
+                  <textarea
+                    className="focus-ring min-h-28 w-full rounded-md border border-zinc-700 px-3 py-2"
+                    defaultValue={fulfillmentNote ?? "Separar produtos, conferir arte/quantidade e preparar envio conforme orçamento."}
+                    name="fulfillmentNote"
+                    required
+                  />
+                </label>
+                <p className="text-xs leading-5 text-zinc-500">
+                  O registro fica salvo no orçamento e no log de auditoria. Se futuramente a API do Olist liberar uma transição específica para expedição, este ponto do fluxo já está isolado para conectar esse endpoint.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
           {action === "invoice" ? (
             <div className="grid gap-3">
               <InfoBox title={invoiceReady ? "Autorizar nota existente" : "Gerar nota fiscal"}>
@@ -917,6 +1005,7 @@ function ActionModal({
               loading ||
               (action === "crm" && !customerReady) ||
               (action === "salesOrder" && (salesOrderPreview.loading || Boolean(salesOrderPreview.error))) ||
+              (action === "fulfillment" && !orderExternalId) ||
               (action === "invoice" && (invoicePreview.loading || Boolean(invoicePreview.error))) ||
               (action === "invoiceCancel" && (!invoiceReady || invoicePreview.loading || Boolean(invoicePreview.error)))
             }
@@ -1407,6 +1496,18 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
     };
   }
 
+  if (action === "fulfillment") {
+    const note = stringField(formData, "fulfillmentNote");
+    const responsibleExternalId = stringField(formData, "responsibleExternalId");
+    if (note.length < 10) return { error: "Informe uma observação de expedição com pelo menos 10 caracteres." };
+    return {
+      body: {
+        note,
+        responsibleExternalId: responsibleExternalId || undefined
+      }
+    };
+  }
+
   if (action === "invoiceCancel") {
     const reason = stringField(formData, "cancelReason");
     const numeroNota = stringField(formData, "numeroNota");
@@ -1443,6 +1544,16 @@ function currencyLike(value: unknown) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return stringValue(value);
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(numeric);
+}
+
+function formatDateTime(value: unknown) {
+  if (!value) return "-";
+  const date = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short"
+  }).format(date);
 }
 
 function stringField(formData: FormData | undefined, key: string) {

@@ -51,6 +51,10 @@ export type QuoteDetail = {
   external_olist_invoice_number?: string | null;
   external_olist_invoice_series?: string | null;
   external_olist_invoice_model?: string | null;
+  external_olist_fulfillment_status?: string | null;
+  external_olist_fulfillment_sent_at?: string | null;
+  external_olist_fulfillment_note?: string | null;
+  external_olist_fulfillment_response?: Record<string, unknown> | null;
   created_by_name: string | null;
   public_token_expires_at?: string | null;
   public_viewed_at?: string | null;
@@ -221,6 +225,10 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           to_jsonb(q)->>'external_olist_invoice_number' as external_olist_invoice_number,
           to_jsonb(q)->>'external_olist_invoice_series' as external_olist_invoice_series,
           to_jsonb(q)->>'external_olist_invoice_model' as external_olist_invoice_model,
+          to_jsonb(q)->>'external_olist_fulfillment_status' as external_olist_fulfillment_status,
+          to_jsonb(q)->>'external_olist_fulfillment_sent_at' as external_olist_fulfillment_sent_at,
+          to_jsonb(q)->>'external_olist_fulfillment_note' as external_olist_fulfillment_note,
+          to_jsonb(q)->'external_olist_fulfillment_response' as external_olist_fulfillment_response,
           u.name as created_by_name,
           q.public_token_expires_at,
           q.public_viewed_at,
@@ -572,6 +580,54 @@ export async function updateQuoteExternalOlistIds(
       `,
       [tenantId, userId, quoteId, JSON.stringify(input)]
     );
+  });
+}
+
+export async function markQuoteOlistFulfillment(
+  userId: string,
+  tenantId: string,
+  quoteId: string,
+  input: {
+    note?: string | null;
+    responsibleExternalId?: string | null;
+    orderId?: string | null;
+  }
+) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const response = {
+      mode: "pricing_pro_controlled",
+      provider: "olist",
+      orderId: input.orderId ?? null,
+      responsibleExternalId: input.responsibleExternalId ?? null,
+      markedAt: new Date().toISOString()
+    };
+
+    const result = await client.query<{
+      external_olist_fulfillment_status: string;
+      external_olist_fulfillment_sent_at: string;
+    }>(
+      `
+        update quotes
+        set external_olist_fulfillment_status = 'sent_to_fulfillment',
+            external_olist_fulfillment_sent_at = now(),
+            external_olist_fulfillment_note = $3,
+            external_olist_fulfillment_response = $4::jsonb,
+            updated_at = now()
+        where tenant_id = $1 and id = $2
+        returning external_olist_fulfillment_status, external_olist_fulfillment_sent_at
+      `,
+      [tenantId, quoteId, input.note ?? null, JSON.stringify(response)]
+    );
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'quotes.olist_fulfillment', 'quote', $3, $4)
+      `,
+      [tenantId, userId, quoteId, JSON.stringify({ ...input, response })]
+    );
+
+    return result.rows[0] ?? null;
   });
 }
 

@@ -201,6 +201,9 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                 externalInvoiceModel={detail.quote.external_olist_invoice_model}
                 externalInvoiceNumber={detail.quote.external_olist_invoice_number}
                 externalInvoiceSeries={detail.quote.external_olist_invoice_series}
+                fulfillmentNote={detail.quote.external_olist_fulfillment_note}
+                fulfillmentSentAt={detail.quote.external_olist_fulfillment_sent_at}
+                fulfillmentStatus={detail.quote.external_olist_fulfillment_status}
                 externalOlistId={detail.quote.customer_external_olist_id}
                 externalOrderId={detail.quote.external_olist_order_id}
                 hasCustomer={Boolean(detail.quote.customer_id)}
