@@ -80,6 +80,14 @@ type ArtworkFilePayload = {
 
 type DraftPricingRule = "per_art_average" | "per_item" | "aggregate_total";
 type ShippingServiceOption = "manual" | "melhor_envio" | "pac" | "sedex";
+type MelhorEnvioQuoteOption = {
+  code: string;
+  name: string;
+  companyName: string;
+  price: number;
+  deliveryTime: number | null;
+  raw: unknown;
+};
 type ShippingPackagingSummary = {
   boxName: string;
   widthCm: number;
@@ -147,6 +155,8 @@ export function PricingCalculator({
   const [shippingQuoteState, setShippingQuoteState] = useState<"idle" | "loading" | "error">("idle");
   const [shippingQuoteMessage, setShippingQuoteMessage] = useState("");
   const [shippingPackaging, setShippingPackaging] = useState<ShippingPackagingSummary | null>(null);
+  const [melhorEnvioOptions, setMelhorEnvioOptions] = useState<MelhorEnvioQuoteOption[]>([]);
+  const [selectedMelhorEnvioServiceCode, setSelectedMelhorEnvioServiceCode] = useState("");
   const [includeMelhorEnvioInsurance, setIncludeMelhorEnvioInsurance] = useState(true);
   const [includeShipping, setIncludeShipping] = useState(false);
   const [includeCommission, setIncludeCommission] = useState(true);
@@ -190,6 +200,13 @@ export function PricingCalculator({
     setLocalSellerShippingCost(platform.sellerShippingCost);
   }, [platform.commissionRate, platform.fixedFee, platform.sellerShippingCost, platformKey]);
 
+  useEffect(() => {
+    if (shippingService !== "melhor_envio") {
+      setMelhorEnvioOptions([]);
+      setSelectedMelhorEnvioServiceCode("");
+    }
+  }, [shippingService]);
+
   const effectivePlatform = useMemo(
     () => ({
       ...platform,
@@ -221,6 +238,14 @@ export function PricingCalculator({
       platform: effectivePlatform
     });
   }, [effectivePlatform, platform, quantity, simulatedCurve, variant]);
+
+  const selectedMelhorEnvioOption = useMemo(
+    () => melhorEnvioOptions.find((option) => option.code === selectedMelhorEnvioServiceCode) ?? null,
+    [melhorEnvioOptions, selectedMelhorEnvioServiceCode]
+  );
+  const shippingServiceLabel = shippingService === "melhor_envio" && selectedMelhorEnvioOption
+    ? `Melhor Envio - ${selectedMelhorEnvioOption.companyName} - ${selectedMelhorEnvioOption.name}`
+    : shippingService;
 
   const currentSeries = useMemo(() => {
     if (!variant || !platform) return [];
@@ -410,6 +435,10 @@ export function PricingCalculator({
 
     setShippingQuoteMessage("");
     setShippingPackaging(null);
+    if (shippingService !== "melhor_envio") {
+      setMelhorEnvioOptions([]);
+      setSelectedMelhorEnvioServiceCode("");
+    }
     setShippingQuoteState("loading");
 
     const origin = normalizeCep(originPostalCode);
@@ -473,16 +502,31 @@ export function PricingCalculator({
         throw new Error(formatShippingError(data?.error) || "Não foi possível calcular o frete.");
       }
 
+      const melhorEnvioQuoteOptions = shippingService === "melhor_envio" ? extractMelhorEnvioOptions(data.result) : [];
+      if (shippingService === "melhor_envio" && melhorEnvioQuoteOptions.length === 0) {
+        throw new Error("O Melhor Envio não retornou opções de frete válidas para esse pacote.");
+      }
+      const selectedMelhorEnvioOption = melhorEnvioQuoteOptions.find((option) => option.code === selectedMelhorEnvioServiceCode)
+        ?? melhorEnvioQuoteOptions[0]
+        ?? null;
       const amount = shippingService === "melhor_envio"
-        ? extractMelhorEnvioAmount(data.result)
+        ? selectedMelhorEnvioOption?.price ?? 0
         : Number(data.result?.totalFrete ?? 0);
       if (!Number.isFinite(amount) || amount <= 0) throw new Error("A cotação não retornou valor de frete.");
 
       setShippingAmount(amount);
       setIncludeShipping(true);
       setShippingPackaging(extractShippingPackaging(data.packaging));
+      if (shippingService === "melhor_envio") {
+        setMelhorEnvioOptions(melhorEnvioQuoteOptions);
+        setSelectedMelhorEnvioServiceCode(selectedMelhorEnvioOption?.code ?? "");
+      }
       setShippingQuoteState("idle");
-      setShippingQuoteMessage(`Frete calculado para ${shippingItems.length > 0 ? "a bandeja de orçamento" : "o item atual"}: ${brl.format(amount)}${shippingService === "melhor_envio" ? " via Melhor Envio" : ""}.`);
+      setShippingQuoteMessage(
+        shippingService === "melhor_envio"
+          ? `Melhor Envio retornou ${melhorEnvioQuoteOptions.length} opção(ões). Selecionado: ${selectedMelhorEnvioOption?.companyName} - ${selectedMelhorEnvioOption?.name}, ${brl.format(amount)}.`
+          : `Frete calculado para ${shippingItems.length > 0 ? "a bandeja de orçamento" : "o item atual"}: ${brl.format(amount)}.`
+      );
     } catch (error) {
       setShippingQuoteState("error");
       setShippingQuoteMessage(error instanceof Error ? error.message : "Não foi possível calcular o frete.");
@@ -552,7 +596,7 @@ export function PricingCalculator({
           customerAddressNumber: quickCustomerAddressNumber,
           customerAddressComplement: quickCustomerAddressComplement,
           shippingAmount,
-          shippingService
+          shippingService: shippingServiceLabel
         })
       })
     });
@@ -673,7 +717,7 @@ export function PricingCalculator({
           customerAddressNumber: quickCustomerAddressNumber,
           customerAddressComplement: quickCustomerAddressComplement,
           shippingAmount,
-          shippingService
+          shippingService: shippingServiceLabel
         })].filter(Boolean).join("\n\n")
       })
     });
@@ -1165,7 +1209,10 @@ export function PricingCalculator({
               <select
                 className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm"
                 value={shippingService}
-                onChange={(event) => setShippingService(event.target.value as ShippingServiceOption)}
+                onChange={(event) => {
+                  setShippingService(event.target.value as ShippingServiceOption);
+                  setShippingQuoteMessage("");
+                }}
               >
                 {activeShippingServices.correios ? (
                   <>
@@ -1199,6 +1246,41 @@ export function PricingCalculator({
               </label>
             </div>
           </div>
+          {shippingService === "melhor_envio" && melhorEnvioOptions.length > 0 ? (
+            <div className="mt-3 rounded-lg border border-cyan-400/20 bg-cyan-400/5 p-3">
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                <Control label="Opção do Melhor Envio">
+                  <select
+                    className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+                    value={selectedMelhorEnvioServiceCode}
+                    onChange={(event) => {
+                      const option = melhorEnvioOptions.find((item) => item.code === event.target.value);
+                      setSelectedMelhorEnvioServiceCode(event.target.value);
+                      if (option) {
+                        setShippingAmount(option.price);
+                        setIncludeShipping(true);
+                        setShippingQuoteMessage(`Opção selecionada: ${option.companyName} - ${option.name}, ${brl.format(option.price)}.`);
+                      }
+                    }}
+                  >
+                    {melhorEnvioOptions.map((option) => (
+                      <option key={option.code} value={option.code}>
+                        {option.companyName} - {option.name} · {brl.format(option.price)}
+                        {option.deliveryTime ? ` · ${option.deliveryTime} dia(s)` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </Control>
+                <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-300">
+                  <span className="block text-xs uppercase tracking-wide text-cyan-200/70">Opções retornadas</span>
+                  <strong className="mt-1 block text-zinc-100">{melhorEnvioOptions.length}</strong>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-zinc-500">
+                Recalcule o frete para atualizar prazos e valores. A opção escolhida é a que entra no orçamento.
+              </p>
+            </div>
+          ) : null}
           <div className="mt-3 rounded-md border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-xs text-zinc-400">
             Base do cálculo:{" "}
             <strong className="text-zinc-100">
@@ -2562,11 +2644,30 @@ function buildQuickQuoteNotes(input: {
   return lines.join("\n");
 }
 
-function extractMelhorEnvioAmount(result: unknown): number {
-  const first = Array.isArray(result) ? result[0] : result;
-  if (!first || typeof first !== "object") return 0;
-  const record = first as Record<string, unknown>;
-  return numberFromUnknown(record.price) || numberFromUnknown(record.custom_price);
+function extractMelhorEnvioOptions(result: unknown): MelhorEnvioQuoteOption[] {
+  const rows = Array.isArray(result) ? result : result ? [result] : [];
+  return rows
+    .map((row, index) => {
+      if (!row || typeof row !== "object") return null;
+      const record = row as Record<string, unknown>;
+      const company = record.company && typeof record.company === "object" ? (record.company as Record<string, unknown>) : {};
+      const price = numberFromUnknown(record.price) || numberFromUnknown(record.custom_price);
+      const code = stringFromUnknown(record.id) ?? stringFromUnknown(record.service_id) ?? String(index + 1);
+      const name = stringFromUnknown(record.name) ?? stringFromUnknown(record.service) ?? "Serviço";
+      const companyName = stringFromUnknown(company.name) ?? stringFromUnknown(record.company) ?? "Melhor Envio";
+      const deliveryTime = numberFromUnknown(record.delivery_time) || numberFromUnknown(record.custom_delivery_time) || null;
+      if (!price || price <= 0) return null;
+      return {
+        code,
+        name,
+        companyName,
+        price,
+        deliveryTime,
+        raw: row
+      };
+    })
+    .filter((option): option is MelhorEnvioQuoteOption => Boolean(option))
+    .sort((a, b) => a.price - b.price);
 }
 
 function defaultShippingService(activeShippingServices: NonNullable<PricingCalculatorProps["activeShippingServices"]>): ShippingServiceOption {
