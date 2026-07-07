@@ -57,6 +57,7 @@ Status atualizado durante a refatoracao inicial.
 - [x] Criar endpoints agent para produtos, cálculo, frete, orçamento composto, PDF, WhatsApp e link público.
 - [x] Criar script para gerar API key de agente por tenant.
 - [x] Criar UI em Configurações para listar, criar e revogar chaves de agente.
+- [x] Criar prompt de desenvolvimento para o módulo Lia Flow consumir a API do Pricing Pro.
 - [ ] Criar CRUD de curvas.
 - [x] Criar CRUD de clientes.
 - [x] Criar CRUD inicial de embalagens.
