@@ -14,7 +14,8 @@
     "check:login": "node --env-file=.env scripts/check-login.mjs",
     "import:boxes": "node --env-file=.env scripts/import-boxes.mjs",
     "configure:correios": "node --env-file=.env scripts/configure-correios.mjs",
-    "configure:melhor-envio": "node --env-file=.env scripts/configure-melhor-envio.mjs"
+    "configure:melhor-envio": "node --env-file=.env scripts/configure-melhor-envio.mjs",
+    "create:agent-key": "node --env-file=.env scripts/create-agent-api-key.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

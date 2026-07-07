@@ -50,6 +50,12 @@ Status atualizado durante a refatoracao inicial.
 - [x] Criar edicao inicial de ancoragens/curvas.
 - [x] Criar CRUD inicial de plataformas/canais.
 - [x] Corrigir template SQL do seed admin.
+- [x] Documentar plano técnico da API para agentes conversacionais.
+- [x] Documentar guia de uso para o agente Lia Flow consumir o Pricing Pro.
+- [x] Criar migration de API keys/idempotência para agentes.
+- [x] Criar autenticação Bearer token para `/api/agent/v1`.
+- [x] Criar endpoints agent para produtos, cálculo, frete, orçamento composto, PDF, WhatsApp e link público.
+- [x] Criar script para gerar API key de agente por tenant.
 - [ ] Criar CRUD de curvas.
 - [x] Criar CRUD de clientes.
 - [x] Criar CRUD inicial de embalagens.
