@@ -31,6 +31,7 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
         body: {
           ok: true,
           url,
+          pdfUrl: `${url}/pdf`,
           expiresAt: result.expiresAt
         }
       };

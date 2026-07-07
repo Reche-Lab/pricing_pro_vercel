@@ -147,6 +147,7 @@ export type QuoteArtworkFileInput = {
 export type PublicQuoteTenant = {
   name: string;
   logo_url: string | null;
+  company_document: string | null;
   company_phone: string | null;
   company_site: string | null;
 };
@@ -393,6 +394,7 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           q.customer_decision_note,
           t.name,
           t.logo_url,
+          t.company_document,
           t.company_phone,
           t.company_site
         from quotes q
@@ -462,6 +464,7 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
       tenant: {
         name: quote.name,
         logo_url: quote.logo_url,
+        company_document: quote.company_document,
         company_phone: quote.company_phone,
         company_site: quote.company_site
       }

@@ -254,7 +254,18 @@ GET /quotes/:quoteId/pdf
 
 Este endpoint retorna um PDF binário e exige autenticação. Não exponha esta URL diretamente ao cliente final. Se precisar enviar o PDF pelo Lia Flow, baixe o arquivo usando o Bearer token, armazene/anexe pelo mecanismo de mídia do Lia Flow e envie o arquivo ao usuário.
 
-Para compartilhamento simples com cliente, prefira o link público.
+Para compartilhamento simples com cliente, prefira `publicPdfUrl`, retornado na criação do orçamento quando `output.publicLink` e `output.pdf` estiverem ativos. Esse link segue o formato:
+
+```txt
+https://liaflow-calcula.vercel.app/q/{{token}}/pdf
+```
+
+Campos esperados na resposta de criação:
+
+- `publicUrl`: página pública do orçamento;
+- `publicPdfUrl`: PDF público acessível no navegador enquanto o link público estiver válido;
+- `authenticatedPdfUrl`: endpoint técnico que exige Bearer token;
+- `pdfUrl`: alias de compatibilidade, usando `publicPdfUrl` quando existir.
 
 ### Link Público
 

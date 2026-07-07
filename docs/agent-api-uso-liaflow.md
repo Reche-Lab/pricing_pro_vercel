@@ -317,10 +317,15 @@ Resposta esperada:
     "grandTotal": 144.9
   },
   "publicUrl": "https://liaflow-calcula.vercel.app/q/token",
-  "pdfUrl": "https://liaflow-calcula.vercel.app/api/quotes/652dc1a4-3a20-4f5e-84c7-f1dbc5ca89e1/pdf",
+  "publicPdfUrl": "https://liaflow-calcula.vercel.app/q/token/pdf",
+  "authenticatedPdfUrl": "https://liaflow-calcula.vercel.app/api/agent/v1/quotes/652dc1a4-3a20-4f5e-84c7-f1dbc5ca89e1/pdf",
+  "pdfUrl": "https://liaflow-calcula.vercel.app/q/token/pdf",
+  "pdfAccess": "public",
   "whatsappText": "Olá, Bruno! Segue seu orçamento..."
 }
 ```
+
+Use `publicPdfUrl` ou `pdfUrl` quando `pdfAccess` for `public` para enviar um link que abre no navegador. Use `authenticatedPdfUrl` somente para o backend do Lia Flow baixar o PDF com Bearer token e enviar como anexo.
 
 Resposta do agente:
 
@@ -374,6 +379,8 @@ Endpoint:
 ```txt
 GET /quotes/{{quoteId}}/pdf
 ```
+
+Este endpoint exige Bearer token e retorna PDF binário. Para o cliente final, prefira o campo `publicPdfUrl` retornado ao criar orçamento com link público.
 
 ## Fluxo Conversacional Recomendado
 

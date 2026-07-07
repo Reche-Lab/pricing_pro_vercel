@@ -132,9 +132,12 @@ export async function POST(request: Request) {
 
       const output = body.output ?? { publicLink: true, pdf: true, whatsappText: true };
       let publicUrl: string | null = null;
+      let publicPdfUrl: string | null = null;
       if (output.publicLink) {
         const publicLink = await createPublicQuoteLink(context.actorUserId, context.tenantId, quote.id, 15);
-        publicUrl = `${getServerEnv().APP_URL.replace(/\/$/, "")}/q/${publicLink.token}`;
+        const publicBaseUrl = `${getServerEnv().APP_URL.replace(/\/$/, "")}/q/${publicLink.token}`;
+        publicUrl = publicBaseUrl;
+        publicPdfUrl = output.pdf ? `${publicBaseUrl}/pdf` : null;
       }
 
       await logAgentAudit(context, "agent.quotes.create_composite", {
@@ -143,7 +146,7 @@ export async function POST(request: Request) {
         externalConversationId: body.externalConversationId
       });
 
-      const pdfUrl = output.pdf
+      const authenticatedPdfUrl = output.pdf
         ? `${getServerEnv().APP_URL.replace(/\/$/, "")}/api/agent/v1/quotes/${quote.id}/pdf`
         : null;
       const whatsappText = output.whatsappText
@@ -172,7 +175,10 @@ export async function POST(request: Request) {
             grandTotal: Number(detail.quote.grand_total)
           },
           publicUrl,
-          pdfUrl,
+          publicPdfUrl,
+          authenticatedPdfUrl,
+          pdfUrl: publicPdfUrl ?? authenticatedPdfUrl,
+          pdfAccess: publicPdfUrl ? "public" : authenticatedPdfUrl ? "bearer_token_required" : null,
           whatsappText
         }
       };
