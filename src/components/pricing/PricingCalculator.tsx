@@ -10,6 +10,7 @@ import {
   FileText,
   Image as ImageIcon,
   Plus,
+  Search,
   ShoppingCart,
   Truck,
   UserRound,
@@ -99,6 +100,24 @@ type ShippingPackagingSummary = {
   grossWeightKg: number;
   grossWeightPerBoxKg: number;
 };
+type OlistCustomerLookupResult = {
+  id: string;
+  code: string;
+  name: string;
+  document: string;
+  email: string;
+  phone: string;
+  personType: string;
+  status: string;
+  postalCode: string;
+  addressLine: string;
+  addressNumber: string;
+  addressComplement: string;
+  district: string;
+  city: string;
+  state: string;
+};
+type OlistCustomerLookupMode = "auto" | "nome" | "cpfCnpj" | "celular" | "email" | "codigo";
 
 const SIMULATION_QUANTITIES = [1, 10, 25, 50, 100, 250, 500, 1000] as const;
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -145,6 +164,11 @@ export function PricingCalculator({
   const [quickCustomerCity, setQuickCustomerCity] = useState("");
   const [quickCustomerState, setQuickCustomerState] = useState("");
   const [quickCustomerAddress, setQuickCustomerAddress] = useState<CepAddress | null>(null);
+  const [olistCustomerLookupMode, setOlistCustomerLookupMode] = useState<OlistCustomerLookupMode>("auto");
+  const [olistCustomerLookupTerm, setOlistCustomerLookupTerm] = useState("");
+  const [olistCustomerLookupState, setOlistCustomerLookupState] = useState<"idle" | "loading" | "error">("idle");
+  const [olistCustomerLookupMessage, setOlistCustomerLookupMessage] = useState("");
+  const [olistCustomerResults, setOlistCustomerResults] = useState<OlistCustomerLookupResult[]>([]);
   const [destinationPostalCode, setDestinationPostalCode] = useState("");
   const [destinationAddress, setDestinationAddress] = useState<CepAddress | null>(null);
   const [originPostalCode, setOriginPostalCode] = useState(formatCep(defaultOriginPostalCode));
@@ -390,6 +414,76 @@ export function PricingCalculator({
     setQuickCustomerState(address.state);
     setQuickCustomerAddress(address);
     setCepLookupMessage("Endereço do cliente preenchido pelo CEP.");
+  }
+
+  async function lookupOlistCustomer() {
+    if (demoMode || readonlyMode) return;
+    const searchValue = olistCustomerLookupTerm.trim()
+      || quickCustomerDocument.trim()
+      || quickCustomerPhone.trim()
+      || quickCustomerEmail.trim()
+      || quickCustomerName.trim();
+    if (!searchValue) {
+      setOlistCustomerLookupState("error");
+      setOlistCustomerLookupMessage("Informe nome, CPF/CNPJ, telefone ou e-mail para buscar no Olist.");
+      setOlistCustomerResults([]);
+      return;
+    }
+
+    setOlistCustomerLookupState("loading");
+    setOlistCustomerLookupMessage("Buscando cliente no Olist...");
+    setOlistCustomerResults([]);
+    const hasExplicitSearchTerm = Boolean(olistCustomerLookupTerm.trim());
+    try {
+      const response = await fetch("/api/pricing/olist/customer-lookup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: olistCustomerLookupMode,
+          value: searchValue,
+          nome: hasExplicitSearchTerm ? "" : quickCustomerName,
+          cpfCnpj: hasExplicitSearchTerm ? "" : quickCustomerDocument,
+          celular: hasExplicitSearchTerm ? "" : quickCustomerPhone,
+          email: hasExplicitSearchTerm ? "" : quickCustomerEmail
+        })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) {
+        setOlistCustomerLookupState("error");
+        setOlistCustomerLookupMessage(data?.error ?? "Não foi possível consultar cliente no Olist.");
+        return;
+      }
+
+      setOlistCustomerLookupState("idle");
+      setOlistCustomerResults(data.customers ?? []);
+      setOlistCustomerLookupMessage(data.message ?? "Consulta concluída.");
+    } catch {
+      setOlistCustomerLookupState("error");
+      setOlistCustomerLookupMessage("Falha de comunicação ao consultar cliente no Olist.");
+    }
+  }
+
+  function applyOlistCustomer(customer: OlistCustomerLookupResult) {
+    setQuickCustomerName(customer.name || quickCustomerName);
+    setQuickCustomerDocument(customer.document ? formatCpfCnpj(customer.document) : quickCustomerDocument);
+    setQuickCustomerEmail(customer.email || quickCustomerEmail);
+    setQuickCustomerPhone(customer.phone ? formatBrazilPhone(stripBrazilDdi(customer.phone)) : quickCustomerPhone);
+    setQuickCustomerPhoneDdi(customer.phone?.startsWith("55") ? "+55" : quickCustomerPhoneDdi);
+    setQuickCustomerPostalCode(customer.postalCode ? formatCep(customer.postalCode) : quickCustomerPostalCode);
+    setQuickCustomerAddressLine(customer.addressLine || quickCustomerAddressLine);
+    setQuickCustomerAddressNumber(customer.addressNumber || quickCustomerAddressNumber);
+    setQuickCustomerAddressComplement(customer.addressComplement || quickCustomerAddressComplement);
+    setQuickCustomerDistrict(customer.district || quickCustomerDistrict);
+    setQuickCustomerCity(customer.city || quickCustomerCity);
+    setQuickCustomerState(customer.state ? customer.state.toUpperCase() : quickCustomerState);
+    setQuickCustomerAddress(customer.postalCode ? {
+      cep: formatCep(customer.postalCode),
+      street: customer.addressLine,
+      district: customer.district,
+      city: customer.city,
+      state: customer.state.toUpperCase()
+    } : quickCustomerAddress);
+    setOlistCustomerLookupMessage(`Dados preenchidos com ${customer.name || "cliente selecionado"} do Olist.`);
   }
 
   function resetAnchors() {
@@ -1101,6 +1195,87 @@ export function PricingCalculator({
         </div>
 
         <DetailsPanel icon={<UserRound size={16} />} title="Informacoes do Cliente">
+          <div className="mb-4 rounded-lg border border-cyan-300/20 bg-cyan-300/10 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-semibold text-cyan-50">Buscar cliente no Olist</h4>
+                <p className="mt-1 text-xs leading-5 text-cyan-100/75">
+                  Encontre por nome, CPF/CNPJ, telefone ou e-mail e preencha automaticamente os dados do orçamento.
+                </p>
+              </div>
+              <span className="rounded-full bg-zinc-950/50 px-2.5 py-1 text-xs text-cyan-100">
+                {olistCustomerResults.length ? `${olistCustomerResults.length} resultado(s)` : "Opcional"}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-3 lg:grid-cols-[170px_minmax(0,1fr)_auto] lg:items-end">
+              <Control label="Pesquisar por">
+                <select
+                  className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm"
+                  value={olistCustomerLookupMode}
+                  onChange={(event) => setOlistCustomerLookupMode(event.target.value as OlistCustomerLookupMode)}
+                >
+                  <option value="auto">Automático</option>
+                  <option value="nome">Nome</option>
+                  <option value="cpfCnpj">CPF/CNPJ</option>
+                  <option value="celular">Telefone</option>
+                  <option value="email">E-mail</option>
+                  <option value="codigo">Código</option>
+                </select>
+              </Control>
+              <Input
+                label="Valor da busca"
+                placeholder="Ex.: Angelita, 000.000.000-00 ou (11) 99999-9999"
+                value={olistCustomerLookupTerm}
+                onChange={setOlistCustomerLookupTerm}
+              />
+              <button
+                className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-cyan-300 px-4 text-sm font-semibold text-zinc-950 hover:bg-cyan-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+                disabled={demoMode || readonlyMode || olistCustomerLookupState === "loading"}
+                onClick={lookupOlistCustomer}
+                type="button"
+              >
+                <Search size={16} />
+                {olistCustomerLookupState === "loading" ? "Buscando..." : "Buscar"}
+              </button>
+            </div>
+            {!olistCustomerLookupTerm.trim() ? (
+              <p className="mt-2 text-xs text-cyan-100/60">
+                Se deixar vazio, a busca usa os dados já digitados abaixo, priorizando CPF/CNPJ, telefone, e-mail e nome.
+              </p>
+            ) : null}
+            {olistCustomerLookupMessage ? (
+              <p className={`mt-3 rounded-md px-3 py-2 text-xs ${olistCustomerLookupState === "error" ? "bg-rose-400/10 text-rose-100" : "bg-zinc-950/50 text-cyan-100"}`}>
+                {olistCustomerLookupMessage}
+              </p>
+            ) : null}
+            {olistCustomerResults.length ? (
+              <div className="mt-3 grid gap-2">
+                {olistCustomerResults.map((customer, index) => (
+                  <button
+                    className="focus-ring rounded-md border border-zinc-800 bg-zinc-950/60 p-3 text-left hover:border-cyan-300/40 hover:bg-zinc-950"
+                    key={`${customer.id || customer.code || customer.name}-${index}`}
+                    onClick={() => applyOlistCustomer(customer)}
+                    type="button"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="font-medium text-white">{customer.name || "Cliente sem nome"}</p>
+                        <p className="mt-1 text-xs text-zinc-500">
+                          {[customer.document, customer.email, customer.phone].filter(Boolean).join(" · ") || "Sem documento/e-mail/telefone no retorno"}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-cyan-300/10 px-2.5 py-1 text-xs text-cyan-100">Usar cliente</span>
+                    </div>
+                    <p className="mt-2 text-xs text-zinc-500">
+                      {[customer.addressLine, customer.addressNumber, customer.district, customer.city, customer.state, customer.postalCode]
+                        .filter(Boolean)
+                        .join(", ") || "Sem endereço no retorno"}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
             <Input label="Nome (cliente)" placeholder="Insira o nome do cliente" value={quickCustomerName} onChange={setQuickCustomerName} />
             <Input
@@ -2145,6 +2320,12 @@ function formatInternationalPhone(ddi: string, phone: string) {
   const ddiDigits = onlyDigits(ddi || "55") || "55";
   const phoneDigits = onlyDigits(phone);
   return phoneDigits ? `+${ddiDigits} ${formatBrazilPhone(phoneDigits)}` : "";
+}
+
+function stripBrazilDdi(value: string) {
+  const digits = onlyDigits(value);
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) return digits.slice(2);
+  return digits;
 }
 
 function onlyDigits(value: string) {
