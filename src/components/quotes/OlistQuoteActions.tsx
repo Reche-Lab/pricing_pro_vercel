@@ -760,7 +760,8 @@ function ActionModal({
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block">
                     <span className="mb-1 block text-sm font-medium text-zinc-300">Campo principal</span>
-                    <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="lookupMode" defaultValue="nome">
+                    <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="lookupMode" defaultValue="auto">
+                      <option value="auto">Automático: CPF/CNPJ, telefone, e-mail e nome</option>
                       <option value="nome">Nome</option>
                       <option value="cpfCnpj">CPF/CNPJ</option>
                       <option value="celular">Telefone/celular</option>
@@ -780,7 +781,7 @@ function ActionModal({
                   </label>
                 </div>
                 <p className="text-xs leading-5 text-zinc-500">
-                  A consulta usa apenas o campo principal escolhido para evitar filtros combinados demais. Deixe situação como “Todas” quando não souber se o contato está como B ou A no Olist.
+                  No modo automático, o sistema prioriza CPF/CNPJ, depois telefone, e-mail, código e nome. A consulta usa apenas um campo principal para evitar filtros combinados demais.
                 </p>
               </div>
             </div>
@@ -1562,7 +1563,7 @@ function Input({
 
 function buildPayload(action: ActionKey, formData: FormData | undefined, defaultCrmSubject: string): { body?: Record<string, unknown> } | { error: string } {
   if (action === "customerLookup") {
-    const mode = stringField(formData, "lookupMode") || "nome";
+    const mode = stringField(formData, "lookupMode") || "auto";
     return {
       body: {
         mode,

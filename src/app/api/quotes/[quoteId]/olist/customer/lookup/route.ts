@@ -4,7 +4,7 @@ import { buildOlistCustomerLookupPayload } from "@/services/olist/payloads";
 import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOperation } from "../../_shared";
 
 const customerLookupSchema = z.object({
-  mode: z.enum(["nome", "cpfCnpj", "celular", "email", "codigo"]).optional().default("nome"),
+  mode: z.enum(["auto", "nome", "cpfCnpj", "celular", "email", "codigo"]).optional().default("auto"),
   cpfCnpj: z.string().trim().optional().nullable(),
   celular: z.string().trim().optional().nullable(),
   email: z.string().trim().optional().nullable(),
@@ -28,7 +28,13 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
   const quotePayload = buildOlistCustomerLookupPayload(loaded.detail.quote);
   const payload = {
     ...quotePayload,
-    mode: parsed.data.mode,
+    mode: resolveLookupMode(parsed.data.mode, {
+      cpfCnpj: parsed.data.cpfCnpj === undefined || parsed.data.cpfCnpj === null ? quotePayload.cpfCnpj : cleanDigits(parsed.data.cpfCnpj),
+      celular: parsed.data.celular === undefined || parsed.data.celular === null ? quotePayload.celular : cleanDigits(parsed.data.celular),
+      email: parsed.data.email === undefined || parsed.data.email === null ? quotePayload.email : parsed.data.email,
+      codigo: parsed.data.codigo === undefined || parsed.data.codigo === null ? quotePayload.codigo : parsed.data.codigo,
+      nome: parsed.data.nome === undefined || parsed.data.nome === null ? quotePayload.nome : parsed.data.nome
+    }),
     cpfCnpj: parsed.data.cpfCnpj === undefined || parsed.data.cpfCnpj === null
       ? quotePayload.cpfCnpj
       : cleanDigits(parsed.data.cpfCnpj),
@@ -78,7 +84,7 @@ function cleanDigits(value: string | null | undefined) {
 }
 
 function buildLookupPath(path: string, payload: ReturnType<typeof buildOlistCustomerLookupPayload> & {
-  mode?: "nome" | "cpfCnpj" | "celular" | "email" | "codigo";
+  mode?: "auto" | "nome" | "cpfCnpj" | "celular" | "email" | "codigo";
   situacao?: string | null;
 }) {
   const params = new URLSearchParams();
@@ -95,10 +101,10 @@ function buildLookupPath(path: string, payload: ReturnType<typeof buildOlistCust
 }
 
 function publicLookupCriteria(payload: ReturnType<typeof buildOlistCustomerLookupPayload> & {
-  mode?: "nome" | "cpfCnpj" | "celular" | "email" | "codigo";
+  mode?: "auto" | "nome" | "cpfCnpj" | "celular" | "email" | "codigo";
   situacao?: string | null;
 }) {
-  const mode = payload.mode ?? "nome";
+  const mode = payload.mode ?? "auto";
   const value = mode === "cpfCnpj"
     ? payload.cpfCnpj
     : mode === "celular"
@@ -113,4 +119,16 @@ function publicLookupCriteria(payload: ReturnType<typeof buildOlistCustomerLooku
     valor: value ?? null,
     situacao: payload.situacao || "todas"
   };
+}
+
+function resolveLookupMode(
+  requestedMode: "auto" | "nome" | "cpfCnpj" | "celular" | "email" | "codigo",
+  payload: Pick<ReturnType<typeof buildOlistCustomerLookupPayload>, "cpfCnpj" | "celular" | "email" | "codigo" | "nome">
+) {
+  if (requestedMode !== "auto") return requestedMode;
+  if (payload.cpfCnpj) return "cpfCnpj";
+  if (payload.celular) return "celular";
+  if (payload.email) return "email";
+  if (payload.codigo) return "codigo";
+  return "nome";
 }
