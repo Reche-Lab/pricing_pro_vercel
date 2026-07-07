@@ -205,7 +205,7 @@ function isCorreiosService(serviceCode: string | null | undefined): boolean {
 }
 
 function shipmentOperationIdentifier(shipment: ShipmentRow | null | undefined): string | null {
-  return shipment?.provider_order_id ?? shipment?.provider_shipment_id ?? shipment?.tracking_code ?? null;
+  return shipment?.provider_shipment_id ?? shipment?.provider_order_id ?? shipment?.tracking_code ?? null;
 }
 
 function buildFromAddress(tenant: TenantShippingProfile, missingFields: string[]): MelhorEnvioAddressPayload {

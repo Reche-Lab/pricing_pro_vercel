@@ -43,6 +43,8 @@ export async function performShipmentMelhorEnvioOperation(
   if (shipment.provider !== "melhor_envio") {
     return NextResponse.json({ ok: false, error: "Shipment provider is not Melhor Envio." }, { status: 409 });
   }
+  const alreadyCompleted = completedOperationResponse(nextStatus, shipment.status);
+  if (alreadyCompleted) return NextResponse.json(alreadyCompleted);
 
   const connection = await getIntegrationConnection(session.userId, session.tenantId, "melhor_envio");
   if (!connection || connection.status !== "active") {
@@ -105,6 +107,22 @@ function humanizeMelhorEnvioError(message: string, status?: number) {
   if (status === 401) return `Melhor Envio recusou a autenticação. Reconecte o OAuth e tente novamente. Detalhe: ${message}`;
   if (status === 403) return `Melhor Envio negou permissão para esta operação. Confira os escopos do aplicativo. Detalhe: ${message}`;
   return message;
+}
+
+function completedOperationResponse(nextStatus: string, currentStatus: string) {
+  const order = ["quoted", "cart", "paid", "label_generated", "printed", "posted", "delivered"];
+  const targetIndex = order.indexOf(nextStatus);
+  const currentIndex = order.indexOf(currentStatus);
+  if (targetIndex === -1 || currentIndex === -1 || currentIndex < targetIndex) return null;
+
+  return {
+    ok: true,
+    alreadyCompleted: true,
+    status: currentStatus,
+    result: {
+      message: `Operação já concluída anteriormente. Status atual: ${currentStatus}.`
+    }
+  };
 }
 
 function extractShipmentFields(result: unknown) {
