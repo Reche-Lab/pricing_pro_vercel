@@ -466,11 +466,11 @@ Códigos úteis:
 - [x] `POST /api/agent/v1/quotes/composite`;
 - [x] `GET /api/agent/v1/quotes/:quoteId/whatsapp`;
 - [x] `GET /api/agent/v1/quotes/:quoteId/pdf`.
+- [x] tela em Configurações para gerar e revogar chave.
 
 ### Fase 2
 
 - idempotência persistida;
-- tela em superadmin/tenant para gerar e revogar chave;
 - endpoint de consulta de orçamento;
 - link público automático.
 

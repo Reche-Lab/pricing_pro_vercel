@@ -33,6 +33,15 @@ Para cada tenant que o agente poderá atender:
 
 Depois de rodar a migration `0030_agent_api_keys.sql`, gere uma chave para o tenant:
 
+Pela interface:
+
+1. Acesse `Configurações > Agentes e API`.
+2. Clique em `Criar chave`.
+3. Copie o token exibido.
+4. Salve o token no ambiente do Lia Flow.
+
+Como alternativa operacional, também é possível gerar via script:
+
 ```bash
 npm run create:agent-key -- ground-shop "Lia Flow Agent"
 ```

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { MelhorEnvioIntegrationPanel } from "@/components/settings/MelhorEnvioIntegrationPanel";
 import { OlistIntegrationPanel } from "@/components/settings/OlistIntegrationPanel";
+import { AgentApiKeysPanel } from "@/components/settings/AgentApiKeysPanel";
 import { ChangePasswordForm } from "@/components/settings/ChangePasswordForm";
 import { TenantSettingsForm } from "@/components/settings/TenantSettingsForm";
 import { getCurrentSession } from "@/lib/auth/session";
@@ -33,6 +34,7 @@ export default async function SettingsPage({
     >
       <div className="grid max-w-5xl gap-6">
         <ChangePasswordForm />
+        <AgentApiKeysPanel />
         <MelhorEnvioIntegrationPanel callbackMessage={params.message} callbackStatus={params.melhor_envio} />
         <OlistIntegrationPanel />
         <TenantSettingsForm tenant={tenant} />

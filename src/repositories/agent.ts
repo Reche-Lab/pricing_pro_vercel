@@ -45,6 +45,19 @@ export type AgentQuoteItemInput = {
   artworkName?: string | null;
 };
 
+export type AgentApiKeyView = {
+  id: string;
+  name: string;
+  key_prefix: string;
+  scopes: string[];
+  status: "active" | "revoked";
+  last_used_at: string | null;
+  created_at: string;
+  revoked_at: string | null;
+  created_by_name: string | null;
+  created_by_email: string | null;
+};
+
 type AgentKeyRow = {
   id: string;
   tenant_id: string;
@@ -69,6 +82,121 @@ export function generateAgentApiKey() {
 
 export function hashAgentToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
+}
+
+export async function listAgentApiKeys(userId: string, tenantId: string): Promise<AgentApiKeyView[]> {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const result = await client.query<AgentApiKeyView>(
+      `
+        select
+          k.id,
+          k.name,
+          k.key_prefix,
+          k.scopes,
+          k.status,
+          k.last_used_at,
+          k.created_at,
+          k.revoked_at,
+          u.name as created_by_name,
+          u.email::text as created_by_email
+        from agent_api_keys k
+        left join app_users u on u.id = k.created_by
+        where k.tenant_id = $1
+        order by
+          case k.status when 'active' then 0 else 1 end,
+          k.created_at desc
+      `,
+      [tenantId]
+    );
+
+    return result.rows;
+  });
+}
+
+export async function createAgentApiKey(userId: string, tenantId: string, input: { name: string; scopes: string[] }) {
+  const generated = generateAgentApiKey();
+  const key = await withTenantContext(userId, tenantId, async (client) => {
+    const result = await client.query<AgentApiKeyView>(
+      `
+        insert into agent_api_keys (
+          tenant_id,
+          name,
+          key_prefix,
+          key_hash,
+          scopes,
+          created_by
+        )
+        values ($1, $2, $3, $4, $5, $6)
+        returning
+          id,
+          name,
+          key_prefix,
+          scopes,
+          status,
+          last_used_at,
+          created_at,
+          revoked_at,
+          null::text as created_by_name,
+          null::text as created_by_email
+      `,
+      [tenantId, input.name, generated.prefix, generated.hash, input.scopes, userId]
+    );
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'agent_api_key.created', 'agent_api_key', $3, $4)
+      `,
+      [
+        tenantId,
+        userId,
+        result.rows[0].id,
+        JSON.stringify({ name: input.name, keyPrefix: generated.prefix, scopes: input.scopes })
+      ]
+    );
+
+    return result.rows[0];
+  });
+
+  return { key, token: generated.token };
+}
+
+export async function revokeAgentApiKey(userId: string, tenantId: string, keyId: string): Promise<AgentApiKeyView | null> {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const result = await client.query<AgentApiKeyView>(
+      `
+        update agent_api_keys
+        set status = 'revoked',
+            revoked_at = coalesce(revoked_at, now())
+        where tenant_id = $1
+          and id = $2
+        returning
+          id,
+          name,
+          key_prefix,
+          scopes,
+          status,
+          last_used_at,
+          created_at,
+          revoked_at,
+          null::text as created_by_name,
+          null::text as created_by_email
+      `,
+      [tenantId, keyId]
+    );
+
+    if (!result.rows[0]) return null;
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'agent_api_key.revoked', 'agent_api_key', $3, $4)
+      `,
+      [tenantId, userId, keyId, JSON.stringify({ keyPrefix: result.rows[0].key_prefix, name: result.rows[0].name })]
+    );
+
+    return result.rows[0];
+  });
 }
 
 export async function authenticateAgentApiKey(token: string): Promise<AgentContext | null> {
