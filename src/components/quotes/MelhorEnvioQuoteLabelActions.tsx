@@ -34,7 +34,7 @@ const OPERATIONS: Array<{
   icon: typeof PackagePlus;
 }> = [
   { key: "cart", title: "Carrinho", label: "Adicionar ao carrinho", doneStatuses: ["cart", "paid", "label_generated", "printed", "posted", "delivered"], icon: PackagePlus },
-  { key: "checkout", title: "Pagamento", label: "Comprar etiqueta", doneStatuses: ["paid", "label_generated", "printed", "posted", "delivered"], icon: CreditCard },
+  { key: "checkout", title: "Compra", label: "Pagar com saldo Melhor Envio", doneStatuses: ["paid", "label_generated", "printed", "posted", "delivered"], icon: CreditCard },
   { key: "generate", title: "Etiqueta", label: "Gerar etiqueta", doneStatuses: ["label_generated", "printed", "posted", "delivered"], icon: FileText },
   { key: "print", title: "Impressão", label: "Imprimir etiqueta", doneStatuses: ["printed", "posted", "delivered"], icon: Printer },
   { key: "tracking", title: "Rastreio", label: "Atualizar rastreio", doneStatuses: ["posted", "delivered"], icon: Radar }
@@ -204,6 +204,9 @@ export function MelhorEnvioQuoteLabelActions({
           <p className="mt-1 text-xs leading-5 text-zinc-500">
             Emita a etiqueta usando os itens, endereço do cliente, caixa calculada e serviço de envio selecionado neste orçamento.
           </p>
+          <p className="mt-2 rounded-md border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">
+            A etapa de compra usa o saldo da conta Melhor Envio conectada. Para adicionar saldo ou alterar forma de pagamento, acesse sua conta Melhor Envio.
+          </p>
         </div>
         {selectedShipment ? (
           <span className="w-fit rounded-md border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-medium text-cyan-100">
@@ -326,7 +329,7 @@ function operationDone(shipment: ShipmentRow, operation: OperationKey) {
 function operationTitle(operation: OperationKey, success: boolean) {
   const titles: Record<OperationKey, string> = {
     cart: success ? "Envio adicionado ao carrinho" : "Carrinho não concluído",
-    checkout: success ? "Etiqueta comprada" : "Pagamento não concluído",
+    checkout: success ? "Etiqueta comprada com saldo Melhor Envio" : "Compra não concluída",
     generate: success ? "Etiqueta gerada" : "Geração não concluída",
     print: success ? "Etiqueta pronta para impressão" : "Impressão não concluída",
     tracking: success ? "Rastreio atualizado" : "Rastreio não concluído"
@@ -337,7 +340,7 @@ function operationTitle(operation: OperationKey, success: boolean) {
 function operationSuccessMessage(operation: OperationKey) {
   const messages: Record<OperationKey, string> = {
     cart: "O envio foi adicionado ao carrinho do Melhor Envio.",
-    checkout: "A compra da etiqueta foi solicitada no Melhor Envio.",
+    checkout: "A compra da etiqueta foi solicitada usando o saldo disponível na conta Melhor Envio conectada.",
     generate: "A etiqueta foi gerada. Agora você pode imprimir.",
     print: "A impressão foi solicitada. Se a API retornar link/arquivo, ele ficará salvo no envio.",
     tracking: "A consulta de rastreio foi atualizada no envio."
