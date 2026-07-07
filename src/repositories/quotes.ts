@@ -122,6 +122,7 @@ export type CreateQuoteInput = {
   customerDistrict?: string | null;
   customerCity?: string | null;
   customerState?: string | null;
+  customerExternalOlistId?: string | null;
   shippingTotal?: number;
   includeCommission?: boolean;
   includeFixedFee?: boolean;
@@ -782,44 +783,7 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
     const platform = platformResult.rows[0];
     if (!platform) throw new Error("Platform rule not found.");
 
-    let customerId = input.customerId || null;
-    if (!customerId && input.customerName) {
-      const customerResult = await client.query<{ id: string }>(
-        `
-          insert into customers (
-            tenant_id,
-            name,
-            document,
-            email,
-            phone,
-            postal_code,
-            address_line,
-            address_number,
-            address_complement,
-            district,
-            city,
-            state
-          )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-          returning id
-        `,
-        [
-          tenantId,
-          input.customerName,
-          clean(input.customerDocument),
-          clean(input.customerEmail),
-          clean(input.customerPhone),
-          clean(input.customerPostalCode),
-          clean(input.customerAddressLine),
-          clean(input.customerAddressNumber),
-          clean(input.customerAddressComplement),
-          clean(input.customerDistrict),
-          clean(input.customerCity),
-          clean(input.customerState)?.toUpperCase() ?? null
-        ]
-      );
-      customerId = customerResult.rows[0].id;
-    }
+    const customerId = await resolveQuoteCustomer(client, tenantId, input);
 
     const effectivePlatform = buildEffectivePlatform(input, platform);
 
@@ -1178,6 +1142,7 @@ function groupArtworksByItem(rows: QuoteItemArtworkRow[]) {
 
 async function resolveQuoteCustomer(client: pg.PoolClient, tenantId: string, input: CreateQuoteInput) {
   let customerId = input.customerId || null;
+  const externalOlistId = clean(input.customerExternalOlistId);
   if (!customerId && input.customerName) {
     const customerResult = await client.query<{ id: string }>(
       `
@@ -1193,9 +1158,10 @@ async function resolveQuoteCustomer(client: pg.PoolClient, tenantId: string, inp
           address_complement,
           district,
           city,
-          state
+          state,
+          external_olist_id
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         returning id
       `,
       [
@@ -1210,10 +1176,25 @@ async function resolveQuoteCustomer(client: pg.PoolClient, tenantId: string, inp
         clean(input.customerAddressComplement),
         clean(input.customerDistrict),
         clean(input.customerCity),
-        clean(input.customerState)?.toUpperCase() ?? null
+        clean(input.customerState)?.toUpperCase() ?? null,
+        externalOlistId
       ]
     );
     customerId = customerResult.rows[0].id;
+  }
+
+  if (customerId && externalOlistId) {
+    await client.query(
+      `
+        update customers
+        set external_olist_id = $3,
+            updated_at = now()
+        where tenant_id = $1
+          and id = $2
+          and (external_olist_id is null or external_olist_id <> $3)
+      `,
+      [tenantId, customerId, externalOlistId]
+    );
   }
 
   return customerId;

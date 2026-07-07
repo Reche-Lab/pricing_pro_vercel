@@ -209,9 +209,11 @@ function shipmentOperationIdentifier(shipment: ShipmentRow | null | undefined): 
 }
 
 function buildFromAddress(tenant: TenantShippingProfile, missingFields: string[]): MelhorEnvioAddressPayload {
+  const document = splitBrazilDocument(tenant.company_document);
   requireField(tenant.name, "tenant.name", missingFields);
   requireField(tenant.company_phone, "tenant.company_phone", missingFields);
   requireField(tenant.company_document, "tenant.company_document", missingFields);
+  requireValidDocument(document, "tenant.company_document", missingFields);
   requireField(tenant.postal_code, "tenant.postal_code", missingFields);
   requireField(tenant.address_line, "tenant.address_line", missingFields);
   requireField(tenant.address_number, "tenant.address_number", missingFields);
@@ -222,8 +224,8 @@ function buildFromAddress(tenant: TenantShippingProfile, missingFields: string[]
   return {
     name: tenant.name,
     phone: onlyDigits(tenant.company_phone),
-    document: onlyDigits(tenant.company_document),
-    company_document: onlyDigits(tenant.company_document),
+    document: document.cpf,
+    company_document: document.cnpj,
     postal_code: onlyDigits(tenant.postal_code),
     address: tenant.address_line ?? undefined,
     number: tenant.address_number ?? undefined,
@@ -236,9 +238,11 @@ function buildFromAddress(tenant: TenantShippingProfile, missingFields: string[]
 }
 
 function buildToAddress(quote: QuoteDetail, missingFields: string[]): MelhorEnvioAddressPayload {
+  const document = splitBrazilDocument(quote.customer_document);
   requireField(quote.customer_name, "customer.name", missingFields);
   requireField(quote.customer_phone, "customer.phone", missingFields);
   requireField(quote.customer_document, "customer.document", missingFields);
+  requireValidDocument(document, "customer.document", missingFields);
   requireField(quote.customer_postal_code, "customer.postal_code", missingFields);
   requireField(quote.customer_address_line, "customer.address_line", missingFields);
   requireField(quote.customer_address_number, "customer.address_number", missingFields);
@@ -250,7 +254,8 @@ function buildToAddress(quote: QuoteDetail, missingFields: string[]): MelhorEnvi
     name: quote.customer_name ?? undefined,
     phone: onlyDigits(quote.customer_phone),
     email: quote.customer_email ?? undefined,
-    document: onlyDigits(quote.customer_document),
+    document: document.cpf,
+    company_document: document.cnpj,
     postal_code: onlyDigits(quote.customer_postal_code),
     address: quote.customer_address_line ?? undefined,
     number: quote.customer_address_number ?? undefined,
@@ -266,9 +271,53 @@ function requireField(value: string | null | undefined, field: string, missingFi
   if (!value?.trim()) missingFields.push(field);
 }
 
+function requireValidDocument(
+  document: { cpf?: string; cnpj?: string; invalid?: string },
+  field: string,
+  missingFields: string[]
+) {
+  if (document.invalid) missingFields.push(`${field}:invalid`);
+}
+
 function onlyDigits(value: string | null | undefined): string | undefined {
   const digits = value?.replace(/\D/g, "") ?? "";
   return digits || undefined;
+}
+
+function splitBrazilDocument(value: string | null | undefined): { cpf?: string; cnpj?: string; invalid?: string } {
+  const digits = onlyDigits(value);
+  if (!digits) return {};
+  if (digits.length === 11) return isValidCpf(digits) ? { cpf: digits } : { invalid: digits };
+  if (digits.length === 14) return isValidCnpj(digits) ? { cnpj: digits } : { invalid: digits };
+  return { invalid: digits };
+}
+
+function isValidCpf(digits: string) {
+  if (!/^\d{11}$/.test(digits) || /^(\d)\1+$/.test(digits)) return false;
+  const first = cpfDigit(digits.slice(0, 9));
+  const second = cpfDigit(digits.slice(0, 9) + first);
+  return digits.endsWith(`${first}${second}`);
+}
+
+function cpfDigit(base: string) {
+  const sum = base.split("").reduce((acc, digit, index) => acc + Number(digit) * (base.length + 1 - index), 0);
+  const mod = (sum * 10) % 11;
+  return mod === 10 ? 0 : mod;
+}
+
+function isValidCnpj(digits: string) {
+  if (!/^\d{14}$/.test(digits) || /^(\d)\1+$/.test(digits)) return false;
+  const weightsA = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  const weightsB = [6, ...weightsA];
+  const first = cnpjDigit(digits.slice(0, 12), weightsA);
+  const second = cnpjDigit(digits.slice(0, 12) + first, weightsB);
+  return digits.endsWith(`${first}${second}`);
+}
+
+function cnpjDigit(base: string, weights: number[]) {
+  const sum = base.split("").reduce((acc, digit, index) => acc + Number(digit) * weights[index], 0);
+  const mod = sum % 11;
+  return mod < 2 ? 0 : 11 - mod;
 }
 
 function money(value: string): number {

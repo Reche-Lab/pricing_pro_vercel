@@ -38,6 +38,7 @@ const quoteSchema = z.object({
   customerDistrict: z.string().trim().optional().nullable(),
   customerCity: z.string().trim().optional().nullable(),
   customerState: z.string().trim().max(2).optional().nullable(),
+  customerExternalOlistId: z.string().trim().max(80).optional().nullable(),
   shippingTotal: z.number().min(0).max(100000).optional(),
   includeCommission: z.boolean().optional(),
   includeFixedFee: z.boolean().optional(),

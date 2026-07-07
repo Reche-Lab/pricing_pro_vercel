@@ -7,6 +7,7 @@ import {
   logIntegrationEvent
 } from "@/repositories/integrations";
 import { getShipment, updateShipmentFlow } from "@/repositories/shipments";
+import { MelhorEnvioRequestError } from "@/services/melhor-envio/melhor-envio";
 import type { MelhorEnvioCredentials, MelhorEnvioSettings } from "@/services/melhor-envio/types";
 
 type MelhorEnvioOperation = (
@@ -67,25 +68,43 @@ export async function performShipmentMelhorEnvioOperation(
     });
     return NextResponse.json({ ok: true, result });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown Melhor Envio error";
+    const status = error instanceof MelhorEnvioRequestError ? error.status : undefined;
+    const response = error instanceof MelhorEnvioRequestError ? error.data : undefined;
+    console.error("Melhor Envio shipment operation failed.", {
+      operation: operationName,
+      shipmentId,
+      httpStatus: status,
+      response,
+      message,
+      stack: error instanceof Error ? error.stack : undefined
+    });
     await updateShipmentFlow(session.userId, session.tenantId, {
       shipmentId,
       status: "error",
       rawPayload: payload,
-      rawResponse: { error: error instanceof Error ? error.message : "Unknown Melhor Envio error" }
+      rawResponse: { error: message, httpStatus: status, response }
     });
     await logIntegrationEvent(session.userId, session.tenantId, {
       provider: "melhor_envio",
       operation: operationName,
       status: "error",
-      message: error instanceof Error ? error.message : "Unknown Melhor Envio error",
-      metadata: { shipmentId }
+      message,
+      metadata: { shipmentId, httpStatus: status, response }
     });
 
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Unknown Melhor Envio error" },
+      { ok: false, error: humanizeMelhorEnvioError(message, status), httpStatus: status, response },
       { status: 502 }
     );
   }
+}
+
+function humanizeMelhorEnvioError(message: string, status?: number) {
+  if (status === 400 || status === 422) return `Melhor Envio recusou os dados da etiqueta. Detalhe: ${message}`;
+  if (status === 401) return `Melhor Envio recusou a autenticação. Reconecte o OAuth e tente novamente. Detalhe: ${message}`;
+  if (status === 403) return `Melhor Envio negou permissão para esta operação. Confira os escopos do aplicativo. Detalhe: ${message}`;
+  return message;
 }
 
 function extractShipmentFields(result: unknown) {

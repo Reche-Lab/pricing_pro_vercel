@@ -156,6 +156,7 @@ export function PricingCalculator({
   const [quickCustomerEmail, setQuickCustomerEmail] = useState("");
   const [quickCustomerPhoneDdi, setQuickCustomerPhoneDdi] = useState("+55");
   const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
+  const [quickCustomerExternalOlistId, setQuickCustomerExternalOlistId] = useState<string | null>(null);
   const [quickCustomerPostalCode, setQuickCustomerPostalCode] = useState("");
   const [quickCustomerAddressLine, setQuickCustomerAddressLine] = useState("");
   const [quickCustomerAddressNumber, setQuickCustomerAddressNumber] = useState("");
@@ -464,6 +465,7 @@ export function PricingCalculator({
   }
 
   function applyOlistCustomer(customer: OlistCustomerLookupResult) {
+    setQuickCustomerExternalOlistId(customer.id || null);
     setQuickCustomerName(customer.name || quickCustomerName);
     setQuickCustomerDocument(customer.document ? formatCpfCnpj(customer.document) : quickCustomerDocument);
     setQuickCustomerEmail(customer.email || quickCustomerEmail);
@@ -670,6 +672,7 @@ export function PricingCalculator({
         customerDistrict: quickCustomerDistrict,
         customerCity: quickCustomerCity,
         customerState: quickCustomerState,
+        customerExternalOlistId: quickCustomerExternalOlistId,
         shippingTotal: includeShipping ? shippingAmount : 0,
         includeCommission,
         includeFixedFee,
@@ -791,6 +794,7 @@ export function PricingCalculator({
         customerDistrict: quickCustomerDistrict,
         customerCity: quickCustomerCity,
         customerState: quickCustomerState,
+        customerExternalOlistId: quickCustomerExternalOlistId,
         shippingTotal: includeShipping ? shippingAmount : 0,
         includeCommission,
         includeFixedFee,
@@ -1312,6 +1316,11 @@ export function PricingCalculator({
               />
             </div>
           </div>
+          {quickCustomerExternalOlistId ? (
+            <p className="mt-3 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-100">
+              Cliente vinculado ao Olist/Tiny: ID {quickCustomerExternalOlistId}. Esse vínculo será salvo no orçamento criado.
+            </p>
+          ) : null}
           {customerHasValidationErrors ? (
             <p className="mt-3 rounded-md border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-xs text-rose-100">
               Corrija CPF/CNPJ, e-mail ou telefone antes de gerar orçamento, PDF ou texto para WhatsApp.

@@ -5,6 +5,8 @@ const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" 
 const PAGE_SIZE: [number, number] = [595.28, 841.89];
 const margin = 42;
 const LOGO_BOX = { width: 82, height: 52 };
+const ARTWORK_THUMBNAIL = { width: 96, height: 96 };
+const ARTWORK_CARD_HEIGHT = 118;
 
 export async function generateQuotePdf(input: {
   tenantName: string;
@@ -119,58 +121,97 @@ export async function generateQuotePdf(input: {
     }))
   );
   if (attachedArtworks.length) {
-    drawSectionTitle("Artes anexadas");
+    drawSectionTitle("Artes do orcamento");
     for (const entry of attachedArtworks) {
-      ensureSpace(86);
+      ensureSpace(ARTWORK_CARD_HEIGHT + 24);
+      const cardY = y - ARTWORK_CARD_HEIGHT + 8;
+      const imageX = margin + 10;
+      const imageY = cardY + 11;
+      const textX = imageX + ARTWORK_THUMBNAIL.width + 16;
       page.drawRectangle({
         x: margin,
-        y: y - 62,
+        y: cardY,
         width: pageWidth - margin * 2,
-        height: 68,
-        color: rgb(0.98, 0.98, 0.99)
+        height: ARTWORK_CARD_HEIGHT,
+        color: rgb(0.975, 0.975, 0.985),
+        borderColor: rgb(0.86, 0.86, 0.9),
+        borderWidth: 0.5
+      });
+      page.drawRectangle({
+        x: imageX,
+        y: imageY,
+        width: ARTWORK_THUMBNAIL.width,
+        height: ARTWORK_THUMBNAIL.height,
+        color: rgb(1, 1, 1),
+        borderColor: rgb(0.82, 0.82, 0.86),
+        borderWidth: 0.5
       });
       const embedded = await loadDataImage(pdf, entry.artwork.data_url);
       if (embedded) {
-        const fitted = fitImage(embedded.width, embedded.height, 54, 54);
+        const fitted = fitImage(embedded.width, embedded.height, ARTWORK_THUMBNAIL.width - 8, ARTWORK_THUMBNAIL.height - 8);
         page.drawImage(embedded, {
-          x: margin + 8 + (54 - fitted.width) / 2,
-          y: y - 55 + (54 - fitted.height) / 2,
+          x: imageX + (ARTWORK_THUMBNAIL.width - fitted.width) / 2,
+          y: imageY + (ARTWORK_THUMBNAIL.height - fitted.height) / 2,
           width: fitted.width,
           height: fitted.height
         });
       } else {
-        page.drawRectangle({
-          x: margin + 8,
-          y: y - 55,
-          width: 54,
-          height: 54,
-          borderColor: rgb(0.82, 0.82, 0.85),
-          borderWidth: 0.5
+        const label = entry.artwork.mime_type === "application/pdf" ? "PDF" : fileExtension(entry.artwork.file_name) || "ARQ";
+        page.drawText(sanitizePdfText(label.toUpperCase()), {
+          x: imageX + 34,
+          y: imageY + 51,
+          size: 12,
+          font: bold,
+          color: rgb(0.42, 0.42, 0.46)
         });
-        page.drawText("ARQ", { x: margin + 24, y: y - 28, size: 9, font: bold, color: rgb(0.45, 0.45, 0.48) });
+        page.drawText("sem preview", {
+          x: imageX + 22,
+          y: imageY + 36,
+          size: 8,
+          font: regular,
+          color: rgb(0.55, 0.55, 0.58)
+        });
       }
-      page.drawText(sanitizePdfText(entry.item.description), {
-        x: margin + 74,
-        y: y - 16,
+
+      const descriptionLines = wrapText(entry.item.description, 54).slice(0, 2);
+      descriptionLines.forEach((line, index) => {
+        page.drawText(sanitizePdfText(line), {
+          x: textX,
+          y: cardY + ARTWORK_CARD_HEIGHT - 22 - index * 12,
+          size: 9,
+          font: index === 0 ? bold : regular,
+          color: rgb(0.12, 0.12, 0.13)
+        });
+      });
+      page.drawText(sanitizePdfText(`Arte/lote: ${entry.artwork.artwork_name ?? entry.item.artwork_name ?? "-"}`), {
+        x: textX,
+        y: cardY + 58,
         size: 9,
         font: bold,
-        color: rgb(0.12, 0.12, 0.13)
-      });
-      page.drawText(sanitizePdfText(`Arte: ${entry.artwork.artwork_name ?? entry.item.artwork_name ?? "-"}`), {
-        x: margin + 74,
-        y: y - 31,
-        size: 9,
-        font: regular,
         color: rgb(0.28, 0.28, 0.3)
       });
       page.drawText(sanitizePdfText(`Arquivo: ${entry.artwork.file_name}`), {
-        x: margin + 74,
-        y: y - 46,
+        x: textX,
+        y: cardY + 43,
         size: 8,
         font: regular,
         color: rgb(0.42, 0.42, 0.45)
       });
-      y -= 78;
+      page.drawText(sanitizePdfText(`Tipo: ${entry.artwork.mime_type} | Tamanho: ${formatBytes(entry.artwork.file_size)}`), {
+        x: textX,
+        y: cardY + 29,
+        size: 8,
+        font: regular,
+        color: rgb(0.42, 0.42, 0.45)
+      });
+      page.drawText(sanitizePdfText(`${entry.item.quantity} un. | Total ${brl.format(Number(entry.item.total_price))}`), {
+        x: textX,
+        y: cardY + 15,
+        size: 8,
+        font: bold,
+        color: rgb(0.22, 0.22, 0.24)
+      });
+      y -= ARTWORK_CARD_HEIGHT + 12;
     }
   }
 
@@ -347,6 +388,18 @@ function formatPricingRule(rule: string | null | undefined) {
   if (rule === "per_art_average") return "por artes";
   if (rule === "aggregate_total") return "por total";
   return "por item";
+}
+
+function fileExtension(fileName: string) {
+  const match = /\.([a-z0-9]{2,5})$/i.exec(fileName);
+  return match?.[1] ?? null;
+}
+
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "-";
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function wrapText(value: string, maxLength: number): string[] {

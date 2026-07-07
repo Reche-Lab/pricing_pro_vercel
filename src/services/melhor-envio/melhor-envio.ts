@@ -212,8 +212,16 @@ export async function melhorEnvioRequest<T = unknown>({
   credentials
 }: MelhorEnvioRequestOptions): Promise<T> {
   if (!credentials.accessToken) throw new Error("Melhor Envio accessToken is required.");
+  const endpoint = `${apiBaseUrl(settings)}${path}`;
+  const startedAt = Date.now();
 
-  const response = await fetch(`${apiBaseUrl(settings)}${path}`, {
+  console.info("Melhor Envio API request prepared.", {
+    method,
+    endpoint: sanitizeUrl(endpoint),
+    hasBody: body != null
+  });
+
+  const response = await fetch(endpoint, {
     method,
     headers: {
       accept: "application/json",
@@ -224,16 +232,44 @@ export async function melhorEnvioRequest<T = unknown>({
     body: body == null ? undefined : JSON.stringify(body)
   });
 
-  return parseMelhorEnvioResponse<T>(response);
+  return parseMelhorEnvioResponse<T>(response, { method, endpoint, durationMs: Date.now() - startedAt });
 }
 
-async function parseMelhorEnvioResponse<T>(response: Response): Promise<T> {
+async function parseMelhorEnvioResponse<T>(
+  response: Response,
+  context?: { method?: string; endpoint?: string; durationMs?: number }
+): Promise<T> {
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  const data = parseJson(text);
+  if (context) {
+    console.info("Melhor Envio API response received.", {
+      method: context.method,
+      endpoint: context.endpoint ? sanitizeUrl(context.endpoint) : undefined,
+      status: response.status,
+      ok: response.ok,
+      durationMs: context.durationMs,
+      error: response.ok ? null : extractError(data) ?? truncate(text)
+    });
+  }
   if (!response.ok) {
-    throw new Error(extractError(data) ?? `Melhor Envio request failed with status ${response.status}.`);
+    throw new MelhorEnvioRequestError(
+      extractError(data) ?? `Melhor Envio request failed with status ${response.status}.`,
+      response.status,
+      data
+    );
   }
   return data as T;
+}
+
+export class MelhorEnvioRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly data: unknown
+  ) {
+    super(message);
+    this.name = "MelhorEnvioRequestError";
+  }
 }
 
 function extractError(data: unknown): string | null {
@@ -242,7 +278,19 @@ function extractError(data: unknown): string | null {
   if (typeof record.message === "string") return record.message;
   if (typeof record.error === "string") return record.error;
   if (Array.isArray(record.errors)) return record.errors.map(String).join("; ");
+  if (record.errors && typeof record.errors === "object") {
+    return Object.entries(record.errors as Record<string, unknown>)
+      .map(([field, value]) => `${field}: ${formatErrorValue(value)}`)
+      .join("; ");
+  }
   return null;
+}
+
+function formatErrorValue(value: unknown): string {
+  if (Array.isArray(value)) return value.map(formatErrorValue).join(", ");
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return String(value);
 }
 
 function apiBaseUrl(settings: MelhorEnvioSettings): string {
@@ -255,6 +303,29 @@ function appBaseUrl(settings: MelhorEnvioSettings): string {
 
 function userAgent(settings: MelhorEnvioSettings): string {
   return settings.user_agent || "Pricing Pro (contato@example.com)";
+}
+
+function parseJson(text: string) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: truncate(text) };
+  }
+}
+
+function truncate(value: string, max = 500) {
+  return value.length > max ? `${value.slice(0, max)}...` : value;
+}
+
+function sanitizeUrl(value: string) {
+  try {
+    const url = new URL(value);
+    url.search = "";
+    return url.toString();
+  } catch {
+    return value;
+  }
 }
 
 function onlyDigits(value: string): string {
