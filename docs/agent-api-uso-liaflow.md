@@ -140,11 +140,13 @@ Endpoint:
 POST /pricing/calculate
 ```
 
+`platformSlug` é opcional. Se o agente não tiver certeza do canal cadastrado no Pricing Pro, omita esse campo para usar o canal padrão do tenant. Na configuração inicial da Ground Shop, `direct` representa venda direta/WhatsApp.
+
 Entrada:
 
 ```json
 {
-  "platformSlug": "whatsapp",
+  "platformSlug": "direct",
   "pricingRule": "per_item",
   "items": [
     {
@@ -270,7 +272,7 @@ Entrada:
     "city": "São Paulo",
     "state": "SP"
   },
-  "platformSlug": "whatsapp",
+  "platformSlug": "direct",
   "pricingRule": "per_item",
   "items": [
     {

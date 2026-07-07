@@ -153,7 +153,7 @@ Payload:
 
 ```json
 {
-  "platformSlug": "whatsapp",
+  "platformSlug": "direct",
   "items": [
     {
       "productSku": "BOTTON-35",
@@ -274,7 +274,7 @@ Payload:
     "city": "São Paulo",
     "state": "SP"
   },
-  "platformSlug": "whatsapp",
+  "platformSlug": "direct",
   "pricingRule": "per_item",
   "items": [
     {

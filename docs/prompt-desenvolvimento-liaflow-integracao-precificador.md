@@ -27,7 +27,7 @@ Adicione as seguintes variáveis de ambiente ao Lia Flow:
 ```txt
 PRICING_PRO_API_BASE_URL="https://liaflow-calcula.vercel.app/api/agent/v1"
 PRICING_PRO_API_KEY="pp_agent_live_xxx"
-PRICING_PRO_DEFAULT_PLATFORM_SLUG="whatsapp"
+PRICING_PRO_DEFAULT_PLATFORM_SLUG=""
 PRICING_PRO_AGENT_SOURCE="lia-flow"
 ```
 
@@ -111,11 +111,17 @@ Use sempre que o usuário informar um produto por nome aproximado. Não invente 
 POST /pricing/calculate
 ```
 
+Importante:
+
+- `platformSlug` é opcional.
+- Se o Lia Flow não tiver certeza do canal cadastrado no Pricing Pro, omita `platformSlug` para usar o canal padrão do tenant.
+- Só envie `platformSlug` quando ele existir em `Configurações > Canais`. Na configuração inicial da Ground Shop, `direct` representa venda direta/WhatsApp.
+
 Payload:
 
 ```json
 {
-  "platformSlug": "whatsapp",
+  "platformSlug": "direct",
   "pricingRule": "per_item",
   "items": [
     {
@@ -184,7 +190,7 @@ Payload recomendado:
     "city": "São Paulo",
     "state": "SP"
   },
-  "platformSlug": "whatsapp",
+  "platformSlug": "direct",
   "pricingRule": "per_item",
   "items": [
     {
@@ -463,7 +469,7 @@ Agente chama `POST /quotes/composite` com:
 ```json
 {
   "externalConversationId": "conversation-123",
-  "platformSlug": "whatsapp",
+  "platformSlug": "direct",
   "pricingRule": "per_item",
   "items": [
     {
@@ -498,4 +504,3 @@ Agente chama `POST /quotes/composite` com:
 ```
 
 Agente responde com o resumo, total e link público retornados pelo Pricing Pro.
-

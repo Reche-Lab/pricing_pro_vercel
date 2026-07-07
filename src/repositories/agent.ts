@@ -367,18 +367,32 @@ export async function resolveAgentPlatform(context: AgentContext, platformSlug?:
         from platform_rules
         where tenant_id = $1
           and active = true
-          and ($2::text is null or key = $2::text)
         order by
-          case when $2::text is not null and key = $2::text then 0 else 1 end,
           sort_order asc,
           name asc
-        limit 1
       `,
-      [context.tenantId, clean(platformSlug)]
+      [context.tenantId]
     );
+    const platforms = result.rows;
+    if (!platforms[0]) throw new AgentApiError("platform_not_found", "Nenhum canal/plataforma ativo foi encontrado.", 404);
 
-    if (!result.rows[0]) throw new AgentApiError("platform_not_found", "Canal/plataforma não encontrado.", 404);
-    return result.rows[0];
+    const requested = clean(platformSlug);
+    if (!requested) return platforms[0];
+
+    const aliases = platformLookupAliases(requested);
+    const match = platforms.find((platform) => {
+      const key = normalizePlatformLookup(platform.key);
+      const name = normalizePlatformLookup(platform.name);
+      return aliases.includes(key) || aliases.includes(name);
+    });
+    if (match) return match;
+
+    const available = platforms.map((platform) => `${platform.key} (${platform.name})`).join(", ");
+    throw new AgentApiError(
+      "platform_not_found",
+      `Canal/plataforma "${requested}" não encontrado. Canais ativos disponíveis: ${available}. Se não tiver certeza, omita platformSlug para usar o canal padrão.`,
+      404
+    );
   });
 }
 
@@ -592,6 +606,45 @@ function clean(value: string | null | undefined) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+function platformLookupAliases(value: string) {
+  const normalized = normalizePlatformLookup(value);
+  const aliases = new Set([normalized]);
+
+  if (["whatsapp", "whats", "zap", "wpp", "vendaonline", "vendawhatsapp"].includes(normalized)) {
+    aliases.add("direct");
+    aliases.add("vendadireta");
+  }
+
+  if (["direct", "direto", "vendadireta"].includes(normalized)) {
+    aliases.add("direct");
+    aliases.add("vendadireta");
+  }
+
+  if (["mercadolivreclassico", "mercadolivreclassic", "mlclassico", "mlclassic"].includes(normalized)) {
+    aliases.add("mlclassic");
+    aliases.add("mlclassico");
+  }
+
+  if (["mercadolivrepremium", "mlpremium"].includes(normalized)) {
+    aliases.add("mlpremium");
+  }
+
+  if (["shopee", "shopeepadrao", "shopeestandard"].includes(normalized)) {
+    aliases.add("shopeestandard");
+    aliases.add("shopeepadrao");
+  }
+
+  return Array.from(aliases);
+}
+
+function normalizePlatformLookup(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 }
 
 function mapAgentCurve(mode: PricingCurveMode | null, anchors: Record<string, string>): PricingCurve {
