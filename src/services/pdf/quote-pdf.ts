@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import sharp from "sharp";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -302,14 +303,14 @@ async function loadLogo(pdf: PDFDocument, logoUrl: string | null | undefined) {
     if (logoUrl.startsWith("data:image/")) {
       const parsed = parseDataImage(logoUrl);
       if (!parsed) return null;
-      return embedSupportedLogoImage(pdf, parsed.bytes);
+      return embedSupportedImage(pdf, parsed.bytes, parsed.contentType);
     }
 
     if (!/^https?:\/\//.test(logoUrl)) return null;
     const response = await fetch(logoUrl);
     if (!response.ok) return null;
     const bytes = new Uint8Array(await response.arrayBuffer());
-    return embedSupportedLogoImage(pdf, bytes);
+    return embedSupportedImage(pdf, bytes);
   } catch {
     return null;
   }
@@ -319,7 +320,7 @@ async function loadDataImage(pdf: PDFDocument, dataUrl: string | null | undefine
   if (!dataUrl?.startsWith("data:image/")) return null;
   const parsed = parseDataImage(dataUrl);
   if (!parsed) return null;
-  return embedSupportedLogoImage(pdf, parsed.bytes);
+  return embedSupportedImage(pdf, parsed.bytes, parsed.contentType);
 }
 
 function fitImage(originalWidth: number, originalHeight: number, maxWidth: number, maxHeight: number) {
@@ -331,7 +332,7 @@ function fitImage(originalWidth: number, originalHeight: number, maxWidth: numbe
 }
 
 function parseDataImage(value: string) {
-  const match = /^data:(image\/(?:png|jpe?g));base64,(.+)$/i.exec(value);
+  const match = /^data:(image\/(?:png|jpe?g|webp));base64,(.+)$/i.exec(value);
   if (!match) return null;
   return {
     contentType: match[1].toLowerCase(),
@@ -339,10 +340,14 @@ function parseDataImage(value: string) {
   };
 }
 
-async function embedSupportedLogoImage(pdf: PDFDocument, bytes: Uint8Array) {
+async function embedSupportedImage(pdf: PDFDocument, bytes: Uint8Array, contentType?: string) {
   try {
     if (isPng(bytes)) return pdf.embedPng(bytes);
     if (isJpeg(bytes)) return pdf.embedJpg(bytes);
+    if (contentType === "image/webp" || isWebp(bytes)) {
+      const png = await sharp(Buffer.from(bytes)).png().toBuffer();
+      return pdf.embedPng(png);
+    }
     return null;
   } catch {
     return null;
@@ -365,6 +370,20 @@ function isPng(bytes: Uint8Array) {
 
 function isJpeg(bytes: Uint8Array) {
   return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+}
+
+function isWebp(bytes: Uint8Array) {
+  return (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  );
 }
 
 function formatDate(value: string): string {

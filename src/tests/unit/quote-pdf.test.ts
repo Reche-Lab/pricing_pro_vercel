@@ -15,9 +15,21 @@ describe("quote PDF", () => {
 
     expect(Buffer.from(pdf.subarray(0, 4)).toString("ascii")).toBe("%PDF");
   });
+
+  it("embeds WebP artwork previews by converting them before writing the PDF", async () => {
+    const pdf = await generateQuotePdf(
+      pdfInput(
+        "",
+        "data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AA/vuUAAA="
+      )
+    );
+
+    expect(Buffer.from(pdf.subarray(0, 4)).toString("ascii")).toBe("%PDF");
+    expect(pdf.byteLength).toBeGreaterThan(500);
+  });
 });
 
-function pdfInput(logoUrl: string): {
+function pdfInput(logoUrl: string, artworkDataUrl?: string): {
   tenantName: string;
   tenant: {
     name: string;
@@ -72,7 +84,21 @@ function pdfInput(logoUrl: string): {
         description: "Botton - 2,5 cm",
         quantity: 100,
         unit_price: "2",
-        total_price: "200"
+        total_price: "200",
+        artworks: artworkDataUrl
+          ? [
+              {
+                id: "artwork-id",
+                quote_item_id: "item-id",
+                artwork_name: "Arte WebP",
+                file_name: "arte.webp",
+                mime_type: "image/webp",
+                file_size: artworkDataUrl.length,
+                data_url: artworkDataUrl,
+                storage_path: null
+              }
+            ]
+          : []
       }
     ]
   };
