@@ -16,7 +16,7 @@ const olistIntegrationSchema = z.object({
   authorizePath: z.string().trim().min(1).default(OLIST_DEFAULT_PATHS.authorize),
   tokenPath: z.string().trim().min(1).default(OLIST_DEFAULT_PATHS.token),
   clientId: z.string().trim().min(1),
-  clientSecret: z.string().trim().min(1),
+  clientSecret: z.string().trim().optional().default(""),
   path: z.string().trim().min(1),
   quotePath: z.string().trim().optional().default(""),
   customerLookupPath: z.string().trim().optional().default(""),
@@ -58,6 +58,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: parsed.error.flatten() }, { status: 400 });
   }
 
+  const existingConnection = await getIntegrationConnection(session.userId, session.tenantId, "olist");
+  const existingCredentials = readExistingCredentials(existingConnection);
+  const nextClientSecret = parsed.data.clientSecret || existingCredentials.clientSecret;
+  if (!nextClientSecret) {
+    return NextResponse.json(
+      { ok: false, error: "Informe Client Secret para a primeira configuração. Depois ele pode ficar em branco para manter o atual." },
+      { status: 400 }
+    );
+  }
+
   await upsertIntegrationConnection(session.userId, session.tenantId, {
     provider: "olist",
     status: "active",
@@ -81,12 +91,22 @@ export async function POST(request: Request) {
       auth_header: parsed.data.authHeader
     },
     credentials: {
+      ...existingCredentials,
       clientId: parsed.data.clientId,
-      clientSecret: parsed.data.clientSecret
+      clientSecret: nextClientSecret
     }
   });
 
   return NextResponse.json({ ok: true });
+}
+
+function readExistingCredentials(connection: Awaited<ReturnType<typeof getIntegrationConnection>>): OlistCredentials {
+  if (!connection) return {};
+  try {
+    return decryptIntegrationCredentials<OlistCredentials>(connection);
+  } catch {
+    return {};
+  }
 }
 
 function serializeConnection(

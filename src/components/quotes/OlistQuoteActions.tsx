@@ -9,7 +9,9 @@ import {
   CheckCircle2,
   Circle,
   FileText,
+  KeyRound,
   Lock,
+  PlugZap,
   ReceiptText,
   Send,
   ShoppingCart,
@@ -112,6 +114,14 @@ type OlistActionResult = {
   externalId?: string | null;
   path?: string | null;
   summary?: Record<string, unknown> | null;
+};
+
+type OlistConnectionStatus = {
+  configured: boolean;
+  connected: boolean;
+  status: string;
+  clientId?: string;
+  apiBaseUrl?: string;
 };
 
 type SalesOrderPreviewState = {
@@ -217,12 +227,16 @@ export function OlistQuoteActions({
   const [customerLookup, setCustomerLookup] = useState<CustomerLookupState | null>(null);
   const [actionResult, setActionResult] = useState<OlistActionResult | null>(null);
   const [usingCustomer, setUsingCustomer] = useState(false);
+  const [olistConnection, setOlistConnection] = useState<OlistConnectionStatus | null>(null);
+  const [olistStatusMessage, setOlistStatusMessage] = useState("");
+  const [oauthLoading, setOauthLoading] = useState(false);
 
   const customerReady = Boolean(customerExternalId);
   const crmReady = Boolean(crmExternalId);
   const orderReady = Boolean(orderExternalId);
   const fulfillmentReady = fulfillmentState.status === "sent_to_fulfillment";
   const invoiceReady = Boolean(invoiceExternalId);
+  const olistConnectionBlocksActions = Boolean(olistConnection?.configured && !olistConnection.connected);
 
   const defaultCrmSubject = useMemo(
     () => `Orçamento ${quoteId}`,
@@ -269,6 +283,34 @@ export function OlistQuoteActions({
     ]
   );
 
+  useEffect(() => {
+    void loadOlistConnectionStatus();
+  }, []);
+
+  async function loadOlistConnectionStatus() {
+    const response = await fetch("/api/integrations/olist");
+    const data = await response.json().catch(() => null);
+    if (response.ok && data?.ok && data.integrations?.olist) {
+      setOlistConnection(data.integrations.olist as OlistConnectionStatus);
+    }
+  }
+
+  async function reconnectOlist() {
+    setOauthLoading(true);
+    setOlistStatusMessage("");
+    const response = await fetch("/api/olist/auth-url");
+    const data = await response.json().catch(() => null);
+    setOauthLoading(false);
+
+    if (!response.ok || !data?.authUrl) {
+      setOlistStatusMessage(data?.error ?? "Não foi possível iniciar a reconexão OAuth do Olist.");
+      setOlistConnection((current) => current ? { ...current, connected: false } : current);
+      return;
+    }
+
+    window.location.href = data.authUrl;
+  }
+
   async function execute(action: ActionKey, formData?: FormData) {
     const config = ACTIONS[action];
     const payload = buildPayload(action, formData, defaultCrmSubject);
@@ -289,6 +331,14 @@ export function OlistQuoteActions({
 
     if (!response.ok || !data?.ok) {
       const errorMessage = data?.error ?? "Falha na integração.";
+      if (isOlistOAuthFailure(data, response.status)) {
+        setOlistConnection((current) => current ? { ...current, connected: false } : {
+          configured: true,
+          connected: false,
+          status: "error"
+        });
+        setOlistStatusMessage("A conexão OAuth do Olist precisa ser renovada para continuar este fluxo.");
+      }
       setMessage(data?.debugId ? `${errorMessage} Debug: ${data.debugId}` : errorMessage);
       setActionResult({
         tone: "error",
@@ -384,6 +434,13 @@ export function OlistQuoteActions({
         </p>
       </div>
 
+      <OlistConnectionBanner
+        connection={olistConnection}
+        loading={oauthLoading}
+        message={olistStatusMessage}
+        onReconnect={reconnectOlist}
+      />
+
       {customerLookup ? (
         <CustomerLookupResult
           activeExternalId={customerExternalId}
@@ -397,7 +454,7 @@ export function OlistQuoteActions({
       <div className="grid gap-3 xl:grid-cols-2">
         <FlowAction
           description="Procura ou cadastra o contato usado no orçamento."
-          disabled={!hasCustomer}
+          disabled={!hasCustomer || olistConnectionBlocksActions}
           done={customerReady}
           icon={<UserCheck size={16} />}
           loading={loading}
@@ -408,7 +465,7 @@ export function OlistQuoteActions({
         />
         <FlowAction
           description="Cria o assunto/oportunidade no CRM para registrar o orçamento."
-          disabled={!customerReady}
+          disabled={!customerReady || olistConnectionBlocksActions}
           done={crmReady}
           icon={<Send size={16} />}
           loading={loading}
@@ -418,7 +475,7 @@ export function OlistQuoteActions({
         />
         <FlowAction
           description="Adiciona uma próxima ação na agenda do assunto CRM."
-          disabled={!crmReady}
+          disabled={!crmReady || olistConnectionBlocksActions}
           done={false}
           icon={<CalendarPlus size={16} />}
           loading={loading}
@@ -428,7 +485,7 @@ export function OlistQuoteActions({
         />
         <FlowAction
           description="Gera o pedido de venda na Olist com SKU, quantidade e preço calculado."
-          disabled={!customerReady}
+          disabled={!customerReady || olistConnectionBlocksActions}
           done={orderReady}
           icon={<ShoppingCart size={16} />}
           loading={loading}
@@ -438,7 +495,7 @@ export function OlistQuoteActions({
         />
         <FlowAction
           description="Confirma que o pedido Olist está pronto para separação e envio."
-          disabled={!orderReady}
+          disabled={!orderReady || olistConnectionBlocksActions}
           done={fulfillmentReady}
           icon={<Truck size={16} />}
           loading={loading}
@@ -448,7 +505,7 @@ export function OlistQuoteActions({
         />
         <FlowAction
           description={invoiceReady ? "Autoriza a nota fiscal já gerada para este pedido." : "Gera a nota fiscal a partir do pedido de venda."}
-          disabled={!orderReady}
+          disabled={!orderReady || olistConnectionBlocksActions}
           done={invoiceReady}
           icon={<ReceiptText size={16} />}
           label={invoiceReady ? "Autorizar nota Olist" : "Gerar nota Olist"}
@@ -557,6 +614,61 @@ function ActionButton({
       {icon}
       {loading === name ? config.loading : label ?? config.label}
     </button>
+  );
+}
+
+function OlistConnectionBanner({
+  connection,
+  loading,
+  message,
+  onReconnect
+}: {
+  connection: OlistConnectionStatus | null;
+  loading: boolean;
+  message: string;
+  onReconnect: () => void;
+}) {
+  if (!connection?.configured && !message) return null;
+
+  const connected = Boolean(connection?.connected);
+  const tone = connected
+    ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100"
+    : "border-amber-400/25 bg-amber-400/10 text-amber-100";
+
+  return (
+    <div className={`rounded-md border px-3 py-3 ${tone}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="inline-flex items-center gap-2 text-sm font-semibold">
+            <PlugZap size={16} />
+            Olist/Tiny {connected ? "conectado" : "desconectado"}
+          </p>
+          <p className="mt-1 text-xs leading-5 opacity-85">
+            {message || (connected
+              ? "Este tenant está com OAuth ativo para consultar clientes, CRM, pedidos e notas fiscais."
+              : "Este tenant tem Olist configurado, mas precisa renovar o OAuth antes de continuar.")}
+          </p>
+          {connection?.clientId || connection?.apiBaseUrl ? (
+            <p className="mt-1 text-[11px] leading-5 opacity-70">
+              {[connection.clientId ? `Client ID: ${connection.clientId}` : null, connection.apiBaseUrl].filter(Boolean).join(" | ")}
+            </p>
+          ) : null}
+        </div>
+        <button
+          className={`focus-ring inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold ${
+            connected
+              ? "border border-emerald-300/30 text-emerald-100 hover:bg-emerald-300/10"
+              : "bg-amber-300 text-zinc-950 hover:bg-amber-200"
+          } disabled:opacity-60`}
+          disabled={loading}
+          onClick={onReconnect}
+          type="button"
+        >
+          <KeyRound size={16} />
+          {loading ? "Abrindo OAuth..." : connected ? "Reconectar Olist" : "Reconectar agora"}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -1669,6 +1781,33 @@ function currencyLike(value: unknown) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return stringValue(value);
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(numeric);
+}
+
+function isOlistOAuthFailure(data: unknown, responseStatus: number) {
+  if (responseStatus === 401) return true;
+  if (!data || typeof data !== "object") return false;
+  const record = data as Record<string, unknown>;
+  const httpStatus = Number(record.httpStatus);
+  if (httpStatus === 401) return true;
+  const text = [
+    record.error,
+    record.message,
+    record.responseSummary,
+    record.response
+  ]
+    .map((value) => typeof value === "string" ? value : JSON.stringify(value ?? ""))
+    .join(" ")
+    .toLowerCase();
+
+  return [
+    "oauth",
+    "token",
+    "autentica",
+    "unauthorized",
+    "não autoriz",
+    "nao autoriz",
+    "integration is not active"
+  ].some((pattern) => text.includes(pattern));
 }
 
 function formatDateTime(value: unknown) {

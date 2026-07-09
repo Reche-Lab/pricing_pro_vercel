@@ -872,7 +872,16 @@ function IntegrationForm({
           <Input defaultValue={connection?.tokenPath ?? OLIST_DEFAULT_PATHS.token} label="Token path" name="tokenPath" required />
         </div>
         <Input defaultValue={connection?.clientId ?? ""} label="Client ID" name="clientId" required />
-        <Input label="Client Secret" name="clientSecret" required type="password" />
+        <Input
+          label="Client Secret"
+          name="clientSecret"
+          placeholder={connection?.clientId ? "Deixe em branco para manter o atual" : ""}
+          required={!connection?.clientId}
+          type="password"
+        />
+        <p className="-mt-2 text-xs leading-5 text-zinc-500">
+          Ao salvar, o OAuth atual é preservado. Preencha o secret somente na primeira configuração ou quando quiser trocar o aplicativo.
+        </p>
         <Input defaultValue={connection?.scopes ?? "openid"} label="Scopes OAuth" name="scopes" placeholder="openid" />
         <div className="grid gap-3 md:grid-cols-2">
           <label className="block">
