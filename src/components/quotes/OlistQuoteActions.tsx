@@ -170,6 +170,8 @@ export function OlistQuoteActions({
   customerLocalCode,
   externalOlistId,
   externalCrmId,
+  externalCrmTaskId,
+  externalCrmTaskCreatedAt,
   externalOrderId,
   externalInvoiceId,
   externalInvoiceNumber,
@@ -197,6 +199,8 @@ export function OlistQuoteActions({
   customerLocalCode?: string | null;
   externalOlistId?: string | null;
   externalCrmId?: string | null;
+  externalCrmTaskId?: string | null;
+  externalCrmTaskCreatedAt?: string | null;
   externalOrderId?: string | null;
   externalInvoiceId?: string | null;
   externalInvoiceNumber?: string | null;
@@ -217,6 +221,10 @@ export function OlistQuoteActions({
   const [loading, setLoading] = useState("");
   const [customerExternalId, setCustomerExternalId] = useState(externalOlistId ?? null);
   const [crmExternalId, setCrmExternalId] = useState(externalCrmId ?? null);
+  const [crmTaskState, setCrmTaskState] = useState({
+    id: externalCrmTaskId ?? null,
+    createdAt: externalCrmTaskCreatedAt ?? null
+  });
   const [orderExternalId, setOrderExternalId] = useState(externalOrderId ?? null);
   const [invoiceExternalId, setInvoiceExternalId] = useState(externalInvoiceId ?? null);
   const [fulfillmentState, setFulfillmentState] = useState({
@@ -233,6 +241,7 @@ export function OlistQuoteActions({
 
   const customerReady = Boolean(customerExternalId);
   const crmReady = Boolean(crmExternalId);
+  const crmTaskReady = Boolean(crmTaskState.id || crmTaskState.createdAt);
   const orderReady = Boolean(orderExternalId);
   const fulfillmentReady = fulfillmentState.status === "sent_to_fulfillment";
   const invoiceReady = Boolean(invoiceExternalId);
@@ -379,8 +388,20 @@ export function OlistQuoteActions({
         });
       }
       if (action === "crm") setCrmExternalId(data.externalId);
+      if (action === "crmTask") {
+        setCrmTaskState({
+          id: data.externalId ?? null,
+          createdAt: new Date().toISOString()
+        });
+      }
       if (action === "salesOrder") setOrderExternalId(data.externalId);
       if (action === "invoice" && !invoiceExternalId) setInvoiceExternalId(data.externalId);
+    }
+    if (action === "crmTask" && !data.externalId) {
+      setCrmTaskState({
+        id: null,
+        createdAt: new Date().toISOString()
+      });
     }
     if (action === "fulfillment") {
       setFulfillmentState({
@@ -476,7 +497,7 @@ export function OlistQuoteActions({
         <FlowAction
           description="Adiciona uma próxima ação na agenda do assunto CRM."
           disabled={!crmReady || olistConnectionBlocksActions}
-          done={false}
+          done={crmTaskReady}
           icon={<CalendarPlus size={16} />}
           loading={loading}
           onClick={setPendingAction}
@@ -494,16 +515,6 @@ export function OlistQuoteActions({
           title="4. Pedido de venda"
         />
         <FlowAction
-          description="Confirma que o pedido Olist está pronto para separação e envio."
-          disabled={!orderReady || olistConnectionBlocksActions}
-          done={fulfillmentReady}
-          icon={<Truck size={16} />}
-          loading={loading}
-          onClick={setPendingAction}
-          primaryName="fulfillment"
-          title="5. Expedição Olist"
-        />
-        <FlowAction
           description={invoiceReady ? "Autoriza a nota fiscal já gerada para este pedido." : "Gera a nota fiscal a partir do pedido de venda."}
           disabled={!orderReady || olistConnectionBlocksActions}
           done={invoiceReady}
@@ -513,7 +524,17 @@ export function OlistQuoteActions({
           onClick={setPendingAction}
           primaryName="invoice"
           secondaryName={invoiceReady ? "invoiceCancel" : undefined}
-          title="6. Nota fiscal"
+          title="5. Nota fiscal"
+        />
+        <FlowAction
+          description="Confirma que o pedido Olist está pronto para separação e envio."
+          disabled={!invoiceReady || olistConnectionBlocksActions}
+          done={fulfillmentReady}
+          icon={<Truck size={16} />}
+          loading={loading}
+          onClick={setPendingAction}
+          primaryName="fulfillment"
+          title="6. Expedição Olist"
         />
       </div>
       {message ? <p className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">{message}</p> : null}
@@ -1127,7 +1148,7 @@ function ActionModal({
               loading ||
               (action === "crm" && !customerReady) ||
               (action === "salesOrder" && (salesOrderPreview.loading || Boolean(salesOrderPreview.error))) ||
-              (action === "fulfillment" && !orderExternalId) ||
+              (action === "fulfillment" && (!orderExternalId || !invoiceExternalId)) ||
               (action === "invoice" && (invoicePreview.loading || Boolean(invoicePreview.error))) ||
               (action === "invoiceCancel" && (!invoiceReady || invoicePreview.loading || Boolean(invoicePreview.error)))
             }

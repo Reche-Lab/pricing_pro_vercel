@@ -46,6 +46,9 @@ export type QuoteDetail = {
   customer_state: string | null;
   customer_external_olist_id: string | null;
   external_crm_id: string | null;
+  external_crm_task_id?: string | null;
+  external_crm_task_created_at?: string | null;
+  external_crm_task_response?: Record<string, unknown> | null;
   external_olist_order_id?: string | null;
   external_olist_invoice_id?: string | null;
   external_olist_invoice_number?: string | null;
@@ -222,6 +225,9 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           c.state as customer_state,
           c.external_olist_id as customer_external_olist_id,
           q.external_crm_id,
+          to_jsonb(q)->>'external_crm_task_id' as external_crm_task_id,
+          to_jsonb(q)->>'external_crm_task_created_at' as external_crm_task_created_at,
+          to_jsonb(q)->'external_crm_task_response' as external_crm_task_response,
           to_jsonb(q)->>'external_olist_order_id' as external_olist_order_id,
           to_jsonb(q)->>'external_olist_invoice_id' as external_olist_invoice_id,
           to_jsonb(q)->>'external_olist_invoice_number' as external_olist_invoice_number,
@@ -583,6 +589,38 @@ export async function updateQuoteExternalOlistIds(
         values ($1, $2, 'quotes.olist_external_ids', 'quote', $3, $4)
       `,
       [tenantId, userId, quoteId, JSON.stringify(input)]
+    );
+  });
+}
+
+export async function markQuoteOlistCrmTask(
+  userId: string,
+  tenantId: string,
+  quoteId: string,
+  input: {
+    taskId?: string | null;
+    response?: unknown;
+  }
+) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    await client.query(
+      `
+        update quotes
+        set external_crm_task_id = coalesce($3, external_crm_task_id),
+            external_crm_task_created_at = coalesce(external_crm_task_created_at, now()),
+            external_crm_task_response = coalesce($4::jsonb, external_crm_task_response),
+            updated_at = now()
+        where tenant_id = $1 and id = $2
+      `,
+      [tenantId, quoteId, input.taskId ?? null, input.response === undefined ? null : JSON.stringify(input.response)]
+    );
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'quotes.crm_task_sync', 'quote', $3, $4)
+      `,
+      [tenantId, userId, quoteId, JSON.stringify({ taskId: input.taskId ?? null })]
     );
   });
 }

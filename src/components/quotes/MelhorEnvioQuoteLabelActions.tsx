@@ -199,7 +199,7 @@ export function MelhorEnvioQuoteLabelActions({
         <div>
           <p className="flex items-center gap-2 text-sm font-semibold text-white">
             <Truck className="text-cyan-300" size={16} />
-            Etiqueta Melhor Envio
+            7. Etiqueta Melhor Envio
           </p>
           <p className="mt-1 text-xs leading-5 text-zinc-500">
             Emita a etiqueta usando os itens, endereço do cliente, caixa calculada e serviço de envio selecionado neste orçamento.
@@ -305,7 +305,7 @@ export function MelhorEnvioQuoteLabelActions({
                 <Icon className={done ? "text-emerald-300" : disabled ? "text-zinc-600" : "text-cyan-300"} size={16} />
                 {done ? <CheckCircle2 className="text-emerald-300" size={16} /> : disabled ? <Lock size={15} /> : null}
               </span>
-              <span className="font-medium text-white">{operation.title}</span>
+              <span className="font-medium text-white">{index + 1}. {operation.title}</span>
               <span>{loading === operation.key ? "Executando..." : operation.label}</span>
             </button>
           );

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { markQuoteOlistCrmTask } from "@/repositories/quotes";
 import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOperation } from "../../_shared";
 
 const taskSchema = z.object({
@@ -49,6 +50,10 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
       credentials: loaded.credentials,
       path: path.value,
       payload
+    });
+    await markQuoteOlistCrmTask(loaded.session.userId, loaded.session.tenantId, quoteId, {
+      taskId: result.externalId,
+      response: result.result
     });
     return NextResponse.json(result);
   } catch (error) {
