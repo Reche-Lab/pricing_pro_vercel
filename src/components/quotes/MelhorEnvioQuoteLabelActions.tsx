@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
@@ -42,9 +42,11 @@ const OPERATIONS: Array<{
 
 export function MelhorEnvioQuoteLabelActions({
   quoteId,
+  quoteShippingTotal,
   shipments
 }: {
   quoteId: string;
+  quoteShippingTotal: number;
   shipments: ShipmentRow[];
 }) {
   const router = useRouter();
@@ -53,11 +55,18 @@ export function MelhorEnvioQuoteLabelActions({
   const [selectedShipmentId, setSelectedShipmentId] = useState(initialShipments[0]?.id ?? "");
   const [quoteOptions, setQuoteOptions] = useState<QuoteOption[]>([]);
   const [selectedServiceCode, setSelectedServiceCode] = useState("");
+  const [manualShippingAmount, setManualShippingAmount] = useState(initialShipments[0] ? Number(initialShipments[0].shipping_amount) : quoteShippingTotal);
   const [loading, setLoading] = useState("");
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<{ tone: "success" | "error" | "info"; title: string; message: string } | null>(null);
 
   const selectedShipment = localShipments.find((shipment) => shipment.id === selectedShipmentId) ?? localShipments[0] ?? null;
+
+  useEffect(() => {
+    if (selectedShipment) {
+      setManualShippingAmount(Number(selectedShipment.shipping_amount));
+    }
+  }, [selectedShipment]);
 
   async function refreshShipments(preferredShipmentId?: string) {
     const response = await fetch(`/api/quotes/${quoteId}/shipments`);
@@ -92,6 +101,7 @@ export function MelhorEnvioQuoteLabelActions({
     const options = Array.isArray(data.options) ? data.options as QuoteOption[] : [];
     setQuoteOptions(options);
     setSelectedServiceCode(options[0]?.code ?? "");
+    setManualShippingAmount(options[0]?.price ?? quoteShippingTotal);
     setResult({
       tone: "success",
       title: "Cotação Melhor Envio pronta",
@@ -254,7 +264,12 @@ export function MelhorEnvioQuoteLabelActions({
               <span className="mb-1 block text-sm font-medium text-cyan-100">Escolha o tipo de envio</span>
               <select
                 className="focus-ring w-full rounded-md border border-cyan-300/30 bg-zinc-950 px-3 py-2 text-cyan-50"
-                onChange={(event) => setSelectedServiceCode(event.currentTarget.value)}
+                onChange={(event) => {
+                  const nextCode = event.currentTarget.value;
+                  const option = quoteOptions.find((item) => item.code === nextCode);
+                  setSelectedServiceCode(nextCode);
+                  if (option) setManualShippingAmount(option.price);
+                }}
                 value={selectedServiceCode}
               >
                 {quoteOptions.map((option) => (
@@ -277,12 +292,39 @@ export function MelhorEnvioQuoteLabelActions({
         ) : null}
 
         {selectedShipment ? (
-          <div className="grid gap-2 text-xs text-zinc-500 sm:grid-cols-4">
-            <Info label="Serviço" value={selectedShipment.service_name ?? selectedShipment.service_code ?? "Melhor Envio"} />
-            <Info label="Valor" value={currency(selectedShipment.shipping_amount)} />
-            <Info label="Rastreio" value={selectedShipment.tracking_code ?? "-"} />
-            <Info label="Etiqueta" value={selectedShipment.label_url ? "Disponível" : "-"} />
-          </div>
+          <>
+            <div className="grid gap-2 text-xs text-zinc-500 sm:grid-cols-4">
+              <Info label="Serviço" value={selectedShipment.service_name ?? selectedShipment.service_code ?? "Melhor Envio"} />
+              <Info label="Valor" value={currency(selectedShipment.shipping_amount)} />
+              <Info label="Rastreio" value={selectedShipment.tracking_code ?? "-"} />
+              <Info label="Etiqueta" value={selectedShipment.label_url ? "Disponível" : "-"} />
+            </div>
+            <div className="grid gap-3 rounded-md border border-amber-400/20 bg-amber-400/10 p-3 md:grid-cols-[minmax(0,220px)_auto_1fr] md:items-end">
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-amber-100">Frete no orçamento</span>
+                <input
+                  className="focus-ring h-10 w-full rounded-md border border-amber-300/30 bg-zinc-950 px-3 text-sm text-white"
+                  min={0}
+                  step={0.01}
+                  type="number"
+                  value={Number.isFinite(manualShippingAmount) ? manualShippingAmount : 0}
+                  onChange={(event) => setManualShippingAmount(Number(event.currentTarget.value))}
+                />
+              </label>
+              <button
+                className="focus-ring inline-flex h-10 w-fit items-center gap-2 rounded-md bg-amber-400 px-3 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-60"
+                disabled={loading === "quote-shipping-update"}
+                onClick={applyShippingToQuote}
+                type="button"
+              >
+                <CheckCircle2 size={16} />
+                {loading === "quote-shipping-update" ? "Atualizando..." : quoteShippingTotal > 0 ? "Atualizar frete do orçamento" : "Incluir frete no orçamento"}
+              </button>
+              <p className="text-xs leading-5 text-amber-100/80">
+                Valor atual salvo no orçamento: <strong>{currency(quoteShippingTotal)}</strong>. Ajuste o valor se precisar repassar um frete diferente da cotação.
+              </p>
+            </div>
+          </>
         ) : null}
       </div>
 
@@ -316,6 +358,37 @@ export function MelhorEnvioQuoteLabelActions({
       {message ? <p className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">{message}</p> : null}
     </div>
   );
+
+  async function applyShippingToQuote() {
+    const amount = Math.max(0, Number.isFinite(manualShippingAmount) ? manualShippingAmount : 0);
+    setLoading("quote-shipping-update");
+    setMessage("");
+    setResult(null);
+
+    const response = await fetch(`/api/quotes/${quoteId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ shippingTotal: amount })
+    });
+    const data = await response.json().catch(() => null);
+    setLoading("");
+
+    if (!response.ok || !data?.ok) {
+      setResult({
+        tone: "error",
+        title: "Frete não atualizado",
+        message: data?.error ?? "Não foi possível incluir o frete no orçamento."
+      });
+      return;
+    }
+
+    setResult({
+      tone: "success",
+      title: "Frete atualizado no orçamento",
+      message: `O orçamento foi atualizado com frete de ${currency(amount)}.`
+    });
+    router.refresh();
+  }
 }
 
 function operationDone(shipment: ShipmentRow, operation: OperationKey) {

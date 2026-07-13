@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "crypto";
-import { calculateQuote } from "@/domain/pricing/pricing";
+import { calculateQuote, normalizePricingCurvePoints } from "@/domain/pricing/pricing";
 import {
   calculateCompositeQuote,
   type CompositePricingRule,
@@ -104,11 +104,13 @@ export type CreateQuoteInput = {
   productVariantId?: string;
   platformRuleId: string;
   quantity?: number;
+  pricingCurve?: PricingCurve;
   pricingRule?: CompositePricingRule;
   items?: Array<{
     productVariantId: string;
     quantity: number;
     artworkName?: string | null;
+    pricingCurve?: PricingCurve;
     artworkFile?: QuoteArtworkFileInput | null;
   }>;
   artworkName?: string | null;
@@ -832,7 +834,7 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
       quantity: input.quantity,
       unitCost: Number(variant.unit_cost),
       method: "anchors",
-      curve: mapCurve(variant.curve_mode, variant.anchors),
+      curve: resolveQuotePricingCurve(input.pricingCurve, variant.curve_mode, variant.anchors),
       platform: effectivePlatform
     });
 
@@ -948,6 +950,41 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
   });
 }
 
+export async function updateQuoteShippingTotal(
+  userId: string,
+  tenantId: string,
+  quoteId: string,
+  shippingTotal: number
+) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const amount = clampNumber(shippingTotal, 0, 100000, 0);
+    const result = await client.query<{ id: string; shipping_total: string; grand_total: string }>(
+      `
+        update quotes
+        set shipping_total = $3,
+            grand_total = subtotal + $3 - discount_total,
+            updated_at = now()
+        where tenant_id = $1 and id = $2
+        returning id, shipping_total::text, grand_total::text
+      `,
+      [tenantId, quoteId, amount]
+    );
+
+    const quote = result.rows[0];
+    if (!quote) return null;
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'quotes.shipping_update', 'quote', $3, $4)
+      `,
+      [tenantId, userId, quoteId, JSON.stringify({ shippingTotal: amount })]
+    );
+
+    return quote;
+  });
+}
+
 async function createCompositeQuoteWithClient(
   client: pg.PoolClient,
   userId: string,
@@ -974,7 +1011,7 @@ async function createCompositeQuoteWithClient(
       artworkName: clean(item.artworkName) ?? `Arte ${index + 1}`,
       quantity: item.quantity,
       unitCost: Number(variant.unit_cost),
-      curve: mapCurve(variant.curve_mode, variant.anchors)
+      curve: resolveQuotePricingCurve(item.pricingCurve, variant.curve_mode, variant.anchors)
     };
   });
 
@@ -1364,6 +1401,25 @@ function mapCurve(mode: PricingCurveMode | null, anchors: Record<string, string>
         unitPrice: Number(unitPrice)
       }))
       .sort((a, b) => a.quantity - b.quantity)
+  };
+}
+
+function resolveQuotePricingCurve(
+  inputCurve: PricingCurve | undefined,
+  fallbackMode: PricingCurveMode | null,
+  fallbackAnchors: Record<string, string>
+): PricingCurve {
+  if (!inputCurve) return mapCurve(fallbackMode, fallbackAnchors);
+
+  const points = normalizePricingCurvePoints(inputCurve.points)
+    .filter((point) => Number.isFinite(point.quantity) && Number.isFinite(point.unitPrice))
+    .slice(0, 50);
+
+  if (points.length === 0) return mapCurve(fallbackMode, fallbackAnchors);
+
+  return {
+    mode: inputCurve.mode === "step" ? "step" : "interpolated",
+    points
   };
 }
 

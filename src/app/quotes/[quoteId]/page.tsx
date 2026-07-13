@@ -216,7 +216,11 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                     email: member.email
                   }))}
               />
-              <MelhorEnvioQuoteLabelActions quoteId={quoteId} shipments={shipments} />
+              <MelhorEnvioQuoteLabelActions
+                quoteId={quoteId}
+                quoteShippingTotal={Number(detail.quote.shipping_total)}
+                shipments={shipments}
+              />
               <QuoteStatusActions quoteId={quoteId} />
             </div>
           </div>

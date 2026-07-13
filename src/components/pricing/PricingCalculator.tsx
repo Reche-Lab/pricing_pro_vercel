@@ -67,6 +67,7 @@ type DraftQuoteItem = {
   productLabel: string;
   artworkName: string;
   artworkFile?: ArtworkFilePayload | null;
+  pricingCurve: PricingCurve;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
@@ -339,8 +340,8 @@ export function PricingCalculator({
 
   const selectedComparison = comparison[0];
   const simulatedChanged = hasCurveChanges(currentCurve, simulatedCurve);
-  const persistentActionsDisabled = readonlyMode || (simulatedChanged && !demoMode);
-  const quoteActionsDisabled = readonlyMode || (simulatedChanged && !demoMode);
+  const persistentActionsDisabled = readonlyMode;
+  const quoteActionsDisabled = readonlyMode;
   const customerValidation = validateCustomerFields({
     document: quickCustomerDocument,
     email: quickCustomerEmail,
@@ -673,6 +674,7 @@ export function PricingCalculator({
         customerCity: quickCustomerCity,
         customerState: quickCustomerState,
         customerExternalOlistId: quickCustomerExternalOlistId,
+        pricingCurve: simulatedCurve,
         shippingTotal: includeShipping ? shippingAmount : 0,
         includeCommission,
         includeFixedFee,
@@ -707,7 +709,7 @@ export function PricingCalculator({
   }
 
   function addCurrentItemToDraft() {
-    if (readonlyMode || (simulatedChanged && !demoMode) || !variant || !simulatedResult) return;
+    if (readonlyMode || !variant || !simulatedResult) return;
 
     const artworkName = draftArtworkName.trim() || `Arte ${draftItems.length + 1}`;
     setDraftItems((current) => [
@@ -718,6 +720,7 @@ export function PricingCalculator({
         productLabel: `${variant.productName} - ${variant.variantName}`,
         artworkName,
         artworkFile: draftArtworkFile,
+        pricingCurve: simulatedCurve,
         quantity,
         unitPrice: simulatedResult.finalUnitPrice,
         totalPrice: simulatedResult.subtotal
@@ -780,6 +783,7 @@ export function PricingCalculator({
           productVariantId: item.productVariantId,
           quantity: item.quantity,
           artworkName: item.artworkName,
+          pricingCurve: item.pricingCurve,
           artworkFile: item.artworkFile ?? null
         })),
         customerId: null,
@@ -932,7 +936,7 @@ export function PricingCalculator({
     if (quoteActionsDisabled || customerHasValidationErrors || quickState === "creating_pdf") return;
 
     if (!simulatedResult) return;
-    const demoItem = currentDemoItem(variant, quantity, simulatedResult.finalUnitPrice, simulatedResult.subtotal, draftArtworkName);
+    const demoItem = currentDemoItem(variant, quantity, simulatedResult.finalUnitPrice, simulatedResult.subtotal, draftArtworkName, simulatedCurve);
     setQuickState("creating_pdf");
     setQuickMessage("");
     setQuickText("");
@@ -970,7 +974,7 @@ export function PricingCalculator({
     if (quoteActionsDisabled || customerHasValidationErrors || quickState === "copying_text") return;
 
     if (!simulatedResult) return;
-    const demoItem = currentDemoItem(variant, quantity, simulatedResult.finalUnitPrice, simulatedResult.subtotal, draftArtworkName);
+    const demoItem = currentDemoItem(variant, quantity, simulatedResult.finalUnitPrice, simulatedResult.subtotal, draftArtworkName, simulatedCurve);
     setQuickState("copying_text");
     setQuickMessage("");
     setQuickText("");
@@ -1622,6 +1626,11 @@ export function PricingCalculator({
           <p className="mt-3 text-xs text-zinc-500">
             Em curva progressiva, o sistema interpola todos os pontos entre duas quantidades. Em preco por faixa, o valor fica fixo ate o proximo ponto.
           </p>
+          {simulatedChanged ? (
+            <p className="mt-3 rounded-md border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+              A curva foi alterada apenas para este atendimento. Ela já será usada ao adicionar itens na bandeja, calcular frete por valor declarado e criar orçamento, PDF ou WhatsApp. Salvar nova versão é opcional e altera o produto definitivamente.
+            </p>
+          ) : null}
           <div className="mt-5 grid gap-4 md:grid-cols-4">
             <EditableCostToggle
               checked={includeCommission}
@@ -2002,7 +2011,8 @@ function currentDemoItem(
   quantity: number,
   unitPrice: number,
   totalPrice: number,
-  artworkName: string
+  artworkName: string,
+  pricingCurve: PricingCurve
 ): DraftQuoteItem {
   return {
     id: "demo-item",
@@ -2010,6 +2020,7 @@ function currentDemoItem(
     productLabel: `${variant.productName} - ${variant.variantName}`,
     artworkName: artworkName.trim() || "Arte 1",
     artworkFile: null,
+    pricingCurve,
     quantity,
     unitPrice,
     totalPrice

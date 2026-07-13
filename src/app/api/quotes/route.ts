@@ -11,16 +11,28 @@ const artworkFileSchema = z.object({
   dataUrl: z.string().startsWith("data:").max(7_200_000)
 });
 
+const pricingCurveSchema = z.object({
+  mode: z.enum(["interpolated", "step"]).optional().default("interpolated"),
+  points: z.array(
+    z.object({
+      quantity: z.number().int().min(1).max(50000),
+      unitPrice: z.number().min(0).max(100000)
+    })
+  ).min(1).max(50)
+});
+
 const quoteSchema = z.object({
   productVariantId: z.string().uuid().optional(),
   platformRuleId: z.string().uuid(),
   quantity: z.number().int().min(1).max(50000).optional(),
+  pricingCurve: pricingCurveSchema.optional(),
   pricingRule: z.enum(["per_item", "per_art_average", "aggregate_total"]).optional(),
   items: z.array(
     z.object({
       productVariantId: z.string().uuid(),
       quantity: z.number().int().min(1).max(50000),
       artworkName: z.string().trim().max(120).optional().nullable(),
+      pricingCurve: pricingCurveSchema.optional(),
       artworkFile: artworkFileSchema.optional().nullable()
     })
   ).min(1).max(50).optional(),
