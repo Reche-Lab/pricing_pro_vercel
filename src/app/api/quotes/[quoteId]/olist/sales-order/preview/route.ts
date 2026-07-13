@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { listQuoteShipments, type ShipmentRow } from "@/repositories/shipments";
 import { buildOlistSalesOrderPayload, missingOlistSkus } from "@/services/olist/payloads";
 import { loadQuoteOlistContext, olistOperationErrorResponse } from "../../_shared";
 
@@ -33,7 +34,13 @@ export async function GET(_request: Request, context: { params: Promise<{ quoteI
   }
 
   try {
-    const payload = buildOlistSalesOrderPayload({ quote: loaded.detail.quote, items: loaded.detail.items });
+    const shipments = await listQuoteShipments(loaded.session.userId, loaded.session.tenantId, quoteId);
+    const melhorEnvioShipment = selectBestMelhorEnvioShipment(shipments);
+    const payload = buildOlistSalesOrderPayload({
+      quote: loaded.detail.quote,
+      items: loaded.detail.items,
+      shipment: melhorEnvioShipment
+    });
     return NextResponse.json({
       ok: true,
       path,
@@ -58,6 +65,7 @@ export async function GET(_request: Request, context: { params: Promise<{ quoteI
         totalPrice: item.total_price,
         artworkName: item.artwork_name
       })),
+      shipment: melhorEnvioShipment ? summarizeShipment(melhorEnvioShipment) : null,
       payload
     });
   } catch (error) {
@@ -68,4 +76,38 @@ export async function GET(_request: Request, context: { params: Promise<{ quoteI
     });
     return NextResponse.json(olistOperationErrorResponse(error, "Falha ao montar prévia do pedido Olist."), { status: 500 });
   }
+}
+
+function selectBestMelhorEnvioShipment(shipments: ShipmentRow[]) {
+  const priority = new Map([
+    ["printed", 6],
+    ["label_generated", 5],
+    ["paid", 4],
+    ["cart", 3],
+    ["quoted", 2],
+    ["error", 1]
+  ]);
+
+  return shipments
+    .filter((shipment) => shipment.provider === "melhor_envio")
+    .sort((a, b) => (priority.get(b.status) ?? 0) - (priority.get(a.status) ?? 0))[0] ?? null;
+}
+
+function summarizeShipment(shipment: ShipmentRow) {
+  return {
+    id: shipment.id,
+    provider: shipment.provider,
+    status: shipment.status,
+    serviceName: shipment.service_name,
+    serviceCode: shipment.service_code,
+    shippingAmount: shipment.shipping_amount,
+    package: shipment.packaging_snapshot ? {
+      boxName: shipment.packaging_snapshot.box.name,
+      widthCm: shipment.packaging_snapshot.box.widthCm,
+      lengthCm: shipment.packaging_snapshot.box.lengthCm,
+      heightCm: shipment.packaging_snapshot.box.heightCm,
+      grossWeightKg: shipment.packaging_snapshot.grossWeightKg,
+      boxesNeeded: shipment.packaging_snapshot.boxesNeeded
+    } : null
+  };
 }

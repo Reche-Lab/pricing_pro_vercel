@@ -9,6 +9,7 @@ import {
 } from "@/services/olist/payloads";
 import type { CustomerRow } from "@/repositories/customers";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
+import type { ShipmentRow } from "@/repositories/shipments";
 
 describe("olist payloads", () => {
   it("builds customer payload", () => {
@@ -48,6 +49,13 @@ describe("olist payloads", () => {
     });
     expect(payload.itens[0].infoAdicional).toContain("Arte azul");
     expect(payload.valorFrete).toBe(20);
+  });
+
+  it("adds package dimensions and gross weight to sales order notes", () => {
+    const payload = buildOlistSalesOrderPayload({ quote: quote(), items: [item()], shipment: shipment() });
+
+    expect(payload.observacoes).toContain("1 volume(s), caixa 16 x 11 x 4 cm, peso bruto 0.650 kg");
+    expect(payload.observacoesInternas).toContain("1 volume(s), caixa 16 x 11 x 4 cm, peso bruto 0.650 kg");
   });
 
   it("builds invoice generation payload", () => {
@@ -142,5 +150,38 @@ function item(): QuoteItemRow {
     unit_price: "2.5000",
     total_price: "250.0000",
     artwork_name: "Arte azul"
+  };
+}
+
+function shipment(): ShipmentRow {
+  return {
+    id: "shipment-1",
+    quote_id: "quote-1",
+    provider: "melhor_envio",
+    provider_shipment_id: null,
+    provider_order_id: null,
+    tracking_code: null,
+    status: "quoted",
+    service_name: "Correios - SEDEX",
+    service_code: "1",
+    shipping_amount: "20.0000",
+    label_url: null,
+    packaging_snapshot: {
+      box: {
+        id: "box-1",
+        name: "Caixa P",
+        widthCm: 16,
+        lengthCm: 11,
+        heightCm: 4,
+        weightKg: 0.15
+      },
+      boxesNeeded: 1,
+      capacity: 100,
+      grossWeightKg: 0.65,
+      netWeightKg: 0.5,
+      grossWeightPerBoxKg: 0.65
+    },
+    selected_quote: null,
+    created_at: "2026-06-27T00:00:00.000Z"
   };
 }

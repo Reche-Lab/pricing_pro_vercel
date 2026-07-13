@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { updateQuoteExternalOlistIds } from "@/repositories/quotes";
+import { listQuoteShipments, type ShipmentRow } from "@/repositories/shipments";
 import { buildOlistSalesOrderPayload, missingOlistSkus } from "@/services/olist/payloads";
 import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOperation } from "../_shared";
 
@@ -23,12 +24,20 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
   }
 
   try {
-    const payload = buildOlistSalesOrderPayload({ quote: loaded.detail.quote, items: loaded.detail.items });
+    const shipments = await listQuoteShipments(loaded.session.userId, loaded.session.tenantId, quoteId);
+    const melhorEnvioShipment = selectBestMelhorEnvioShipment(shipments);
+    const payload = buildOlistSalesOrderPayload({
+      quote: loaded.detail.quote,
+      items: loaded.detail.items,
+      shipment: melhorEnvioShipment
+    });
     console.info("Olist sales order payload built.", {
       quoteId,
       path,
       customerExternalOlistId: loaded.detail.quote.customer_external_olist_id,
       itemCount: loaded.detail.items.length,
+      shipmentId: melhorEnvioShipment?.id ?? null,
+      package: melhorEnvioShipment?.packaging_snapshot ?? null,
       payload
     });
     const result = await sendOlistQuoteOperation({
@@ -61,4 +70,19 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
     });
     return NextResponse.json(olistOperationErrorResponse(error, "Unknown Olist error"), { status: 502 });
   }
+}
+
+function selectBestMelhorEnvioShipment(shipments: ShipmentRow[]) {
+  const priority = new Map([
+    ["printed", 6],
+    ["label_generated", 5],
+    ["paid", 4],
+    ["cart", 3],
+    ["quoted", 2],
+    ["error", 1]
+  ]);
+
+  return shipments
+    .filter((shipment) => shipment.provider === "melhor_envio")
+    .sort((a, b) => (priority.get(b.status) ?? 0) - (priority.get(a.status) ?? 0))[0] ?? null;
 }

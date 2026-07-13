@@ -1,5 +1,6 @@
 import type { CustomerRow } from "@/repositories/customers";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
+import type { ShipmentRow } from "@/repositories/shipments";
 import type { TenantMemberRow } from "@/repositories/users";
 
 export function buildOlistCustomerPayload(customer: CustomerRow, options?: { personType?: "F" | "J" | null }) {
@@ -49,13 +50,16 @@ export function buildOlistCrmQuotePayload(input: {
   });
 }
 
-export function buildOlistSalesOrderPayload(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
+export function buildOlistSalesOrderPayload(input: { quote: QuoteDetail; items: QuoteItemRow[]; shipment?: ShipmentRow | null }) {
   return compactObject({
     idContato: numericId(input.quote.customer_external_olist_id),
     data: dateOnly(input.quote.created_at),
     dataPrevista: dateOnly(input.quote.valid_until),
     observacoes: buildOlistNotes(input),
-    observacoesInternas: `Pricing Pro quote ${input.quote.id}`,
+    observacoesInternas: [
+      `Pricing Pro quote ${input.quote.id}`,
+      buildPackageLine(input.shipment)
+    ].filter(Boolean).join("\n"),
     valorFrete: money(input.quote.shipping_total),
     valorDesconto: money(input.quote.discount_total),
     enderecoEntrega: quoteDeliveryAddress(input.quote),
@@ -152,7 +156,7 @@ function nativeOrderItem(item: QuoteItemRow) {
   });
 }
 
-function buildOlistNotes(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
+function buildOlistNotes(input: { quote: QuoteDetail; items: QuoteItemRow[]; shipment?: ShipmentRow | null }) {
   const itemLines = input.items.map((item, index) => {
     const art = item.artwork_name ? ` | Arte: ${item.artwork_name}` : "";
     const olistId = item.external_olist_product_id ? ` | Olist ID: ${item.external_olist_product_id}` : "";
@@ -162,9 +166,34 @@ function buildOlistNotes(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
     input.quote.notes,
     `Orçamento Pricing Pro: ${input.quote.id}`,
     `Frete: ${money(input.quote.shipping_total).toFixed(2)}`,
+    buildPackageLine(input.shipment),
     `Total final: ${money(input.quote.grand_total).toFixed(2)}`,
     itemLines.join("\n")
   ].filter(Boolean).join("\n");
+}
+
+function buildPackageLine(shipment: ShipmentRow | null | undefined) {
+  const summary = summarizeShipmentPackage(shipment);
+  if (!summary) return null;
+  return `Embalagem/frete: ${summary.volumes} volume(s), caixa ${summary.dimensions}, peso bruto ${summary.grossWeightKg.toFixed(3)} kg.`;
+}
+
+function summarizeShipmentPackage(shipment: ShipmentRow | null | undefined) {
+  const packaging = shipment?.packaging_snapshot;
+  if (!packaging) return null;
+
+  const width = numberOrNull(packaging.box.widthCm);
+  const length = numberOrNull(packaging.box.lengthCm);
+  const height = numberOrNull(packaging.box.heightCm);
+  const grossWeightKg = numberOrNull(packaging.grossWeightKg);
+  const volumes = numberOrNull(packaging.boxesNeeded);
+  if (!width || !length || !height || !grossWeightKg || !volumes) return null;
+
+  return {
+    dimensions: `${formatDimension(width)} x ${formatDimension(length)} x ${formatDimension(height)} cm`,
+    grossWeightKg,
+    volumes
+  };
 }
 
 function digits(value: unknown): string | null {
@@ -208,6 +237,19 @@ function dateOnly(value: unknown): string | null {
 
 function money(value: unknown): number {
   return Number(Number(value).toFixed(2));
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function formatDimension(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function compactObject<T>(value: T): T {
