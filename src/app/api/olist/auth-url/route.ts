@@ -5,9 +5,11 @@ import { createOAuthState, decryptIntegrationCredentials, getIntegrationConnecti
 import { buildOlistAuthUrl } from "@/services/olist/olist";
 import type { OlistCredentials, OlistSettings } from "@/services/olist/types";
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ ok: false }, { status: 401 });
+  const url = new URL(request.url);
+  const redirectPath = safeRedirectPath(url.searchParams.get("redirectPath")) ?? "/settings";
 
   const connection = await getIntegrationConnection(session.userId, session.tenantId, "olist");
   if (!connection) {
@@ -35,7 +37,7 @@ export async function GET() {
   await createOAuthState(session.userId, session.tenantId, {
     provider: "olist",
     state,
-    redirectPath: "/settings",
+    redirectPath,
     ttlMinutes: 10
   });
 
@@ -48,4 +50,10 @@ export async function GET() {
       { status: 409 }
     );
   }
+}
+
+function safeRedirectPath(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return null;
+  if (value.includes("://")) return null;
+  return value.slice(0, 120);
 }

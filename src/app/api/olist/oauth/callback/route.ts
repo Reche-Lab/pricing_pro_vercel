@@ -51,7 +51,7 @@ export async function GET(request: Request) {
       }
     });
 
-    return redirectWithStatus(request, "connected");
+    return redirectWithStatus(request, "connected", undefined, oauthState.redirect_path);
   } catch (callbackError) {
     await logIntegrationEvent(oauthState.user_id, oauthState.tenant_id, {
       provider: oauthState.provider,
@@ -62,14 +62,21 @@ export async function GET(request: Request) {
     return redirectWithStatus(
       request,
       "error",
-      callbackError instanceof Error ? callbackError.message : "unknown_oauth_error"
+      callbackError instanceof Error ? callbackError.message : "unknown_oauth_error",
+      oauthState.redirect_path
     );
   }
 }
 
-function redirectWithStatus(request: Request, status: "connected" | "error", message?: string) {
-  const target = new URL("/settings", request.url);
+function redirectWithStatus(request: Request, status: "connected" | "error", message?: string, redirectPath?: string | null) {
+  const target = new URL(safeRedirectPath(redirectPath) ?? "/settings", request.url);
   target.searchParams.set("olist", status);
   if (message) target.searchParams.set("message", message.slice(0, 140));
   return NextResponse.redirect(target);
+}
+
+function safeRedirectPath(value: string | null | undefined) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return null;
+  if (value.includes("://")) return null;
+  return value;
 }

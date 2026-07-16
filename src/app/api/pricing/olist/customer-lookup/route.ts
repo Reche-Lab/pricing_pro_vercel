@@ -76,6 +76,7 @@ export async function POST(request: Request) {
     const status = error instanceof OlistRequestError ? error.status : undefined;
     const response = error instanceof OlistRequestError ? error.data : undefined;
     const message = error instanceof Error ? error.message : "Falha ao consultar cliente no Olist.";
+    const oauthInvalid = isOlistOAuthInvalid(message, status);
     console.error("Pricing Olist customer lookup failed.", {
       debugId,
       path,
@@ -92,7 +93,17 @@ export async function POST(request: Request) {
       message,
       metadata: { criteria, path, httpStatus: status, response }
     });
-    return NextResponse.json({ ok: false, error: humanizeOlistError(message, status), debugId, response }, { status: 502 });
+    return NextResponse.json(
+      {
+        ok: false,
+        code: oauthInvalid ? "olist_oauth_invalid" : "olist_lookup_failed",
+        error: humanizeOlistError(message, status),
+        debugId,
+        response,
+        reconnectRequired: oauthInvalid
+      },
+      { status: oauthInvalid ? 401 : 502 }
+    );
   }
 }
 
@@ -233,10 +244,16 @@ function digits(value: unknown) {
 }
 
 function humanizeOlistError(message: string, status?: number) {
+  if (isOlistOAuthInvalid(message, status)) return "A autenticação com o Olist/Tiny expirou ou foi revogada. Refaça a conexão OAuth para consultar clientes.";
   if (status === 401) return `Olist/Tiny recusou a autenticação. Reconecte o OAuth e tente novamente. Detalhe: ${message}`;
   if (status === 403) return `Olist/Tiny negou permissão para consultar contatos. Detalhe: ${message}`;
   if (status === 404) return `Endpoint de contatos não encontrado. Confira a configuração da integração Olist. Detalhe: ${message}`;
   return message;
+}
+
+function isOlistOAuthInvalid(message: string, status?: number) {
+  const normalized = message.toLowerCase();
+  return status === 401 || normalized.includes("invalid_grant") || normalized.includes("invalid token");
 }
 
 async function safeLogIntegrationEvent(
