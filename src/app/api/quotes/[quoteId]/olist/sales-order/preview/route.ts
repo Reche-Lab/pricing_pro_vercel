@@ -58,7 +58,7 @@ export async function GET(_request: Request, context: { params: Promise<{ quoteI
       totalPrice: item.total_price,
       artworkName: item.artwork_name
     }));
-    if (!paymentTerm?.payment_method_external_id) {
+    if (!paymentTerm?.receiving_method_external_id) {
       return NextResponse.json(
         {
           ok: true,

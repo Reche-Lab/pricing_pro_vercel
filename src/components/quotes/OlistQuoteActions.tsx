@@ -440,13 +440,13 @@ export function OlistQuoteActions({
     router.refresh();
   }
 
-  async function useFoundCustomer(externalId: string) {
+  async function useFoundCustomer(externalId: string, raw?: unknown) {
     setMessage("");
     setUsingCustomer(true);
     const response = await fetch(`/api/quotes/${quoteId}/olist/customer/use`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ externalId })
+      body: JSON.stringify({ externalId, raw })
     });
     const data = await response.json().catch(() => null);
     setUsingCustomer(false);
@@ -459,6 +459,12 @@ export function OlistQuoteActions({
     setCustomerExternalId(externalId);
     setMessage(data.message ?? `Cliente Olist vinculado. ID: ${externalId}.`);
     router.refresh();
+  }
+
+  function openAction(action: ActionKey) {
+    setActionResult(null);
+    setMessage("");
+    setPendingAction(action);
   }
 
   return (
@@ -495,7 +501,7 @@ export function OlistQuoteActions({
           done={customerReady}
           icon={<UserCheck size={16} />}
           loading={loading}
-          onClick={setPendingAction}
+          onClick={openAction}
           primaryName={customerReady ? "customer" : "customerLookup"}
           secondaryName={customerReady ? undefined : "customer"}
           title="1. Cliente Olist"
@@ -506,7 +512,7 @@ export function OlistQuoteActions({
           done={crmReady}
           icon={<Send size={16} />}
           loading={loading}
-          onClick={setPendingAction}
+          onClick={openAction}
           primaryName="crm"
           title="2. Assunto CRM"
         />
@@ -516,7 +522,7 @@ export function OlistQuoteActions({
           done={crmTaskReady}
           icon={<CalendarPlus size={16} />}
           loading={loading}
-          onClick={setPendingAction}
+          onClick={openAction}
           primaryName="crmTask"
           title="3. Tarefa CRM"
         />
@@ -526,7 +532,7 @@ export function OlistQuoteActions({
           done={orderReady}
           icon={<ShoppingCart size={16} />}
           loading={loading}
-          onClick={setPendingAction}
+          onClick={openAction}
           primaryName="salesOrder"
           title="4. Pedido de venda"
         />
@@ -537,7 +543,7 @@ export function OlistQuoteActions({
           icon={<ReceiptText size={16} />}
           label={invoiceReady ? "Autorizar nota Olist" : "Gerar nota Olist"}
           loading={loading}
-          onClick={setPendingAction}
+          onClick={openAction}
           primaryName="invoice"
           secondaryName={invoiceReady ? "invoiceCancel" : undefined}
           title="5. Nota fiscal"
@@ -548,7 +554,7 @@ export function OlistQuoteActions({
           done={fulfillmentReady}
           icon={<Truck size={16} />}
           loading={loading}
-          onClick={setPendingAction}
+          onClick={openAction}
           primaryName="fulfillment"
           title="6. Expedição Olist"
         />
@@ -1716,7 +1722,7 @@ function CustomerLookupResult({
   lookup: CustomerLookupState;
   activeExternalId: string | null;
   loading: boolean;
-  onUseCustomer: (externalId: string) => void;
+  onUseCustomer: (externalId: string, raw?: unknown) => void;
 }) {
   const title =
     lookup.status === "found"
@@ -1745,7 +1751,7 @@ function CustomerLookupResult({
             <button
               className="focus-ring inline-flex min-h-9 w-fit items-center justify-center rounded-md border border-emerald-300/40 bg-emerald-300/10 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-300/20 disabled:opacity-60"
               disabled={loading}
-              onClick={() => onUseCustomer(lookup.externalId as string)}
+              onClick={() => onUseCustomer(lookup.externalId as string, lookup.raw)}
               type="button"
             >
               {loading ? "Vinculando..." : "Usar este cliente"}

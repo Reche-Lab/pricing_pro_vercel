@@ -52,6 +52,23 @@ describe("olist payloads", () => {
     expect(payload.valorFrete).toBe(20);
   });
 
+  it("omits delivery address when quote address is incomplete", () => {
+    const payload = buildOlistSalesOrderPayload({
+      quote: {
+        ...quote(),
+        customer_name: null,
+        customer_postal_code: null,
+        customer_address_line: null,
+        customer_city: null,
+        customer_state: null
+      },
+      items: [item()]
+    });
+
+    expect(payload.enderecoEntrega).toBeUndefined();
+    expect(payload.idContato).toBe(12345);
+  });
+
   it("adds payment terms to sales order payload", () => {
     const payload = buildOlistSalesOrderPayload({
       quote: quote(),

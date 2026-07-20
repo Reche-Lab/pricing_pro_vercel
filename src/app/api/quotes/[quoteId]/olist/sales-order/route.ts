@@ -53,7 +53,7 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     const body = await request.json().catch(() => null);
     const shipments = await listQuoteShipments(loaded.session.userId, loaded.session.tenantId, quoteId);
     let paymentTerm = await getQuotePaymentTerm(loaded.session.userId, loaded.session.tenantId, quoteId);
-    if (!paymentTerm?.payment_method_external_id && body?.paymentTerm) {
+    if (!paymentTerm?.receiving_method_external_id && body?.paymentTerm) {
       const parsedPaymentTerm = paymentTermSchema.safeParse(body.paymentTerm);
       if (!parsedPaymentTerm.success) {
         return NextResponse.json({ ok: false, error: parsedPaymentTerm.error.flatten(), paymentRequired: true }, { status: 400 });
@@ -61,11 +61,11 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
       await upsertQuotePaymentTerm(loaded.session.userId, loaded.session.tenantId, quoteId, parsedPaymentTerm.data);
       paymentTerm = await getQuotePaymentTerm(loaded.session.userId, loaded.session.tenantId, quoteId);
     }
-    if (!paymentTerm?.payment_method_external_id) {
+    if (!paymentTerm?.receiving_method_external_id) {
       return NextResponse.json(
         {
           ok: false,
-          error: "Selecione e salve uma forma de pagamento do Olist antes de gerar o pedido de venda.",
+          error: "Selecione e salve uma forma de recebimento do Olist antes de gerar o pedido de venda.",
           paymentRequired: true,
           paymentTerm
         },

@@ -190,6 +190,72 @@ export async function updateCustomerExternalOlistId(
   });
 }
 
+export async function updateCustomerFromOlistProfile(
+  userId: string,
+  tenantId: string,
+  customerId: string,
+  input: {
+    externalOlistId: string;
+    name?: string | null;
+    document?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    postalCode?: string | null;
+    addressLine?: string | null;
+    addressNumber?: string | null;
+    addressComplement?: string | null;
+    district?: string | null;
+    city?: string | null;
+    state?: string | null;
+  }
+) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    await client.query(
+      `
+        update customers
+        set external_olist_id = $3,
+            name = coalesce($4, name),
+            document = coalesce($5, document),
+            email = coalesce($6, email),
+            phone = coalesce($7, phone),
+            postal_code = coalesce($8, postal_code),
+            address_line = coalesce($9, address_line),
+            address_number = coalesce($10, address_number),
+            address_complement = coalesce($11, address_complement),
+            district = coalesce($12, district),
+            city = coalesce($13, city),
+            state = coalesce($14, state),
+            updated_at = now()
+        where tenant_id = $1 and id = $2
+      `,
+      [
+        tenantId,
+        customerId,
+        clean(input.externalOlistId),
+        clean(input.name),
+        clean(input.document),
+        clean(input.email),
+        clean(input.phone),
+        clean(input.postalCode),
+        clean(input.addressLine),
+        clean(input.addressNumber),
+        clean(input.addressComplement),
+        clean(input.district),
+        clean(input.city),
+        clean(input.state)?.toUpperCase() ?? null
+      ]
+    );
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'customers.olist_profile_sync', 'customer', $3, $4)
+      `,
+      [tenantId, userId, customerId, JSON.stringify({ externalOlistId: input.externalOlistId })]
+    );
+  });
+}
+
 export async function countCustomers(userId: string, tenantId: string): Promise<number> {
   return withTenantContext(userId, tenantId, async (client) => {
     const result = await client.query<{ count: string }>(
@@ -198,4 +264,8 @@ export async function countCustomers(userId: string, tenantId: string): Promise<
     );
     return Number(result.rows[0]?.count ?? 0);
   });
+}
+
+function clean(value: string | null | undefined) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }

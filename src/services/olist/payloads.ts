@@ -142,14 +142,20 @@ export function buildOlistTaskPayload(input: {
 }
 
 function quoteDeliveryAddress(quote: QuoteDetail) {
+  const state = normalizeBrazilianState(quote.customer_state);
+  const postalCode = digits(quote.customer_postal_code);
+  const addressLine = cleanString(quote.customer_address_line);
+  const city = cleanString(quote.customer_city);
+  if (!state || !postalCode || !addressLine || !city) return null;
+
   return {
     endereco: quote.customer_address_line,
     enderecoNro: quote.customer_address_number,
     complemento: quote.customer_address_complement,
     bairro: quote.customer_district,
     municipio: quote.customer_city,
-    cep: digits(quote.customer_postal_code),
-    uf: quote.customer_state?.toUpperCase(),
+    cep: postalCode,
+    uf: state,
     fone: digits(quote.customer_phone),
     nomeDestinatario: quote.customer_name,
     cpfCnpj: digits(quote.customer_document),
@@ -240,6 +246,20 @@ function digits(value: unknown): string | null {
     ? String(value).replace(/\D/g, "")
     : "";
   return output || null;
+}
+
+function cleanString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeBrazilianState(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const state = value.trim().toUpperCase();
+  const validStates = new Set([
+    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG",
+    "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"
+  ]);
+  return validStates.has(state) ? state : null;
 }
 
 function olistCustomerCode(value: unknown): string | null {
