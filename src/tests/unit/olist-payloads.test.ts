@@ -4,6 +4,7 @@ import {
   buildOlistCustomerPayload,
   buildOlistInvoiceCancelPayload,
   buildOlistInvoicePayload,
+  buildOlistSalesOrderItemsUpdatePayload,
   buildOlistSalesOrderPayload,
   missingOlistSkus
 } from "@/services/olist/payloads";
@@ -56,6 +57,20 @@ describe("olist payloads", () => {
 
     expect(payload.observacoes).toContain("1 volume(s), caixa 16 x 11 x 4 cm, peso bruto 0.650 kg");
     expect(payload.observacoesInternas).toContain("1 volume(s), caixa 16 x 11 x 4 cm, peso bruto 0.650 kg");
+  });
+
+  it("builds sales order items update payload", () => {
+    const payload = buildOlistSalesOrderItemsUpdatePayload([{ ...item(), quantity: 50, unit_price: "3.2500" }]);
+
+    expect(payload).toEqual({
+      itens: [
+        expect.objectContaining({
+          produto: { id: 98765, tipo: "P" },
+          quantidade: 50,
+          valorUnitario: 3.25
+        })
+      ]
+    });
   });
 
   it("builds invoice generation payload", () => {

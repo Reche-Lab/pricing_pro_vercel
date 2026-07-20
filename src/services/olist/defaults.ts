@@ -7,6 +7,7 @@ export const OLIST_DEFAULT_PATHS = {
   customer: "/contatos",
   customerLookup: "/contatos",
   salesOrder: "/pedidos",
+  salesOrderItems: "/pedidos/{idPedido}/itens",
   invoice: "/pedidos/{idPedido}/gerar-nota-fiscal",
   invoiceEmit: "/notas/{idNota}/emitir",
   invoiceXml: "/notas/{idNota}/xml",

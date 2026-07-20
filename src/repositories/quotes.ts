@@ -80,7 +80,21 @@ export type QuoteItemRow = {
   pricing_group_key?: string | null;
   reference_quantity?: number | null;
   base_unit_price?: string | null;
+  manual_unit_price?: boolean | null;
+  manual_price_reason?: string | null;
+  manual_price_changed_at?: string | null;
+  manual_price_changed_by_name?: string | null;
   artworks?: QuoteItemArtworkRow[];
+};
+
+export type QuoteEditLogRow = {
+  id: string;
+  reason: string | null;
+  synced_olist_order_id: string | null;
+  before_snapshot: Record<string, unknown>;
+  after_snapshot: Record<string, unknown>;
+  created_at: string;
+  edited_by_name: string | null;
 };
 
 export type QuoteItemArtworkRow = {
@@ -140,6 +154,21 @@ export type CreateQuoteInput = {
   }>;
   validDays?: number;
   notes?: string | null;
+};
+
+export type UpdateQuoteInput = {
+  validUntil?: string | null;
+  shippingTotal: number;
+  notes?: string | null;
+  reason?: string | null;
+  items: Array<{
+    id?: string | null;
+    productVariantId: string;
+    description?: string | null;
+    quantity: number;
+    unitPrice: number;
+    artworkName?: string | null;
+  }>;
 };
 
 export type QuoteArtworkFileInput = {
@@ -272,9 +301,14 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           qi.pricing_rule,
           qi.pricing_group_key,
           qi.reference_quantity,
-          qi.base_unit_price
+          qi.base_unit_price,
+          coalesce((to_jsonb(qi)->>'manual_unit_price')::boolean, false) as manual_unit_price,
+          to_jsonb(qi)->>'manual_price_reason' as manual_price_reason,
+          to_jsonb(qi)->>'manual_price_changed_at' as manual_price_changed_at,
+          manual_user.name as manual_price_changed_by_name
         from quote_items qi
         left join product_variants pv on pv.id = qi.product_variant_id and pv.tenant_id = qi.tenant_id
+        left join app_users manual_user on manual_user.id::text = to_jsonb(qi)->>'manual_price_changed_by'
         where qi.tenant_id = $1 and qi.quote_id = $2
         order by qi.created_at asc
       `,
@@ -985,6 +1019,275 @@ export async function updateQuoteShippingTotal(
   });
 }
 
+export async function listQuoteEditLogs(
+  userId: string,
+  tenantId: string,
+  quoteId: string
+): Promise<QuoteEditLogRow[]> {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const result = await client.query<QuoteEditLogRow>(
+      `
+        select
+          qel.id,
+          qel.reason,
+          qel.synced_olist_order_id,
+          qel.before_snapshot,
+          qel.after_snapshot,
+          qel.created_at,
+          u.name as edited_by_name
+        from quote_edit_logs qel
+        left join app_users u on u.id = qel.edited_by
+        where qel.tenant_id = $1 and qel.quote_id = $2
+        order by qel.created_at desc
+        limit 20
+      `,
+      [tenantId, quoteId]
+    );
+
+    return result.rows;
+  });
+}
+
+export async function updateQuoteEditable(
+  userId: string,
+  tenantId: string,
+  quoteId: string,
+  input: UpdateQuoteInput & { syncedOlistOrderId?: string | null }
+) {
+  return withTenantContext(userId, tenantId, async (client) => {
+      const quoteResult = await client.query<QuoteDetail>(
+        `
+          select
+            q.id,
+            q.status,
+            q.valid_until::text as valid_until,
+            q.subtotal::text as subtotal,
+            q.shipping_total::text as shipping_total,
+            q.discount_total::text as discount_total,
+            q.grand_total::text as grand_total,
+            q.margin_amount::text as margin_amount,
+            q.margin_percent::text as margin_percent,
+            q.notes,
+            q.created_at,
+            q.customer_id,
+            null::text as customer_name,
+            null::text as customer_document,
+            null::text as customer_email,
+            null::text as customer_phone,
+            null::text as customer_postal_code,
+            null::text as customer_address_line,
+            null::text as customer_address_number,
+            null::text as customer_address_complement,
+            null::text as customer_district,
+            null::text as customer_city,
+            null::text as customer_state,
+            null::text as customer_external_olist_id,
+            q.external_crm_id,
+            to_jsonb(q)->>'external_olist_order_id' as external_olist_order_id,
+            to_jsonb(q)->>'external_olist_invoice_id' as external_olist_invoice_id,
+            to_jsonb(q)->>'public_accepted_at' as public_accepted_at,
+            null::text as created_by_name
+          from quotes q
+          where q.tenant_id = $1 and q.id = $2
+          for update
+        `,
+        [tenantId, quoteId]
+      );
+      const quote = quoteResult.rows[0];
+      if (!quote) throw new Error("Quote not found.");
+      if (quote.external_olist_invoice_id) throw new Error("Orçamento com nota fiscal Olist não pode ser editado.");
+      if (quote.public_accepted_at || quote.status === "accepted") throw new Error("Orçamento aceito pelo cliente não pode ser editado.");
+
+      const currentItemsResult = await client.query<QuoteItemRow>(
+        `
+          select
+            id,
+            product_variant_id,
+            description,
+            quantity,
+            unit_price,
+            total_price,
+            artwork_name,
+            coalesce((to_jsonb(quote_items)->>'manual_unit_price')::boolean, false) as manual_unit_price,
+            to_jsonb(quote_items)->>'manual_price_reason' as manual_price_reason
+          from quote_items
+          where tenant_id = $1 and quote_id = $2
+          order by created_at asc
+          for update
+        `,
+        [tenantId, quoteId]
+      );
+      const currentItems = currentItemsResult.rows;
+      if (input.items.length !== currentItems.length) {
+        throw new Error("Esta edição suporta alterar os itens existentes. Inclusão/remoção será tratada em uma etapa dedicada.");
+      }
+
+      const currentItemMap = new Map(currentItems.map((item) => [item.id, item]));
+      const itemIds = input.items.map((item) => item.id).filter((id): id is string => Boolean(id));
+      if (itemIds.length !== currentItems.length || itemIds.some((id) => !currentItemMap.has(id))) {
+        throw new Error("Todos os itens atuais do orçamento devem ser enviados para edição.");
+      }
+
+      const variants = await findQuoteEditVariants(client, tenantId, input.items.map((item) => item.productVariantId));
+      const variantMap = new Map(variants.map((variant) => [variant.variant_id, variant]));
+      const beforeSnapshot = { quote, items: currentItems };
+      const reason = clean(input.reason);
+      const changedUnitPrice = input.items.some((item) => {
+        const current = item.id ? currentItemMap.get(item.id) : null;
+        return !current || Math.abs(Number(current.unit_price) - item.unitPrice) >= 0.0001;
+      });
+      if (changedUnitPrice && !reason) throw new Error("Informe o motivo da alteração manual de preço.");
+
+      let subtotal = 0;
+      let totalCost = 0;
+      const updatedItems = [];
+      for (const item of input.items) {
+        const current = currentItemMap.get(item.id as string);
+        const variant = variantMap.get(item.productVariantId);
+        if (!current) throw new Error("Item do orçamento não encontrado.");
+        if (!variant) throw new Error("Produto selecionado não encontrado.");
+
+        const quantity = Math.max(1, Math.trunc(item.quantity));
+        const unitPrice = clampNumber(item.unitPrice, 0, 100000, Number(current.unit_price));
+        const totalPrice = Number((quantity * unitPrice).toFixed(4));
+        const itemChangedPrice = Math.abs(Number(current.unit_price) - unitPrice) >= 0.0001;
+        const manualUnitPrice = Boolean(current.manual_unit_price) || itemChangedPrice;
+        const manualReason = itemChangedPrice ? reason : current.manual_price_reason ?? null;
+        const description = clean(item.description) ?? `${variant.product_name} - ${variant.variant_name}`;
+
+        await client.query(
+          `
+            update quote_items
+            set product_variant_id = $4,
+                description = $5,
+                quantity = $6,
+                unit_price = $7,
+                total_price = $8,
+                artwork_name = $9,
+                manual_unit_price = $10,
+                manual_price_reason = $11,
+                manual_price_changed_by = case when $12::boolean then $13 else manual_price_changed_by end,
+                manual_price_changed_at = case when $12::boolean then now() else manual_price_changed_at end
+            where tenant_id = $1 and quote_id = $2 and id = $3
+          `,
+          [
+            tenantId,
+            quoteId,
+            current.id,
+            variant.variant_id,
+            description,
+            quantity,
+            unitPrice,
+            totalPrice,
+            clean(item.artworkName),
+            manualUnitPrice,
+            manualReason,
+            itemChangedPrice,
+            userId
+          ]
+        );
+
+        subtotal += totalPrice;
+        totalCost += quantity * Number(variant.unit_cost);
+        updatedItems.push({
+          id: current.id,
+          productVariantId: variant.variant_id,
+          description,
+          quantity,
+          unitPrice,
+          totalPrice,
+          artworkName: clean(item.artworkName),
+          manualUnitPrice,
+          manualPriceReason: manualReason
+        });
+      }
+
+      const shippingTotal = clampNumber(input.shippingTotal, 0, 100000, Number(quote.shipping_total));
+      const discountTotal = Number(quote.discount_total);
+      const grandTotal = subtotal + shippingTotal - discountTotal;
+      const marginAmount = subtotal - totalCost;
+      const marginPercent = subtotal > 0 ? (marginAmount / subtotal) * 100 : 0;
+      const validUntil = clean(input.validUntil);
+
+      const updatedQuoteResult = await client.query<{ id: string }>(
+        `
+          update quotes
+          set valid_until = coalesce($3::date, valid_until),
+              subtotal = $4,
+              shipping_total = $5,
+              grand_total = $6,
+              margin_amount = $7,
+              margin_percent = $8,
+              notes = $9,
+              updated_at = now()
+          where tenant_id = $1 and id = $2
+          returning id
+        `,
+        [
+          tenantId,
+          quoteId,
+          validUntil,
+          subtotal,
+          shippingTotal,
+          grandTotal,
+          marginAmount,
+          marginPercent,
+          input.notes ?? null
+        ]
+      );
+      if (!updatedQuoteResult.rows[0]) throw new Error("Quote not found.");
+
+      const afterSnapshot = {
+        quote: {
+          id: quoteId,
+          validUntil,
+          subtotal,
+          shippingTotal,
+          discountTotal,
+          grandTotal,
+          marginAmount,
+          marginPercent,
+          notes: input.notes ?? null
+        },
+        items: updatedItems
+      };
+
+      await client.query(
+        `
+          insert into quote_edit_logs (
+            tenant_id,
+            quote_id,
+            edited_by,
+            reason,
+            synced_olist_order_id,
+            before_snapshot,
+            after_snapshot
+          )
+          values ($1, $2, $3, $4, $5, $6, $7)
+        `,
+        [
+          tenantId,
+          quoteId,
+          userId,
+          reason,
+          input.syncedOlistOrderId ?? null,
+          JSON.stringify(beforeSnapshot),
+          JSON.stringify(afterSnapshot)
+        ]
+      );
+
+      await client.query(
+        `
+          insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+          values ($1, $2, 'quotes.edit', 'quote', $3, $4)
+        `,
+        [tenantId, userId, quoteId, JSON.stringify({ reason, changedUnitPrice, syncedOlistOrderId: input.syncedOlistOrderId ?? null })]
+      );
+
+      return { id: quoteId, subtotal, shippingTotal, grandTotal };
+  });
+}
+
 async function createCompositeQuoteWithClient(
   client: pg.PoolClient,
   userId: string,
@@ -1387,6 +1690,37 @@ async function findVariantsForQuote(
         and p.active = true
     `,
     [tenantId, variantIds, platformRuleId]
+  );
+
+  return result.rows;
+}
+
+async function findQuoteEditVariants(client: pg.PoolClient, tenantId: string, variantIds: string[]) {
+  const uniqueVariantIds = Array.from(new Set(variantIds));
+  const result = await client.query<{
+    variant_id: string;
+    variant_name: string;
+    product_name: string;
+    sku: string | null;
+    external_olist_product_id: string | null;
+    unit_cost: string;
+  }>(
+    `
+      select
+        v.id as variant_id,
+        v.name as variant_name,
+        p.name as product_name,
+        v.sku,
+        to_jsonb(v)->>'external_olist_product_id' as external_olist_product_id,
+        v.unit_cost
+      from product_variants v
+      join products p on p.id = v.product_id and p.tenant_id = v.tenant_id
+      where v.tenant_id = $1
+        and v.id = any($2::uuid[])
+        and v.active = true
+        and p.active = true
+    `,
+    [tenantId, uniqueVariantIds]
   );
 
   return result.rows;

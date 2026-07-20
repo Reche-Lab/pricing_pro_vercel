@@ -6,11 +6,13 @@ import { DeleteQuoteButton } from "@/components/quotes/DeleteQuoteButton";
 import { MelhorEnvioQuoteLabelActions } from "@/components/quotes/MelhorEnvioQuoteLabelActions";
 import { MelhorEnvioPayloadPreview } from "@/components/quotes/MelhorEnvioPayloadPreview";
 import { OlistQuoteActions } from "@/components/quotes/OlistQuoteActions";
+import { QuoteEditPanel } from "@/components/quotes/QuoteEditPanel";
 import { QuoteStatusActions } from "@/components/quotes/QuoteStatusActions";
 import { QuoteWhatsAppButton } from "@/components/quotes/QuoteWhatsAppButton";
 import { PublicQuoteLinkButton } from "@/components/quotes/PublicQuoteLinkButton";
 import { getCurrentSession } from "@/lib/auth/session";
-import { getQuoteDetail } from "@/repositories/quotes";
+import { getQuoteDetail, listQuoteEditLogs } from "@/repositories/quotes";
+import { listProductVariants } from "@/repositories/products";
 import { listQuoteShipments } from "@/repositories/shipments";
 import { getSessionProfile, listTenantMembers, userHasPermission } from "@/repositories/users";
 
@@ -24,12 +26,14 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
   const quoteIdParsed = z.string().uuid().safeParse(quoteId);
   if (!quoteIdParsed.success) notFound();
 
-  const [profile, detail, shipments, members, canDeleteQuotesByPermission] = await Promise.all([
+  const [profile, detail, shipments, members, canDeleteQuotesByPermission, variants, editLogs] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
     getQuoteDetail(session.userId, session.tenantId, quoteId),
     listQuoteShipments(session.userId, session.tenantId, quoteId),
     listTenantMembers(session.userId, session.tenantId),
-    userHasPermission(session.userId, session.tenantId, "quotes:delete")
+    userHasPermission(session.userId, session.tenantId, "quotes:delete"),
+    listProductVariants(session.userId, session.tenantId),
+    listQuoteEditLogs(session.userId, session.tenantId, quoteId)
   ]);
 
   if (!profile) redirect("/login");
@@ -215,6 +219,17 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                     name: member.name,
                     email: member.email
                   }))}
+              />
+              <QuoteEditPanel
+                editLogs={editLogs}
+                items={detail.items}
+                quote={detail.quote}
+                variants={variants.map((variant) => ({
+                  id: variant.variant_id,
+                  label: `${variant.product_name} - ${variant.variant_name}`,
+                  sku: variant.sku,
+                  externalOlistProductId: variant.external_olist_product_id
+                }))}
               />
               <MelhorEnvioQuoteLabelActions
                 quoteId={quoteId}

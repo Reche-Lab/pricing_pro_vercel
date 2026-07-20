@@ -68,6 +68,12 @@ export function buildOlistSalesOrderPayload(input: { quote: QuoteDetail; items: 
   });
 }
 
+export function buildOlistSalesOrderItemsUpdatePayload(items: QuoteItemRow[]) {
+  return {
+    itens: items.map((item) => nativeOrderItem(item))
+  };
+}
+
 export function buildOlistInvoicePayload(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
   void input;
   return compactObject({
