@@ -70,8 +70,11 @@ type DraftQuoteItem = {
   artworkFile?: ArtworkFilePayload | null;
   pricingCurve: PricingCurve;
   quantity: number;
+  curveUnitPrice: number;
   unitPrice: number;
   totalPrice: number;
+  manualUnitPrice?: boolean;
+  manualPriceReason?: string;
 };
 
 type ArtworkFilePayload = {
@@ -745,8 +748,11 @@ export function PricingCalculator({
         artworkFile: draftArtworkFile,
         pricingCurve: simulatedCurve,
         quantity,
+        curveUnitPrice: simulatedResult.finalUnitPrice,
         unitPrice: simulatedResult.finalUnitPrice,
-        totalPrice: simulatedResult.subtotal
+        totalPrice: simulatedResult.subtotal,
+        manualUnitPrice: false,
+        manualPriceReason: ""
       }
     ]);
     setDraftArtworkName(`Arte ${draftItems.length + 2}`);
@@ -791,6 +797,47 @@ export function PricingCalculator({
     setDraftItems((current) => current.filter((item) => item.id !== itemId));
   }
 
+  function updateDraftItemManualPrice(itemId: string, unitPrice: number) {
+    setDraftItems((current) => current.map((item) => {
+      if (item.id !== itemId) return item;
+      const nextUnitPrice = Math.max(0, Number.isFinite(unitPrice) ? unitPrice : 0);
+      const manualUnitPrice = Math.abs(nextUnitPrice - item.curveUnitPrice) >= 0.0001;
+      return {
+        ...item,
+        unitPrice: nextUnitPrice,
+        totalPrice: Number((nextUnitPrice * item.quantity).toFixed(4)),
+        manualUnitPrice,
+        manualPriceReason: manualUnitPrice ? item.manualPriceReason ?? "" : ""
+      };
+    }));
+    setDraftState("idle");
+    setDraftMessage("");
+  }
+
+  function resetDraftItemManualPrice(itemId: string) {
+    setDraftItems((current) => current.map((item) => item.id === itemId
+      ? {
+          ...item,
+          unitPrice: item.curveUnitPrice,
+          totalPrice: Number((item.curveUnitPrice * item.quantity).toFixed(4)),
+          manualUnitPrice: false,
+          manualPriceReason: ""
+        }
+      : item
+    ));
+    setDraftState("idle");
+    setDraftMessage("");
+  }
+
+  function updateDraftItemManualReason(itemId: string, manualPriceReason: string) {
+    setDraftItems((current) => current.map((item) => item.id === itemId
+      ? { ...item, manualPriceReason }
+      : item
+    ));
+    setDraftState("idle");
+    setDraftMessage("");
+  }
+
   async function createDraftQuote() {
     if (draftItems.length === 0) throw new Error("Draft is empty.");
     if (demoMode) return `demo-${Date.now()}`;
@@ -807,6 +854,9 @@ export function PricingCalculator({
           quantity: item.quantity,
           artworkName: item.artworkName,
           pricingCurve: item.pricingCurve,
+          curveUnitPrice: item.curveUnitPrice,
+          manualUnitPrice: item.manualUnitPrice ? item.unitPrice : null,
+          manualPriceReason: item.manualUnitPrice ? item.manualPriceReason : null,
           artworkFile: item.artworkFile ?? null
         })),
         customerId: null,
@@ -1794,6 +1844,9 @@ export function PricingCalculator({
       onPricingRuleChange={setDraftPricingRule}
       onClearItems={() => setDraftItems([])}
       onRemoveItem={removeDraftItem}
+      onResetManualPrice={resetDraftItemManualPrice}
+      onUpdateItemManualPrice={updateDraftItemManualPrice}
+      onUpdateItemManualReason={updateDraftItemManualReason}
       onUpdateNotes={setDraftNotes}
       shippingAmount={shippingAmount}
     />
@@ -1826,6 +1879,9 @@ function QuoteDraftDrawer({
   onPricingRuleChange,
   onClearItems,
   onRemoveItem,
+  onResetManualPrice,
+  onUpdateItemManualPrice,
+  onUpdateItemManualReason,
   onUpdateNotes,
   shippingAmount
 }: {
@@ -1846,12 +1902,16 @@ function QuoteDraftDrawer({
   onPricingRuleChange: (rule: DraftPricingRule) => void;
   onClearItems: () => void;
   onRemoveItem: (itemId: string) => void;
+  onResetManualPrice: (itemId: string) => void;
+  onUpdateItemManualPrice: (itemId: string, unitPrice: number) => void;
+  onUpdateItemManualReason: (itemId: string, reason: string) => void;
   onUpdateNotes: (value: string) => void;
   shippingAmount: number;
 }) {
   if (!draftOpen) return null;
 
-  const disabled = invalidCustomerFields || draftItems.length === 0 || ["creating", "creating_pdf", "copying_text"].includes(draftState);
+  const missingManualPriceReason = draftItems.some((item) => item.manualUnitPrice && !item.manualPriceReason?.trim());
+  const disabled = invalidCustomerFields || missingManualPriceReason || draftItems.length === 0 || ["creating", "creating_pdf", "copying_text"].includes(draftState);
 
   return (
     <div className="fixed inset-0 z-50">
@@ -1944,6 +2004,9 @@ function QuoteDraftDrawer({
                         <p className="mt-1 text-xs text-zinc-400">
                           {item.quantity} x {brl.format(item.unitPrice)}
                         </p>
+                        <p className="mt-1 text-[11px] text-zinc-500">
+                          Preço da curva: {brl.format(item.curveUnitPrice)}
+                        </p>
                       </div>
                       <button
                         className="focus-ring inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:bg-zinc-800"
@@ -1952,6 +2015,45 @@ function QuoteDraftDrawer({
                       >
                         <Trash2 size={15} />
                       </button>
+                    </div>
+                    <div className="mt-3 grid gap-2 rounded-md border border-zinc-800 bg-zinc-950/45 p-2">
+                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                        <label className="block">
+                          <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+                            Preço unitário neste orçamento
+                          </span>
+                          <input
+                            className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+                            min={0}
+                            step={0.01}
+                            type="number"
+                            value={Number.isFinite(item.unitPrice) ? item.unitPrice : 0}
+                            onChange={(event) => onUpdateItemManualPrice(item.id, Number(event.currentTarget.value))}
+                          />
+                        </label>
+                        <button
+                          className="focus-ring inline-flex h-9 items-center justify-center gap-1 rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
+                          disabled={!item.manualUnitPrice}
+                          type="button"
+                          onClick={() => onResetManualPrice(item.id)}
+                        >
+                          <RotateCcw size={13} />
+                          Curva
+                        </button>
+                      </div>
+                      {item.manualUnitPrice ? (
+                        <label className="block">
+                          <span className="mb-1 block text-[11px] font-medium text-amber-200">
+                            Motivo do preço manual
+                          </span>
+                          <textarea
+                            className="focus-ring min-h-16 w-full rounded-md border border-amber-400/30 bg-zinc-950 px-3 py-2 text-xs text-white"
+                            placeholder="Ex.: condição negociada, ajuste aprovado, campanha..."
+                            value={item.manualPriceReason ?? ""}
+                            onChange={(event) => onUpdateItemManualReason(item.id, event.currentTarget.value)}
+                          />
+                        </label>
+                      ) : null}
                     </div>
                     <p className="mt-2 text-right text-sm font-semibold text-white">{brl.format(item.totalPrice)}</p>
                   </div>
@@ -1992,6 +2094,11 @@ function QuoteDraftDrawer({
           {invalidCustomerFields ? (
             <p className="mb-3 rounded-md border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-xs text-rose-100">
               Corrija CPF/CNPJ, e-mail ou telefone em Informações do Cliente antes de criar/exportar.
+            </p>
+          ) : null}
+          {missingManualPriceReason ? (
+            <p className="mb-3 rounded-md border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+              Informe o motivo de cada preço manual para registrar o log no orçamento.
             </p>
           ) : null}
           <div className="grid gap-2 sm:grid-cols-3">
@@ -2136,8 +2243,11 @@ function currentDemoItem(
     artworkFile: null,
     pricingCurve,
     quantity,
+    curveUnitPrice: unitPrice,
     unitPrice,
-    totalPrice
+    totalPrice,
+    manualUnitPrice: false,
+    manualPriceReason: ""
   };
 }
 

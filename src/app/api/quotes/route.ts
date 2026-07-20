@@ -33,6 +33,9 @@ const quoteSchema = z.object({
       quantity: z.number().int().min(1).max(50000),
       artworkName: z.string().trim().max(120).optional().nullable(),
       pricingCurve: pricingCurveSchema.optional(),
+      curveUnitPrice: z.number().min(0).max(100000).optional().nullable(),
+      manualUnitPrice: z.number().min(0).max(100000).optional().nullable(),
+      manualPriceReason: z.string().trim().max(500).optional().nullable(),
       artworkFile: artworkFileSchema.optional().nullable()
     })
   ).min(1).max(50).optional(),

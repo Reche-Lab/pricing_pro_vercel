@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from "crypto";
-import { calculateQuote, normalizePricingCurvePoints } from "@/domain/pricing/pricing";
+import { calculatePlatformCosts, calculateQuote, normalizePricingCurvePoints } from "@/domain/pricing/pricing";
 import {
   calculateCompositeQuote,
+  type CompositeQuoteCalculation,
   type CompositePricingRule,
   type CompositeQuoteInputItem
 } from "@/domain/quotes/composite-pricing";
@@ -125,6 +126,9 @@ export type CreateQuoteInput = {
     quantity: number;
     artworkName?: string | null;
     pricingCurve?: PricingCurve;
+    curveUnitPrice?: number | null;
+    manualUnitPrice?: number | null;
+    manualPriceReason?: string | null;
     artworkFile?: QuoteArtworkFileInput | null;
   }>;
   artworkName?: string | null;
@@ -1306,6 +1310,9 @@ async function createCompositeQuoteWithClient(
     const variant = variantMap.get(item.productVariantId);
     if (!variant) throw new Error("Product variant not found.");
     if (!variant.anchors) throw new Error("Active pricing curve not found.");
+    if (getManualUnitPrice(item) !== null && !clean(item.manualPriceReason)) {
+      throw new Error("Informe o motivo da alteração manual de preço.");
+    }
 
     return {
       id: String(index + 1),
@@ -1325,11 +1332,12 @@ async function createCompositeQuoteWithClient(
     platform: effectivePlatform,
     pricingRule: input.pricingRule ?? "per_art_average"
   });
+  const adjustedCalculation = applyManualCompositePrices(calculation, quoteItems, effectivePlatform);
 
   const customerId = await resolveQuoteCustomer(client, tenantId, input);
   const validDays = Math.max(1, Math.min(90, input.validDays ?? 7));
   const shippingTotal = Math.max(0, input.shippingTotal ?? 0);
-  const grandTotal = calculation.subtotal + shippingTotal;
+  const grandTotal = adjustedCalculation.subtotal + shippingTotal;
   const quoteResult = await client.query<{ id: string }>(
     `
       insert into quotes (
@@ -1367,18 +1375,23 @@ async function createCompositeQuoteWithClient(
       customerId,
       userId,
       validDays,
-      calculation.subtotal,
+      adjustedCalculation.subtotal,
       shippingTotal,
       grandTotal,
-      calculation.profit,
-      calculation.marginPercent,
+      adjustedCalculation.profit,
+      adjustedCalculation.marginPercent,
       input.notes || null
     ]
   );
   const quoteId = quoteResult.rows[0].id;
 
-  for (const item of calculation.items) {
+  for (const item of adjustedCalculation.items) {
     const sourceItem = quoteItems[Number(item.id) - 1];
+    const manualUnitPrice = getManualUnitPrice(sourceItem);
+    const hasManualUnitPrice = manualUnitPrice !== null && Math.abs(manualUnitPrice - item.curveFinalUnitPrice) >= 0.0001;
+    const manualPriceReason = hasManualUnitPrice
+      ? clean(sourceItem?.manualPriceReason) ?? "Preço ajustado manualmente na bandeja do precificador."
+      : null;
     const quoteItemResult = await client.query<{ id: string }>(
       `
         insert into quote_items (
@@ -1393,9 +1406,13 @@ async function createCompositeQuoteWithClient(
           pricing_rule,
           pricing_group_key,
           reference_quantity,
-          base_unit_price
+          base_unit_price,
+          manual_unit_price,
+          manual_price_reason,
+          manual_price_changed_by,
+          manual_price_changed_at
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, case when $13::boolean then $15 else null end, case when $13::boolean then now() else null end)
         returning id
       `,
       [
@@ -1410,7 +1427,10 @@ async function createCompositeQuoteWithClient(
         item.pricingRule,
         item.pricingGroupKey,
         item.referenceQuantity,
-        item.baseUnitPrice
+        item.baseUnitPrice,
+        hasManualUnitPrice,
+        manualPriceReason,
+        userId
       ]
     );
     await insertQuoteItemArtwork(client, tenantId, userId, quoteId, quoteItemResult.rows[0].id, {
@@ -1432,20 +1452,81 @@ async function createCompositeQuoteWithClient(
         request: input,
         platform,
         effectivePlatform,
-        calculation
+        calculation: adjustedCalculation
       })
     ]
   );
+
+  const manualAdjustments = adjustedCalculation.items
+    .filter((item) => item.manualUnitPrice)
+    .map((item) => ({
+      productVariantId: item.productVariantId,
+      description: item.description,
+      artworkName: item.artworkName,
+      quantity: item.quantity,
+      curveUnitPrice: item.curveFinalUnitPrice,
+      manualUnitPrice: item.finalUnitPrice,
+      curveTotal: item.curveSubtotal,
+      manualTotal: item.subtotal,
+      reason: item.manualPriceReason
+    }));
+
+  if (manualAdjustments.length > 0) {
+    await client.query(
+      `
+        insert into quote_edit_logs (
+          tenant_id,
+          quote_id,
+          edited_by,
+          reason,
+          before_snapshot,
+          after_snapshot
+        )
+        values ($1, $2, $3, $4, $5, $6)
+      `,
+      [
+        tenantId,
+        quoteId,
+        userId,
+        "Preço manual definido na bandeja do precificador.",
+        JSON.stringify({
+          kind: "quote_creation_curve_prices",
+          items: manualAdjustments.map((item) => ({
+            ...item,
+            unitPrice: item.curveUnitPrice,
+            totalPrice: item.curveTotal
+          }))
+        }),
+        JSON.stringify({
+          kind: "quote_creation_manual_prices",
+          items: manualAdjustments.map((item) => ({
+            ...item,
+            unitPrice: item.manualUnitPrice,
+            totalPrice: item.manualTotal
+          }))
+        })
+      ]
+    );
+  }
 
   await client.query(
     `
       insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
       values ($1, $2, 'quotes.create_composite', 'quote', $3, $4)
     `,
-    [tenantId, userId, quoteId, JSON.stringify({ itemCount: calculation.items.length, pricingRule: input.pricingRule })]
+    [
+      tenantId,
+      userId,
+      quoteId,
+      JSON.stringify({
+        itemCount: adjustedCalculation.items.length,
+        pricingRule: input.pricingRule,
+        manualPriceAdjustments: manualAdjustments.length
+      })
+    ]
   );
 
-  return { id: quoteId, calculation };
+  return { id: quoteId, calculation: adjustedCalculation };
 }
 
 async function insertQuoteItemArtwork(
@@ -1488,6 +1569,63 @@ async function insertQuoteItemArtwork(
       userId
     ]
   );
+}
+
+function applyManualCompositePrices(
+  calculation: CompositeQuoteCalculation,
+  sourceItems: NonNullable<CreateQuoteInput["items"]>,
+  platform: Parameters<typeof calculatePlatformCosts>[1]
+) {
+  const items = calculation.items.map((item) => {
+    const sourceItem = sourceItems[Number(item.id) - 1];
+    const manualUnitPrice = getManualUnitPrice(sourceItem);
+    const curveFinalUnitPrice = item.finalUnitPrice;
+    const curveSubtotal = item.subtotal;
+    const hasManualUnitPrice = manualUnitPrice !== null && Math.abs(manualUnitPrice - curveFinalUnitPrice) >= 0.0001;
+    const finalUnitPrice = hasManualUnitPrice ? manualUnitPrice : curveFinalUnitPrice;
+    const subtotal = Number((finalUnitPrice * item.quantity).toFixed(4));
+    const costOfGoodsTotal = item.unitCost * item.quantity;
+
+    return {
+      ...item,
+      curveFinalUnitPrice,
+      curveSubtotal,
+      finalUnitPrice,
+      subtotal,
+      costOfGoodsTotal,
+      profit: subtotal - costOfGoodsTotal,
+      manualUnitPrice: hasManualUnitPrice,
+      manualPriceReason: hasManualUnitPrice
+        ? clean(sourceItem?.manualPriceReason) ?? "Preço ajustado manualmente na bandeja do precificador."
+        : null
+    };
+  });
+
+  const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0);
+  const costOfGoodsTotal = items.reduce((sum, item) => sum + item.costOfGoodsTotal, 0);
+  const { commissionTotal, fixedFeeTotal, sellerShippingTotal } = calculatePlatformCosts(subtotal, platform);
+  const totalCost = costOfGoodsTotal + commissionTotal + fixedFeeTotal + sellerShippingTotal;
+  const profit = subtotal - totalCost;
+
+  return {
+    ...calculation,
+    items,
+    subtotal,
+    commissionTotal,
+    fixedFeeTotal,
+    sellerShippingTotal,
+    costOfGoodsTotal,
+    totalCost,
+    profit,
+    marginPercent: subtotal > 0 ? (profit / subtotal) * 100 : 0
+  };
+}
+
+function getManualUnitPrice(item: NonNullable<CreateQuoteInput["items"]>[number] | undefined) {
+  if (!item || item.manualUnitPrice === null || item.manualUnitPrice === undefined) return null;
+  const value = Number(item.manualUnitPrice);
+  if (!Number.isFinite(value)) return null;
+  return clampNumber(value, 0, 100000, 0);
 }
 
 function normalizeArtworkFile(file: QuoteArtworkFileInput | null | undefined): QuoteArtworkFileInput | null {
