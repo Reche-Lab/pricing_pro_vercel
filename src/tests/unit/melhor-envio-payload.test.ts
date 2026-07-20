@@ -22,7 +22,7 @@ describe("melhor envio cart payload draft", () => {
     expect(draft.payload.from).toMatchObject({
       name: "Ground Shop",
       phone: "11999999999",
-      document: "11222333000181",
+      company_document: "11222333000181",
       postal_code: "11696208",
       address: "Rua Origem",
       number: "10",

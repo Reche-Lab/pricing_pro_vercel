@@ -47,10 +47,18 @@ type PricingCalculatorProps = {
     melhorEnvio: boolean;
   };
   defaultOriginPostalCode?: string;
+  olistPaymentOptions?: OlistPaymentOption[];
   variants: DemoProductVariant[];
   platforms: Record<string, PricingPlatformOption>;
   demoMode?: boolean;
   readonlyMode?: boolean;
+};
+
+type OlistPaymentOption = {
+  kind: "payment_method" | "receiving_method" | "category";
+  externalId: string;
+  name: string;
+  groupName: string | null;
 };
 
 type ChartPoint = {
@@ -140,6 +148,7 @@ const emptyPlatform: PricingPlatformOption = {
 export function PricingCalculator({
   activeShippingServices = { correios: false, melhorEnvio: false },
   defaultOriginPostalCode = "",
+  olistPaymentOptions = [],
   variants,
   platforms,
   demoMode = false,
@@ -213,6 +222,16 @@ export function PricingCalculator({
   const [draftMessage, setDraftMessage] = useState("");
   const [draftText, setDraftText] = useState("");
   const [draftAttention, setDraftAttention] = useState(false);
+  const [paymentOptions, setPaymentOptions] = useState<OlistPaymentOption[]>(olistPaymentOptions);
+  const [paymentMethodId, setPaymentMethodId] = useState("");
+  const [receivingMethodId, setReceivingMethodId] = useState("");
+  const [paymentCategoryId, setPaymentCategoryId] = useState("");
+  const [paymentInstallmentsCount, setPaymentInstallmentsCount] = useState(1);
+  const [paymentFirstDueDays, setPaymentFirstDueDays] = useState(0);
+  const [paymentIntervalDays, setPaymentIntervalDays] = useState(30);
+  const [paymentNotes, setPaymentNotes] = useState("");
+  const [paymentSyncState, setPaymentSyncState] = useState<"idle" | "syncing" | "error">("idle");
+  const [paymentMessage, setPaymentMessage] = useState("");
 
   useEffect(() => {
     if (variant) {
@@ -333,6 +352,36 @@ export function PricingCalculator({
     () => draftItemsSubtotal + (includeShipping ? shippingAmount : 0),
     [draftItemsSubtotal, includeShipping, shippingAmount]
   );
+  const paymentMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "payment_method"), [paymentOptions]);
+  const receivingMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "receiving_method"), [paymentOptions]);
+  const paymentCategories = useMemo(() => paymentOptions.filter((option) => option.kind === "category"), [paymentOptions]);
+  const selectedPaymentMethod = paymentMethods.find((option) => option.externalId === paymentMethodId) ?? null;
+  const selectedReceivingMethod = receivingMethods.find((option) => option.externalId === receivingMethodId) ?? null;
+  const selectedPaymentCategory = paymentCategories.find((option) => option.externalId === paymentCategoryId) ?? null;
+  const paymentTerm = useMemo(() => buildPaymentTermPayload({
+    total: draftItems.length > 0 ? draftEstimatedTotal : simulatedResult?.subtotal ? simulatedResult.subtotal + (includeShipping ? shippingAmount : 0) : 0,
+    paymentMethod: selectedPaymentMethod,
+    receivingMethod: selectedReceivingMethod,
+    category: selectedPaymentCategory,
+    installmentsCount: paymentInstallmentsCount,
+    firstDueDays: paymentFirstDueDays,
+    intervalDays: paymentIntervalDays,
+    notes: paymentNotes
+  }), [
+    draftEstimatedTotal,
+    draftItems.length,
+    includeShipping,
+    paymentFirstDueDays,
+    paymentInstallmentsCount,
+    paymentIntervalDays,
+    paymentNotes,
+    selectedPaymentCategory,
+    selectedPaymentMethod,
+    selectedReceivingMethod,
+    shippingAmount,
+    simulatedResult?.subtotal
+  ]);
+  const paymentSelected = Boolean(paymentTerm);
 
   useEffect(() => {
     setShippingAmount(0);
@@ -489,6 +538,35 @@ export function PricingCalculator({
     }
 
     window.location.href = data.authUrl;
+  }
+
+  async function syncOlistPaymentOptions() {
+    if (demoMode || readonlyMode || paymentSyncState === "syncing") return;
+    setPaymentSyncState("syncing");
+    setPaymentMessage("Sincronizando formas de pagamento do Olist...");
+    try {
+      const response = await fetch("/api/olist/payment-options/sync", { method: "POST" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) {
+        if (isOlistReconnectRequired(data, response.status)) {
+          setOlistReconnectOpen(true);
+          setOlistReconnectMessage(data?.error ?? "A autenticação com o Olist/Tiny precisa ser renovada.");
+        }
+        throw new Error(data?.error ?? "Não foi possível sincronizar formas de pagamento.");
+      }
+      const nextOptions = (data.options ?? []).map((option: Record<string, unknown>) => ({
+        kind: option.kind,
+        externalId: option.external_id,
+        name: option.name,
+        groupName: option.group_name ?? null
+      })).filter((option: OlistPaymentOption) => option.kind && option.externalId && option.name);
+      setPaymentOptions(nextOptions);
+      setPaymentSyncState("idle");
+      setPaymentMessage(`Opções sincronizadas: ${nextOptions.length}. Escolha uma forma para evitar retrabalho no pedido Olist.`);
+    } catch (error) {
+      setPaymentSyncState("error");
+      setPaymentMessage(error instanceof Error ? error.message : "Não foi possível sincronizar formas de pagamento.");
+    }
   }
 
   function applyOlistCustomer(customer: OlistCustomerLookupResult) {
@@ -712,6 +790,7 @@ export function PricingCalculator({
           sellerShippingThreshold: platform.sellerShippingThreshold
         }),
         validDays: 7,
+        paymentTerm,
         notes: buildQuickQuoteNotes({
           destinationAddress: effectiveDestinationAddress,
           destinationPostalCode: effectiveDestinationPostalCode,
@@ -883,6 +962,7 @@ export function PricingCalculator({
           sellerShippingThreshold: platform.sellerShippingThreshold
         }),
         validDays: 7,
+        paymentTerm,
         notes: [draftNotes, buildQuickQuoteNotes({
           destinationAddress: effectiveDestinationAddress,
           destinationPostalCode: effectiveDestinationPostalCode,
@@ -1848,6 +1928,27 @@ export function PricingCalculator({
       onUpdateItemManualPrice={updateDraftItemManualPrice}
       onUpdateItemManualReason={updateDraftItemManualReason}
       onUpdateNotes={setDraftNotes}
+      paymentCategories={paymentCategories}
+      paymentCategoryId={paymentCategoryId}
+      paymentFirstDueDays={paymentFirstDueDays}
+      paymentInstallmentsCount={paymentInstallmentsCount}
+      paymentIntervalDays={paymentIntervalDays}
+      paymentMessage={paymentMessage}
+      paymentMethodId={paymentMethodId}
+      paymentMethods={paymentMethods}
+      paymentNotes={paymentNotes}
+      paymentSelected={paymentSelected}
+      paymentSyncState={paymentSyncState}
+      receivingMethodId={receivingMethodId}
+      receivingMethods={receivingMethods}
+      onPaymentCategoryChange={setPaymentCategoryId}
+      onPaymentFirstDueDaysChange={setPaymentFirstDueDays}
+      onPaymentInstallmentsCountChange={setPaymentInstallmentsCount}
+      onPaymentIntervalDaysChange={setPaymentIntervalDays}
+      onPaymentMethodChange={setPaymentMethodId}
+      onPaymentNotesChange={setPaymentNotes}
+      onReceivingMethodChange={setReceivingMethodId}
+      onSyncPaymentOptions={syncOlistPaymentOptions}
       shippingAmount={shippingAmount}
     />
     <OlistReconnectModal
@@ -1883,6 +1984,27 @@ function QuoteDraftDrawer({
   onUpdateItemManualPrice,
   onUpdateItemManualReason,
   onUpdateNotes,
+  paymentCategories,
+  paymentCategoryId,
+  paymentFirstDueDays,
+  paymentInstallmentsCount,
+  paymentIntervalDays,
+  paymentMessage,
+  paymentMethodId,
+  paymentMethods,
+  paymentNotes,
+  paymentSelected,
+  paymentSyncState,
+  receivingMethodId,
+  receivingMethods,
+  onPaymentCategoryChange,
+  onPaymentFirstDueDaysChange,
+  onPaymentInstallmentsCountChange,
+  onPaymentIntervalDaysChange,
+  onPaymentMethodChange,
+  onPaymentNotesChange,
+  onReceivingMethodChange,
+  onSyncPaymentOptions,
   shippingAmount
 }: {
   draftEstimatedTotal: number;
@@ -1906,6 +2028,27 @@ function QuoteDraftDrawer({
   onUpdateItemManualPrice: (itemId: string, unitPrice: number) => void;
   onUpdateItemManualReason: (itemId: string, reason: string) => void;
   onUpdateNotes: (value: string) => void;
+  paymentCategories: OlistPaymentOption[];
+  paymentCategoryId: string;
+  paymentFirstDueDays: number;
+  paymentInstallmentsCount: number;
+  paymentIntervalDays: number;
+  paymentMessage: string;
+  paymentMethodId: string;
+  paymentMethods: OlistPaymentOption[];
+  paymentNotes: string;
+  paymentSelected: boolean;
+  paymentSyncState: "idle" | "syncing" | "error";
+  receivingMethodId: string;
+  receivingMethods: OlistPaymentOption[];
+  onPaymentCategoryChange: (value: string) => void;
+  onPaymentFirstDueDaysChange: (value: number) => void;
+  onPaymentInstallmentsCountChange: (value: number) => void;
+  onPaymentIntervalDaysChange: (value: number) => void;
+  onPaymentMethodChange: (value: string) => void;
+  onPaymentNotesChange: (value: string) => void;
+  onReceivingMethodChange: (value: string) => void;
+  onSyncPaymentOptions: () => void;
   shippingAmount: number;
 }) {
   if (!draftOpen) return null;
@@ -1946,6 +2089,100 @@ function QuoteDraftDrawer({
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
           <div className="grid gap-3">
+            <div className={`rounded-lg border p-3 ${
+              paymentSelected
+                ? "border-emerald-400/25 bg-emerald-400/10"
+                : "border-amber-400/35 bg-amber-400/10"
+            }`}>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className={`text-sm font-semibold ${paymentSelected ? "text-emerald-100" : "text-amber-100"}`}>
+                    Condição de pagamento
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    Opcional para criar o orçamento. Obrigatório antes de gerar o pedido de venda no Olist.
+                  </p>
+                </div>
+                <button
+                  className="focus-ring inline-flex h-9 w-fit items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-60"
+                  disabled={paymentSyncState === "syncing"}
+                  type="button"
+                  onClick={onSyncPaymentOptions}
+                >
+                  <RotateCcw size={13} />
+                  {paymentSyncState === "syncing" ? "Sincronizando..." : "Sincronizar Olist"}
+                </button>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <SelectOption
+                  label="Forma de pagamento"
+                  options={paymentMethods}
+                  placeholder={paymentMethods.length ? "Selecione" : "Sincronize o Olist"}
+                  value={paymentMethodId}
+                  onChange={onPaymentMethodChange}
+                />
+                <SelectOption
+                  label="Forma de recebimento"
+                  options={receivingMethods}
+                  placeholder={receivingMethods.length ? "Selecione" : "Opcional"}
+                  value={receivingMethodId}
+                  onChange={onReceivingMethodChange}
+                />
+                <SelectOption
+                  label="Categoria financeira"
+                  options={paymentCategories}
+                  placeholder={paymentCategories.length ? "Opcional" : "Opcional"}
+                  value={paymentCategoryId}
+                  onChange={onPaymentCategoryChange}
+                />
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-zinc-400">Parcelas</span>
+                  <input
+                    className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+                    min={1}
+                    max={24}
+                    type="number"
+                    value={paymentInstallmentsCount}
+                    onChange={(event) => onPaymentInstallmentsCountChange(Math.max(1, Math.min(24, Number(event.currentTarget.value))))}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-zinc-400">1º vencimento em dias</span>
+                  <input
+                    className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+                    min={0}
+                    type="number"
+                    value={paymentFirstDueDays}
+                    onChange={(event) => onPaymentFirstDueDaysChange(Math.max(0, Number(event.currentTarget.value)))}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-zinc-400">Intervalo entre parcelas</span>
+                  <input
+                    className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+                    min={0}
+                    type="number"
+                    value={paymentIntervalDays}
+                    onChange={(event) => onPaymentIntervalDaysChange(Math.max(0, Number(event.currentTarget.value)))}
+                  />
+                </label>
+              </div>
+              <label className="mt-2 block">
+                <span className="mb-1 block text-xs font-medium text-zinc-400">Observação financeira</span>
+                <input
+                  className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+                  placeholder="Ex.: Pix à vista, entrada + 2 parcelas..."
+                  value={paymentNotes}
+                  onChange={(event) => onPaymentNotesChange(event.currentTarget.value)}
+                />
+              </label>
+              {paymentMessage ? (
+                <p className={`mt-2 text-xs ${paymentSyncState === "error" ? "text-rose-200" : "text-zinc-400"}`}>
+                  {paymentMessage}
+                </p>
+              ) : null}
+            </div>
+
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3">
               <p className="text-sm font-medium text-white">Regra de cobranca</p>
               <div className="mt-3 grid gap-2">
@@ -2251,6 +2488,61 @@ function currentDemoItem(
   };
 }
 
+function buildPaymentTermPayload({
+  category,
+  firstDueDays,
+  installmentsCount,
+  intervalDays,
+  notes,
+  paymentMethod,
+  receivingMethod,
+  total
+}: {
+  category: OlistPaymentOption | null;
+  firstDueDays: number;
+  installmentsCount: number;
+  intervalDays: number;
+  notes: string;
+  paymentMethod: OlistPaymentOption | null;
+  receivingMethod: OlistPaymentOption | null;
+  total: number;
+}) {
+  if (!paymentMethod && !receivingMethod && !category) return null;
+  const count = Math.max(1, Math.min(24, Math.trunc(installmentsCount || 1)));
+  const totalCents = Math.max(0, Math.round(total * 100));
+  const baseCents = Math.floor(totalCents / count);
+  const today = new Date();
+  const installments = Array.from({ length: count }, (_, index) => {
+    const days = Math.max(0, Math.trunc(firstDueDays || 0)) + index * Math.max(0, Math.trunc(intervalDays || 0));
+    const dueDate = new Date(today);
+    dueDate.setDate(today.getDate() + days);
+    const cents = index === count - 1 ? totalCents - baseCents * (count - 1) : baseCents;
+    return {
+      installmentNumber: index + 1,
+      dueDate: dueDate.toISOString().slice(0, 10),
+      days,
+      amount: cents / 100,
+      notes: notes.trim() || `Parcela ${index + 1}/${count}`,
+      paymentMethodExternalId: paymentMethod?.externalId ?? null,
+      paymentMethodName: paymentMethod?.name ?? null,
+      receivingMethodExternalId: receivingMethod?.externalId ?? null,
+      receivingMethodName: receivingMethod?.name ?? null
+    };
+  });
+
+  return {
+    paymentMethodExternalId: paymentMethod?.externalId ?? null,
+    paymentMethodName: paymentMethod?.name ?? null,
+    receivingMethodExternalId: receivingMethod?.externalId ?? null,
+    receivingMethodName: receivingMethod?.name ?? null,
+    categoryExternalId: category?.externalId ?? null,
+    categoryName: category?.name ?? null,
+    installmentsCount: count,
+    notes: notes.trim() || null,
+    installments
+  };
+}
+
 function buildDemoWhatsAppText({
   customerName,
   items,
@@ -2415,6 +2707,38 @@ function DraftRuleButton({
       <span className="block text-sm font-medium">{label}</span>
       <span className="mt-1 block text-xs text-zinc-500">{description}</span>
     </button>
+  );
+}
+
+function SelectOption({
+  label,
+  options,
+  placeholder,
+  value,
+  onChange
+}: {
+  label: string;
+  options: OlistPaymentOption[];
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium text-zinc-400">{label}</span>
+      <select
+        className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+        value={value}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((option) => (
+          <option key={`${option.kind}-${option.externalId}`} value={option.externalId}>
+            {option.groupName ? `${option.name} - ${option.groupName}` : option.name}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

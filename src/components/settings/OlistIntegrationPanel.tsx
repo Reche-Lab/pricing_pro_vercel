@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { KeyRound, PlayCircle, Route, Save, Store, X } from "lucide-react";
+import { CreditCard, KeyRound, PlayCircle, Route, Save, Store, X } from "lucide-react";
 import { OLIST_API_V3_BASE_URL, OLIST_APP_BASE_URL, OLIST_DEFAULT_PATHS } from "@/services/olist/defaults";
 
 type OlistConnectionView = {
@@ -108,6 +108,23 @@ export function OlistIntegrationPanel() {
     window.location.href = data.authUrl;
   }
 
+  async function syncPaymentOptions() {
+    setMessage("");
+    setLoading("olist_payments");
+    const response = await fetch("/api/olist/payment-options/sync", { method: "POST" });
+    const data = await response.json().catch(() => null);
+    setLoading("");
+
+    if (!response.ok || !data?.ok) {
+      setMessage(data?.error ?? "Não foi possível sincronizar formas de pagamento do Olist.");
+      return;
+    }
+
+    setMessage(
+      `Opções financeiras sincronizadas: ${data.counts?.paymentMethods ?? 0} formas de pagamento, ${data.counts?.receivingMethods ?? 0} formas de recebimento.`
+    );
+  }
+
   return (
     <section className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5">
       <div className="mb-5 flex items-center gap-2">
@@ -126,7 +143,9 @@ export function OlistIntegrationPanel() {
           loading={loading === "olist"}
           oauthLoading={loading === "olist_oauth"}
           onConnect={connect}
+          onSyncPaymentOptions={syncPaymentOptions}
           onSubmit={save}
+          paymentSyncLoading={loading === "olist_payments"}
           title="Olist API v3"
         />
       </div>
@@ -843,14 +862,18 @@ function IntegrationForm({
   loading,
   oauthLoading,
   onConnect,
-  onSubmit
+  onSyncPaymentOptions,
+  onSubmit,
+  paymentSyncLoading
 }: {
   title: string;
   connection?: OlistConnectionView;
   loading: boolean;
   oauthLoading: boolean;
   onConnect: () => void;
+  onSyncPaymentOptions: () => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  paymentSyncLoading: boolean;
 }) {
   return (
     <form className="rounded-md border border-zinc-800 p-4" onSubmit={onSubmit}>
@@ -940,6 +963,15 @@ function IntegrationForm({
       >
         <KeyRound size={16} />
         {oauthLoading ? "Conectando..." : "Conectar OAuth"}
+      </button>
+      <button
+        className="focus-ring ml-2 mt-4 inline-flex items-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-400/20 disabled:opacity-60"
+        disabled={paymentSyncLoading}
+        type="button"
+        onClick={onSyncPaymentOptions}
+      >
+        <CreditCard size={16} />
+        {paymentSyncLoading ? "Sincronizando..." : "Sincronizar pagamentos"}
       </button>
     </form>
   );

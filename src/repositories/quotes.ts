@@ -10,6 +10,7 @@ import { canTransitionQuoteStatus, createQuoteCalculationSnapshot } from "@/doma
 import type { QuoteStatus } from "@/domain/quotes/types";
 import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
 import { getPool, withTenantContext } from "@/lib/db/client";
+import type { QuotePaymentTermInput } from "@/repositories/olist-payment-options";
 import type pg from "pg";
 
 export type QuoteRow = {
@@ -157,6 +158,7 @@ export type CreateQuoteInput = {
     sellerShippingThreshold: number;
   }>;
   validDays?: number;
+  paymentTerm?: QuotePaymentTermInput | null;
   notes?: string | null;
 };
 
@@ -926,6 +928,7 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
     );
 
     const quoteId = quoteResult.rows[0].id;
+    await insertQuotePaymentTerm(client, tenantId, userId, quoteId, input.paymentTerm);
 
     const quoteItemResult = await client.query<{ id: string }>(
       `
@@ -1384,6 +1387,7 @@ async function createCompositeQuoteWithClient(
     ]
   );
   const quoteId = quoteResult.rows[0].id;
+  await insertQuotePaymentTerm(client, tenantId, userId, quoteId, input.paymentTerm);
 
   for (const item of adjustedCalculation.items) {
     const sourceItem = quoteItems[Number(item.id) - 1];
@@ -1571,6 +1575,102 @@ async function insertQuoteItemArtwork(
   );
 }
 
+async function insertQuotePaymentTerm(
+  client: pg.PoolClient,
+  tenantId: string,
+  userId: string,
+  quoteId: string,
+  input: QuotePaymentTermInput | null | undefined
+) {
+  if (!input) return;
+  const installments = normalizePaymentInstallments(input);
+  const hasPayment =
+    clean(input.paymentMethodExternalId) ||
+    clean(input.receivingMethodExternalId) ||
+    clean(input.categoryExternalId) ||
+    installments.length > 0;
+  if (!hasPayment) return;
+
+  const termResult = await client.query<{ id: string }>(
+    `
+      insert into quote_payment_terms (
+        tenant_id,
+        quote_id,
+        payment_method_external_id,
+        payment_method_name,
+        receiving_method_external_id,
+        receiving_method_name,
+        category_external_id,
+        category_name,
+        installments_count,
+        notes,
+        created_by
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      on conflict (tenant_id, quote_id) do update
+        set payment_method_external_id = excluded.payment_method_external_id,
+            payment_method_name = excluded.payment_method_name,
+            receiving_method_external_id = excluded.receiving_method_external_id,
+            receiving_method_name = excluded.receiving_method_name,
+            category_external_id = excluded.category_external_id,
+            category_name = excluded.category_name,
+            installments_count = excluded.installments_count,
+            notes = excluded.notes,
+            updated_at = now()
+      returning id
+    `,
+    [
+      tenantId,
+      quoteId,
+      clean(input.paymentMethodExternalId),
+      clean(input.paymentMethodName),
+      clean(input.receivingMethodExternalId),
+      clean(input.receivingMethodName),
+      clean(input.categoryExternalId),
+      clean(input.categoryName),
+      installments.length || Math.max(1, Math.min(24, input.installmentsCount ?? 1)),
+      clean(input.notes),
+      userId
+    ]
+  );
+  const termId = termResult.rows[0].id;
+  await client.query("delete from quote_payment_installments where tenant_id = $1 and quote_payment_term_id = $2", [tenantId, termId]);
+
+  for (const installment of installments) {
+    await client.query(
+      `
+        insert into quote_payment_installments (
+          tenant_id,
+          quote_payment_term_id,
+          installment_number,
+          due_date,
+          days,
+          amount,
+          notes,
+          payment_method_external_id,
+          payment_method_name,
+          receiving_method_external_id,
+          receiving_method_name
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `,
+      [
+        tenantId,
+        termId,
+        installment.installmentNumber,
+        clean(installment.dueDate),
+        installment.days ?? null,
+        installment.amount,
+        clean(installment.notes),
+        clean(installment.paymentMethodExternalId ?? input.paymentMethodExternalId),
+        clean(installment.paymentMethodName ?? input.paymentMethodName),
+        clean(installment.receivingMethodExternalId ?? input.receivingMethodExternalId),
+        clean(installment.receivingMethodName ?? input.receivingMethodName)
+      ]
+    );
+  }
+}
+
 function applyManualCompositePrices(
   calculation: CompositeQuoteCalculation,
   sourceItems: NonNullable<CreateQuoteInput["items"]>,
@@ -1619,6 +1719,23 @@ function applyManualCompositePrices(
     profit,
     marginPercent: subtotal > 0 ? (profit / subtotal) * 100 : 0
   };
+}
+
+function normalizePaymentInstallments(input: QuotePaymentTermInput) {
+  return (input.installments ?? [])
+    .slice(0, 24)
+    .map((installment, index) => ({
+      installmentNumber: Math.max(1, Math.trunc(installment.installmentNumber || index + 1)),
+      dueDate: clean(installment.dueDate),
+      days: installment.days === null || installment.days === undefined ? null : Math.max(0, Math.trunc(installment.days)),
+      amount: Math.max(0, Number(Number(installment.amount).toFixed(2))),
+      notes: clean(installment.notes),
+      paymentMethodExternalId: clean(installment.paymentMethodExternalId),
+      paymentMethodName: clean(installment.paymentMethodName),
+      receivingMethodExternalId: clean(installment.receivingMethodExternalId),
+      receivingMethodName: clean(installment.receivingMethodName)
+    }))
+    .filter((installment) => installment.amount >= 0);
 }
 
 function getManualUnitPrice(item: NonNullable<CreateQuoteInput["items"]>[number] | undefined) {

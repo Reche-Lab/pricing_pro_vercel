@@ -8,18 +8,20 @@ import { getSessionProfile } from "@/repositories/users";
 import { listProductVariants } from "@/repositories/products";
 import { getTenantShippingProfile } from "@/repositories/tenant-settings";
 import { getIntegrationConnection } from "@/repositories/integrations";
+import { listOlistPaymentOptions } from "@/repositories/olist-payment-options";
 
 export default async function PricingPage() {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
 
-  const [profile, variants, platforms, tenant, correiosConnection, melhorEnvioConnection] = await Promise.all([
+  const [profile, variants, platforms, tenant, correiosConnection, melhorEnvioConnection, olistPaymentOptions] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
     listProductVariants(session.userId, session.tenantId),
     listPlatformRules(session.userId, session.tenantId),
     getTenantShippingProfile(session.userId, session.tenantId),
     getIntegrationConnection(session.userId, session.tenantId, "correios"),
-    getIntegrationConnection(session.userId, session.tenantId, "melhor_envio")
+    getIntegrationConnection(session.userId, session.tenantId, "melhor_envio"),
+    listOlistPaymentOptions(session.userId, session.tenantId)
   ]);
 
   if (!profile) redirect("/login");
@@ -47,6 +49,12 @@ export default async function PricingPage() {
           melhorEnvio: melhorEnvioConnection?.status === "active"
         }}
         defaultOriginPostalCode={tenant?.postal_code ?? ""}
+        olistPaymentOptions={olistPaymentOptions.map((option) => ({
+          kind: option.kind,
+          externalId: option.external_id,
+          name: option.name,
+          groupName: option.group_name
+        }))}
         variants={mappedVariants}
         platforms={mapPlatforms(platforms)}
       />

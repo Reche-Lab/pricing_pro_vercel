@@ -1,4 +1,5 @@
 import type { CustomerRow } from "@/repositories/customers";
+import type { QuotePaymentTermRow } from "@/repositories/olist-payment-options";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 import type { ShipmentRow } from "@/repositories/shipments";
 import type { TenantMemberRow } from "@/repositories/users";
@@ -50,7 +51,12 @@ export function buildOlistCrmQuotePayload(input: {
   });
 }
 
-export function buildOlistSalesOrderPayload(input: { quote: QuoteDetail; items: QuoteItemRow[]; shipment?: ShipmentRow | null }) {
+export function buildOlistSalesOrderPayload(input: {
+  quote: QuoteDetail;
+  items: QuoteItemRow[];
+  shipment?: ShipmentRow | null;
+  paymentTerm?: QuotePaymentTermRow | null;
+}) {
   return compactObject({
     idContato: numericId(input.quote.customer_external_olist_id),
     data: dateOnly(input.quote.created_at),
@@ -64,6 +70,7 @@ export function buildOlistSalesOrderPayload(input: { quote: QuoteDetail; items: 
     valorDesconto: money(input.quote.discount_total),
     enderecoEntrega: quoteDeliveryAddress(input.quote),
     ecommerce: { numeroPedidoEcommerce: input.quote.id },
+    pagamento: buildPaymentPayload(input.paymentTerm),
     itens: input.items.map((item) => nativeOrderItem(item))
   });
 }
@@ -160,6 +167,32 @@ function nativeOrderItem(item: QuoteItemRow) {
       .filter(Boolean)
       .join(" | ")
   });
+}
+
+function buildPaymentPayload(paymentTerm: QuotePaymentTermRow | null | undefined) {
+  if (!paymentTerm) return null;
+  const formaRecebimentoId = numericId(paymentTerm.receiving_method_external_id);
+  const meioPagamentoId = numericId(paymentTerm.payment_method_external_id);
+  const categoriaId = numericId(paymentTerm.category_external_id);
+  const parcelas = paymentTerm.installments.map((installment) => compactObject({
+    dias: installment.days,
+    data: installment.dueDate,
+    valor: money(installment.amount),
+    observacoes: installment.notes,
+    formaRecebimento: paymentObject(numericId(installment.receivingMethodExternalId) ?? formaRecebimentoId),
+    meioPagamento: paymentObject(numericId(installment.paymentMethodExternalId) ?? meioPagamentoId)
+  }));
+
+  return compactObject({
+    formaRecebimento: formaRecebimentoId ? { id: formaRecebimentoId } : null,
+    meioPagamento: meioPagamentoId ? { id: meioPagamentoId } : null,
+    categoria: categoriaId ? { id: categoriaId } : null,
+    parcelas: parcelas.length ? parcelas : null
+  });
+}
+
+function paymentObject(id: number | null) {
+  return id ? { id } : null;
 }
 
 function buildOlistNotes(input: { quote: QuoteDetail; items: QuoteItemRow[]; shipment?: ShipmentRow | null }) {

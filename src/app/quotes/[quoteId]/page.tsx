@@ -7,11 +7,13 @@ import { MelhorEnvioQuoteLabelActions } from "@/components/quotes/MelhorEnvioQuo
 import { MelhorEnvioPayloadPreview } from "@/components/quotes/MelhorEnvioPayloadPreview";
 import { OlistQuoteActions } from "@/components/quotes/OlistQuoteActions";
 import { QuoteEditPanel, QuoteItemEditPanel } from "@/components/quotes/QuoteEditPanel";
+import { QuotePaymentTermPanel } from "@/components/quotes/QuotePaymentTermPanel";
 import { QuoteStatusActions } from "@/components/quotes/QuoteStatusActions";
 import { QuoteWhatsAppButton } from "@/components/quotes/QuoteWhatsAppButton";
 import { PublicQuoteLinkButton } from "@/components/quotes/PublicQuoteLinkButton";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getQuoteDetail, listQuoteEditLogs } from "@/repositories/quotes";
+import { getQuotePaymentTerm, listOlistPaymentOptions } from "@/repositories/olist-payment-options";
 import { listProductVariants } from "@/repositories/products";
 import { listQuoteShipments } from "@/repositories/shipments";
 import { getSessionProfile, listTenantMembers, userHasPermission } from "@/repositories/users";
@@ -26,14 +28,16 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
   const quoteIdParsed = z.string().uuid().safeParse(quoteId);
   if (!quoteIdParsed.success) notFound();
 
-  const [profile, detail, shipments, members, canDeleteQuotesByPermission, variants, editLogs] = await Promise.all([
+  const [profile, detail, shipments, members, canDeleteQuotesByPermission, variants, editLogs, paymentOptions, paymentTerm] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
     getQuoteDetail(session.userId, session.tenantId, quoteId),
     listQuoteShipments(session.userId, session.tenantId, quoteId),
     listTenantMembers(session.userId, session.tenantId),
     userHasPermission(session.userId, session.tenantId, "quotes:delete"),
     listProductVariants(session.userId, session.tenantId),
-    listQuoteEditLogs(session.userId, session.tenantId, quoteId)
+    listQuoteEditLogs(session.userId, session.tenantId, quoteId),
+    listOlistPaymentOptions(session.userId, session.tenantId),
+    getQuotePaymentTerm(session.userId, session.tenantId, quoteId)
   ]);
 
   if (!profile) redirect("/login");
@@ -85,6 +89,18 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
               <Detail label="Validade" value={formatDate(detail.quote.valid_until)} />
             </dl>
           </div>
+
+          <QuotePaymentTermPanel
+            initialPaymentTerm={paymentTerm}
+            options={paymentOptions.map((option) => ({
+              kind: option.kind,
+              externalId: option.external_id,
+              name: option.name,
+              groupName: option.group_name
+            }))}
+            quoteId={quoteId}
+            total={Number(detail.quote.grand_total)}
+          />
 
           <QuoteItemEditPanel items={detail.items} quote={detail.quote} variants={quoteEditVariants} />
 

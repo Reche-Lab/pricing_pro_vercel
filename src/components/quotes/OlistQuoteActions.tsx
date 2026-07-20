@@ -132,6 +132,8 @@ type SalesOrderPreviewState = {
     method?: string;
     quote?: Record<string, unknown>;
     items?: Array<Record<string, unknown>>;
+    paymentTerm?: Record<string, unknown> | null;
+    paymentRequired?: boolean;
     payload?: unknown;
     missingSkus?: string[];
   } | null;
@@ -1186,6 +1188,11 @@ function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }
             </ul>
           </div>
         ) : null}
+        {preview.data?.paymentRequired ? (
+          <div className="rounded-md border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+            Vá até o card <strong>Pagamento do pedido Olist</strong>, abaixo do resumo do orçamento, selecione uma forma de pagamento e salve. Depois abra este modal novamente.
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -1193,6 +1200,7 @@ function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }
   const data = preview.data;
   const quote = data?.quote ?? {};
   const items = data?.items ?? [];
+  const paymentTerm = data?.paymentTerm as Record<string, unknown> | null | undefined;
   const payload = data?.payload as Record<string, unknown> | null | undefined;
 
   return (
@@ -1204,6 +1212,25 @@ function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }
         <InfoTile label="Desconto" value={currencyLike(quote.discountTotal)} />
         <InfoTile label="Total do orçamento" value={currencyLike(quote.grandTotal)} />
         <InfoTile label="Validade" value={stringValue(quote.validUntil)} />
+      </div>
+
+      <div className={`rounded-md border px-3 py-3 text-sm ${
+        paymentTerm
+          ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+          : "border-amber-400/25 bg-amber-400/10 text-amber-100"
+      }`}>
+        <p className="font-semibold">Pagamento do pedido Olist</p>
+        {paymentTerm ? (
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            <InfoTile compact label="Forma pagamento" value={stringValue(paymentTerm.payment_method_name)} />
+            <InfoTile compact label="Forma recebimento" value={stringValue(paymentTerm.receiving_method_name)} />
+            <InfoTile compact label="Parcelas" value={stringValue(paymentTerm.installments_count)} />
+          </div>
+        ) : (
+          <p className="mt-1 text-xs text-amber-100/80">
+            Nenhuma condição foi salva. O pedido pode ser criado, mas o financeiro no Olist exigirá conferência manual.
+          </p>
+        )}
       </div>
 
       <div className="min-w-0 rounded-md border border-zinc-800 bg-zinc-950/60">

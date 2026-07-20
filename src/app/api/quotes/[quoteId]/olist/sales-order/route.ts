@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { updateQuoteExternalOlistIds } from "@/repositories/quotes";
+import { getQuotePaymentTerm } from "@/repositories/olist-payment-options";
 import { listQuoteShipments, type ShipmentRow } from "@/repositories/shipments";
 import { buildOlistSalesOrderPayload, missingOlistSkus } from "@/services/olist/payloads";
 import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOperation } from "../_shared";
@@ -25,11 +26,24 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
 
   try {
     const shipments = await listQuoteShipments(loaded.session.userId, loaded.session.tenantId, quoteId);
+    const paymentTerm = await getQuotePaymentTerm(loaded.session.userId, loaded.session.tenantId, quoteId);
+    if (!paymentTerm?.payment_method_external_id) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Selecione e salve uma forma de pagamento do Olist antes de gerar o pedido de venda.",
+          paymentRequired: true,
+          paymentTerm
+        },
+        { status: 409 }
+      );
+    }
     const melhorEnvioShipment = selectBestMelhorEnvioShipment(shipments);
     const payload = buildOlistSalesOrderPayload({
       quote: loaded.detail.quote,
       items: loaded.detail.items,
-      shipment: melhorEnvioShipment
+      shipment: melhorEnvioShipment,
+      paymentTerm
     });
     console.info("Olist sales order payload built.", {
       quoteId,
@@ -38,6 +52,7 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
       itemCount: loaded.detail.items.length,
       shipmentId: melhorEnvioShipment?.id ?? null,
       package: melhorEnvioShipment?.packaging_snapshot ?? null,
+      paymentTerm,
       payload
     });
     const result = await sendOlistQuoteOperation({

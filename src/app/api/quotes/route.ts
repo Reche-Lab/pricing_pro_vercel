@@ -65,6 +65,29 @@ const quoteSchema = z.object({
     sellerShippingThreshold: z.number().min(0).max(100000).optional()
   }).optional(),
   validDays: z.number().int().min(1).max(90).optional(),
+  paymentTerm: z.object({
+    paymentMethodExternalId: z.string().trim().max(80).optional().nullable(),
+    paymentMethodName: z.string().trim().max(160).optional().nullable(),
+    receivingMethodExternalId: z.string().trim().max(80).optional().nullable(),
+    receivingMethodName: z.string().trim().max(160).optional().nullable(),
+    categoryExternalId: z.string().trim().max(80).optional().nullable(),
+    categoryName: z.string().trim().max(160).optional().nullable(),
+    installmentsCount: z.number().int().min(1).max(24).optional().nullable(),
+    notes: z.string().trim().max(600).optional().nullable(),
+    installments: z.array(
+      z.object({
+        installmentNumber: z.number().int().min(1).max(24),
+        dueDate: z.string().trim().optional().nullable(),
+        days: z.number().int().min(0).max(3650).optional().nullable(),
+        amount: z.number().min(0).max(1000000),
+        notes: z.string().trim().max(300).optional().nullable(),
+        paymentMethodExternalId: z.string().trim().max(80).optional().nullable(),
+        paymentMethodName: z.string().trim().max(160).optional().nullable(),
+        receivingMethodExternalId: z.string().trim().max(80).optional().nullable(),
+        receivingMethodName: z.string().trim().max(160).optional().nullable()
+      })
+    ).min(1).max(24)
+  }).optional().nullable(),
   notes: z.string().trim().max(2000).optional().nullable()
 });
 

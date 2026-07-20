@@ -52,6 +52,73 @@ describe("olist payloads", () => {
     expect(payload.valorFrete).toBe(20);
   });
 
+  it("adds payment terms to sales order payload", () => {
+    const payload = buildOlistSalesOrderPayload({
+      quote: quote(),
+      items: [item()],
+      paymentTerm: {
+        id: "term-1",
+        quote_id: "quote-1",
+        payment_method_external_id: "10",
+        payment_method_name: "Pix",
+        receiving_method_external_id: "20",
+        receiving_method_name: "Conta principal",
+        category_external_id: "30",
+        category_name: "Vendas",
+        installments_count: 2,
+        notes: "Pix em 2 parcelas",
+        installments: [
+          {
+            installmentNumber: 1,
+            dueDate: "2026-07-20",
+            days: 0,
+            amount: 135,
+            notes: "Entrada",
+            paymentMethodExternalId: "10",
+            paymentMethodName: "Pix",
+            receivingMethodExternalId: "20",
+            receivingMethodName: "Conta principal"
+          },
+          {
+            installmentNumber: 2,
+            dueDate: "2026-08-19",
+            days: 30,
+            amount: 135,
+            notes: "Saldo",
+            paymentMethodExternalId: "10",
+            paymentMethodName: "Pix",
+            receivingMethodExternalId: "20",
+            receivingMethodName: "Conta principal"
+          }
+        ]
+      }
+    });
+
+    expect(payload.pagamento).toEqual({
+      formaRecebimento: { id: 20 },
+      meioPagamento: { id: 10 },
+      categoria: { id: 30 },
+      parcelas: [
+        {
+          dias: 0,
+          data: "2026-07-20",
+          valor: 135,
+          observacoes: "Entrada",
+          formaRecebimento: { id: 20 },
+          meioPagamento: { id: 10 }
+        },
+        {
+          dias: 30,
+          data: "2026-08-19",
+          valor: 135,
+          observacoes: "Saldo",
+          formaRecebimento: { id: 20 },
+          meioPagamento: { id: 10 }
+        }
+      ]
+    });
+  });
+
   it("adds package dimensions and gross weight to sales order notes", () => {
     const payload = buildOlistSalesOrderPayload({ quote: quote(), items: [item()], shipment: shipment() });
 
