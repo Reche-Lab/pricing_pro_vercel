@@ -11,6 +11,7 @@ import { QuotePaymentTermPanel } from "@/components/quotes/QuotePaymentTermPanel
 import { QuoteStatusActions } from "@/components/quotes/QuoteStatusActions";
 import { QuoteWhatsAppButton } from "@/components/quotes/QuoteWhatsAppButton";
 import { PublicQuoteLinkButton } from "@/components/quotes/PublicQuoteLinkButton";
+import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getQuoteDetail, listQuoteEditLogs } from "@/repositories/quotes";
 import { getQuotePaymentTerm, listOlistPaymentOptions } from "@/repositories/olist-payment-options";
@@ -20,6 +21,7 @@ import { listQuoteShipments } from "@/repositories/shipments";
 import { getSessionProfile, listTenantMembers, userHasPermission } from "@/repositories/users";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+type QuoteDetailResult = NonNullable<Awaited<ReturnType<typeof getQuoteDetail>>>;
 
 export default async function QuoteDetailPage({ params }: { params: Promise<{ quoteId: string }> }) {
   const session = await getCurrentSession();
@@ -49,8 +51,12 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
     id: variant.variant_id,
     label: `${variant.product_name} - ${variant.variant_name}`,
     sku: variant.sku,
-    externalOlistProductId: variant.external_olist_product_id
+    externalOlistProductId: variant.external_olist_product_id,
+    unitCost: Number(variant.unit_cost),
+    curve: mapCurve(variant.curve_mode, variant.anchors)
   }));
+  const latestSnapshot = detail.snapshots[0]?.snapshot;
+  const quoteEditPricingContext = buildQuoteEditPricingContext(latestSnapshot, detail.items);
 
   return (
     <AppShell
@@ -112,7 +118,12 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
             total={Number(detail.quote.grand_total)}
           />
 
-          <QuoteItemEditPanel items={detail.items} quote={detail.quote} variants={quoteEditVariants} />
+          <QuoteItemEditPanel
+            items={detail.items}
+            pricingContext={quoteEditPricingContext}
+            quote={detail.quote}
+            variants={quoteEditVariants}
+          />
 
           <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
             <div className="border-b border-zinc-800 px-4 py-3">
@@ -273,6 +284,105 @@ function formatPricingRule(rule: string | null | undefined) {
   if (rule === "per_art_average") return "por artes do mesmo produto";
   if (rule === "aggregate_total") return "por total do mesmo produto";
   return "por item individual";
+}
+
+function buildQuoteEditPricingContext(
+  snapshot: unknown,
+  items: QuoteDetailResult["items"]
+) {
+  return {
+    platform: readEffectivePlatform(snapshot),
+    itemCurves: readSnapshotItemCurves(snapshot, items)
+  };
+}
+
+function readEffectivePlatform(snapshot: unknown) {
+  const snapshotRecord = asRecord(snapshot);
+  const effectivePlatform = snapshotRecord ? asRecord(snapshotRecord.effectivePlatform) : null;
+
+  return {
+    commissionRate: numberFrom(effectivePlatform?.commissionRate, 0),
+    fixedFee: numberFrom(effectivePlatform?.fixedFee, 0),
+    sellerShippingCost: numberFrom(effectivePlatform?.sellerShippingCost, 0),
+    sellerShippingThreshold: numberFrom(effectivePlatform?.sellerShippingThreshold, 0)
+  };
+}
+
+function readSnapshotItemCurves(
+  snapshot: unknown,
+  items: QuoteDetailResult["items"]
+) {
+  const snapshotRecord = asRecord(snapshot);
+  if (!snapshotRecord) return {};
+
+  const itemCurves: Record<string, { productVariantId: string | null; curve: PricingCurve }> = {};
+  const calculation = asRecord(snapshotRecord.calculation);
+  const calculationItems = Array.isArray(calculation?.items) ? calculation.items : [];
+
+  calculationItems.forEach((calculationItem, index) => {
+    const item = items[index];
+    const curve = asPricingCurve(asRecord(calculationItem)?.curve);
+    if (item && curve) {
+      itemCurves[item.id] = {
+        productVariantId: typeof asRecord(calculationItem)?.productVariantId === "string"
+          ? asRecord(calculationItem)?.productVariantId as string
+          : item.product_variant_id ?? null,
+        curve
+      };
+    }
+  });
+
+  const requestCurve = asPricingCurve(asRecord(snapshotRecord.request)?.pricingCurve);
+  if (requestCurve && items[0] && !itemCurves[items[0].id]) {
+    itemCurves[items[0].id] = {
+      productVariantId: items[0].product_variant_id ?? null,
+      curve: requestCurve
+    };
+  }
+
+  return itemCurves;
+}
+
+function mapCurve(mode: PricingCurveMode | null, anchors: Record<string, number> | null): PricingCurve {
+  return {
+    mode: mode ?? "interpolated",
+    points: Object.entries(anchors ?? {})
+      .map(([quantity, unitPrice]) => ({
+        quantity: Number(quantity),
+        unitPrice: Number(unitPrice)
+      }))
+      .filter((point) => Number.isFinite(point.quantity) && Number.isFinite(point.unitPrice))
+      .sort((a, b) => a.quantity - b.quantity)
+  };
+}
+
+function asPricingCurve(value: unknown): PricingCurve | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const mode = record.mode === "step" ? "step" : "interpolated";
+  const points = Array.isArray(record.points)
+    ? record.points
+      .map((point) => {
+        const pointRecord = asRecord(point);
+        return {
+          quantity: numberFrom(pointRecord?.quantity, Number.NaN),
+          unitPrice: numberFrom(pointRecord?.unitPrice, Number.NaN)
+        };
+      })
+      .filter((point) => Number.isFinite(point.quantity) && Number.isFinite(point.unitPrice))
+      .sort((a, b) => a.quantity - b.quantity)
+    : [];
+
+  return points.length ? { mode, points } : null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function numberFrom(value: unknown, fallback: number) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
 }
 
 function Detail({ label, value }: { label: string; value: string }) {

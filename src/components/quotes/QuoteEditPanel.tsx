@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Edit3, History, Lock, Save } from "lucide-react";
+import { calculateQuote } from "@/domain/pricing/pricing";
+import type { PricingCurve } from "@/domain/pricing/types";
 import type { QuoteDetail, QuoteEditLogRow, QuoteItemRow } from "@/repositories/quotes";
 
 export type QuoteEditVariant = {
@@ -10,6 +12,8 @@ export type QuoteEditVariant = {
   label: string;
   sku: string | null;
   externalOlistProductId: string | null;
+  unitCost: number;
+  curve: PricingCurve | null;
 };
 
 type EditableItem = {
@@ -18,6 +22,21 @@ type EditableItem = {
   quantity: number;
   unitPrice: number;
   artworkName: string;
+  curveUnitPrice?: number | null;
+  priceManuallyEdited?: boolean;
+};
+
+type QuoteEditPricingContext = {
+  platform: {
+    commissionRate: number;
+    fixedFee: number;
+    sellerShippingCost: number;
+    sellerShippingThreshold: number;
+  };
+  itemCurves: Record<string, {
+    productVariantId: string | null;
+    curve: PricingCurve;
+  }>;
 };
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -168,10 +187,12 @@ export function QuoteEditPanel({
 
 export function QuoteItemEditPanel({
   items,
+  pricingContext,
   quote,
   variants
 }: {
   items: QuoteItemRow[];
+  pricingContext: QuoteEditPricingContext;
   quote: QuoteDetail;
   variants: QuoteEditVariant[];
 }) {
@@ -186,10 +207,19 @@ export function QuoteItemEditPanel({
   const original = draft ? items.find((item) => item.id === draft.id) ?? null : null;
   const changedPrice = Boolean(original && draft && Math.abs(Number(original.unit_price) - draft.unitPrice) >= 0.0001);
   const selectedVariant = draft ? variants.find((variant) => variant.id === draft.productVariantId) : null;
+  const suggestedPrice = draft ? calculateSuggestedUnitPrice(draft, selectedVariant, pricingContext) : null;
+  const priceDiffersFromCurve = Boolean(suggestedPrice !== null && draft && Math.abs(draft.unitPrice - suggestedPrice) >= 0.0001);
 
   async function saveItem() {
     if (!draft || blockedReason || state === "saving") return;
-    if (changedPrice && !reason.trim()) {
+    const manuallyOverriddenCurvePrice = changedPrice && priceDiffersFromCurve;
+    const effectiveReason = manuallyOverriddenCurvePrice
+      ? reason.trim()
+      : changedPrice
+        ? "Preço recalculado automaticamente pela curva ao alterar quantidade/produto."
+        : reason.trim();
+
+    if (manuallyOverriddenCurvePrice && !effectiveReason) {
       setState("error");
       setMessage("Informe o motivo da alteração manual de preço.");
       return;
@@ -205,7 +235,7 @@ export function QuoteItemEditPanel({
         validUntil: formatDateInput(quote.valid_until),
         shippingTotal: Number(quote.shipping_total),
         notes: quote.notes ?? "",
-        reason,
+        reason: effectiveReason,
         items: payloadItems
       })
     });
@@ -252,7 +282,7 @@ export function QuoteItemEditPanel({
                   type="button"
                   onClick={() => {
                     setEditingItemId(editingItemId === item.id ? null : item.id);
-                    setDraft(toEditableItem(item));
+                    setDraft(createDraftFromItem(item, variants, pricingContext));
                     setReason("");
                     setState("idle");
                     setMessage("");
@@ -270,7 +300,7 @@ export function QuoteItemEditPanel({
                     <select
                       className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
                       value={draft.productVariantId}
-                      onChange={(event) => updateDraft({ productVariantId: event.currentTarget.value })}
+                      onChange={(event) => updateDraftWithCurve({ productVariantId: event.currentTarget.value })}
                     >
                       {variants.map((variant) => (
                         <option key={variant.id} value={variant.id}>{variant.label}</option>
@@ -283,7 +313,7 @@ export function QuoteItemEditPanel({
                     ) : null}
                   </label>
                   <div className="grid gap-3 sm:grid-cols-3">
-                    <NumberField label="Qtd." min={1} step={1} value={draft.quantity} onChange={(value) => updateDraft({ quantity: Math.max(1, Math.trunc(value)) })} />
+                    <NumberField label="Qtd." min={1} step={1} value={draft.quantity} onChange={(value) => updateDraftWithCurve({ quantity: Math.max(1, Math.trunc(value)) })} />
                     <NumberField label="Preço unitário" min={0} step={0.01} value={draft.unitPrice} onChange={(value) => updateDraft({ unitPrice: Math.max(0, value) })} />
                     <label className="block">
                       <span className="mb-1 block text-xs font-medium text-zinc-400">Arte/lote</span>
@@ -297,7 +327,28 @@ export function QuoteItemEditPanel({
                   <p className="text-right text-sm font-semibold text-white">
                     Novo total: {brl.format(draft.quantity * draft.unitPrice)}
                   </p>
-                  {changedPrice ? (
+                  {suggestedPrice !== null ? (
+                    <div className="flex flex-col gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-xs text-zinc-400 sm:flex-row sm:items-center sm:justify-between">
+                      <span>
+                        Preço pela curva para {draft.quantity} un.: <strong className="text-zinc-200">{brl.format(suggestedPrice)}</strong>
+                        {priceDiffersFromCurve ? <span className="text-amber-200"> · preço manual em uso</span> : null}
+                      </span>
+                      {priceDiffersFromCurve ? (
+                        <button
+                          className="focus-ring inline-flex h-8 items-center justify-center rounded-md border border-zinc-700 px-2 text-xs text-zinc-300 hover:bg-zinc-900"
+                          type="button"
+                          onClick={() => updateDraft({ unitPrice: suggestedPrice })}
+                        >
+                          Usar preço da curva
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="rounded-md border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+                      Não foi possível encontrar curva ativa para recalcular este item. O preço pode ser editado manualmente.
+                    </p>
+                  )}
+                  {changedPrice && priceDiffersFromCurve ? (
                     <label className="block">
                       <span className="mb-1 block text-xs font-medium text-amber-200">Motivo da alteração manual de preço</span>
                       <textarea
@@ -323,6 +374,21 @@ export function QuoteItemEditPanel({
 
   function updateDraft(patch: Partial<EditableItem>) {
     setDraft((current) => current ? { ...current, ...patch } : current);
+    resetMessage();
+  }
+
+  function updateDraftWithCurve(patch: Partial<EditableItem>) {
+    setDraft((current) => {
+      if (!current) return current;
+      const next = { ...current, ...patch };
+      const variant = variants.find((item) => item.id === next.productVariantId) ?? null;
+      const nextSuggestedPrice = calculateSuggestedUnitPrice(next, variant, pricingContext);
+      return {
+        ...next,
+        unitPrice: nextSuggestedPrice ?? next.unitPrice,
+        curveUnitPrice: nextSuggestedPrice
+      };
+    });
     resetMessage();
   }
 
@@ -421,6 +487,44 @@ function toEditableItem(item: QuoteItemRow): EditableItem {
     unitPrice: Number(item.unit_price),
     artworkName: item.artwork_name ?? ""
   };
+}
+
+function createDraftFromItem(
+  item: QuoteItemRow,
+  variants: QuoteEditVariant[],
+  pricingContext: QuoteEditPricingContext
+): EditableItem {
+  const draft = toEditableItem(item);
+  const variant = variants.find((candidate) => candidate.id === draft.productVariantId) ?? null;
+  const suggestedPrice = calculateSuggestedUnitPrice(draft, variant, pricingContext);
+  return {
+    ...draft,
+    curveUnitPrice: suggestedPrice
+  };
+}
+
+function calculateSuggestedUnitPrice(
+  item: EditableItem,
+  variant: QuoteEditVariant | null | undefined,
+  pricingContext: QuoteEditPricingContext
+) {
+  if (!variant) return null;
+  const snapshotCurve = pricingContext.itemCurves[item.id];
+  const curve = snapshotCurve?.productVariantId === item.productVariantId ? snapshotCurve.curve : variant.curve;
+  if (!curve?.points?.length) return null;
+
+  try {
+    const result = calculateQuote({
+      quantity: item.quantity,
+      unitCost: variant.unitCost,
+      method: "anchors",
+      curve,
+      platform: pricingContext.platform
+    });
+    return result.finalUnitPrice;
+  } catch {
+    return null;
+  }
 }
 
 function editBlockedReason(quote: QuoteDetail) {
