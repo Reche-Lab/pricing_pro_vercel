@@ -344,6 +344,7 @@ export function OlistQuoteActions({
     }
 
     setMessage("");
+    setActionResult(null);
     setLoading(action);
     const response = await fetch(`/api/quotes/${quoteId}/olist/${config.url}`, {
       method: "POST",
@@ -557,6 +558,7 @@ export function OlistQuoteActions({
       {pendingAction ? (
         <ActionModal
           action={pendingAction}
+          actionResult={actionResult}
           customerCreateDefaults={customerCreateDefaults}
           customerReady={customerReady}
           customerLookupDefaults={customerLookupDefaults}
@@ -722,6 +724,7 @@ function OlistConnectionBanner({
 
 function ActionModal({
   action,
+  actionResult,
   customerCreateDefaults,
   customerReady,
   customerLookupDefaults,
@@ -746,6 +749,7 @@ function ActionModal({
   responsibleUsers
 }: {
   action: ActionKey;
+  actionResult: OlistActionResult | null;
   customerCreateDefaults: {
     name: string;
     document: string;
@@ -903,6 +907,21 @@ function ActionModal({
         </div>
 
         <div className="grid min-h-0 gap-4 overflow-y-auto overflow-x-hidden p-5">
+          {actionResult?.tone === "error" ? (
+            <div className="rounded-md border border-rose-400/25 bg-rose-400/10 px-3 py-3 text-sm text-rose-100">
+              <p className="font-semibold">{actionResult.title}</p>
+              <p className="mt-1 leading-5 text-rose-100/85">{actionResult.message}</p>
+              {actionResult.debugId ? (
+                <p className="mt-2 text-xs text-rose-100/70">Debug: {actionResult.debugId}</p>
+              ) : null}
+              {actionResult.summary ? (
+                <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-black/25 p-2 text-xs text-rose-50">
+                  {formatJson(actionResult.summary)}
+                </pre>
+              ) : null}
+            </div>
+          ) : null}
+
           {action === "customerLookup" ? (
             <div className="grid gap-4">
               <InfoBox title="Consulta sem alteração de dados">
@@ -2012,6 +2031,14 @@ function inferPersonType(value: string | null | undefined): "F" | "J" {
 function stringValue(value: unknown) {
   if (value === null || value === undefined || value === "") return "-";
   return String(value);
+}
+
+function formatJson(value: unknown) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
 }
 
 function currencyLike(value: unknown) {

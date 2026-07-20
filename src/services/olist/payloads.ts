@@ -171,25 +171,21 @@ function nativeOrderItem(item: QuoteItemRow) {
 
 function buildPaymentPayload(paymentTerm: QuotePaymentTermRow | null | undefined) {
   if (!paymentTerm) return null;
-  const meioPagamentoId = numericId(paymentTerm.payment_method_external_id);
   const categoriaId = numericId(paymentTerm.category_external_id);
   const parcelas = paymentTerm.installments.map((installment) => compactObject({
     dias: installment.days,
     data: installment.dueDate,
     valor: money(installment.amount),
-    observacoes: installment.notes,
-    meioPagamento: paymentObject(numericId(installment.paymentMethodExternalId) ?? meioPagamentoId)
+    observacoes: [
+      installment.notes,
+      installment.paymentMethodName ? `Forma de pagamento: ${installment.paymentMethodName}` : null
+    ].filter(Boolean).join(" | ")
   }));
 
   return compactObject({
-    meioPagamento: meioPagamentoId ? { id: meioPagamentoId } : null,
     categoria: categoriaId ? { id: categoriaId } : null,
     parcelas: parcelas.length ? parcelas : null
   });
-}
-
-function paymentObject(id: number | null) {
-  return id ? { id } : null;
 }
 
 function buildOlistNotes(input: { quote: QuoteDetail; items: QuoteItemRow[]; shipment?: ShipmentRow | null }) {
