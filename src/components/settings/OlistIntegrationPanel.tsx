@@ -983,6 +983,7 @@ function IntegrationForm({
   shippingOptionsLoading: boolean;
 }) {
   const categoryOptions = paymentOptions.filter((option) => option.kind === "category");
+  const [shippingMappingMessage, setShippingMappingMessage] = useState("");
   return (
     <form className="rounded-md border border-zinc-800 p-4" onSubmit={onSubmit}>
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -1082,7 +1083,15 @@ function IntegrationForm({
                 A consulta usa <code className="rounded bg-zinc-950 px-1">/formas-envio</code> e, para cada item, consulta <code className="rounded bg-zinc-950 px-1">/formas-envio/ID</code> para trazer as formas de frete como SEDEX e PAC.
               </p>
               {shippingOptions.length ? (
-                <ShippingOptionsResult options={shippingOptions} />
+                <ShippingOptionsResult
+                  onApplied={(nextMessage) => setShippingMappingMessage(nextMessage)}
+                  options={shippingOptions}
+                />
+              ) : null}
+              {shippingMappingMessage ? (
+                <div className="rounded-md border border-emerald-300/25 bg-emerald-300/10 px-3 py-2 text-xs leading-5 text-emerald-100">
+                  {shippingMappingMessage} Clique em <span className="font-semibold">Salvar</span> para gravar este vínculo no tenant.
+                </div>
               ) : null}
             </div>
             <label className="block">
@@ -1188,7 +1197,13 @@ function IntegrationForm({
   );
 }
 
-function ShippingOptionsResult({ options }: { options: OlistShippingOptionView[] }) {
+function ShippingOptionsResult({
+  options,
+  onApplied
+}: {
+  options: OlistShippingOptionView[];
+  onApplied: (message: string) => void;
+}) {
   return (
     <div className="grid gap-2">
       {options.map((option) => (
@@ -1210,6 +1225,7 @@ function ShippingOptionsResult({ options }: { options: OlistShippingOptionView[]
                 const form = event.currentTarget.form;
                 setInputValue(form, "melhorEnvioFormaEnvioId", option.id);
                 setInputValue(form, "melhorEnvioFormaEnvioName", option.name ?? "Melhor Envio");
+                onApplied(`Forma de envio "${option.name ?? option.id}" vinculada como Melhor Envio.`);
               }}
               type="button"
             >
@@ -1236,6 +1252,7 @@ function ShippingOptionsResult({ options }: { options: OlistShippingOptionView[]
                         const form = event.currentTarget.form;
                         setInputValue(form, "sedexFormaFreteId", freight.id);
                         setInputValue(form, "sedexFormaFreteName", freight.name);
+                        onApplied(`Forma de frete "${freight.name}" vinculada como SEDEX.`);
                       }}
                       type="button"
                     >
@@ -1247,6 +1264,7 @@ function ShippingOptionsResult({ options }: { options: OlistShippingOptionView[]
                         const form = event.currentTarget.form;
                         setInputValue(form, "pacFormaFreteId", freight.id);
                         setInputValue(form, "pacFormaFreteName", freight.name);
+                        onApplied(`Forma de frete "${freight.name}" vinculada como PAC.`);
                       }}
                       type="button"
                     >
@@ -1272,6 +1290,14 @@ function setInputValue(form: HTMLFormElement | null, name: string, value: string
   if (field instanceof HTMLInputElement) {
     field.value = value;
     field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.animate(
+      [
+        { boxShadow: "0 0 0 0 rgba(34, 211, 238, 0)" },
+        { boxShadow: "0 0 0 3px rgba(34, 211, 238, 0.45)" },
+        { boxShadow: "0 0 0 0 rgba(34, 211, 238, 0)" }
+      ],
+      { duration: 900, easing: "ease-out" }
+    );
   }
 }
 
