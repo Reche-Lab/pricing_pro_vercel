@@ -26,7 +26,7 @@ type EditableItem = {
   priceManuallyEdited?: boolean;
 };
 
-type QuoteEditPricingContext = {
+export type QuoteEditPricingContext = {
   platform: {
     commissionRate: number;
     fixedFee: number;
