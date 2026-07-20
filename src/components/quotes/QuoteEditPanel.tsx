@@ -313,14 +313,24 @@ function editBlockedReason(quote: QuoteDetail) {
   return null;
 }
 
-function formatDateInput(value: string | null | undefined) {
+function formatDateInput(value: unknown) {
   if (!value) return "";
-  return value.slice(0, 10);
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === "string") return value.slice(0, 10);
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
 }
 
-function formatDateTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+function formatDateTime(value: unknown) {
+  if (value instanceof Date) {
+    return new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short"
+    }).format(value);
+  }
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return String(value ?? "-");
   return new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "short",
     timeStyle: "short"
