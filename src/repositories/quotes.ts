@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "crypto";
-import { calculatePlatformCosts, calculateQuote, normalizePricingCurvePoints } from "@/domain/pricing/pricing";
+import { calculatePlatformCosts, calculateQuote, normalizePricingCurvePoints, roundMoney } from "@/domain/pricing/pricing";
 import {
   calculateCompositeQuote,
   type CompositeQuoteCalculation,
@@ -1141,7 +1141,7 @@ export async function updateQuoteEditable(
       const reason = clean(input.reason);
       const changedUnitPrice = input.items.some((item) => {
         const current = item.id ? currentItemMap.get(item.id) : null;
-        return !current || Math.abs(Number(current.unit_price) - item.unitPrice) >= 0.0001;
+        return !current || Math.abs(roundMoney(Number(current.unit_price)) - roundMoney(item.unitPrice)) >= 0.0001;
       });
       if (changedUnitPrice && !reason) throw new Error("Informe o motivo da alteração manual de preço.");
 
@@ -1155,8 +1155,8 @@ export async function updateQuoteEditable(
         if (!variant) throw new Error("Produto selecionado não encontrado.");
 
         const quantity = Math.max(1, Math.trunc(item.quantity));
-        const unitPrice = clampNumber(item.unitPrice, 0, 100000, Number(current.unit_price));
-        const totalPrice = Number((quantity * unitPrice).toFixed(4));
+        const unitPrice = roundMoney(clampNumber(item.unitPrice, 0, 100000, Number(current.unit_price)));
+        const totalPrice = roundMoney(quantity * unitPrice);
         const itemChangedPrice = Math.abs(Number(current.unit_price) - unitPrice) >= 0.0001;
         const manualUnitPrice = Boolean(current.manual_unit_price) || itemChangedPrice;
         const manualReason = itemChangedPrice ? reason : current.manual_price_reason ?? null;
@@ -1682,8 +1682,8 @@ function applyManualCompositePrices(
     const curveFinalUnitPrice = item.finalUnitPrice;
     const curveSubtotal = item.subtotal;
     const hasManualUnitPrice = manualUnitPrice !== null && Math.abs(manualUnitPrice - curveFinalUnitPrice) >= 0.0001;
-    const finalUnitPrice = hasManualUnitPrice ? manualUnitPrice : curveFinalUnitPrice;
-    const subtotal = Number((finalUnitPrice * item.quantity).toFixed(4));
+    const finalUnitPrice = roundMoney(hasManualUnitPrice ? manualUnitPrice : curveFinalUnitPrice);
+    const subtotal = roundMoney(finalUnitPrice * item.quantity);
     const costOfGoodsTotal = item.unitCost * item.quantity;
 
     return {
@@ -1701,7 +1701,7 @@ function applyManualCompositePrices(
     };
   });
 
-  const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0);
+  const subtotal = roundMoney(items.reduce((sum, item) => sum + item.subtotal, 0));
   const costOfGoodsTotal = items.reduce((sum, item) => sum + item.costOfGoodsTotal, 0);
   const { commissionTotal, fixedFeeTotal, sellerShippingTotal } = calculatePlatformCosts(subtotal, platform);
   const totalCost = costOfGoodsTotal + commissionTotal + fixedFeeTotal + sellerShippingTotal;
@@ -1742,7 +1742,7 @@ function getManualUnitPrice(item: NonNullable<CreateQuoteInput["items"]>[number]
   if (!item || item.manualUnitPrice === null || item.manualUnitPrice === undefined) return null;
   const value = Number(item.manualUnitPrice);
   if (!Number.isFinite(value)) return null;
-  return clampNumber(value, 0, 100000, 0);
+  return roundMoney(clampNumber(value, 0, 100000, 0));
 }
 
 function normalizeArtworkFile(file: QuoteArtworkFileInput | null | undefined): QuoteArtworkFileInput | null {

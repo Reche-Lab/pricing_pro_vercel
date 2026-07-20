@@ -29,7 +29,8 @@ import {
   comparePricingSimulationSeries,
   DEFAULT_ANCHOR_QUANTITIES,
   normalizePricingCurvePoints,
-  recomputeIntermediateAnchors
+  recomputeIntermediateAnchors,
+  roundMoney
 } from "@/domain/pricing/pricing";
 import type { DemoProductVariant } from "@/domain/pricing/defaults";
 import type { PlatformRule, PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
@@ -884,12 +885,12 @@ export function PricingCalculator({
   function updateDraftItemManualPrice(itemId: string, unitPrice: number) {
     setDraftItems((current) => current.map((item) => {
       if (item.id !== itemId) return item;
-      const nextUnitPrice = Math.max(0, Number.isFinite(unitPrice) ? unitPrice : 0);
+      const nextUnitPrice = roundMoney(Math.max(0, Number.isFinite(unitPrice) ? unitPrice : 0));
       const manualUnitPrice = Math.abs(nextUnitPrice - item.curveUnitPrice) >= 0.0001;
       return {
         ...item,
         unitPrice: nextUnitPrice,
-        totalPrice: Number((nextUnitPrice * item.quantity).toFixed(4)),
+        totalPrice: roundMoney(nextUnitPrice * item.quantity),
         manualUnitPrice,
         manualPriceReason: manualUnitPrice ? item.manualPriceReason ?? "" : ""
       };
@@ -903,7 +904,7 @@ export function PricingCalculator({
       ? {
           ...item,
           unitPrice: item.curveUnitPrice,
-          totalPrice: Number((item.curveUnitPrice * item.quantity).toFixed(4)),
+          totalPrice: roundMoney(item.curveUnitPrice * item.quantity),
           manualUnitPrice: false,
           manualPriceReason: ""
         }

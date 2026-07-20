@@ -16,6 +16,11 @@ export function clampQuantity(quantity: number, min = 1, max = 50000): number {
   return Math.max(min, Math.min(max, Math.trunc(quantity)));
 }
 
+export function roundMoney(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 export function calculateLogisticUnitPrice(
   quantity: number,
   minPrice: number,
@@ -167,8 +172,8 @@ export function calculateQuote(input: QuoteCalculationInput): QuoteCalculationRe
           requireLogistic(input.logistic).n
         );
 
-  const finalUnitPrice = calculateFinalUnitPrice(quantity, baseUnitPrice, input.platform);
-  const subtotal = finalUnitPrice * quantity;
+  const finalUnitPrice = roundMoney(calculateFinalUnitPrice(quantity, baseUnitPrice, input.platform));
+  const subtotal = roundMoney(finalUnitPrice * quantity);
   const { commissionTotal, fixedFeeTotal, sellerShippingTotal } = calculatePlatformCosts(
     subtotal,
     input.platform

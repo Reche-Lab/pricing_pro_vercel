@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Edit3, History, Lock, Save } from "lucide-react";
-import { calculateQuote } from "@/domain/pricing/pricing";
+import { calculateQuote, roundMoney } from "@/domain/pricing/pricing";
 import type { PricingCurve } from "@/domain/pricing/types";
 import type { QuoteDetail, QuoteEditLogRow, QuoteItemRow } from "@/repositories/quotes";
 
@@ -314,7 +314,7 @@ export function QuoteItemEditPanel({
                   </label>
                   <div className="grid gap-3 sm:grid-cols-3">
                     <NumberField label="Qtd." min={1} step={1} value={draft.quantity} onChange={(value) => updateDraftWithCurve({ quantity: Math.max(1, Math.trunc(value)) })} />
-                    <NumberField label="Preço unitário" min={0} step={0.01} value={draft.unitPrice} onChange={(value) => updateDraft({ unitPrice: Math.max(0, value) })} />
+                    <NumberField label="Preço unitário" min={0} step={0.01} value={draft.unitPrice} onChange={(value) => updateDraft({ unitPrice: roundMoney(Math.max(0, value)) })} />
                     <label className="block">
                       <span className="mb-1 block text-xs font-medium text-zinc-400">Arte/lote</span>
                       <input
@@ -325,7 +325,7 @@ export function QuoteItemEditPanel({
                     </label>
                   </div>
                   <p className="text-right text-sm font-semibold text-white">
-                    Novo total: {brl.format(draft.quantity * draft.unitPrice)}
+                    Novo total: {brl.format(roundMoney(draft.quantity * draft.unitPrice))}
                   </p>
                   {suggestedPrice !== null ? (
                     <div className="flex flex-col gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-xs text-zinc-400 sm:flex-row sm:items-center sm:justify-between">
@@ -337,7 +337,7 @@ export function QuoteItemEditPanel({
                         <button
                           className="focus-ring inline-flex h-8 items-center justify-center rounded-md border border-zinc-700 px-2 text-xs text-zinc-300 hover:bg-zinc-900"
                           type="button"
-                          onClick={() => updateDraft({ unitPrice: suggestedPrice })}
+                          onClick={() => updateDraft({ unitPrice: roundMoney(suggestedPrice) })}
                         >
                           Usar preço da curva
                         </button>
@@ -385,7 +385,7 @@ export function QuoteItemEditPanel({
       const nextSuggestedPrice = calculateSuggestedUnitPrice(next, variant, pricingContext);
       return {
         ...next,
-        unitPrice: nextSuggestedPrice ?? next.unitPrice,
+        unitPrice: nextSuggestedPrice ?? roundMoney(next.unitPrice),
         curveUnitPrice: nextSuggestedPrice
       };
     });
@@ -484,7 +484,7 @@ function toEditableItem(item: QuoteItemRow): EditableItem {
     id: item.id,
     productVariantId: item.product_variant_id ?? "",
     quantity: item.quantity,
-    unitPrice: Number(item.unit_price),
+    unitPrice: roundMoney(Number(item.unit_price)),
     artworkName: item.artwork_name ?? ""
   };
 }
@@ -521,7 +521,7 @@ function calculateSuggestedUnitPrice(
       curve,
       platform: pricingContext.platform
     });
-    return result.finalUnitPrice;
+    return roundMoney(result.finalUnitPrice);
   } catch {
     return null;
   }

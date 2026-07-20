@@ -1,4 +1,4 @@
-import { calculateCurveUnitPrice, calculatePlatformCosts } from "@/domain/pricing/pricing";
+import { calculateCurveUnitPrice, calculatePlatformCosts, roundMoney } from "@/domain/pricing/pricing";
 import type { PlatformRule, PricingCurve } from "@/domain/pricing/types";
 
 export type CompositePricingRule = "per_item" | "per_art_average" | "aggregate_total";
@@ -62,13 +62,12 @@ export function calculateCompositeQuote(input: {
   });
 
   const baseSubtotal = baseItems.reduce((sum, item) => sum + item.baseSubtotal, 0);
-  const finalSubtotal = calculateFinalSubtotal(baseSubtotal, input.platform);
-  const multiplier = baseSubtotal > 0 ? finalSubtotal / baseSubtotal : 1;
-  const { commissionTotal, fixedFeeTotal, sellerShippingTotal } = calculatePlatformCosts(finalSubtotal, input.platform);
+  const targetSubtotal = roundMoney(calculateFinalSubtotal(baseSubtotal, input.platform));
+  const multiplier = baseSubtotal > 0 ? targetSubtotal / baseSubtotal : 1;
 
   const items = baseItems.map((item) => {
-    const finalUnitPrice = item.baseUnitPrice * multiplier;
-    const subtotal = finalUnitPrice * item.quantity;
+    const finalUnitPrice = roundMoney(item.baseUnitPrice * multiplier);
+    const subtotal = roundMoney(finalUnitPrice * item.quantity);
     const costOfGoodsTotal = item.unitCost * item.quantity;
 
     return {
@@ -90,21 +89,23 @@ export function calculateCompositeQuote(input: {
     };
   });
 
+  const subtotal = roundMoney(items.reduce((sum, item) => sum + item.subtotal, 0));
+  const { commissionTotal, fixedFeeTotal, sellerShippingTotal } = calculatePlatformCosts(subtotal, input.platform);
   const costOfGoodsTotal = items.reduce((sum, item) => sum + item.costOfGoodsTotal, 0);
   const totalCost = costOfGoodsTotal + commissionTotal + fixedFeeTotal + sellerShippingTotal;
-  const profit = finalSubtotal - totalCost;
+  const profit = subtotal - totalCost;
 
   return {
     items,
     baseSubtotal,
-    subtotal: finalSubtotal,
+    subtotal,
     commissionTotal,
     fixedFeeTotal,
     sellerShippingTotal,
     costOfGoodsTotal,
     totalCost,
     profit,
-    marginPercent: finalSubtotal > 0 ? (profit / finalSubtotal) * 100 : 0
+    marginPercent: subtotal > 0 ? (profit / subtotal) * 100 : 0
   };
 }
 
