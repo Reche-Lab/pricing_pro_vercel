@@ -171,6 +171,7 @@ function nativeOrderItem(item: QuoteItemRow) {
 
 function buildPaymentPayload(paymentTerm: QuotePaymentTermRow | null | undefined) {
   if (!paymentTerm) return null;
+  const formaRecebimentoId = numericId(paymentTerm.receiving_method_external_id);
   const categoriaId = numericId(paymentTerm.category_external_id);
   const parcelas = paymentTerm.installments.map((installment) => compactObject({
     dias: installment.days,
@@ -178,14 +179,20 @@ function buildPaymentPayload(paymentTerm: QuotePaymentTermRow | null | undefined
     valor: money(installment.amount),
     observacoes: [
       installment.notes,
-      installment.paymentMethodName ? `Forma de pagamento: ${installment.paymentMethodName}` : null
-    ].filter(Boolean).join(" | ")
+      installment.receivingMethodName ? `Forma de recebimento: ${installment.receivingMethodName}` : null
+    ].filter(Boolean).join(" | "),
+    formaRecebimento: paymentObject(numericId(installment.receivingMethodExternalId) ?? formaRecebimentoId)
   }));
 
   return compactObject({
+    formaRecebimento: paymentObject(formaRecebimentoId),
     categoria: categoriaId ? { id: categoriaId } : null,
     parcelas: parcelas.length ? parcelas : null
   });
+}
+
+function paymentObject(id: number | null) {
+  return id ? { id } : null;
 }
 
 function buildOlistNotes(input: { quote: QuoteDetail; items: QuoteItemRow[]; shipment?: ShipmentRow | null }) {

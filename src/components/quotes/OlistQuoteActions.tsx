@@ -814,7 +814,7 @@ function ActionModal({
     [defaultResponsibleExternalId, responsibleUsers]
   );
   const salesOrderNeedsPayment = action === "salesOrder" && Boolean(salesOrderPreview.data?.paymentRequired);
-  const paymentMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "payment_method"), [paymentOptions]);
+  const receivingMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "receiving_method"), [paymentOptions]);
   const paymentCategories = useMemo(() => paymentOptions.filter((option) => option.kind === "category"), [paymentOptions]);
 
   useEffect(() => {
@@ -1096,7 +1096,7 @@ function ActionModal({
                 <SalesOrderPaymentFields
                   categories={paymentCategories}
                   defaultCategory={defaultPaymentCategory}
-                  paymentMethods={paymentMethods}
+                  receivingMethods={receivingMethods}
                   total={Number(salesOrderPreview.data?.quote?.grandTotal ?? 0)}
                 />
               ) : null}
@@ -1292,7 +1292,7 @@ function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }
         <p className="font-semibold">Pagamento do pedido Olist</p>
         {paymentTerm ? (
           <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            <InfoTile compact label="Forma pagamento" value={stringValue(paymentTerm.payment_method_name)} />
+            <InfoTile compact label="Forma recebimento" value={stringValue(paymentTerm.receiving_method_name ?? paymentTerm.payment_method_name)} />
             <InfoTile compact label="Categoria" value={stringValue(paymentTerm.category_name)} />
             <InfoTile compact label="Parcelas" value={stringValue(paymentTerm.installments_count)} />
           </div>
@@ -1359,21 +1359,21 @@ function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }
 function SalesOrderPaymentFields({
   categories,
   defaultCategory,
-  paymentMethods,
+  receivingMethods,
   total
 }: {
   categories: PaymentOption[];
   defaultCategory: { externalId: string; name: string };
-  paymentMethods: PaymentOption[];
+  receivingMethods: PaymentOption[];
   total: number;
 }) {
-  const [selectedMethodValue, setSelectedMethodValue] = useState("");
+  const [selectedReceivingValue, setSelectedReceivingValue] = useState("");
   const [selectedCategoryValue, setSelectedCategoryValue] = useState(() => encodePaymentOption({
     externalId: defaultCategory.externalId,
     name: defaultCategory.name
   }));
-  const selectedMethod = decodePaymentOption(selectedMethodValue);
-  const showInstallments = shouldShowPaymentInstallments(selectedMethod?.name);
+  const selectedReceivingMethod = decodePaymentOption(selectedReceivingValue);
+  const showInstallments = shouldShowPaymentInstallments(selectedReceivingMethod?.name);
 
   return (
     <div className="grid gap-3 rounded-md border border-amber-400/25 bg-amber-400/10 p-3">
@@ -1386,16 +1386,16 @@ function SalesOrderPaymentFields({
       <input name="paymentTotal" type="hidden" value={Number.isFinite(total) ? total : 0} />
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-zinc-300">Forma de pagamento</span>
+          <span className="mb-1 block text-sm font-medium text-zinc-300">Forma de recebimento</span>
           <select
             className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
-            name="salesOrderPaymentMethod"
+            name="salesOrderReceivingMethod"
             required
-            value={selectedMethodValue}
-            onChange={(event) => setSelectedMethodValue(event.currentTarget.value)}
+            value={selectedReceivingValue}
+            onChange={(event) => setSelectedReceivingValue(event.currentTarget.value)}
           >
-            <option value="">{paymentMethods.length ? "Selecione" : "Sincronize formas de pagamento"}</option>
-            {paymentMethods.map((option) => (
+            <option value="">{receivingMethods.length ? "Selecione" : "Sincronize formas de recebimento"}</option>
+            {receivingMethods.map((option) => (
               <option key={option.externalId} value={encodePaymentOption(option)}>
                 {option.groupName ? `${option.name} - ${option.groupName}` : option.name}
               </option>
@@ -1943,8 +1943,8 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
   }
 
   if (action === "salesOrder") {
-    const paymentMethod = decodePaymentOption(stringField(formData, "salesOrderPaymentMethod"));
-    if (!paymentMethod) return { body: undefined };
+    const receivingMethod = decodePaymentOption(stringField(formData, "salesOrderReceivingMethod"));
+    if (!receivingMethod) return { body: undefined };
 
     const category = decodePaymentOption(stringField(formData, "salesOrderPaymentCategory"));
     const total = Math.max(0, Number(stringField(formData, "paymentTotal")) || 0);
@@ -1957,15 +1957,15 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
       amount: index === installmentsCount - 1
         ? Number((total - installmentAmount * (installmentsCount - 1)).toFixed(2))
         : installmentAmount,
-      paymentMethodExternalId: paymentMethod.externalId,
-      paymentMethodName: paymentMethod.name
+      receivingMethodExternalId: receivingMethod.externalId,
+      receivingMethodName: receivingMethod.name
     }));
 
     return {
       body: {
         paymentTerm: {
-          paymentMethodExternalId: paymentMethod.externalId,
-          paymentMethodName: paymentMethod.name,
+          receivingMethodExternalId: receivingMethod.externalId,
+          receivingMethodName: receivingMethod.name,
           categoryExternalId: category?.externalId || undefined,
           categoryName: category?.name || undefined,
           installmentsCount,

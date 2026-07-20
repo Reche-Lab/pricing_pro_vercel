@@ -13,12 +13,16 @@ const installmentSchema = z.object({
   amount: z.number().min(0).max(1000000),
   notes: z.string().trim().max(300).optional().nullable(),
   paymentMethodExternalId: z.string().trim().max(80).optional().nullable(),
-  paymentMethodName: z.string().trim().max(160).optional().nullable()
+  paymentMethodName: z.string().trim().max(160).optional().nullable(),
+  receivingMethodExternalId: z.string().trim().max(80).optional().nullable(),
+  receivingMethodName: z.string().trim().max(160).optional().nullable()
 });
 
 const paymentTermSchema = z.object({
-  paymentMethodExternalId: z.string().trim().min(1).max(80),
+  paymentMethodExternalId: z.string().trim().max(80).optional().nullable(),
   paymentMethodName: z.string().trim().max(160).optional().nullable(),
+  receivingMethodExternalId: z.string().trim().min(1).max(80),
+  receivingMethodName: z.string().trim().max(160).optional().nullable(),
   categoryExternalId: z.string().trim().max(80).optional().nullable(),
   categoryName: z.string().trim().max(160).optional().nullable(),
   installmentsCount: z.number().int().min(1).max(24).optional().nullable(),
