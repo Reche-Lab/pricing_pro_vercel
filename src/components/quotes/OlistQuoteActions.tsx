@@ -1223,7 +1223,7 @@ function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }
         {paymentTerm ? (
           <div className="mt-2 grid gap-2 sm:grid-cols-3">
             <InfoTile compact label="Forma pagamento" value={stringValue(paymentTerm.payment_method_name)} />
-            <InfoTile compact label="Forma recebimento" value={stringValue(paymentTerm.receiving_method_name)} />
+            <InfoTile compact label="Categoria" value={stringValue(paymentTerm.category_name)} />
             <InfoTile compact label="Parcelas" value={stringValue(paymentTerm.installments_count)} />
           </div>
         ) : (

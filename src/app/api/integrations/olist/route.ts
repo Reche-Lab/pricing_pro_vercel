@@ -28,7 +28,9 @@ const olistIntegrationSchema = z.object({
   taskPath: z.string().trim().optional().default(""),
   scopes: z.string().trim().optional().default(""),
   authScheme: z.enum(["Bearer", "Token", "ApiKey"]).default("Bearer"),
-  authHeader: z.string().trim().default("authorization")
+  authHeader: z.string().trim().default("authorization"),
+  defaultPaymentCategoryExternalId: z.string().trim().optional().default(""),
+  defaultPaymentCategoryName: z.string().trim().optional().default("")
 });
 
 export async function GET() {
@@ -88,7 +90,9 @@ export async function POST(request: Request) {
       scopes: normalizeOlistScopes(parseScopes(parsed.data.scopes)),
       api_version: "v3",
       auth_scheme: parsed.data.authScheme,
-      auth_header: parsed.data.authHeader
+      auth_header: parsed.data.authHeader,
+      default_payment_category_external_id: parsed.data.defaultPaymentCategoryExternalId || undefined,
+      default_payment_category_name: parsed.data.defaultPaymentCategoryName || undefined
     },
     credentials: {
       ...existingCredentials,
@@ -145,7 +149,9 @@ function serializeConnection(
     scopes: normalizeOlistScopes(settings.scopes).join(" "),
     apiVersion: settings.api_version ?? "v3",
     authScheme: settings.auth_scheme ?? "Bearer",
-    authHeader: settings.auth_header ?? "authorization"
+    authHeader: settings.auth_header ?? "authorization",
+    defaultPaymentCategoryExternalId: settings.default_payment_category_external_id ?? "",
+    defaultPaymentCategoryName: settings.default_payment_category_name ?? ""
   };
 }
 

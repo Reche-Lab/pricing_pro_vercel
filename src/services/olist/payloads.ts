@@ -171,7 +171,6 @@ function nativeOrderItem(item: QuoteItemRow) {
 
 function buildPaymentPayload(paymentTerm: QuotePaymentTermRow | null | undefined) {
   if (!paymentTerm) return null;
-  const formaRecebimentoId = numericId(paymentTerm.receiving_method_external_id);
   const meioPagamentoId = numericId(paymentTerm.payment_method_external_id);
   const categoriaId = numericId(paymentTerm.category_external_id);
   const parcelas = paymentTerm.installments.map((installment) => compactObject({
@@ -179,12 +178,10 @@ function buildPaymentPayload(paymentTerm: QuotePaymentTermRow | null | undefined
     data: installment.dueDate,
     valor: money(installment.amount),
     observacoes: installment.notes,
-    formaRecebimento: paymentObject(numericId(installment.receivingMethodExternalId) ?? formaRecebimentoId),
     meioPagamento: paymentObject(numericId(installment.paymentMethodExternalId) ?? meioPagamentoId)
   }));
 
   return compactObject({
-    formaRecebimento: formaRecebimentoId ? { id: formaRecebimentoId } : null,
     meioPagamento: meioPagamentoId ? { id: meioPagamentoId } : null,
     categoria: categoriaId ? { id: categoriaId } : null,
     parcelas: parcelas.length ? parcelas : null

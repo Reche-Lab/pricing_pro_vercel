@@ -14,6 +14,7 @@ import { PublicQuoteLinkButton } from "@/components/quotes/PublicQuoteLinkButton
 import { getCurrentSession } from "@/lib/auth/session";
 import { getQuoteDetail, listQuoteEditLogs } from "@/repositories/quotes";
 import { getQuotePaymentTerm, listOlistPaymentOptions } from "@/repositories/olist-payment-options";
+import { getIntegrationConnection } from "@/repositories/integrations";
 import { listProductVariants } from "@/repositories/products";
 import { listQuoteShipments } from "@/repositories/shipments";
 import { getSessionProfile, listTenantMembers, userHasPermission } from "@/repositories/users";
@@ -28,7 +29,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
   const quoteIdParsed = z.string().uuid().safeParse(quoteId);
   if (!quoteIdParsed.success) notFound();
 
-  const [profile, detail, shipments, members, canDeleteQuotesByPermission, variants, editLogs, paymentOptions, paymentTerm] = await Promise.all([
+  const [profile, detail, shipments, members, canDeleteQuotesByPermission, variants, editLogs, paymentOptions, paymentTerm, olistConnection] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
     getQuoteDetail(session.userId, session.tenantId, quoteId),
     listQuoteShipments(session.userId, session.tenantId, quoteId),
@@ -37,7 +38,8 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
     listProductVariants(session.userId, session.tenantId),
     listQuoteEditLogs(session.userId, session.tenantId, quoteId),
     listOlistPaymentOptions(session.userId, session.tenantId),
-    getQuotePaymentTerm(session.userId, session.tenantId, quoteId)
+    getQuotePaymentTerm(session.userId, session.tenantId, quoteId),
+    getIntegrationConnection(session.userId, session.tenantId, "olist")
   ]);
 
   if (!profile) redirect("/login");
@@ -92,6 +94,14 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
 
           <QuotePaymentTermPanel
             initialPaymentTerm={paymentTerm}
+            defaultCategory={{
+              externalId: typeof olistConnection?.settings.default_payment_category_external_id === "string"
+                ? olistConnection.settings.default_payment_category_external_id
+                : "",
+              name: typeof olistConnection?.settings.default_payment_category_name === "string"
+                ? olistConnection.settings.default_payment_category_name
+                : ""
+            }}
             options={paymentOptions.map((option) => ({
               kind: option.kind,
               externalId: option.external_id,

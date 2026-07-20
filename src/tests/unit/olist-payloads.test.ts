@@ -95,7 +95,6 @@ describe("olist payloads", () => {
     });
 
     expect(payload.pagamento).toEqual({
-      formaRecebimento: { id: 20 },
       meioPagamento: { id: 10 },
       categoria: { id: 30 },
       parcelas: [
@@ -104,7 +103,6 @@ describe("olist payloads", () => {
           data: "2026-07-20",
           valor: 135,
           observacoes: "Entrada",
-          formaRecebimento: { id: 20 },
           meioPagamento: { id: 10 }
         },
         {
@@ -112,7 +110,6 @@ describe("olist payloads", () => {
           data: "2026-08-19",
           valor: 135,
           observacoes: "Saldo",
-          formaRecebimento: { id: 20 },
           meioPagamento: { id: 10 }
         }
       ]

@@ -22,11 +22,13 @@ type PaymentTerm = {
 };
 
 export function QuotePaymentTermPanel({
+  defaultCategory,
   initialPaymentTerm,
   options,
   quoteId,
   total
 }: {
+  defaultCategory: { externalId: string; name: string };
   initialPaymentTerm: PaymentTerm | null;
   options: PaymentOption[];
   quoteId: string;
@@ -34,8 +36,7 @@ export function QuotePaymentTermPanel({
 }) {
   const [paymentOptions, setPaymentOptions] = useState(options);
   const [paymentMethodId, setPaymentMethodId] = useState(initialPaymentTerm?.payment_method_external_id ?? "");
-  const [receivingMethodId, setReceivingMethodId] = useState(initialPaymentTerm?.receiving_method_external_id ?? "");
-  const [categoryId, setCategoryId] = useState(initialPaymentTerm?.category_external_id ?? "");
+  const [categoryId, setCategoryId] = useState(initialPaymentTerm?.category_external_id ?? defaultCategory.externalId ?? "");
   const [installmentsCount, setInstallmentsCount] = useState(initialPaymentTerm?.installments_count ?? 1);
   const [firstDueDays, setFirstDueDays] = useState(0);
   const [intervalDays, setIntervalDays] = useState(30);
@@ -44,19 +45,22 @@ export function QuotePaymentTermPanel({
   const [message, setMessage] = useState("");
 
   const paymentMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "payment_method"), [paymentOptions]);
-  const receivingMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "receiving_method"), [paymentOptions]);
   const categories = useMemo(() => paymentOptions.filter((option) => option.kind === "category"), [paymentOptions]);
   const selectedPaymentMethod = paymentMethods.find((option) => option.externalId === paymentMethodId) ?? null;
-  const selectedReceivingMethod = receivingMethods.find((option) => option.externalId === receivingMethodId) ?? null;
-  const selectedCategory = categories.find((option) => option.externalId === categoryId) ?? null;
+  const selectedCategory = categories.find((option) => option.externalId === categoryId) ?? (defaultCategory.externalId ? {
+    kind: "category" as const,
+    externalId: defaultCategory.externalId,
+    name: defaultCategory.name || "Categoria padrão",
+    groupName: null
+  } : null);
+  const showInstallments = shouldShowPaymentInstallments(selectedPaymentMethod?.name);
   const paymentTerm = buildPaymentTermPayload({
     total,
     paymentMethod: selectedPaymentMethod,
-    receivingMethod: selectedReceivingMethod,
     category: selectedCategory,
-    installmentsCount,
+    installmentsCount: showInstallments ? installmentsCount : 1,
     firstDueDays,
-    intervalDays,
+    intervalDays: showInstallments ? intervalDays : 0,
     notes
   });
   const selected = Boolean(paymentTerm);
@@ -105,6 +109,29 @@ export function QuotePaymentTermPanel({
     setMessage("Condição salva. O pedido de venda Olist usará essas informações.");
   }
 
+  async function setCategoryAsDefault() {
+    const category = categories.find((option) => option.externalId === categoryId);
+    if (!category) {
+      setState("error");
+      setMessage("Selecione uma categoria para definir como padrão.");
+      return;
+    }
+    setState("saving");
+    const response = await fetch("/api/olist/payment-options/default-category", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ categoryExternalId: category.externalId, categoryName: category.name })
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.ok) {
+      setState("error");
+      setMessage(data?.error ?? "Não foi possível definir categoria padrão.");
+      return;
+    }
+    setState("success");
+    setMessage("Categoria definida como padrão para os próximos pedidos.");
+  }
+
   return (
     <section className={`rounded-lg border p-4 ${
       selected
@@ -133,12 +160,29 @@ export function QuotePaymentTermPanel({
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <SelectOption label="Forma de pagamento" options={paymentMethods} placeholder={paymentMethods.length ? "Selecione" : "Sincronize"} value={paymentMethodId} onChange={setPaymentMethodId} />
-        <SelectOption label="Forma de recebimento" options={receivingMethods} placeholder={receivingMethods.length ? "Opcional" : "Opcional"} value={receivingMethodId} onChange={setReceivingMethodId} />
-        <SelectOption label="Categoria" options={categories} placeholder="Opcional" value={categoryId} onChange={setCategoryId} />
-        <NumberInput label="Parcelas" max={24} min={1} value={installmentsCount} onChange={setInstallmentsCount} />
+        <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-500">
+          <span className="block font-medium text-zinc-300">Categoria padrão</span>
+          <span className="mt-1 block">{selectedCategory?.name ?? "Não definida"}</span>
+        </div>
+        {showInstallments ? <NumberInput label="Parcelas" max={24} min={1} value={installmentsCount} onChange={setInstallmentsCount} /> : null}
         <NumberInput label="1º vencimento em dias" min={0} value={firstDueDays} onChange={setFirstDueDays} />
-        <NumberInput label="Intervalo entre parcelas" min={0} value={intervalDays} onChange={setIntervalDays} />
+        {showInstallments ? <NumberInput label="Intervalo entre parcelas" min={0} value={intervalDays} onChange={setIntervalDays} /> : null}
       </div>
+      <details className="mt-2 rounded-md border border-zinc-800 bg-zinc-950/40">
+        <summary className="focus-ring cursor-pointer list-none rounded-md px-3 py-2 text-xs font-medium text-zinc-400 hover:bg-zinc-900">
+          Categoria avançada
+        </summary>
+        <div className="grid gap-2 border-t border-zinc-800 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <SelectOption label="Categoria do pedido" options={categories} placeholder="Usar padrão" value={categoryId} onChange={setCategoryId} />
+          <button
+            className="focus-ring inline-flex h-10 items-center justify-center rounded-md border border-emerald-400/30 px-3 text-xs font-medium text-emerald-100 hover:bg-emerald-400/10"
+            type="button"
+            onClick={setCategoryAsDefault}
+          >
+            Definir como padrão
+          </button>
+        </div>
+      </details>
       <label className="mt-2 block">
         <span className="mb-1 block text-xs font-medium text-zinc-400">Observação financeira</span>
         <input
@@ -232,7 +276,6 @@ function buildPaymentTermPayload({
   intervalDays,
   notes,
   paymentMethod,
-  receivingMethod,
   total
 }: {
   category: PaymentOption | null;
@@ -241,10 +284,9 @@ function buildPaymentTermPayload({
   intervalDays: number;
   notes: string;
   paymentMethod: PaymentOption | null;
-  receivingMethod: PaymentOption | null;
   total: number;
 }) {
-  if (!paymentMethod && !receivingMethod && !category) return null;
+  if (!paymentMethod && !category) return null;
   const count = Math.max(1, Math.min(24, Math.trunc(installmentsCount || 1)));
   const totalCents = Math.max(0, Math.round(total * 100));
   const baseCents = Math.floor(totalCents / count);
@@ -262,20 +304,29 @@ function buildPaymentTermPayload({
       notes: notes.trim() || `Parcela ${index + 1}/${count}`,
       paymentMethodExternalId: paymentMethod?.externalId ?? null,
       paymentMethodName: paymentMethod?.name ?? null,
-      receivingMethodExternalId: receivingMethod?.externalId ?? null,
-      receivingMethodName: receivingMethod?.name ?? null
+      receivingMethodExternalId: null,
+      receivingMethodName: null
     };
   });
 
   return {
     paymentMethodExternalId: paymentMethod?.externalId ?? null,
     paymentMethodName: paymentMethod?.name ?? null,
-    receivingMethodExternalId: receivingMethod?.externalId ?? null,
-    receivingMethodName: receivingMethod?.name ?? null,
+    receivingMethodExternalId: null,
+    receivingMethodName: null,
     categoryExternalId: category?.externalId ?? null,
     categoryName: category?.name ?? null,
     installmentsCount: count,
     notes: notes.trim() || null,
     installments
   };
+}
+
+function shouldShowPaymentInstallments(name: string | null | undefined) {
+  const normalized = normalizeText(name ?? "");
+  return normalized.includes("cartao de credito") || normalized.includes("credito") || normalized.includes("link de pagamento");
+}
+
+function normalizeText(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }

@@ -47,6 +47,10 @@ type PricingCalculatorProps = {
     melhorEnvio: boolean;
   };
   defaultOriginPostalCode?: string;
+  defaultPaymentCategory?: {
+    externalId: string;
+    name: string;
+  };
   olistPaymentOptions?: OlistPaymentOption[];
   variants: DemoProductVariant[];
   platforms: Record<string, PricingPlatformOption>;
@@ -148,6 +152,7 @@ const emptyPlatform: PricingPlatformOption = {
 export function PricingCalculator({
   activeShippingServices = { correios: false, melhorEnvio: false },
   defaultOriginPostalCode = "",
+  defaultPaymentCategory = { externalId: "", name: "" },
   olistPaymentOptions = [],
   variants,
   platforms,
@@ -224,8 +229,6 @@ export function PricingCalculator({
   const [draftAttention, setDraftAttention] = useState(false);
   const [paymentOptions, setPaymentOptions] = useState<OlistPaymentOption[]>(olistPaymentOptions);
   const [paymentMethodId, setPaymentMethodId] = useState("");
-  const [receivingMethodId, setReceivingMethodId] = useState("");
-  const [paymentCategoryId, setPaymentCategoryId] = useState("");
   const [paymentInstallmentsCount, setPaymentInstallmentsCount] = useState(1);
   const [paymentFirstDueDays, setPaymentFirstDueDays] = useState(0);
   const [paymentIntervalDays, setPaymentIntervalDays] = useState(30);
@@ -353,21 +356,24 @@ export function PricingCalculator({
     [draftItemsSubtotal, includeShipping, shippingAmount]
   );
   const paymentMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "payment_method"), [paymentOptions]);
-  const receivingMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "receiving_method"), [paymentOptions]);
-  const paymentCategories = useMemo(() => paymentOptions.filter((option) => option.kind === "category"), [paymentOptions]);
   const selectedPaymentMethod = paymentMethods.find((option) => option.externalId === paymentMethodId) ?? null;
-  const selectedReceivingMethod = receivingMethods.find((option) => option.externalId === receivingMethodId) ?? null;
-  const selectedPaymentCategory = paymentCategories.find((option) => option.externalId === paymentCategoryId) ?? null;
+  const showPaymentInstallments = shouldShowPaymentInstallments(selectedPaymentMethod?.name);
   const paymentTerm = useMemo(() => buildPaymentTermPayload({
     total: draftItems.length > 0 ? draftEstimatedTotal : simulatedResult?.subtotal ? simulatedResult.subtotal + (includeShipping ? shippingAmount : 0) : 0,
     paymentMethod: selectedPaymentMethod,
-    receivingMethod: selectedReceivingMethod,
-    category: selectedPaymentCategory,
-    installmentsCount: paymentInstallmentsCount,
+    category: defaultPaymentCategory.externalId ? {
+      kind: "category",
+      externalId: defaultPaymentCategory.externalId,
+      name: defaultPaymentCategory.name || "Categoria padrão",
+      groupName: null
+    } : null,
+    installmentsCount: showPaymentInstallments ? paymentInstallmentsCount : 1,
     firstDueDays: paymentFirstDueDays,
-    intervalDays: paymentIntervalDays,
+    intervalDays: showPaymentInstallments ? paymentIntervalDays : 0,
     notes: paymentNotes
   }), [
+    defaultPaymentCategory.externalId,
+    defaultPaymentCategory.name,
     draftEstimatedTotal,
     draftItems.length,
     includeShipping,
@@ -375,9 +381,8 @@ export function PricingCalculator({
     paymentInstallmentsCount,
     paymentIntervalDays,
     paymentNotes,
-    selectedPaymentCategory,
     selectedPaymentMethod,
-    selectedReceivingMethod,
+    showPaymentInstallments,
     shippingAmount,
     simulatedResult?.subtotal
   ]);
@@ -1928,8 +1933,7 @@ export function PricingCalculator({
       onUpdateItemManualPrice={updateDraftItemManualPrice}
       onUpdateItemManualReason={updateDraftItemManualReason}
       onUpdateNotes={setDraftNotes}
-      paymentCategories={paymentCategories}
-      paymentCategoryId={paymentCategoryId}
+      defaultPaymentCategoryName={defaultPaymentCategory.name}
       paymentFirstDueDays={paymentFirstDueDays}
       paymentInstallmentsCount={paymentInstallmentsCount}
       paymentIntervalDays={paymentIntervalDays}
@@ -1939,15 +1943,12 @@ export function PricingCalculator({
       paymentNotes={paymentNotes}
       paymentSelected={paymentSelected}
       paymentSyncState={paymentSyncState}
-      receivingMethodId={receivingMethodId}
-      receivingMethods={receivingMethods}
-      onPaymentCategoryChange={setPaymentCategoryId}
+      showPaymentInstallments={showPaymentInstallments}
       onPaymentFirstDueDaysChange={setPaymentFirstDueDays}
       onPaymentInstallmentsCountChange={setPaymentInstallmentsCount}
       onPaymentIntervalDaysChange={setPaymentIntervalDays}
       onPaymentMethodChange={setPaymentMethodId}
       onPaymentNotesChange={setPaymentNotes}
-      onReceivingMethodChange={setReceivingMethodId}
       onSyncPaymentOptions={syncOlistPaymentOptions}
       shippingAmount={shippingAmount}
     />
@@ -1984,8 +1985,7 @@ function QuoteDraftDrawer({
   onUpdateItemManualPrice,
   onUpdateItemManualReason,
   onUpdateNotes,
-  paymentCategories,
-  paymentCategoryId,
+  defaultPaymentCategoryName,
   paymentFirstDueDays,
   paymentInstallmentsCount,
   paymentIntervalDays,
@@ -1995,15 +1995,12 @@ function QuoteDraftDrawer({
   paymentNotes,
   paymentSelected,
   paymentSyncState,
-  receivingMethodId,
-  receivingMethods,
-  onPaymentCategoryChange,
+  showPaymentInstallments,
   onPaymentFirstDueDaysChange,
   onPaymentInstallmentsCountChange,
   onPaymentIntervalDaysChange,
   onPaymentMethodChange,
   onPaymentNotesChange,
-  onReceivingMethodChange,
   onSyncPaymentOptions,
   shippingAmount
 }: {
@@ -2028,8 +2025,7 @@ function QuoteDraftDrawer({
   onUpdateItemManualPrice: (itemId: string, unitPrice: number) => void;
   onUpdateItemManualReason: (itemId: string, reason: string) => void;
   onUpdateNotes: (value: string) => void;
-  paymentCategories: OlistPaymentOption[];
-  paymentCategoryId: string;
+  defaultPaymentCategoryName: string;
   paymentFirstDueDays: number;
   paymentInstallmentsCount: number;
   paymentIntervalDays: number;
@@ -2039,15 +2035,12 @@ function QuoteDraftDrawer({
   paymentNotes: string;
   paymentSelected: boolean;
   paymentSyncState: "idle" | "syncing" | "error";
-  receivingMethodId: string;
-  receivingMethods: OlistPaymentOption[];
-  onPaymentCategoryChange: (value: string) => void;
+  showPaymentInstallments: boolean;
   onPaymentFirstDueDaysChange: (value: number) => void;
   onPaymentInstallmentsCountChange: (value: number) => void;
   onPaymentIntervalDaysChange: (value: number) => void;
   onPaymentMethodChange: (value: string) => void;
   onPaymentNotesChange: (value: string) => void;
-  onReceivingMethodChange: (value: string) => void;
   onSyncPaymentOptions: () => void;
   shippingAmount: number;
 }) {
@@ -2126,49 +2119,45 @@ function QuoteDraftDrawer({
                     value={paymentMethodId}
                     onChange={onPaymentMethodChange}
                   />
-                  <SelectOption
-                    label="Forma de recebimento"
-                    options={receivingMethods}
-                    placeholder={receivingMethods.length ? "Opcional" : "Opcional"}
-                    value={receivingMethodId}
-                    onChange={onReceivingMethodChange}
-                  />
-                  <SelectOption
-                    label="Categoria"
-                    options={paymentCategories}
-                    placeholder="Opcional"
-                    value={paymentCategoryId}
-                    onChange={onPaymentCategoryChange}
-                  />
+                  <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-500">
+                    <span className="block font-medium text-zinc-300">Categoria padrão</span>
+                    <span className="mt-1 block">
+                      {defaultPaymentCategoryName || "Defina em Configurações > Olist e CRM"}
+                    </span>
+                  </div>
+                  {showPaymentInstallments ? (
+                    <>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-medium text-zinc-500">Parcelas</span>
+                        <input
+                          className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+                          min={1}
+                          max={24}
+                          type="number"
+                          value={paymentInstallmentsCount}
+                          onChange={(event) => onPaymentInstallmentsCountChange(Math.max(1, Math.min(24, Number(event.currentTarget.value))))}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-medium text-zinc-500">Intervalo entre parcelas</span>
+                        <input
+                          className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+                          min={0}
+                          type="number"
+                          value={paymentIntervalDays}
+                          onChange={(event) => onPaymentIntervalDaysChange(Math.max(0, Number(event.currentTarget.value)))}
+                        />
+                      </label>
+                    </>
+                  ) : null}
                   <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-zinc-500">Parcelas</span>
-                    <input
-                      className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
-                      min={1}
-                      max={24}
-                      type="number"
-                      value={paymentInstallmentsCount}
-                      onChange={(event) => onPaymentInstallmentsCountChange(Math.max(1, Math.min(24, Number(event.currentTarget.value))))}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-zinc-500">1º vencimento</span>
+                    <span className="mb-1 block text-xs font-medium text-zinc-500">Vencimento em dias</span>
                     <input
                       className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
                       min={0}
                       type="number"
                       value={paymentFirstDueDays}
                       onChange={(event) => onPaymentFirstDueDaysChange(Math.max(0, Number(event.currentTarget.value)))}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-zinc-500">Intervalo</span>
-                    <input
-                      className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
-                      min={0}
-                      type="number"
-                      value={paymentIntervalDays}
-                      onChange={(event) => onPaymentIntervalDaysChange(Math.max(0, Number(event.currentTarget.value)))}
                     />
                   </label>
                 </div>
@@ -2498,7 +2487,6 @@ function buildPaymentTermPayload({
   intervalDays,
   notes,
   paymentMethod,
-  receivingMethod,
   total
 }: {
   category: OlistPaymentOption | null;
@@ -2507,10 +2495,9 @@ function buildPaymentTermPayload({
   intervalDays: number;
   notes: string;
   paymentMethod: OlistPaymentOption | null;
-  receivingMethod: OlistPaymentOption | null;
   total: number;
 }) {
-  if (!paymentMethod && !receivingMethod && !category) return null;
+  if (!paymentMethod && !category) return null;
   const count = Math.max(1, Math.min(24, Math.trunc(installmentsCount || 1)));
   const totalCents = Math.max(0, Math.round(total * 100));
   const baseCents = Math.floor(totalCents / count);
@@ -2528,22 +2515,31 @@ function buildPaymentTermPayload({
       notes: notes.trim() || `Parcela ${index + 1}/${count}`,
       paymentMethodExternalId: paymentMethod?.externalId ?? null,
       paymentMethodName: paymentMethod?.name ?? null,
-      receivingMethodExternalId: receivingMethod?.externalId ?? null,
-      receivingMethodName: receivingMethod?.name ?? null
+      receivingMethodExternalId: null,
+      receivingMethodName: null
     };
   });
 
   return {
     paymentMethodExternalId: paymentMethod?.externalId ?? null,
     paymentMethodName: paymentMethod?.name ?? null,
-    receivingMethodExternalId: receivingMethod?.externalId ?? null,
-    receivingMethodName: receivingMethod?.name ?? null,
+    receivingMethodExternalId: null,
+    receivingMethodName: null,
     categoryExternalId: category?.externalId ?? null,
     categoryName: category?.name ?? null,
     installmentsCount: count,
     notes: notes.trim() || null,
     installments
   };
+}
+
+function shouldShowPaymentInstallments(name: string | null | undefined) {
+  const normalized = normalizeText(name ?? "");
+  return normalized.includes("cartao de credito") || normalized.includes("credito") || normalized.includes("link de pagamento");
+}
+
+function normalizeText(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
 function buildDemoWhatsAppText({

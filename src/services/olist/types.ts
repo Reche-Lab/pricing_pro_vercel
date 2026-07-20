@@ -17,6 +17,8 @@ export type OlistSettings = {
   api_version?: "v3";
   auth_scheme?: "Bearer" | "Token" | "ApiKey";
   auth_header?: string;
+  default_payment_category_external_id?: string;
+  default_payment_category_name?: string;
 };
 
 export type OlistCredentials = {

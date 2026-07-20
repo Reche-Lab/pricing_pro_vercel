@@ -20,12 +20,21 @@ type OlistConnectionView = {
   taskPath?: string;
   authScheme?: "Bearer" | "Token" | "ApiKey";
   authHeader?: string;
+  defaultPaymentCategoryExternalId?: string;
+  defaultPaymentCategoryName?: string;
   appBaseUrl?: string;
   authorizePath?: string;
   tokenPath?: string;
   clientId?: string;
   scopes?: string;
   apiVersion?: "v3";
+};
+
+type OlistPaymentOptionView = {
+  kind: "payment_method" | "receiving_method" | "category";
+  externalId: string;
+  name: string;
+  groupName: string | null;
 };
 
 type OlistIntegrations = {
@@ -37,6 +46,7 @@ export function OlistIntegrationPanel() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState("");
   const [callbackUrl, setCallbackUrl] = useState("");
+  const [paymentOptions, setPaymentOptions] = useState<OlistPaymentOptionView[]>([]);
 
   useEffect(() => {
     setCallbackUrl(`${window.location.origin}/api/olist/oauth/callback`);
@@ -44,12 +54,26 @@ export function OlistIntegrationPanel() {
     if (params.get("olist") === "connected") setMessage("OAuth Olist conectado.");
     if (params.get("olist") === "error") setMessage(params.get("message") ?? "Erro no OAuth Olist.");
     void loadIntegrations();
+    void loadPaymentOptions();
   }, []);
 
   async function loadIntegrations() {
     const response = await fetch("/api/integrations/olist");
     const data = await response.json().catch(() => null);
     if (response.ok && data?.ok) setIntegrations(data.integrations);
+  }
+
+  async function loadPaymentOptions() {
+    const response = await fetch("/api/olist/payment-options");
+    const data = await response.json().catch(() => null);
+    if (response.ok && data?.ok) {
+      setPaymentOptions((data.options ?? []).map((option: Record<string, unknown>) => ({
+        kind: option.kind,
+        externalId: option.external_id,
+        name: option.name,
+        groupName: option.group_name ?? null
+      })).filter((option: OlistPaymentOptionView) => option.kind && option.externalId && option.name));
+    }
   }
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
@@ -78,7 +102,9 @@ export function OlistIntegrationPanel() {
         clientSecret: form.get("clientSecret"),
         scopes: form.get("scopes"),
         authScheme: form.get("authScheme"),
-        authHeader: form.get("authHeader")
+        authHeader: form.get("authHeader"),
+        defaultPaymentCategoryExternalId: form.get("defaultPaymentCategoryExternalId") ?? "",
+        defaultPaymentCategoryName: selectedOptionName(paymentOptions, String(form.get("defaultPaymentCategoryExternalId") ?? ""))
       })
     });
     const data = await response.json().catch(() => null);
@@ -123,6 +149,7 @@ export function OlistIntegrationPanel() {
     setMessage(
       `Opções financeiras sincronizadas: ${data.counts?.paymentMethods ?? 0} formas de pagamento, ${data.counts?.receivingMethods ?? 0} formas de recebimento.`
     );
+    await loadPaymentOptions();
   }
 
   return (
@@ -146,6 +173,7 @@ export function OlistIntegrationPanel() {
           onSyncPaymentOptions={syncPaymentOptions}
           onSubmit={save}
           paymentSyncLoading={loading === "olist_payments"}
+          paymentOptions={paymentOptions}
           title="Olist API v3"
         />
       </div>
@@ -864,7 +892,8 @@ function IntegrationForm({
   onConnect,
   onSyncPaymentOptions,
   onSubmit,
-  paymentSyncLoading
+  paymentSyncLoading,
+  paymentOptions
 }: {
   title: string;
   connection?: OlistConnectionView;
@@ -874,7 +903,9 @@ function IntegrationForm({
   onSyncPaymentOptions: () => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   paymentSyncLoading: boolean;
+  paymentOptions: OlistPaymentOptionView[];
 }) {
+  const categoryOptions = paymentOptions.filter((option) => option.kind === "category");
   return (
     <form className="rounded-md border border-zinc-800 p-4" onSubmit={onSubmit}>
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -906,6 +937,24 @@ function IntegrationForm({
           Ao salvar, o OAuth atual é preservado. Preencha o secret somente na primeira configuração ou quando quiser trocar o aplicativo.
         </p>
         <Input defaultValue={connection?.scopes ?? "openid"} label="Scopes OAuth" name="scopes" placeholder="openid" />
+        <label className="block rounded-md border border-emerald-400/20 bg-emerald-400/5 p-3">
+          <span className="mb-1 block text-sm font-medium text-emerald-100">Categoria padrão para pagamentos</span>
+          <select
+            className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
+            defaultValue={connection?.defaultPaymentCategoryExternalId ?? ""}
+            name="defaultPaymentCategoryExternalId"
+          >
+            <option value="">Sem categoria padrão</option>
+            {categoryOptions.map((option) => (
+              <option key={option.externalId} value={option.externalId}>
+                {option.groupName ? `${option.name} - ${option.groupName}` : option.name}
+              </option>
+            ))}
+          </select>
+          <span className="mt-2 block text-xs leading-5 text-zinc-500">
+            Use “Sincronizar pagamentos” para carregar as categorias do Olist. A categoria padrão será enviada no pedido de venda.
+          </span>
+        </label>
         <div className="grid gap-3 md:grid-cols-2">
           <label className="block">
             <span className="mb-1 block text-sm font-medium text-zinc-300">Auth scheme</span>
@@ -1005,4 +1054,9 @@ function Input({
       />
     </label>
   );
+}
+
+function selectedOptionName(options: OlistPaymentOptionView[], externalId: string) {
+  const option = options.find((item) => item.externalId === externalId);
+  return option?.name ?? "";
 }
