@@ -2089,99 +2089,102 @@ function QuoteDraftDrawer({
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
           <div className="grid gap-3">
-            <div className={`rounded-lg border p-3 ${
-              paymentSelected
-                ? "border-emerald-400/25 bg-emerald-400/10"
-                : "border-amber-400/35 bg-amber-400/10"
-            }`}>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className={`text-sm font-semibold ${paymentSelected ? "text-emerald-100" : "text-amber-100"}`}>
-                    Condição de pagamento
+            <details className="rounded-lg border border-zinc-800 bg-zinc-900/45">
+              <summary className="focus-ring flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-900">
+                <span className="min-w-0">
+                  <span className="font-medium text-zinc-200">Pagamento Olist</span>
+                  <span className="ml-2 text-zinc-500">
+                    {paymentSelected
+                      ? `${paymentMethodId ? "selecionado" : "parcial"} · ${paymentInstallmentsCount}x`
+                      : "opcional no orçamento"}
+                  </span>
+                </span>
+                <span className={paymentSelected ? "shrink-0 text-emerald-300" : "shrink-0 text-zinc-500"}>
+                  {paymentSelected ? "pronto" : "configurar"}
+                </span>
+              </summary>
+              <div className="grid gap-2 border-t border-zinc-800 p-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs leading-5 text-zinc-500">
+                    Opcional para criar o orçamento. Obrigatório apenas antes de gerar pedido Olist.
                   </p>
-                  <p className="mt-1 text-xs text-zinc-400">
-                    Opcional para criar o orçamento. Obrigatório antes de gerar o pedido de venda no Olist.
-                  </p>
+                  <button
+                    className="focus-ring inline-flex h-8 w-fit items-center justify-center gap-2 rounded-md border border-zinc-700 px-2.5 text-xs font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-60"
+                    disabled={paymentSyncState === "syncing"}
+                    type="button"
+                    onClick={onSyncPaymentOptions}
+                  >
+                    <RotateCcw size={12} />
+                    {paymentSyncState === "syncing" ? "Sincronizando..." : "Sincronizar"}
+                  </button>
                 </div>
-                <button
-                  className="focus-ring inline-flex h-9 w-fit items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-60"
-                  disabled={paymentSyncState === "syncing"}
-                  type="button"
-                  onClick={onSyncPaymentOptions}
-                >
-                  <RotateCcw size={13} />
-                  {paymentSyncState === "syncing" ? "Sincronizando..." : "Sincronizar Olist"}
-                </button>
-              </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <SelectOption
-                  label="Forma de pagamento"
-                  options={paymentMethods}
-                  placeholder={paymentMethods.length ? "Selecione" : "Sincronize o Olist"}
-                  value={paymentMethodId}
-                  onChange={onPaymentMethodChange}
-                />
-                <SelectOption
-                  label="Forma de recebimento"
-                  options={receivingMethods}
-                  placeholder={receivingMethods.length ? "Selecione" : "Opcional"}
-                  value={receivingMethodId}
-                  onChange={onReceivingMethodChange}
-                />
-                <SelectOption
-                  label="Categoria financeira"
-                  options={paymentCategories}
-                  placeholder={paymentCategories.length ? "Opcional" : "Opcional"}
-                  value={paymentCategoryId}
-                  onChange={onPaymentCategoryChange}
-                />
-                <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-400">Parcelas</span>
-                  <input
-                    className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
-                    min={1}
-                    max={24}
-                    type="number"
-                    value={paymentInstallmentsCount}
-                    onChange={(event) => onPaymentInstallmentsCountChange(Math.max(1, Math.min(24, Number(event.currentTarget.value))))}
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <SelectOption
+                    label="Forma de pagamento"
+                    options={paymentMethods}
+                    placeholder={paymentMethods.length ? "Selecione" : "Sincronize o Olist"}
+                    value={paymentMethodId}
+                    onChange={onPaymentMethodChange}
                   />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-400">1º vencimento em dias</span>
-                  <input
-                    className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
-                    min={0}
-                    type="number"
-                    value={paymentFirstDueDays}
-                    onChange={(event) => onPaymentFirstDueDaysChange(Math.max(0, Number(event.currentTarget.value)))}
+                  <SelectOption
+                    label="Forma de recebimento"
+                    options={receivingMethods}
+                    placeholder={receivingMethods.length ? "Opcional" : "Opcional"}
+                    value={receivingMethodId}
+                    onChange={onReceivingMethodChange}
                   />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-zinc-400">Intervalo entre parcelas</span>
-                  <input
-                    className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
-                    min={0}
-                    type="number"
-                    value={paymentIntervalDays}
-                    onChange={(event) => onPaymentIntervalDaysChange(Math.max(0, Number(event.currentTarget.value)))}
+                  <SelectOption
+                    label="Categoria"
+                    options={paymentCategories}
+                    placeholder="Opcional"
+                    value={paymentCategoryId}
+                    onChange={onPaymentCategoryChange}
                   />
-                </label>
-              </div>
-              <label className="mt-2 block">
-                <span className="mb-1 block text-xs font-medium text-zinc-400">Observação financeira</span>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium text-zinc-500">Parcelas</span>
+                    <input
+                      className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+                      min={1}
+                      max={24}
+                      type="number"
+                      value={paymentInstallmentsCount}
+                      onChange={(event) => onPaymentInstallmentsCountChange(Math.max(1, Math.min(24, Number(event.currentTarget.value))))}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium text-zinc-500">1º vencimento</span>
+                    <input
+                      className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+                      min={0}
+                      type="number"
+                      value={paymentFirstDueDays}
+                      onChange={(event) => onPaymentFirstDueDaysChange(Math.max(0, Number(event.currentTarget.value)))}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium text-zinc-500">Intervalo</span>
+                    <input
+                      className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+                      min={0}
+                      type="number"
+                      value={paymentIntervalDays}
+                      onChange={(event) => onPaymentIntervalDaysChange(Math.max(0, Number(event.currentTarget.value)))}
+                    />
+                  </label>
+                </div>
                 <input
-                  className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
-                  placeholder="Ex.: Pix à vista, entrada + 2 parcelas..."
+                  className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+                  placeholder="Observação financeira opcional"
                   value={paymentNotes}
                   onChange={(event) => onPaymentNotesChange(event.currentTarget.value)}
                 />
-              </label>
-              {paymentMessage ? (
-                <p className={`mt-2 text-xs ${paymentSyncState === "error" ? "text-rose-200" : "text-zinc-400"}`}>
-                  {paymentMessage}
-                </p>
-              ) : null}
-            </div>
+                {paymentMessage ? (
+                  <p className={`text-xs ${paymentSyncState === "error" ? "text-rose-200" : "text-zinc-500"}`}>
+                    {paymentMessage}
+                  </p>
+                ) : null}
+              </div>
+            </details>
 
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3">
               <p className="text-sm font-medium text-white">Regra de cobranca</p>
