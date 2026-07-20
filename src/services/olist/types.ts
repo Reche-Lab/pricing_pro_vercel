@@ -8,6 +8,7 @@ export type OlistSettings = {
   quote_path?: string;
   sales_order_path?: string;
   sales_order_items_path?: string;
+  sales_order_dispatch_path?: string;
   invoice_path?: string;
   invoice_emit_path?: string;
   invoice_cancel_path?: string;
@@ -19,6 +20,19 @@ export type OlistSettings = {
   auth_header?: string;
   default_payment_category_external_id?: string;
   default_payment_category_name?: string;
+  default_frete_por_conta?: "R" | "D" | "T" | "3" | "4" | "S";
+  melhor_envio_forma_envio_id?: string;
+  melhor_envio_forma_envio_name?: string;
+  correios_forma_envio_id?: string;
+  correios_forma_envio_name?: string;
+  pickup_forma_envio_id?: string;
+  pickup_forma_envio_name?: string;
+  carrier_forma_envio_id?: string;
+  carrier_forma_envio_name?: string;
+  sedex_forma_frete_id?: string;
+  sedex_forma_frete_name?: string;
+  pac_forma_frete_id?: string;
+  pac_forma_frete_name?: string;
 };
 
 export type OlistCredentials = {

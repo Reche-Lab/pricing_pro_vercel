@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CreditCard, KeyRound, PlayCircle, Route, Save, Store, X } from "lucide-react";
+import { CreditCard, KeyRound, PlayCircle, Route, Save, Search, Store, X } from "lucide-react";
 import { OLIST_API_V3_BASE_URL, OLIST_APP_BASE_URL, OLIST_DEFAULT_PATHS } from "@/services/olist/defaults";
 
 type OlistConnectionView = {
@@ -13,6 +13,7 @@ type OlistConnectionView = {
   quotePath?: string;
   customerLookupPath?: string;
   salesOrderPath?: string;
+  salesOrderDispatchPath?: string;
   invoicePath?: string;
   invoiceEmitPath?: string;
   invoiceCancelPath?: string;
@@ -22,6 +23,19 @@ type OlistConnectionView = {
   authHeader?: string;
   defaultPaymentCategoryExternalId?: string;
   defaultPaymentCategoryName?: string;
+  defaultFretePorConta?: "R" | "D" | "T" | "3" | "4" | "S";
+  melhorEnvioFormaEnvioId?: string;
+  melhorEnvioFormaEnvioName?: string;
+  correiosFormaEnvioId?: string;
+  correiosFormaEnvioName?: string;
+  pickupFormaEnvioId?: string;
+  pickupFormaEnvioName?: string;
+  carrierFormaEnvioId?: string;
+  carrierFormaEnvioName?: string;
+  sedexFormaFreteId?: string;
+  sedexFormaFreteName?: string;
+  pacFormaFreteId?: string;
+  pacFormaFreteName?: string;
   appBaseUrl?: string;
   authorizePath?: string;
   tokenPath?: string;
@@ -37,6 +51,21 @@ type OlistPaymentOptionView = {
   groupName: string | null;
 };
 
+type OlistShippingOptionView = {
+  id: string;
+  name: string | null;
+  type: string | null;
+  status: string | null;
+  gatewayName: string | null;
+  freightForms: Array<{
+    id: string;
+    name: string;
+    code: string | null;
+    externalCode: string | null;
+    deliveryType: string | null;
+  }>;
+};
+
 type OlistIntegrations = {
   olist: OlistConnectionView;
 };
@@ -47,6 +76,7 @@ export function OlistIntegrationPanel() {
   const [loading, setLoading] = useState("");
   const [callbackUrl, setCallbackUrl] = useState("");
   const [paymentOptions, setPaymentOptions] = useState<OlistPaymentOptionView[]>([]);
+  const [shippingOptions, setShippingOptions] = useState<OlistShippingOptionView[]>([]);
 
   useEffect(() => {
     setCallbackUrl(`${window.location.origin}/api/olist/oauth/callback`);
@@ -93,6 +123,7 @@ export function OlistIntegrationPanel() {
         quotePath: form.get("quotePath") ?? "",
         customerLookupPath: form.get("customerLookupPath") ?? "",
         salesOrderPath: form.get("salesOrderPath") ?? "",
+        salesOrderDispatchPath: form.get("salesOrderDispatchPath") ?? "",
         invoicePath: form.get("invoicePath") ?? "",
         invoiceEmitPath: form.get("invoiceEmitPath") ?? "",
         invoiceCancelPath: form.get("invoiceCancelPath") ?? "",
@@ -104,7 +135,20 @@ export function OlistIntegrationPanel() {
         authScheme: form.get("authScheme"),
         authHeader: form.get("authHeader"),
         defaultPaymentCategoryExternalId: form.get("defaultPaymentCategoryExternalId") ?? "",
-        defaultPaymentCategoryName: selectedOptionName(paymentOptions, String(form.get("defaultPaymentCategoryExternalId") ?? ""))
+        defaultPaymentCategoryName: selectedOptionName(paymentOptions, String(form.get("defaultPaymentCategoryExternalId") ?? "")),
+        defaultFretePorConta: form.get("defaultFretePorConta") ?? "D",
+        melhorEnvioFormaEnvioId: form.get("melhorEnvioFormaEnvioId") ?? "",
+        melhorEnvioFormaEnvioName: form.get("melhorEnvioFormaEnvioName") ?? "",
+        correiosFormaEnvioId: form.get("correiosFormaEnvioId") ?? "",
+        correiosFormaEnvioName: form.get("correiosFormaEnvioName") ?? "",
+        pickupFormaEnvioId: form.get("pickupFormaEnvioId") ?? "",
+        pickupFormaEnvioName: form.get("pickupFormaEnvioName") ?? "",
+        carrierFormaEnvioId: form.get("carrierFormaEnvioId") ?? "",
+        carrierFormaEnvioName: form.get("carrierFormaEnvioName") ?? "",
+        sedexFormaFreteId: form.get("sedexFormaFreteId") ?? "",
+        sedexFormaFreteName: form.get("sedexFormaFreteName") ?? "",
+        pacFormaFreteId: form.get("pacFormaFreteId") ?? "",
+        pacFormaFreteName: form.get("pacFormaFreteName") ?? ""
       })
     });
     const data = await response.json().catch(() => null);
@@ -152,6 +196,30 @@ export function OlistIntegrationPanel() {
     await loadPaymentOptions();
   }
 
+  async function searchShippingOptions(form: HTMLFormElement) {
+    setMessage("");
+    setLoading("olist_shipping_options");
+    const params = new URLSearchParams();
+    const data = new FormData(form);
+    for (const key of ["shippingOptionName", "shippingOptionType", "shippingOptionStatus"]) {
+      const value = String(data.get(key) ?? "").trim();
+      if (!value) continue;
+      const paramName = key === "shippingOptionName" ? "nome" : key === "shippingOptionType" ? "tipo" : "situacao";
+      params.set(paramName, value);
+    }
+    const response = await fetch(`/api/olist/shipping-options?${params.toString()}`);
+    const body = await response.json().catch(() => null);
+    setLoading("");
+
+    if (!response.ok || !body?.ok) {
+      setMessage(body?.debugId ? `${body?.error ?? "Falha ao consultar formas de envio."} Debug: ${body.debugId}` : body?.error ?? "Falha ao consultar formas de envio.");
+      return;
+    }
+
+    setShippingOptions(body.options ?? []);
+    setMessage(body.message ?? "Consulta de transporte concluída.");
+  }
+
   return (
     <section className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5">
       <div className="mb-5 flex items-center gap-2">
@@ -174,6 +242,9 @@ export function OlistIntegrationPanel() {
           onSubmit={save}
           paymentSyncLoading={loading === "olist_payments"}
           paymentOptions={paymentOptions}
+          shippingOptions={shippingOptions}
+          shippingOptionsLoading={loading === "olist_shipping_options"}
+          onSearchShippingOptions={searchShippingOptions}
           title="Olist API v3"
         />
       </div>
@@ -892,8 +963,11 @@ function IntegrationForm({
   onConnect,
   onSyncPaymentOptions,
   onSubmit,
+  onSearchShippingOptions,
   paymentSyncLoading,
-  paymentOptions
+  paymentOptions,
+  shippingOptions,
+  shippingOptionsLoading
 }: {
   title: string;
   connection?: OlistConnectionView;
@@ -902,8 +976,11 @@ function IntegrationForm({
   onConnect: () => void;
   onSyncPaymentOptions: () => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onSearchShippingOptions: (form: HTMLFormElement) => void;
   paymentSyncLoading: boolean;
   paymentOptions: OlistPaymentOptionView[];
+  shippingOptions: OlistShippingOptionView[];
+  shippingOptionsLoading: boolean;
 }) {
   const categoryOptions = paymentOptions.filter((option) => option.kind === "category");
   return (
@@ -955,6 +1032,90 @@ function IntegrationForm({
             Use “Sincronizar pagamentos” para carregar as categorias do Olist. A categoria padrão será enviada no pedido de venda.
           </span>
         </label>
+        <details className="rounded-md border border-zinc-800 bg-zinc-950/50">
+          <summary className="focus-ring flex cursor-pointer list-none items-center justify-between gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-900/80">
+            <span className="inline-flex items-center gap-2">
+              <Route size={16} className="text-amber-300" />
+              Transporte e despacho Olist
+            </span>
+            <span className="text-xs font-normal text-zinc-500">IDs por tenant</span>
+          </summary>
+          <div className="grid gap-3 border-t border-zinc-800 p-3">
+            <p className="text-xs leading-5 text-zinc-500">
+              Configure os IDs das formas cadastradas no Olist/Tiny. Quando houver frete Melhor Envio no orçamento, esses campos preenchem o pedido de venda e a atualização de despacho/rastreio.
+            </p>
+            <div className="grid gap-3 rounded-md border border-cyan-400/20 bg-cyan-400/5 p-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+                <Input defaultValue="" label="Pesquisar forma de envio" name="shippingOptionName" placeholder="Ex.: Melhor Envio, Correios, Retirada" />
+                <label className="block lg:w-48">
+                  <span className="mb-1 block text-sm font-medium text-zinc-300">Tipo</span>
+                  <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="shippingOptionType" defaultValue="">
+                    <option value="">Todos</option>
+                    <option value="1">Correios</option>
+                    <option value="2">Transportadora</option>
+                    <option value="6">Customizado</option>
+                    <option value="24">Olist Envios</option>
+                  </select>
+                </label>
+                <label className="block lg:w-48">
+                  <span className="mb-1 block text-sm font-medium text-zinc-300">Situação</span>
+                  <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="shippingOptionStatus" defaultValue="1">
+                    <option value="">Todas</option>
+                    <option value="1">Habilitada</option>
+                    <option value="2">Desabilitada</option>
+                  </select>
+                </label>
+                <button
+                  className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/20 disabled:opacity-60"
+                  disabled={shippingOptionsLoading}
+                  onClick={(event) => {
+                    const form = event.currentTarget.form;
+                    if (form) onSearchShippingOptions(form);
+                  }}
+                  type="button"
+                >
+                  <Search size={16} />
+                  {shippingOptionsLoading ? "Consultando..." : "Consultar no Olist"}
+                </button>
+              </div>
+              <p className="text-xs leading-5 text-zinc-500">
+                A consulta usa <code className="rounded bg-zinc-950 px-1">/formas-envio</code> e, para cada item, consulta <code className="rounded bg-zinc-950 px-1">/formas-envio/ID</code> para trazer as formas de frete como SEDEX e PAC.
+              </p>
+              {shippingOptions.length ? (
+                <ShippingOptionsResult options={shippingOptions} />
+              ) : null}
+            </div>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-zinc-300">Frete por conta</span>
+              <select
+                className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
+                defaultValue={connection?.defaultFretePorConta ?? "D"}
+                name="defaultFretePorConta"
+              >
+                <option value="D">Destinatário</option>
+                <option value="R">Remetente</option>
+                <option value="T">Terceiros</option>
+                <option value="3">Próprio remetente</option>
+                <option value="4">Próprio destinatário</option>
+                <option value="S">Sem transporte</option>
+              </select>
+            </label>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input defaultValue={connection?.melhorEnvioFormaEnvioId ?? ""} label="ID forma de envio: Melhor Envio" name="melhorEnvioFormaEnvioId" />
+              <Input defaultValue={connection?.melhorEnvioFormaEnvioName ?? "Melhor Envio"} label="Nome forma de envio: Melhor Envio" name="melhorEnvioFormaEnvioName" />
+              <Input defaultValue={connection?.correiosFormaEnvioId ?? ""} label="ID forma de envio: Correios" name="correiosFormaEnvioId" />
+              <Input defaultValue={connection?.correiosFormaEnvioName ?? "Correios"} label="Nome forma de envio: Correios" name="correiosFormaEnvioName" />
+              <Input defaultValue={connection?.pickupFormaEnvioId ?? ""} label="ID forma de envio: Retirar pessoalmente" name="pickupFormaEnvioId" />
+              <Input defaultValue={connection?.pickupFormaEnvioName ?? "Retirar pessoalmente"} label="Nome forma de envio: Retirada" name="pickupFormaEnvioName" />
+              <Input defaultValue={connection?.carrierFormaEnvioId ?? ""} label="ID forma de envio: Transportadora" name="carrierFormaEnvioId" />
+              <Input defaultValue={connection?.carrierFormaEnvioName ?? "Transportadora"} label="Nome forma de envio: Transportadora" name="carrierFormaEnvioName" />
+              <Input defaultValue={connection?.sedexFormaFreteId ?? ""} label="ID forma de frete: SEDEX" name="sedexFormaFreteId" />
+              <Input defaultValue={connection?.sedexFormaFreteName ?? "SEDEX"} label="Nome forma de frete: SEDEX" name="sedexFormaFreteName" />
+              <Input defaultValue={connection?.pacFormaFreteId ?? ""} label="ID forma de frete: PAC" name="pacFormaFreteId" />
+              <Input defaultValue={connection?.pacFormaFreteName ?? "PAC"} label="Nome forma de frete: PAC" name="pacFormaFreteName" />
+            </div>
+          </div>
+        </details>
         <div className="grid gap-3 md:grid-cols-2">
           <label className="block">
             <span className="mb-1 block text-sm font-medium text-zinc-300">Auth scheme</span>
@@ -988,6 +1149,7 @@ function IntegrationForm({
               <Input defaultValue={connection?.quotePath ?? OLIST_DEFAULT_PATHS.crmQuote} label="Path assunto CRM" name="quotePath" placeholder="/crm/assuntos" />
               <Input defaultValue={connection?.taskPath ?? OLIST_DEFAULT_PATHS.crmTask} label="Path tarefas/agenda" name="taskPath" placeholder="/crm/assuntos/{idAssunto}/acoes" />
               <Input defaultValue={connection?.salesOrderPath ?? OLIST_DEFAULT_PATHS.salesOrder} label="Path pedido de venda" name="salesOrderPath" placeholder="/pedidos" />
+              <Input defaultValue={connection?.salesOrderDispatchPath ?? OLIST_DEFAULT_PATHS.salesOrderDispatch} label="Path despacho/rastreio" name="salesOrderDispatchPath" placeholder="/pedidos/{idPedido}/despacho" />
               <Input defaultValue={connection?.invoicePath ?? OLIST_DEFAULT_PATHS.invoice} label="Path gerar nota" name="invoicePath" placeholder="/pedidos/{idPedido}/gerar-nota-fiscal" />
               <Input defaultValue={connection?.invoiceEmitPath ?? OLIST_DEFAULT_PATHS.invoiceEmit} label="Path autorizar nota" name="invoiceEmitPath" placeholder="/notas/{idNota}/emitir" />
               <Input defaultValue={connection?.invoiceCancelPath ?? OLIST_DEFAULT_PATHS.invoiceCancel} label="Path cancelar nota" name="invoiceCancelPath" placeholder="/notas/xml/cancelar" />
@@ -1024,6 +1186,93 @@ function IntegrationForm({
       </button>
     </form>
   );
+}
+
+function ShippingOptionsResult({ options }: { options: OlistShippingOptionView[] }) {
+  return (
+    <div className="grid gap-2">
+      {options.map((option) => (
+        <div className="rounded-md border border-zinc-800 bg-zinc-950/70 p-3" key={option.id}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white">
+                {option.name ?? "Forma de envio sem nome"}
+                <span className="ml-2 rounded-full bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-300">ID {option.id}</span>
+              </p>
+              <p className="mt-1 text-xs leading-5 text-zinc-500">
+                Tipo {option.type ?? "-"} · Situação {option.status ?? "-"}
+                {option.gatewayName ? ` · Gateway ${option.gatewayName}` : ""}
+              </p>
+            </div>
+            <button
+              className="focus-ring inline-flex min-h-9 shrink-0 items-center justify-center rounded-md border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-300/20"
+              onClick={(event) => {
+                const form = event.currentTarget.form;
+                setInputValue(form, "melhorEnvioFormaEnvioId", option.id);
+                setInputValue(form, "melhorEnvioFormaEnvioName", option.name ?? "Melhor Envio");
+              }}
+              type="button"
+            >
+              Usar como Melhor Envio
+            </button>
+          </div>
+          {option.freightForms.length ? (
+            <div className="mt-3 grid gap-2">
+              {option.freightForms.map((freight) => (
+                <div className="flex flex-col gap-2 rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2 sm:flex-row sm:items-center sm:justify-between" key={freight.id}>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-zinc-200">
+                      {freight.name}
+                      <span className="ml-2 rounded bg-zinc-950 px-1.5 py-0.5 text-zinc-400">ID {freight.id}</span>
+                    </p>
+                    <p className="mt-1 text-[11px] text-zinc-500">
+                      Código {freight.code ?? "-"} · Código externo {freight.externalCode ?? "-"} · Tipo entrega {freight.deliveryType ?? "-"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      className="focus-ring rounded-md border border-cyan-300/30 px-2.5 py-1.5 text-xs font-semibold text-cyan-100 hover:bg-cyan-300/10"
+                      onClick={(event) => {
+                        const form = event.currentTarget.form;
+                        setInputValue(form, "sedexFormaFreteId", freight.id);
+                        setInputValue(form, "sedexFormaFreteName", freight.name);
+                      }}
+                      type="button"
+                    >
+                      Usar como SEDEX
+                    </button>
+                    <button
+                      className="focus-ring rounded-md border border-emerald-300/30 px-2.5 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-300/10"
+                      onClick={(event) => {
+                        const form = event.currentTarget.form;
+                        setInputValue(form, "pacFormaFreteId", freight.id);
+                        setInputValue(form, "pacFormaFreteName", freight.name);
+                      }}
+                      type="button"
+                    >
+                      Usar como PAC
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs text-zinc-500">
+              Esta forma de envio não retornou formas de frete no detalhe.
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function setInputValue(form: HTMLFormElement | null, name: string, value: string) {
+  const field = form?.elements.namedItem(name);
+  if (field instanceof HTMLInputElement) {
+    field.value = value;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  }
 }
 
 function Input({

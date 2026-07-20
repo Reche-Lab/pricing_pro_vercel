@@ -77,7 +77,8 @@ export async function GET(_request: Request, context: { params: Promise<{ quoteI
       quote: loaded.detail.quote,
       items: loaded.detail.items,
       shipment: melhorEnvioShipment,
-      paymentTerm
+      paymentTerm,
+      settings: loaded.settings
     });
     return NextResponse.json({
       ok: true,

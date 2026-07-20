@@ -3,6 +3,7 @@ import type { QuotePaymentTermRow } from "@/repositories/olist-payment-options";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 import type { ShipmentRow } from "@/repositories/shipments";
 import type { TenantMemberRow } from "@/repositories/users";
+import type { OlistSettings } from "./types";
 
 export function buildOlistCustomerPayload(customer: CustomerRow, options?: { personType?: "F" | "J" | null }) {
   return compactObject({
@@ -56,6 +57,7 @@ export function buildOlistSalesOrderPayload(input: {
   items: QuoteItemRow[];
   shipment?: ShipmentRow | null;
   paymentTerm?: QuotePaymentTermRow | null;
+  settings?: OlistSettings;
 }) {
   return compactObject({
     idContato: numericId(input.quote.customer_external_olist_id),
@@ -70,6 +72,7 @@ export function buildOlistSalesOrderPayload(input: {
     valorDesconto: money(input.quote.discount_total),
     enderecoEntrega: quoteDeliveryAddress(input.quote),
     ecommerce: { numeroPedidoEcommerce: input.quote.id },
+    transportador: buildOlistTransportadorPayload(input.shipment, input.settings),
     pagamento: buildPaymentPayload(input.paymentTerm),
     itens: input.items.map((item) => nativeOrderItem(item))
   });
@@ -79,6 +82,35 @@ export function buildOlistSalesOrderItemsUpdatePayload(items: QuoteItemRow[]) {
   return {
     itens: items.map((item) => nativeOrderItem(item))
   };
+}
+
+export function buildOlistSalesOrderDispatchPayload(input: {
+  quote: QuoteDetail;
+  shipment?: ShipmentRow | null;
+  settings?: OlistSettings;
+}) {
+  const packageSummary = summarizeShipmentPackage(input.shipment);
+  const transportador = buildOlistTransportadorPayload(input.shipment, input.settings);
+  const trackingCode = stringOrNull(input.shipment?.tracking_code);
+  const trackingUrl = shipmentTrackingUrl(input.shipment);
+
+  return compactObject({
+    codigoRastreamento: trackingCode,
+    urlRastreamento: trackingUrl,
+    formaEnvio: transportador?.formaEnvio,
+    formaFrete: transportador?.formaFrete,
+    fretePagoEmpresa: money(input.quote.shipping_total),
+    dataPrevista: dateOnly(input.quote.valid_until),
+    volumes: packageSummary?.volumes,
+    pesoBruto: packageSummary?.grossWeightKg,
+    pesoLiquido: packageSummary?.netWeightKg,
+    observacoes: [
+      input.shipment?.service_name ? `Serviço: ${input.shipment.service_name}` : null,
+      packageSummary ? `Caixa: ${packageSummary.dimensions}` : null,
+      trackingCode ? `Rastreio: ${trackingCode}` : null,
+      trackingUrl ? `URL rastreio: ${trackingUrl}` : null
+    ].filter(Boolean).join("\n")
+  });
 }
 
 export function buildOlistInvoicePayload(input: { quote: QuoteDetail; items: QuoteItemRow[] }) {
@@ -197,6 +229,27 @@ function buildPaymentPayload(paymentTerm: QuotePaymentTermRow | null | undefined
   });
 }
 
+export function buildOlistTransportadorPayload(
+  shipment: ShipmentRow | null | undefined,
+  settings: OlistSettings | undefined
+) {
+  if (!shipment || !settings) return null;
+  const formaEnvioId = shippingMethodId(shipment, settings);
+  const formaFreteId = freightServiceId(shipment, settings);
+  const trackingCode = stringOrNull(shipment.tracking_code);
+  const trackingUrl = shipmentTrackingUrl(shipment);
+
+  if (!formaEnvioId && !formaFreteId && !trackingCode && !trackingUrl) return null;
+
+  return compactObject({
+    fretePorConta: settings.default_frete_por_conta || "D",
+    formaEnvio: paymentObject(formaEnvioId),
+    formaFrete: paymentObject(formaFreteId),
+    codigoRastreamento: trackingCode,
+    urlRastreamento: trackingUrl
+  });
+}
+
 function paymentObject(id: number | null) {
   return id ? { id } : null;
 }
@@ -237,8 +290,34 @@ function summarizeShipmentPackage(shipment: ShipmentRow | null | undefined) {
   return {
     dimensions: `${formatDimension(width)} x ${formatDimension(length)} x ${formatDimension(height)} cm`,
     grossWeightKg,
+    netWeightKg: numberOrNull(packaging.netWeightKg) ?? grossWeightKg,
     volumes
   };
+}
+
+function shippingMethodId(shipment: ShipmentRow, settings: OlistSettings) {
+  if (shipment.provider === "melhor_envio") return numericId(settings.melhor_envio_forma_envio_id);
+  if (shipment.provider === "correios") return numericId(settings.correios_forma_envio_id);
+  if (shipment.provider === "pickup" || shipment.provider === "retirada") return numericId(settings.pickup_forma_envio_id);
+  if (shipment.provider === "carrier" || shipment.provider === "transportadora") return numericId(settings.carrier_forma_envio_id);
+  return null;
+}
+
+function freightServiceId(shipment: ShipmentRow, settings: OlistSettings) {
+  const normalized = `${shipment.service_name ?? ""} ${shipment.service_code ?? ""}`.toUpperCase();
+  if (normalized.includes("SEDEX")) return numericId(settings.sedex_forma_frete_id);
+  if (normalized.includes("PAC")) return numericId(settings.pac_forma_frete_id);
+  return null;
+}
+
+function shipmentTrackingUrl(shipment: ShipmentRow | null | undefined) {
+  const selectedQuoteUrl = pickNestedString(shipment?.selected_quote, ["tracking_url", "trackingUrl", "urlRastreamento"]);
+  if (selectedQuoteUrl) return selectedQuoteUrl;
+  if (shipment?.label_url) return shipment.label_url;
+  const trackingCode = stringOrNull(shipment?.tracking_code);
+  if (!trackingCode) return null;
+  if (shipment?.provider === "melhor_envio") return `https://www.melhorenvio.com.br/rastreamento/${encodeURIComponent(trackingCode)}`;
+  return null;
 }
 
 function digits(value: unknown): string | null {
@@ -246,6 +325,26 @@ function digits(value: unknown): string | null {
     ? String(value).replace(/\D/g, "")
     : "";
   return output || null;
+}
+
+function stringOrNull(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number") return String(value);
+  return null;
+}
+
+function pickNestedString(value: unknown, keys: string[]): string | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    const direct = stringOrNull(record[key]);
+    if (direct) return direct;
+  }
+  for (const item of Object.values(record)) {
+    const nested = pickNestedString(item, keys);
+    if (nested) return nested;
+  }
+  return null;
 }
 
 function cleanString(value: unknown): string | null {

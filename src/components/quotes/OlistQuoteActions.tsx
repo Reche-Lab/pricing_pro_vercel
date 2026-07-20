@@ -66,6 +66,15 @@ const ACTIONS = {
     loading: "Gerando...",
     submitLabel: "Gerar pedido"
   },
+  dispatch: {
+    url: "dispatch",
+    title: "Atualizar despacho/rastreio",
+    description: "Envia forma de envio, forma de frete, volumes, peso e rastreio para o pedido Olist já criado.",
+    success: "Despacho/rastreio atualizado.",
+    label: "Atualizar despacho",
+    loading: "Atualizando...",
+    submitLabel: "Atualizar no Olist"
+  },
   fulfillment: {
     url: "fulfillment",
     title: "Enviar para expedição",
@@ -534,6 +543,8 @@ export function OlistQuoteActions({
           loading={loading}
           onClick={openAction}
           primaryName="salesOrder"
+          secondaryIcon={<Truck size={16} />}
+          secondaryName={orderReady ? "dispatch" : undefined}
           title="4. Pedido de venda"
         />
         <FlowAction
@@ -602,6 +613,7 @@ function FlowAction({
   loading,
   primaryName,
   secondaryName,
+  secondaryIcon,
   label,
   onClick
 }: {
@@ -613,6 +625,7 @@ function FlowAction({
   loading: string;
   primaryName: ActionKey;
   secondaryName?: ActionKey;
+  secondaryIcon?: ReactNode;
   label?: string;
   onClick: (action: ActionKey) => void;
 }) {
@@ -628,7 +641,7 @@ function FlowAction({
       <div className="grid gap-2 sm:grid-cols-2">
         <ActionButton disabled={disabled} icon={icon} label={label} loading={loading} name={primaryName} onClick={onClick} />
         {secondaryName ? (
-          <ActionButton disabled={disabled} icon={<UserCheck size={16} />} loading={loading} name={secondaryName} onClick={onClick} />
+          <ActionButton disabled={disabled} icon={secondaryIcon ?? <UserCheck size={16} />} loading={loading} name={secondaryName} onClick={onClick} />
         ) : null}
       </div>
     </div>
@@ -1109,6 +1122,24 @@ function ActionModal({
             </div>
           ) : null}
 
+          {action === "dispatch" ? (
+            <div className="grid gap-4">
+              <InfoBox title="Atualização de transporte no pedido">
+                Esta ação envia ao Olist/Tiny os dados do frete vinculado ao orçamento: forma de envio, forma de frete, volumes, peso bruto e rastreio quando já existir.
+              </InfoBox>
+              <div className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <InfoTile label="Pedido de venda Olist" value={stringValue(orderExternalId)} />
+                  <InfoTile label="Fonte do frete" value={melhorEnvioShipment ? "Melhor Envio" : "Sem frete Melhor Envio"} />
+                </div>
+                <ShipmentInfoPanel shipment={melhorEnvioShipment} title="Dados que serão enviados para Transportador / Volumes" />
+                <p className="text-xs leading-5 text-zinc-500">
+                  Os IDs de forma de envio e forma de frete vêm de Configurações &gt; Olist &gt; Transporte e despacho. Se estiverem vazios, o sistema envia apenas os dados disponíveis como valor, volumes, peso e rastreio.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
           {action === "fulfillment" ? (
             <div className="grid gap-4">
               <InfoBox title="Expedição do pedido">
@@ -1226,6 +1257,7 @@ function ActionModal({
               loading ||
               (action === "crm" && !customerReady) ||
               (action === "salesOrder" && (salesOrderPreview.loading || Boolean(salesOrderPreview.error && !salesOrderPreview.data?.paymentRequired))) ||
+              (action === "dispatch" && !orderExternalId) ||
               (action === "fulfillment" && (!orderExternalId || !invoiceExternalId)) ||
               (action === "invoice" && (invoicePreview.loading || Boolean(invoicePreview.error))) ||
               (action === "invoiceCancel" && (!invoiceReady || invoicePreview.loading || Boolean(invoicePreview.error)))

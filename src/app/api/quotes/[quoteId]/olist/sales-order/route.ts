@@ -77,7 +77,8 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
       quote: loaded.detail.quote,
       items: loaded.detail.items,
       shipment: melhorEnvioShipment,
-      paymentTerm
+      paymentTerm,
+      settings: loaded.settings
     });
     console.info("Olist sales order payload built.", {
       quoteId,

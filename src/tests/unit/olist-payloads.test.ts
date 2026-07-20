@@ -4,6 +4,7 @@ import {
   buildOlistCustomerPayload,
   buildOlistInvoiceCancelPayload,
   buildOlistInvoicePayload,
+  buildOlistSalesOrderDispatchPayload,
   buildOlistSalesOrderItemsUpdatePayload,
   buildOlistSalesOrderPayload,
   missingOlistSkus
@@ -140,6 +141,50 @@ describe("olist payloads", () => {
     expect(payload.observacoesInternas).toContain("1 volume(s), caixa 16 x 11 x 4 cm, peso bruto 0.650 kg");
   });
 
+  it("adds transportador data to sales order when Olist shipping ids are configured", () => {
+    const payload = buildOlistSalesOrderPayload({
+      quote: quote(),
+      items: [item()],
+      shipment: shipment({ service_name: "Correios - SEDEX", tracking_code: "BR123" }),
+      settings: {
+        default_frete_por_conta: "D",
+        melhor_envio_forma_envio_id: "101",
+        sedex_forma_frete_id: "202"
+      }
+    });
+
+    expect(payload.transportador).toEqual({
+      fretePorConta: "D",
+      formaEnvio: { id: 101 },
+      formaFrete: { id: 202 },
+      codigoRastreamento: "BR123",
+      urlRastreamento: "https://www.melhorenvio.com.br/rastreamento/BR123"
+    });
+  });
+
+  it("builds Olist sales order dispatch payload with freight, package and tracking data", () => {
+    const payload = buildOlistSalesOrderDispatchPayload({
+      quote: quote(),
+      shipment: shipment({ service_name: "Correios - PAC", tracking_code: "PX123" }),
+      settings: {
+        melhor_envio_forma_envio_id: "101",
+        pac_forma_frete_id: "303"
+      }
+    });
+
+    expect(payload).toMatchObject({
+      codigoRastreamento: "PX123",
+      urlRastreamento: "https://www.melhorenvio.com.br/rastreamento/PX123",
+      formaEnvio: { id: 101 },
+      formaFrete: { id: 303 },
+      fretePagoEmpresa: 20,
+      dataPrevista: "2026-07-01",
+      volumes: 1,
+      pesoBruto: 0.65,
+      pesoLiquido: 0.5
+    });
+  });
+
   it("builds sales order items update payload", () => {
     const payload = buildOlistSalesOrderItemsUpdatePayload([{ ...item(), quantity: 50, unit_price: "3.2500" }]);
 
@@ -249,7 +294,7 @@ function item(): QuoteItemRow {
   };
 }
 
-function shipment(): ShipmentRow {
+function shipment(overrides: Partial<ShipmentRow> = {}): ShipmentRow {
   return {
     id: "shipment-1",
     quote_id: "quote-1",
@@ -278,6 +323,7 @@ function shipment(): ShipmentRow {
       grossWeightPerBoxKg: 0.65
     },
     selected_quote: null,
-    created_at: "2026-06-27T00:00:00.000Z"
+    created_at: "2026-06-27T00:00:00.000Z",
+    ...overrides
   };
 }

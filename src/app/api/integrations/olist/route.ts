@@ -21,6 +21,7 @@ const olistIntegrationSchema = z.object({
   quotePath: z.string().trim().optional().default(""),
   customerLookupPath: z.string().trim().optional().default(""),
   salesOrderPath: z.string().trim().optional().default(""),
+  salesOrderDispatchPath: z.string().trim().optional().default(""),
   invoicePath: z.string().trim().optional().default(""),
   invoiceEmitPath: z.string().trim().optional().default(""),
   invoiceCancelPath: z.string().trim().optional().default(""),
@@ -30,7 +31,20 @@ const olistIntegrationSchema = z.object({
   authScheme: z.enum(["Bearer", "Token", "ApiKey"]).default("Bearer"),
   authHeader: z.string().trim().default("authorization"),
   defaultPaymentCategoryExternalId: z.string().trim().optional().default(""),
-  defaultPaymentCategoryName: z.string().trim().optional().default("")
+  defaultPaymentCategoryName: z.string().trim().optional().default(""),
+  defaultFretePorConta: z.enum(["R", "D", "T", "3", "4", "S"]).default("D"),
+  melhorEnvioFormaEnvioId: z.string().trim().optional().default(""),
+  melhorEnvioFormaEnvioName: z.string().trim().optional().default(""),
+  correiosFormaEnvioId: z.string().trim().optional().default(""),
+  correiosFormaEnvioName: z.string().trim().optional().default(""),
+  pickupFormaEnvioId: z.string().trim().optional().default(""),
+  pickupFormaEnvioName: z.string().trim().optional().default(""),
+  carrierFormaEnvioId: z.string().trim().optional().default(""),
+  carrierFormaEnvioName: z.string().trim().optional().default(""),
+  sedexFormaFreteId: z.string().trim().optional().default(""),
+  sedexFormaFreteName: z.string().trim().optional().default(""),
+  pacFormaFreteId: z.string().trim().optional().default(""),
+  pacFormaFreteName: z.string().trim().optional().default("")
 });
 
 export async function GET() {
@@ -82,6 +96,7 @@ export async function POST(request: Request) {
       customer_lookup_path: parsed.data.customerLookupPath || OLIST_DEFAULT_PATHS.customerLookup,
       quote_path: parsed.data.quotePath || OLIST_DEFAULT_PATHS.crmQuote,
       sales_order_path: parsed.data.salesOrderPath || OLIST_DEFAULT_PATHS.salesOrder,
+      sales_order_dispatch_path: parsed.data.salesOrderDispatchPath || OLIST_DEFAULT_PATHS.salesOrderDispatch,
       invoice_path: parsed.data.invoicePath || OLIST_DEFAULT_PATHS.invoice,
       invoice_emit_path: parsed.data.invoiceEmitPath || OLIST_DEFAULT_PATHS.invoiceEmit,
       invoice_cancel_path: normalizeInvoiceCancelPath(parsed.data.invoiceCancelPath),
@@ -92,7 +107,20 @@ export async function POST(request: Request) {
       auth_scheme: parsed.data.authScheme,
       auth_header: parsed.data.authHeader,
       default_payment_category_external_id: parsed.data.defaultPaymentCategoryExternalId || undefined,
-      default_payment_category_name: parsed.data.defaultPaymentCategoryName || undefined
+      default_payment_category_name: parsed.data.defaultPaymentCategoryName || undefined,
+      default_frete_por_conta: parsed.data.defaultFretePorConta,
+      melhor_envio_forma_envio_id: parsed.data.melhorEnvioFormaEnvioId || undefined,
+      melhor_envio_forma_envio_name: parsed.data.melhorEnvioFormaEnvioName || undefined,
+      correios_forma_envio_id: parsed.data.correiosFormaEnvioId || undefined,
+      correios_forma_envio_name: parsed.data.correiosFormaEnvioName || undefined,
+      pickup_forma_envio_id: parsed.data.pickupFormaEnvioId || undefined,
+      pickup_forma_envio_name: parsed.data.pickupFormaEnvioName || undefined,
+      carrier_forma_envio_id: parsed.data.carrierFormaEnvioId || undefined,
+      carrier_forma_envio_name: parsed.data.carrierFormaEnvioName || undefined,
+      sedex_forma_frete_id: parsed.data.sedexFormaFreteId || undefined,
+      sedex_forma_frete_name: parsed.data.sedexFormaFreteName || undefined,
+      pac_forma_frete_id: parsed.data.pacFormaFreteId || undefined,
+      pac_forma_frete_name: parsed.data.pacFormaFreteName || undefined
     },
     credentials: {
       ...existingCredentials,
@@ -140,6 +168,7 @@ function serializeConnection(
     quotePath: settings.quote_path ?? crmSettings?.quote_path ?? OLIST_DEFAULT_PATHS.crmQuote,
     customerLookupPath: settings.customer_lookup_path ?? OLIST_DEFAULT_PATHS.customerLookup,
     salesOrderPath: settings.sales_order_path ?? OLIST_DEFAULT_PATHS.salesOrder,
+    salesOrderDispatchPath: settings.sales_order_dispatch_path ?? OLIST_DEFAULT_PATHS.salesOrderDispatch,
     invoicePath: settings.invoice_path ?? OLIST_DEFAULT_PATHS.invoice,
     invoiceEmitPath: settings.invoice_emit_path ?? OLIST_DEFAULT_PATHS.invoiceEmit,
     invoiceCancelPath: normalizeInvoiceCancelPath(settings.invoice_cancel_path),
@@ -151,7 +180,20 @@ function serializeConnection(
     authScheme: settings.auth_scheme ?? "Bearer",
     authHeader: settings.auth_header ?? "authorization",
     defaultPaymentCategoryExternalId: settings.default_payment_category_external_id ?? "",
-    defaultPaymentCategoryName: settings.default_payment_category_name ?? ""
+    defaultPaymentCategoryName: settings.default_payment_category_name ?? "",
+    defaultFretePorConta: settings.default_frete_por_conta ?? "D",
+    melhorEnvioFormaEnvioId: settings.melhor_envio_forma_envio_id ?? "",
+    melhorEnvioFormaEnvioName: settings.melhor_envio_forma_envio_name ?? "",
+    correiosFormaEnvioId: settings.correios_forma_envio_id ?? "",
+    correiosFormaEnvioName: settings.correios_forma_envio_name ?? "",
+    pickupFormaEnvioId: settings.pickup_forma_envio_id ?? "",
+    pickupFormaEnvioName: settings.pickup_forma_envio_name ?? "",
+    carrierFormaEnvioId: settings.carrier_forma_envio_id ?? "",
+    carrierFormaEnvioName: settings.carrier_forma_envio_name ?? "",
+    sedexFormaFreteId: settings.sedex_forma_frete_id ?? "",
+    sedexFormaFreteName: settings.sedex_forma_frete_name ?? "",
+    pacFormaFreteId: settings.pac_forma_frete_id ?? "",
+    pacFormaFreteName: settings.pac_forma_frete_name ?? ""
   };
 }
 
