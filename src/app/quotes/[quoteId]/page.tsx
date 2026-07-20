@@ -6,7 +6,7 @@ import { DeleteQuoteButton } from "@/components/quotes/DeleteQuoteButton";
 import { MelhorEnvioQuoteLabelActions } from "@/components/quotes/MelhorEnvioQuoteLabelActions";
 import { MelhorEnvioPayloadPreview } from "@/components/quotes/MelhorEnvioPayloadPreview";
 import { OlistQuoteActions } from "@/components/quotes/OlistQuoteActions";
-import { QuoteEditPanel } from "@/components/quotes/QuoteEditPanel";
+import { QuoteEditPanel, QuoteItemEditPanel } from "@/components/quotes/QuoteEditPanel";
 import { QuoteStatusActions } from "@/components/quotes/QuoteStatusActions";
 import { QuoteWhatsAppButton } from "@/components/quotes/QuoteWhatsAppButton";
 import { PublicQuoteLinkButton } from "@/components/quotes/PublicQuoteLinkButton";
@@ -39,6 +39,12 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
   if (!profile) redirect("/login");
   if (!detail) notFound();
   const canDeleteQuotes = profile.role === "owner" || canDeleteQuotesByPermission;
+  const quoteEditVariants = variants.map((variant) => ({
+    id: variant.variant_id,
+    label: `${variant.product_name} - ${variant.variant_name}`,
+    sku: variant.sku,
+    externalOlistProductId: variant.external_olist_product_id
+  }));
 
   return (
     <AppShell
@@ -79,6 +85,8 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
               <Detail label="Validade" value={formatDate(detail.quote.valid_until)} />
             </dl>
           </div>
+
+          <QuoteItemEditPanel items={detail.items} quote={detail.quote} variants={quoteEditVariants} />
 
           <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
             <div className="border-b border-zinc-800 px-4 py-3">
@@ -184,6 +192,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                   />
                 ) : null}
               </div>
+              <QuoteEditPanel editLogs={editLogs} items={detail.items} quote={detail.quote} />
               <OlistQuoteActions
                 customerDocument={detail.quote.customer_document}
                 customerEmail={detail.quote.customer_email}
@@ -219,17 +228,6 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                     name: member.name,
                     email: member.email
                   }))}
-              />
-              <QuoteEditPanel
-                editLogs={editLogs}
-                items={detail.items}
-                quote={detail.quote}
-                variants={variants.map((variant) => ({
-                  id: variant.variant_id,
-                  label: `${variant.product_name} - ${variant.variant_name}`,
-                  sku: variant.sku,
-                  externalOlistProductId: variant.external_olist_product_id
-                }))}
               />
               <MelhorEnvioQuoteLabelActions
                 quoteId={quoteId}
