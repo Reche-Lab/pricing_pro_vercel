@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+import { Edit3 } from "lucide-react";
 import { z } from "zod";
 import { AppShell } from "@/components/layout/AppShell";
 import { DeleteQuoteButton } from "@/components/quotes/DeleteQuoteButton";
@@ -123,16 +124,29 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
             total={Number(detail.quote.grand_total)}
           />
 
-          <QuoteItemEditPanel
-            items={detail.items}
-            pricingContext={quoteEditPricingContext}
-            quote={detail.quote}
-            variants={quoteEditVariants}
-          />
-
           <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
-            <div className="border-b border-zinc-800 px-4 py-3">
-              <h2 className="font-semibold">Itens</h2>
+            <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3">
+              <div>
+                <h2 className="font-semibold">Itens</h2>
+                <p className="text-xs text-zinc-500">{detail.items.length} item(ns) neste orçamento</p>
+              </div>
+              <details className="group relative">
+                <summary className="focus-ring inline-flex h-9 cursor-pointer list-none items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-950">
+                  <Edit3 size={14} />
+                  Editar
+                </summary>
+                <div className="absolute right-0 z-20 mt-2 w-[min(92vw,720px)] rounded-lg border border-zinc-800 bg-zinc-950 p-3 shadow-2xl shadow-black/50">
+                  <div className="grid gap-3">
+                    <QuoteEditPanel editLogs={editLogs} items={detail.items} quote={detail.quote} />
+                    <QuoteItemEditPanel
+                      items={detail.items}
+                      pricingContext={quoteEditPricingContext}
+                      quote={detail.quote}
+                      variants={quoteEditVariants}
+                    />
+                  </div>
+                </div>
+              </details>
             </div>
             <div className="divide-y divide-zinc-800">
               {detail.items.map((item) => (
@@ -234,7 +248,6 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                   />
                 ) : null}
               </div>
-              <QuoteEditPanel editLogs={editLogs} items={detail.items} quote={detail.quote} />
               <OlistQuoteActions
                 customerDocument={detail.quote.customer_document}
                 customerEmail={detail.quote.customer_email}
@@ -262,6 +275,20 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                 externalOlistId={detail.quote.customer_external_olist_id}
                 externalOrderId={detail.quote.external_olist_order_id}
                 hasCustomer={Boolean(detail.quote.customer_id)}
+                defaultPaymentCategory={{
+                  externalId: typeof olistConnection?.settings.default_payment_category_external_id === "string"
+                    ? olistConnection.settings.default_payment_category_external_id
+                    : "",
+                  name: typeof olistConnection?.settings.default_payment_category_name === "string"
+                    ? olistConnection.settings.default_payment_category_name
+                    : ""
+                }}
+                paymentOptions={paymentOptions.map((option) => ({
+                  kind: option.kind,
+                  externalId: option.external_id,
+                  name: option.name,
+                  groupName: option.group_name
+                }))}
                 quoteId={quoteId}
                 shipments={shipments}
                 responsibleUsers={members

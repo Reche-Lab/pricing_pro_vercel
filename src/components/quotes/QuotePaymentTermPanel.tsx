@@ -43,6 +43,7 @@ export function QuotePaymentTermPanel({
   const [notes, setNotes] = useState(initialPaymentTerm?.notes ?? "");
   const [state, setState] = useState<"idle" | "saving" | "syncing" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [open, setOpen] = useState(false);
 
   const paymentMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "payment_method"), [paymentOptions]);
   const categories = useMemo(() => paymentOptions.filter((option) => option.kind === "category"), [paymentOptions]);
@@ -138,73 +139,98 @@ export function QuotePaymentTermPanel({
         ? "border-emerald-400/25 bg-emerald-400/10"
         : "border-amber-400/35 bg-amber-400/10"
     }`}>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <button
+          className="focus-ring min-w-0 rounded-md text-left"
+          type="button"
+          onClick={() => setOpen((current) => !current)}
+        >
           <p className={`inline-flex items-center gap-2 text-sm font-semibold ${selected ? "text-emerald-100" : "text-amber-100"}`}>
             {selected ? <CheckCircle2 size={16} /> : <CreditCard size={16} />}
             Pagamento do pedido Olist
           </p>
           <p className="mt-1 text-xs text-zinc-400">
-            Obrigatório para gerar pedido de venda no Olist; a nota fiscal herdará essa condição.
+            {selectedPaymentMethod?.name
+              ? `${selectedPaymentMethod.name}${selectedCategory?.name ? ` · ${selectedCategory.name}` : ""}`
+              : "Ainda não selecionado. Será exigido ao gerar pedido de venda."}
           </p>
-        </div>
-        <button
-          className="focus-ring inline-flex h-9 w-fit items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-60"
-          disabled={state === "syncing"}
-          type="button"
-          onClick={syncOptions}
-        >
-          <RotateCcw size={13} />
-          {state === "syncing" ? "Sincronizando..." : "Sincronizar"}
         </button>
-      </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <SelectOption label="Forma de pagamento" options={paymentMethods} placeholder={paymentMethods.length ? "Selecione" : "Sincronize"} value={paymentMethodId} onChange={setPaymentMethodId} />
-        <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-500">
-          <span className="block font-medium text-zinc-300">Categoria padrão</span>
-          <span className="mt-1 block">{selectedCategory?.name ?? "Não definida"}</span>
-        </div>
-        {showInstallments ? <NumberInput label="Parcelas" max={24} min={1} value={installmentsCount} onChange={setInstallmentsCount} /> : null}
-        <NumberInput label="1º vencimento em dias" min={0} value={firstDueDays} onChange={setFirstDueDays} />
-        {showInstallments ? <NumberInput label="Intervalo entre parcelas" min={0} value={intervalDays} onChange={setIntervalDays} /> : null}
-      </div>
-      <details className="mt-2 rounded-md border border-zinc-800 bg-zinc-950/40">
-        <summary className="focus-ring cursor-pointer list-none rounded-md px-3 py-2 text-xs font-medium text-zinc-400 hover:bg-zinc-900">
-          Categoria avançada
-        </summary>
-        <div className="grid gap-2 border-t border-zinc-800 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
-          <SelectOption label="Categoria do pedido" options={categories} placeholder="Usar padrão" value={categoryId} onChange={setCategoryId} />
+        <div className="flex items-center gap-2">
           <button
-            className="focus-ring inline-flex h-10 items-center justify-center rounded-md border border-emerald-400/30 px-3 text-xs font-medium text-emerald-100 hover:bg-emerald-400/10"
+            className="focus-ring inline-flex h-8 w-fit items-center justify-center rounded-md border border-zinc-700 px-2 text-xs font-medium text-zinc-300 hover:bg-zinc-900"
             type="button"
-            onClick={setCategoryAsDefault}
+            onClick={() => setOpen((current) => !current)}
           >
-            Definir como padrão
+            {open ? "Recolher" : "Configurar"}
+          </button>
+          <button
+            className="focus-ring inline-flex h-8 w-fit items-center justify-center gap-2 rounded-md border border-zinc-700 px-2 text-xs font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-60"
+            disabled={state === "syncing"}
+            type="button"
+            onClick={syncOptions}
+          >
+            <RotateCcw size={13} />
+            {state === "syncing" ? "Sincronizando..." : "Sincronizar"}
           </button>
         </div>
-      </details>
-      <label className="mt-2 block">
-        <span className="mb-1 block text-xs font-medium text-zinc-400">Observação financeira</span>
-        <input
-          className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
-          value={notes}
-          onChange={(event) => setNotes(event.currentTarget.value)}
-        />
-      </label>
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className={`text-xs ${state === "error" ? "text-rose-200" : "text-zinc-400"}`}>
-          {message || (selected ? "Condição pronta para o pedido Olist." : "Pagamento ainda não selecionado.")}
-        </p>
-        <button
-          className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-amber-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:opacity-60"
-          disabled={state === "saving"}
-          type="button"
-          onClick={save}
-        >
-          <Save size={15} />
-          {state === "saving" ? "Salvando..." : "Salvar pagamento"}
-        </button>
       </div>
+
+      {open ? (
+        <div className="mt-3 grid gap-3 border-t border-zinc-800/70 pt-3">
+          <p className="text-xs text-zinc-400">
+            Obrigatório para gerar pedido de venda no Olist; a nota fiscal herdará essa condição.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <SelectOption label="Forma de pagamento" options={paymentMethods} placeholder={paymentMethods.length ? "Selecione" : "Sincronize"} value={paymentMethodId} onChange={setPaymentMethodId} />
+            <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-500">
+              <span className="block font-medium text-zinc-300">Categoria padrão</span>
+              <span className="mt-1 block">{selectedCategory?.name ?? "Não definida"}</span>
+            </div>
+            {showInstallments ? <NumberInput label="Parcelas" max={24} min={1} value={installmentsCount} onChange={setInstallmentsCount} /> : null}
+            <NumberInput label="1º vencimento em dias" min={0} value={firstDueDays} onChange={setFirstDueDays} />
+            {showInstallments ? <NumberInput label="Intervalo entre parcelas" min={0} value={intervalDays} onChange={setIntervalDays} /> : null}
+          </div>
+          <details className="rounded-md border border-zinc-800 bg-zinc-950/40">
+            <summary className="focus-ring cursor-pointer list-none rounded-md px-3 py-2 text-xs font-medium text-zinc-400 hover:bg-zinc-900">
+              Categoria avançada
+            </summary>
+            <div className="grid gap-2 border-t border-zinc-800 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
+              <SelectOption label="Categoria do pedido" options={categories} placeholder="Usar padrão" value={categoryId} onChange={setCategoryId} />
+              <button
+                className="focus-ring inline-flex h-10 items-center justify-center rounded-md border border-emerald-400/30 px-3 text-xs font-medium text-emerald-100 hover:bg-emerald-400/10"
+                type="button"
+                onClick={setCategoryAsDefault}
+              >
+                Definir como padrão
+              </button>
+            </div>
+          </details>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-zinc-400">Observação financeira</span>
+            <input
+              className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+              value={notes}
+              onChange={(event) => setNotes(event.currentTarget.value)}
+            />
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className={`text-xs ${state === "error" ? "text-rose-200" : "text-zinc-400"}`}>
+              {message || (selected ? "Condição pronta para o pedido Olist." : "Pagamento ainda não selecionado.")}
+            </p>
+            <button
+              className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-amber-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:opacity-60"
+              disabled={state === "saving"}
+              type="button"
+              onClick={save}
+            >
+              <Save size={15} />
+              {state === "saving" ? "Salvando..." : "Salvar pagamento"}
+            </button>
+          </div>
+        </div>
+      ) : message ? (
+        <p className={`mt-2 text-xs ${state === "error" ? "text-rose-200" : "text-zinc-400"}`}>{message}</p>
+      ) : null}
     </section>
   );
 }

@@ -37,18 +37,42 @@ export async function GET(_request: Request, context: { params: Promise<{ quoteI
   try {
     const shipments = await listQuoteShipments(loaded.session.userId, loaded.session.tenantId, quoteId);
     const paymentTerm = await getQuotePaymentTerm(loaded.session.userId, loaded.session.tenantId, quoteId);
+    const melhorEnvioShipment = selectBestMelhorEnvioShipment(shipments);
+    const previewQuote = {
+      id: loaded.detail.quote.id,
+      customerId: loaded.detail.quote.customer_id,
+      customerName: loaded.detail.quote.customer_name,
+      customerExternalOlistId: loaded.detail.quote.customer_external_olist_id,
+      shippingTotal: loaded.detail.quote.shipping_total,
+      discountTotal: loaded.detail.quote.discount_total,
+      grandTotal: loaded.detail.quote.grand_total,
+      validUntil: loaded.detail.quote.valid_until
+    };
+    const previewItems = loaded.detail.items.map((item) => ({
+      id: item.id,
+      description: item.description,
+      sku: item.sku,
+      externalOlistProductId: item.external_olist_product_id,
+      quantity: item.quantity,
+      unitPrice: item.unit_price,
+      totalPrice: item.total_price,
+      artworkName: item.artwork_name
+    }));
     if (!paymentTerm?.payment_method_external_id) {
       return NextResponse.json(
         {
-          ok: false,
-          error: "Selecione e salve uma forma de pagamento do Olist antes de gerar o pedido de venda.",
+          ok: true,
           paymentRequired: true,
-          paymentTerm
-        },
-        { status: 409 }
+          paymentTerm,
+          path,
+          method: "POST",
+          quote: previewQuote,
+          items: previewItems,
+          shipment: melhorEnvioShipment ? summarizeShipment(melhorEnvioShipment) : null,
+          payload: null
+        }
       );
     }
-    const melhorEnvioShipment = selectBestMelhorEnvioShipment(shipments);
     const payload = buildOlistSalesOrderPayload({
       quote: loaded.detail.quote,
       items: loaded.detail.items,
@@ -59,26 +83,8 @@ export async function GET(_request: Request, context: { params: Promise<{ quoteI
       ok: true,
       path,
       method: "POST",
-      quote: {
-        id: loaded.detail.quote.id,
-        customerId: loaded.detail.quote.customer_id,
-        customerName: loaded.detail.quote.customer_name,
-        customerExternalOlistId: loaded.detail.quote.customer_external_olist_id,
-        shippingTotal: loaded.detail.quote.shipping_total,
-        discountTotal: loaded.detail.quote.discount_total,
-        grandTotal: loaded.detail.quote.grand_total,
-        validUntil: loaded.detail.quote.valid_until
-      },
-      items: loaded.detail.items.map((item) => ({
-        id: item.id,
-        description: item.description,
-        sku: item.sku,
-        externalOlistProductId: item.external_olist_product_id,
-        quantity: item.quantity,
-        unitPrice: item.unit_price,
-        totalPrice: item.total_price,
-        artworkName: item.artwork_name
-      })),
+      quote: previewQuote,
+      items: previewItems,
       paymentTerm,
       shipment: melhorEnvioShipment ? summarizeShipment(melhorEnvioShipment) : null,
       payload

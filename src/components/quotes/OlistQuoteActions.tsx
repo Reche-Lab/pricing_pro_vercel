@@ -124,6 +124,13 @@ type OlistConnectionStatus = {
   apiBaseUrl?: string;
 };
 
+type PaymentOption = {
+  kind: "payment_method" | "receiving_method" | "category";
+  externalId: string;
+  name: string;
+  groupName: string | null;
+};
+
 type SalesOrderPreviewState = {
   loading: boolean;
   error: string | null;
@@ -184,6 +191,8 @@ export function OlistQuoteActions({
   fulfillmentSentAt,
   fulfillmentNote,
   shipments,
+  defaultPaymentCategory,
+  paymentOptions,
   responsibleUsers
 }: {
   quoteId: string;
@@ -214,6 +223,8 @@ export function OlistQuoteActions({
   fulfillmentSentAt?: string | null;
   fulfillmentNote?: string | null;
   shipments?: ShipmentRow[];
+  defaultPaymentCategory?: { externalId: string; name: string };
+  paymentOptions?: PaymentOption[];
   responsibleUsers?: Array<{
     id: string;
     name: string;
@@ -559,7 +570,9 @@ export function OlistQuoteActions({
           fulfillmentNote={fulfillmentNote ?? null}
           fulfillmentReady={fulfillmentReady}
           fulfillmentSentAt={fulfillmentState.sentAt}
+          defaultPaymentCategory={defaultPaymentCategory ?? { externalId: "", name: "" }}
           orderExternalId={orderExternalId}
+          paymentOptions={paymentOptions ?? []}
           shipments={shipments ?? []}
           loading={loading === pendingAction}
           onClose={() => setPendingAction(null)}
@@ -657,6 +670,15 @@ function OlistConnectionBanner({
   if (!connection?.configured && !message) return null;
 
   const connected = Boolean(connection?.connected);
+  if (connected && !message) {
+    return (
+      <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-100">
+        <PlugZap size={13} />
+        Olist/Tiny conectado
+      </div>
+    );
+  }
+
   const tone = connected
     ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100"
     : "border-amber-400/25 bg-amber-400/10 text-amber-100";
@@ -713,7 +735,9 @@ function ActionModal({
   fulfillmentNote,
   fulfillmentReady,
   fulfillmentSentAt,
+  defaultPaymentCategory,
   orderExternalId,
+  paymentOptions,
   shipments,
   loading,
   onClose,
@@ -755,7 +779,9 @@ function ActionModal({
   fulfillmentNote: string | null;
   fulfillmentReady: boolean;
   fulfillmentSentAt: string | null;
+  defaultPaymentCategory: { externalId: string; name: string };
   orderExternalId: string | null;
+  paymentOptions: PaymentOption[];
   shipments: ShipmentRow[];
   loading: boolean;
   onClose: () => void;
@@ -783,6 +809,9 @@ function ActionModal({
     () => responsibleUsers.find((user) => user.id === defaultResponsibleExternalId) ?? null,
     [defaultResponsibleExternalId, responsibleUsers]
   );
+  const salesOrderNeedsPayment = action === "salesOrder" && Boolean(salesOrderPreview.data?.paymentRequired);
+  const paymentMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "payment_method"), [paymentOptions]);
+  const paymentCategories = useMemo(() => paymentOptions.filter((option) => option.kind === "category"), [paymentOptions]);
 
   useEffect(() => {
     if (action !== "salesOrder") return;
@@ -1044,6 +1073,14 @@ function ActionModal({
                 Esta ação usa cliente Olist, itens do orçamento, quantidades, preços finais, frete, desconto e IDs numéricos dos produtos Olist cadastrados em Produtos.
               </InfoBox>
               <SalesOrderPreviewPanel preview={salesOrderPreview} />
+              {salesOrderNeedsPayment ? (
+                <SalesOrderPaymentFields
+                  categories={paymentCategories}
+                  defaultCategory={defaultPaymentCategory}
+                  paymentMethods={paymentMethods}
+                  total={Number(salesOrderPreview.data?.quote?.grandTotal ?? 0)}
+                />
+              ) : null}
             </div>
           ) : null}
 
@@ -1163,7 +1200,7 @@ function ActionModal({
             disabled={
               loading ||
               (action === "crm" && !customerReady) ||
-              (action === "salesOrder" && (salesOrderPreview.loading || Boolean(salesOrderPreview.error))) ||
+              (action === "salesOrder" && (salesOrderPreview.loading || Boolean(salesOrderPreview.error && !salesOrderPreview.data?.paymentRequired))) ||
               (action === "fulfillment" && (!orderExternalId || !invoiceExternalId)) ||
               (action === "invoice" && (invoicePreview.loading || Boolean(invoicePreview.error))) ||
               (action === "invoiceCancel" && (!invoiceReady || invoicePreview.loading || Boolean(invoicePreview.error)))
@@ -1242,7 +1279,7 @@ function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }
           </div>
         ) : (
           <p className="mt-1 text-xs text-amber-100/80">
-            Nenhuma condição foi salva. O pedido pode ser criado, mas o financeiro no Olist exigirá conferência manual.
+            Nenhuma condição foi salva. Escolha a forma de pagamento abaixo para liberar a criação do pedido.
           </p>
         )}
       </div>
@@ -1296,6 +1333,85 @@ function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }
           </pre>
         </div>
       </details>
+    </div>
+  );
+}
+
+function SalesOrderPaymentFields({
+  categories,
+  defaultCategory,
+  paymentMethods,
+  total
+}: {
+  categories: PaymentOption[];
+  defaultCategory: { externalId: string; name: string };
+  paymentMethods: PaymentOption[];
+  total: number;
+}) {
+  const [selectedMethodValue, setSelectedMethodValue] = useState("");
+  const [selectedCategoryValue, setSelectedCategoryValue] = useState(() => encodePaymentOption({
+    externalId: defaultCategory.externalId,
+    name: defaultCategory.name
+  }));
+  const selectedMethod = decodePaymentOption(selectedMethodValue);
+  const showInstallments = shouldShowPaymentInstallments(selectedMethod?.name);
+
+  return (
+    <div className="grid gap-3 rounded-md border border-amber-400/25 bg-amber-400/10 p-3">
+      <div>
+        <p className="text-sm font-semibold text-amber-100">Pagamento obrigatório para o pedido</p>
+        <p className="mt-1 text-xs text-amber-100/80">
+          Essa condição será salva no orçamento e enviada junto com o pedido de venda Olist.
+        </p>
+      </div>
+      <input name="paymentTotal" type="hidden" value={Number.isFinite(total) ? total : 0} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-zinc-300">Forma de pagamento</span>
+          <select
+            className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
+            name="salesOrderPaymentMethod"
+            required
+            value={selectedMethodValue}
+            onChange={(event) => setSelectedMethodValue(event.currentTarget.value)}
+          >
+            <option value="">{paymentMethods.length ? "Selecione" : "Sincronize formas de pagamento"}</option>
+            {paymentMethods.map((option) => (
+              <option key={option.externalId} value={encodePaymentOption(option)}>
+                {option.groupName ? `${option.name} - ${option.groupName}` : option.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-zinc-300">Categoria</span>
+          <select
+            className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
+            name="salesOrderPaymentCategory"
+            value={selectedCategoryValue}
+            onChange={(event) => setSelectedCategoryValue(event.currentTarget.value)}
+          >
+            {defaultCategory.externalId ? (
+              <option value={encodePaymentOption(defaultCategory)}>
+                {defaultCategory.name || "Categoria padrão"}
+              </option>
+            ) : (
+              <option value="">Sem categoria padrão</option>
+            )}
+            {categories.map((option) => (
+              <option key={option.externalId} value={encodePaymentOption(option)}>
+                {option.groupName ? `${option.name} - ${option.groupName}` : option.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {showInstallments ? (
+          <>
+            <Input label="Parcelas" name="salesOrderInstallmentsCount" type="number" defaultValue="1" />
+            <Input label="Intervalo entre parcelas" name="salesOrderInstallmentIntervalDays" type="number" defaultValue="30" />
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -1807,6 +1923,39 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
     };
   }
 
+  if (action === "salesOrder") {
+    const paymentMethod = decodePaymentOption(stringField(formData, "salesOrderPaymentMethod"));
+    if (!paymentMethod) return { body: undefined };
+
+    const category = decodePaymentOption(stringField(formData, "salesOrderPaymentCategory"));
+    const total = Math.max(0, Number(stringField(formData, "paymentTotal")) || 0);
+    const installmentsCount = Math.max(1, Math.min(24, Math.trunc(Number(stringField(formData, "salesOrderInstallmentsCount")) || 1)));
+    const intervalDays = Math.max(0, Math.trunc(Number(stringField(formData, "salesOrderInstallmentIntervalDays")) || 0));
+    const installmentAmount = Number((total / installmentsCount).toFixed(2));
+    const installments = Array.from({ length: installmentsCount }, (_, index) => ({
+      installmentNumber: index + 1,
+      days: index * intervalDays,
+      amount: index === installmentsCount - 1
+        ? Number((total - installmentAmount * (installmentsCount - 1)).toFixed(2))
+        : installmentAmount,
+      paymentMethodExternalId: paymentMethod.externalId,
+      paymentMethodName: paymentMethod.name
+    }));
+
+    return {
+      body: {
+        paymentTerm: {
+          paymentMethodExternalId: paymentMethod.externalId,
+          paymentMethodName: paymentMethod.name,
+          categoryExternalId: category?.externalId || undefined,
+          categoryName: category?.name || undefined,
+          installmentsCount,
+          installments
+        }
+      }
+    };
+  }
+
   if (action === "invoiceCancel") {
     const reason = stringField(formData, "cancelReason");
     const numeroNota = stringField(formData, "numeroNota");
@@ -1820,6 +1969,32 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
   }
 
   return {};
+}
+
+function encodePaymentOption(option: Pick<PaymentOption, "externalId" | "name">) {
+  if (!option.externalId) return "";
+  return JSON.stringify({ externalId: option.externalId, name: option.name });
+}
+
+function decodePaymentOption(value: string) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as { externalId?: unknown; name?: unknown };
+    const externalId = typeof parsed.externalId === "string" ? parsed.externalId : "";
+    const name = typeof parsed.name === "string" ? parsed.name : "";
+    return externalId ? { externalId, name } : null;
+  } catch {
+    return null;
+  }
+}
+
+function shouldShowPaymentInstallments(name: string | null | undefined) {
+  const normalized = normalizeText(name ?? "");
+  return normalized.includes("cartao de credito") || normalized.includes("credito") || normalized.includes("link de pagamento");
+}
+
+function normalizeText(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
 function firstName(value: string | null | undefined) {

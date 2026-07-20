@@ -1,11 +1,32 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { updateQuoteExternalOlistIds } from "@/repositories/quotes";
-import { getQuotePaymentTerm } from "@/repositories/olist-payment-options";
+import { getQuotePaymentTerm, upsertQuotePaymentTerm } from "@/repositories/olist-payment-options";
 import { listQuoteShipments, type ShipmentRow } from "@/repositories/shipments";
 import { buildOlistSalesOrderPayload, missingOlistSkus } from "@/services/olist/payloads";
 import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOperation } from "../_shared";
 
-export async function POST(_request: Request, context: { params: Promise<{ quoteId: string }> }) {
+const installmentSchema = z.object({
+  installmentNumber: z.number().int().min(1).max(24),
+  dueDate: z.string().trim().optional().nullable(),
+  days: z.number().int().min(0).max(3650).optional().nullable(),
+  amount: z.number().min(0).max(1000000),
+  notes: z.string().trim().max(300).optional().nullable(),
+  paymentMethodExternalId: z.string().trim().max(80).optional().nullable(),
+  paymentMethodName: z.string().trim().max(160).optional().nullable()
+});
+
+const paymentTermSchema = z.object({
+  paymentMethodExternalId: z.string().trim().min(1).max(80),
+  paymentMethodName: z.string().trim().max(160).optional().nullable(),
+  categoryExternalId: z.string().trim().max(80).optional().nullable(),
+  categoryName: z.string().trim().max(160).optional().nullable(),
+  installmentsCount: z.number().int().min(1).max(24).optional().nullable(),
+  notes: z.string().trim().max(600).optional().nullable(),
+  installments: z.array(installmentSchema).min(1).max(24)
+});
+
+export async function POST(request: Request, context: { params: Promise<{ quoteId: string }> }) {
   const { quoteId } = await context.params;
   const loaded = await loadQuoteOlistContext(quoteId, "olist");
   if ("error" in loaded && loaded.error) return NextResponse.json(loaded.error.body, { status: loaded.error.status });
@@ -25,8 +46,17 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
   }
 
   try {
+    const body = await request.json().catch(() => null);
     const shipments = await listQuoteShipments(loaded.session.userId, loaded.session.tenantId, quoteId);
-    const paymentTerm = await getQuotePaymentTerm(loaded.session.userId, loaded.session.tenantId, quoteId);
+    let paymentTerm = await getQuotePaymentTerm(loaded.session.userId, loaded.session.tenantId, quoteId);
+    if (!paymentTerm?.payment_method_external_id && body?.paymentTerm) {
+      const parsedPaymentTerm = paymentTermSchema.safeParse(body.paymentTerm);
+      if (!parsedPaymentTerm.success) {
+        return NextResponse.json({ ok: false, error: parsedPaymentTerm.error.flatten(), paymentRequired: true }, { status: 400 });
+      }
+      await upsertQuotePaymentTerm(loaded.session.userId, loaded.session.tenantId, quoteId, parsedPaymentTerm.data);
+      paymentTerm = await getQuotePaymentTerm(loaded.session.userId, loaded.session.tenantId, quoteId);
+    }
     if (!paymentTerm?.payment_method_external_id) {
       return NextResponse.json(
         {
