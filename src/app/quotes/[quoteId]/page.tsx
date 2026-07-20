@@ -57,6 +57,11 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
   }));
   const latestSnapshot = detail.snapshots[0]?.snapshot;
   const quoteEditPricingContext = buildQuoteEditPricingContext(latestSnapshot, detail.items);
+  const currentMemberOlistUserId = members.find((member) => (
+    member.user_id === session.userId &&
+    member.member_status === "active" &&
+    member.external_olist_user_id
+  ))?.external_olist_user_id ?? null;
 
   return (
     <AppShell
@@ -246,6 +251,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                 externalCrmId={detail.quote.external_crm_id}
                 externalCrmTaskCreatedAt={detail.quote.external_crm_task_created_at}
                 externalCrmTaskId={detail.quote.external_crm_task_id}
+                defaultResponsibleExternalId={currentMemberOlistUserId}
                 externalInvoiceId={detail.quote.external_olist_invoice_id}
                 externalInvoiceModel={detail.quote.external_olist_invoice_model}
                 externalInvoiceNumber={detail.quote.external_olist_invoice_number}

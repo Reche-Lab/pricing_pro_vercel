@@ -174,6 +174,7 @@ export function OlistQuoteActions({
   externalCrmId,
   externalCrmTaskId,
   externalCrmTaskCreatedAt,
+  defaultResponsibleExternalId,
   externalOrderId,
   externalInvoiceId,
   externalInvoiceNumber,
@@ -203,6 +204,7 @@ export function OlistQuoteActions({
   externalCrmId?: string | null;
   externalCrmTaskId?: string | null;
   externalCrmTaskCreatedAt?: string | null;
+  defaultResponsibleExternalId?: string | null;
   externalOrderId?: string | null;
   externalInvoiceId?: string | null;
   externalInvoiceNumber?: string | null;
@@ -548,6 +550,7 @@ export function OlistQuoteActions({
           customerReady={customerReady}
           customerLookupDefaults={customerLookupDefaults}
           defaultCrmSubject={defaultCrmSubject}
+          defaultResponsibleExternalId={defaultResponsibleExternalId ?? null}
           invoiceExternalId={invoiceExternalId}
           invoiceNumber={externalInvoiceNumber ?? null}
           invoiceSeries={externalInvoiceSeries ?? null}
@@ -701,6 +704,7 @@ function ActionModal({
   customerReady,
   customerLookupDefaults,
   defaultCrmSubject,
+  defaultResponsibleExternalId,
   invoiceExternalId,
   invoiceNumber,
   invoiceSeries,
@@ -742,6 +746,7 @@ function ActionModal({
     codigo: string;
   };
   defaultCrmSubject: string;
+  defaultResponsibleExternalId: string | null;
   invoiceExternalId: string | null;
   invoiceNumber: string | null;
   invoiceSeries: string | null;
@@ -774,6 +779,10 @@ function ActionModal({
     data: null
   });
   const melhorEnvioShipment = useMemo(() => selectBestMelhorEnvioShipment(shipments), [shipments]);
+  const defaultResponsibleUser = useMemo(
+    () => responsibleUsers.find((user) => user.id === defaultResponsibleExternalId) ?? null,
+    [defaultResponsibleExternalId, responsibleUsers]
+  );
 
   useEffect(() => {
     if (action !== "salesOrder") return;
@@ -1007,7 +1016,7 @@ function ActionModal({
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block">
                   <span className="mb-1 block text-sm font-medium text-zinc-300">Responsável CRM</span>
-                  <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="responsibleExternalId" defaultValue={responsibleUsers[0]?.id ?? ""}>
+                  <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="responsibleExternalId" defaultValue={defaultResponsibleExternalId ?? ""}>
                     <option value="">Sem responsável</option>
                     {responsibleUsers.map((user) => (
                       <option key={user.id} value={user.id}>
@@ -1018,6 +1027,11 @@ function ActionModal({
                 </label>
                 <Input label="ID responsável manual" name="responsibleExternalIdManual" />
               </div>
+              {defaultResponsibleUser ? (
+                <p className="rounded-md border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-100">
+                  Responsável preenchido automaticamente pelo usuário logado: {defaultResponsibleUser.name} - Olist {defaultResponsibleUser.id}.
+                </p>
+              ) : null}
               <p className="text-xs leading-5 text-zinc-500">
                 Para aparecer na agenda de um usuário do CRM, vincule o usuário em Configurações &gt; Usuários &gt; Olist, ou informe manualmente o ID do responsável.
               </p>
