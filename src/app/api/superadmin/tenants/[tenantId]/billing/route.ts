@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
-import { applyTenantVoucher, extendTenantTrial } from "@/repositories/billing";
+import { applyTenantVoucher, changeTenantBillingPlan, extendTenantTrial } from "@/repositories/billing";
 import { isSuperAdmin } from "@/repositories/superadmin";
 
 const billingAdminSchema = z.discriminatedUnion("action", [
@@ -14,6 +14,10 @@ const billingAdminSchema = z.discriminatedUnion("action", [
     discountPercent: z.number().min(1).max(100),
     expiresAt: z.string().datetime(),
     note: z.string().trim().max(240).optional().nullable()
+  }),
+  z.object({
+    action: z.literal("change_plan"),
+    planId: z.string().uuid()
   })
 ]);
 
@@ -30,21 +34,36 @@ export async function PATCH(request: Request, context: { params: Promise<{ tenan
   const parsed = billingAdminSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ ok: false, error: parsed.error.flatten() }, { status: 400 });
 
-  if (parsed.data.action === "extend_trial") {
-    await extendTenantTrial({
-      actorUserId: session.userId,
-      tenantId,
-      endsAt: parsed.data.endsAt
-    });
-  } else {
-    await applyTenantVoucher({
-      actorUserId: session.userId,
-      tenantId,
-      discountPercent: parsed.data.discountPercent,
-      expiresAt: parsed.data.expiresAt,
-      note: parsed.data.note
-    });
-  }
+  try {
+    let result: Record<string, unknown> | undefined;
+    if (parsed.data.action === "extend_trial") {
+      await extendTenantTrial({
+        actorUserId: session.userId,
+        tenantId,
+        endsAt: parsed.data.endsAt
+      });
+    } else if (parsed.data.action === "apply_voucher") {
+      await applyTenantVoucher({
+        actorUserId: session.userId,
+        tenantId,
+        discountPercent: parsed.data.discountPercent,
+        expiresAt: parsed.data.expiresAt,
+        note: parsed.data.note
+      });
+    } else {
+      result = await changeTenantBillingPlan({
+        actorUserId: session.userId,
+        tenantId,
+        planId: parsed.data.planId
+      });
+    }
 
-  return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, ...result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Não foi possível atualizar a cobrança.";
+    return NextResponse.json(
+      { ok: false, error: message },
+      { status: message === "Forbidden." ? 403 : message.includes("not found") ? 404 : 500 }
+    );
+  }
 }

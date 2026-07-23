@@ -10,6 +10,10 @@ export type SuperadminTenantRow = {
   billing_status: string;
   subscription_status: string | null;
   current_period_end: string | null;
+  plan_id: string | null;
+  plan_key: string | null;
+  plan_name: string | null;
+  plan_amount_cents: number | null;
   discount_percent: number | null;
   discount_expires_at: string | null;
   member_count: number;
@@ -59,6 +63,10 @@ export async function listSuperadminTenants(): Promise<SuperadminTenantRow[]> {
         t.billing_status,
         ts.status as subscription_status,
         ts.current_period_end,
+        p.id as plan_id,
+        p.key as plan_key,
+        p.name as plan_name,
+        p.amount_cents as plan_amount_cents,
         ts.discount_percent,
         ts.discount_expires_at,
         coalesce(members.member_count, 0)::int as member_count,
@@ -102,6 +110,7 @@ export async function listSuperadminTenants(): Promise<SuperadminTenantRow[]> {
         where tm.tenant_id = t.id
       ) members on true
       left join tenant_subscriptions ts on ts.tenant_id = t.id
+      left join billing_plans p on p.id = ts.plan_id
       order by t.created_at desc
     `
   );

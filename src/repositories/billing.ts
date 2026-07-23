@@ -177,6 +177,98 @@ export async function upsertBillingPlan(input: {
   }
 }
 
+export async function changeTenantBillingPlan(input: {
+  actorUserId: string;
+  tenantId: string;
+  planId: string;
+}): Promise<{ planId: string; planName: string; amountCents: number }> {
+  const client = await getPool().connect();
+  try {
+    await client.query("begin");
+    await client.query("select set_config('app.user_id', $1, true)", [input.actorUserId]);
+
+    const actor = await client.query<{ is_super_admin: boolean }>(
+      "select is_super_admin from app_users where id = $1 and status = 'active'",
+      [input.actorUserId]
+    );
+    if (!actor.rows[0]?.is_super_admin) throw new Error("Forbidden.");
+
+    const plan = await client.query<{ id: string; name: string; amount_cents: number }>(
+      `
+        select id, name, amount_cents
+        from billing_plans
+        where id = $1 and active = true
+        limit 1
+      `,
+      [input.planId]
+    );
+    if (!plan.rows[0]) throw new Error("Active billing plan not found.");
+
+    const subscription = await client.query<{ id: string; previous_plan_id: string }>(
+      `
+        with previous as (
+          select id, plan_id
+          from tenant_subscriptions
+          where tenant_id = $1
+          for update
+        )
+        update tenant_subscriptions subscription
+        set plan_id = $2,
+            updated_at = now()
+        from previous
+        where subscription.id = previous.id
+        returning subscription.id, previous.plan_id as previous_plan_id
+      `,
+      [input.tenantId, input.planId]
+    );
+    if (!subscription.rows[0]) throw new Error("Tenant subscription not found.");
+
+    await client.query(
+      `
+        update billing_invoices
+        set status = 'cancelled',
+            updated_at = now(),
+            metadata = metadata || jsonb_build_object(
+              'cancelled_by_plan_change', true,
+              'next_plan_id', $2
+            )
+        where tenant_id = $1
+          and status in ('open', 'pending')
+      `,
+      [input.tenantId, input.planId]
+    );
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'billing.plan_change', 'tenant_subscription', $3, $4)
+      `,
+      [
+        input.tenantId,
+        input.actorUserId,
+        subscription.rows[0].id,
+        JSON.stringify({
+          previousPlanId: subscription.rows[0].previous_plan_id,
+          nextPlanId: input.planId,
+          nextAmountCents: plan.rows[0].amount_cents
+        })
+      ]
+    );
+
+    await client.query("commit");
+    return {
+      planId: plan.rows[0].id,
+      planName: plan.rows[0].name,
+      amountCents: plan.rows[0].amount_cents
+    };
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function getBillingOverview(userId: string, tenantId: string): Promise<BillingOverview | null> {
   return withTenantContext(userId, tenantId, async (client) => {
     const result = await client.query<BillingOverview>(
@@ -210,6 +302,7 @@ export async function getBillingOverview(userId: string, tenantId: string): Prom
           select id, status, checkout_url, due_at
           from billing_invoices bi
           where bi.tenant_id = t.id
+            and bi.status in ('open', 'pending')
           order by bi.created_at desc
           limit 1
         ) latest on true

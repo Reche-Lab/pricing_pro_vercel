@@ -84,7 +84,11 @@ export function SuperadminPanel({
       return;
     }
 
-    setMessage("Cobrança atualizada.");
+    setMessage(
+      input.action === "change_plan"
+        ? `Plano do tenant alterado para ${data.planName}. O novo valor mensal é ${formatCurrency(Number(data.amountCents ?? 0))}.`
+        : "Cobrança atualizada."
+    );
     router.refresh();
   }
 
@@ -105,7 +109,11 @@ export function SuperadminPanel({
       return;
     }
 
-    setMessage("Preço base atualizado. Cobranças abertas desse plano foram canceladas para serem recriadas com o novo valor.");
+    const affectedTenants = Number(data.plan?.tenant_count ?? 0);
+    setMessage(
+      `Preço base atualizado para ${affectedTenants} ${affectedTenants === 1 ? "tenant vinculado" : "tenants vinculados"}. ` +
+      "Cobranças abertas foram invalidadas e o próximo checkout usará o novo valor."
+    );
     router.refresh();
   }
 
@@ -141,7 +149,9 @@ export function SuperadminPanel({
               Defina o valor mensal padrão usado nas assinaturas e nos checkouts do Mercado Pago. Alterar um plano cancela cobranças abertas dele para que a próxima seja recriada com o novo valor.
             </p>
           </div>
-          <Badge>{billingPlans.length} plano(s)</Badge>
+          <span className="inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full border border-zinc-700 bg-zinc-950/60 px-3 text-xs font-medium text-zinc-300">
+            {billingPlans.length} {billingPlans.length === 1 ? "plano" : "planos"}
+          </span>
         </div>
         <BillingPlansPanel
           disabledKey={planLoading}
@@ -236,12 +246,20 @@ export function SuperadminPanel({
                       <Badge>{billingLabel(tenant.subscription_status ?? tenant.billing_status)}</Badge>
                     </div>
                     <p className="mt-1 text-sm text-zinc-500">{tenant.slug}</p>
-                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 sm:grid-cols-3">
+                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 sm:grid-cols-2 2xl:grid-cols-4">
                       <SummaryPill
                         label="Owner"
                         value={tenant.owner_name ? `${tenant.owner_name} (${tenant.owner_email})` : "não definido"}
                       />
                       <SummaryPill label="Usuários" value={`${tenant.member_count} membro(s)`} />
+                      <SummaryPill
+                        label="Plano"
+                        value={
+                          tenant.plan_name && tenant.plan_amount_cents !== null
+                            ? `${tenant.plan_name} · ${formatCurrency(tenant.plan_amount_cents)}/mês`
+                            : "não configurado"
+                        }
+                      />
                       <SummaryPill
                         label="Voucher"
                         value={tenant.discount_percent && Number(tenant.discount_percent) > 0 ? `${Number(tenant.discount_percent).toFixed(0)}% ativo` : "sem voucher"}
@@ -253,7 +271,11 @@ export function SuperadminPanel({
                     <StatusBlock
                       label="Assinatura"
                       value={billingLabel(tenant.subscription_status ?? tenant.billing_status)}
-                      detail={tenant.current_period_end ? `Válida até ${new Intl.DateTimeFormat("pt-BR").format(new Date(tenant.current_period_end))}` : "Sem vencimento definido"}
+                      detail={
+                        tenant.plan_name && tenant.plan_amount_cents !== null
+                          ? `${tenant.plan_name} · ${formatCurrency(tenant.plan_amount_cents)}/mês`
+                          : "Plano não configurado"
+                      }
                     />
                   </div>
                 </div>
@@ -314,7 +336,10 @@ export function SuperadminPanel({
                         />
                       </div>
                       <TenantBillingActions
+                        key={`${tenant.id}-${tenant.plan_id ?? "no-plan"}`}
                         disabled={billingLoading === tenant.id}
+                        currentPlanId={tenant.plan_id}
+                        plans={billingPlans}
                         tenantId={tenant.id}
                         onSubmit={updateTenantBilling}
                       />
@@ -332,17 +357,22 @@ export function SuperadminPanel({
 }
 
 function TenantBillingActions({
+  currentPlanId,
   disabled,
   onSubmit,
+  plans,
   tenantId
 }: {
+  currentPlanId: string | null;
   disabled: boolean;
   onSubmit: (tenantId: string, input: Record<string, unknown>) => void;
+  plans: BillingPlanRow[];
   tenantId: string;
 }) {
   const [trialDays, setTrialDays] = useState(14);
   const [discountPercent, setDiscountPercent] = useState(50);
   const [voucherDays, setVoucherDays] = useState(30);
+  const [selectedPlanId, setSelectedPlanId] = useState(currentPlanId ?? "");
 
   function futureDate(days: number) {
     const date = new Date();
@@ -353,6 +383,39 @@ function TenantBillingActions({
   return (
     <div className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
       <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Plano deste tenant</p>
+        <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+          <label className="block">
+            <span className="mb-1 block text-[11px] text-zinc-500">Plano e valor mensal</span>
+            <select
+              className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs"
+              onChange={(event) => setSelectedPlanId(event.target.value)}
+              value={selectedPlanId}
+            >
+              <option disabled value="">Selecione um plano</option>
+              {plans.filter((plan) => plan.active || plan.id === currentPlanId).map((plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.name} · {formatCurrency(plan.amount_cents)}/mês{plan.active ? "" : " (inativo)"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="focus-ring mt-5 inline-flex h-9 items-center gap-1 rounded-md border border-emerald-400/40 px-3 text-xs text-emerald-200 hover:bg-emerald-400/10 disabled:opacity-50"
+            disabled={disabled || !selectedPlanId || selectedPlanId === currentPlanId}
+            type="button"
+            onClick={() => onSubmit(tenantId, { action: "change_plan", planId: selectedPlanId })}
+          >
+            <DollarSign size={14} />
+            Alterar plano
+          </button>
+        </div>
+        <p className="mt-2 text-[11px] leading-4 text-zinc-600">
+          A troca vale imediatamente. Cobranças abertas são substituídas no próximo checkout; pagamentos concluídos não são alterados.
+        </p>
+      </div>
+
+      <div className="border-t border-zinc-800 pt-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Trial do tenant</p>
         <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
           <label className="block">
@@ -448,17 +511,17 @@ function BillingPlansPanel({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+    <div className="grid gap-4">
       <div className="grid gap-3">
         {plans.map((plan) => (
           <form
-            className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 md:grid-cols-[1fr_160px_120px_auto] md:items-end"
+            className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3"
             key={plan.id}
             onSubmit={(event) => submitPlan(event, plan.key)}
           >
             <input name="planKey" type="hidden" value={plan.key} />
-            <div className="min-w-0">
-              <label className="block">
+            <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(160px,200px)_100px_140px] lg:items-end">
+              <label className="min-w-0">
                 <span className="mb-1 block text-xs font-medium text-zinc-500">Nome do plano</span>
                 <input
                   className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
@@ -467,42 +530,47 @@ function BillingPlansPanel({
                   required
                 />
               </label>
-              <p className="mt-1 text-xs text-zinc-600">
-                Chave: <span className="font-mono text-zinc-400">{plan.key}</span> · {plan.tenant_count} tenant(s) · {plan.open_invoice_count} cobrança(s) aberta(s)
-              </p>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-zinc-500">Valor mensal</span>
+                <input
+                  className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+                  defaultValue={centsToInput(plan.amount_cents)}
+                  inputMode="decimal"
+                  name="planAmount"
+                  required
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-zinc-500">Disponível</span>
+                <span className="flex min-h-10 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-sm text-zinc-300">
+                  <input className="h-4 w-4 accent-emerald-300" defaultChecked={plan.active} name="planActive" type="checkbox" />
+                  Ativo
+                </span>
+              </label>
+              <button
+                className="focus-ring inline-flex min-h-10 items-center justify-center rounded-md bg-emerald-300 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-200 disabled:opacity-60"
+                disabled={disabledKey === plan.key}
+                type="submit"
+              >
+                {disabledKey === plan.key ? "Salvando..." : "Salvar preço"}
+              </button>
             </div>
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-500">Valor mensal</span>
-              <input
-                className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
-                defaultValue={centsToInput(plan.amount_cents)}
-                inputMode="decimal"
-                name="planAmount"
-                required
-              />
-            </label>
-            <label className="flex min-h-10 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-sm text-zinc-300">
-              <input className="h-4 w-4 accent-emerald-300" defaultChecked={plan.active} name="planActive" type="checkbox" />
-              Ativo
-            </label>
-            <button
-              className="focus-ring inline-flex min-h-10 items-center justify-center rounded-md bg-emerald-300 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-200 disabled:opacity-60"
-              disabled={disabledKey === plan.key}
-              type="submit"
-            >
-              {disabledKey === plan.key ? "Salvando..." : "Salvar preço"}
-            </button>
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-zinc-800/80 pt-3 text-xs text-zinc-500">
+              <span>
+                Chave: <span className="font-mono text-zinc-300">{plan.key}</span>
+              </span>
+              <span>{plan.tenant_count} {plan.tenant_count === 1 ? "tenant vinculado" : "tenants vinculados"}</span>
+              <span>{plan.open_invoice_count} {plan.open_invoice_count === 1 ? "cobrança aberta" : "cobranças abertas"}</span>
+            </div>
           </form>
         ))}
         {plans.length === 0 ? <EmptyState text="Nenhum plano de cobrança cadastrado." /> : null}
       </div>
 
-      <form className="grid h-fit gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3" onSubmit={(event) => submitPlan(event)}>
+      <form className="grid h-fit gap-3 rounded-lg border border-dashed border-zinc-700 bg-zinc-950/40 p-3 sm:grid-cols-2 lg:grid-cols-[180px_1fr_180px_100px_140px] lg:items-end" onSubmit={(event) => submitPlan(event)}>
         <div>
           <p className="text-sm font-semibold text-white">Novo plano base</p>
-          <p className="mt-1 text-xs leading-5 text-zinc-500">
-            Use para criar uma nova opção de preço da plataforma. Novos tenants ainda usam o plano starter padrão até alterarmos a regra de onboarding.
-          </p>
+          <p className="mt-1 text-xs leading-5 text-zinc-500">Crie outra opção de assinatura.</p>
         </div>
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-zinc-500">Chave</span>
@@ -538,9 +606,12 @@ function BillingPlansPanel({
             value={newPlanAmount}
           />
         </label>
-        <label className="flex min-h-10 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-sm text-zinc-300">
-          <input className="h-4 w-4 accent-emerald-300" defaultChecked name="planActive" type="checkbox" />
-          Ativo
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-zinc-500">Disponível</span>
+          <span className="flex min-h-10 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-sm text-zinc-300">
+            <input className="h-4 w-4 accent-emerald-300" defaultChecked name="planActive" type="checkbox" />
+            Ativo
+          </span>
         </label>
         <button
           className="focus-ring inline-flex min-h-10 items-center justify-center rounded-md border border-emerald-300/30 bg-emerald-300/10 px-3 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-300/20 disabled:opacity-60"
@@ -646,6 +717,13 @@ function centsToInput(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
+}
+
+function formatCurrency(valueInCents: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL"
+  }).format(Number(valueInCents) / 100);
 }
 
 function formatError(error: unknown) {
