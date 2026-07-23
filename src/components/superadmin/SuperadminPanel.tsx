@@ -2,12 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Copy, Gift, ShieldCheck, TimerReset, Users } from "lucide-react";
+import { Building2, Copy, DollarSign, Gift, ShieldCheck, TimerReset, Users } from "lucide-react";
+import type { BillingPlanRow } from "@/repositories/billing";
 import type { SuperadminTenantRow } from "@/repositories/superadmin";
 
 export function SuperadminPanel({
+  billingPlans,
   tenants
 }: {
+  billingPlans: BillingPlanRow[];
   tenants: SuperadminTenantRow[];
 }) {
   const router = useRouter();
@@ -17,6 +20,7 @@ export function SuperadminPanel({
   const [inviteUrl, setInviteUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [billingLoading, setBillingLoading] = useState("");
+  const [planLoading, setPlanLoading] = useState("");
 
   const generatedSlug = useMemo(() => slugify(tenantName), [tenantName]);
 
@@ -84,6 +88,27 @@ export function SuperadminPanel({
     router.refresh();
   }
 
+  async function updateBillingPlan(input: Record<string, unknown>) {
+    const key = String(input.key ?? "");
+    setPlanLoading(key || "new");
+    setMessage("");
+    const response = await fetch("/api/superadmin/billing-plans", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
+    const data = await response.json().catch(() => null);
+    setPlanLoading("");
+
+    if (!response.ok || !data?.ok) {
+      setMessage(data?.error ? "Não foi possível salvar o preço base." : "Não foi possível salvar o preço base.");
+      return;
+    }
+
+    setMessage("Preço base atualizado. Cobranças abertas desse plano foram canceladas para serem recriadas com o novo valor.");
+    router.refresh();
+  }
+
   return (
     <div className="grid gap-6 xl:grid-cols-[440px_1fr]">
       <section className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-5 xl:col-span-2">
@@ -103,6 +128,26 @@ export function SuperadminPanel({
             liaflow.ai@gmail.com
           </span>
         </div>
+      </section>
+
+      <section className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5 xl:col-span-2">
+        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <DollarSign className="text-emerald-300" size={18} />
+              <h2 className="font-semibold text-white">Preços base da plataforma</h2>
+            </div>
+            <p className="mt-1 text-sm text-zinc-500">
+              Defina o valor mensal padrão usado nas assinaturas e nos checkouts do Mercado Pago. Alterar um plano cancela cobranças abertas dele para que a próxima seja recriada com o novo valor.
+            </p>
+          </div>
+          <Badge>{billingPlans.length} plano(s)</Badge>
+        </div>
+        <BillingPlansPanel
+          disabledKey={planLoading}
+          plans={billingPlans}
+          onSubmit={updateBillingPlan}
+        />
       </section>
 
       <section className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5">
@@ -378,6 +423,137 @@ function TenantBillingActions({
   );
 }
 
+function BillingPlansPanel({
+  disabledKey,
+  onSubmit,
+  plans
+}: {
+  disabledKey: string;
+  onSubmit: (input: Record<string, unknown>) => void;
+  plans: BillingPlanRow[];
+}) {
+  const [newPlanKey, setNewPlanKey] = useState("");
+  const [newPlanName, setNewPlanName] = useState("");
+  const [newPlanAmount, setNewPlanAmount] = useState("50,00");
+
+  function submitPlan(event: React.FormEvent<HTMLFormElement>, currentKey?: string) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const key = String(form.get("planKey") ?? currentKey ?? "").trim();
+    const name = String(form.get("planName") ?? "").trim();
+    const amountCents = moneyToCents(String(form.get("planAmount") ?? ""));
+    const active = form.get("planActive") === "on";
+    if (!key || !name || amountCents < 100) return;
+    onSubmit({ key, name, amountCents, active });
+  }
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+      <div className="grid gap-3">
+        {plans.map((plan) => (
+          <form
+            className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 md:grid-cols-[1fr_160px_120px_auto] md:items-end"
+            key={plan.id}
+            onSubmit={(event) => submitPlan(event, plan.key)}
+          >
+            <input name="planKey" type="hidden" value={plan.key} />
+            <div className="min-w-0">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-zinc-500">Nome do plano</span>
+                <input
+                  className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+                  defaultValue={plan.name}
+                  name="planName"
+                  required
+                />
+              </label>
+              <p className="mt-1 text-xs text-zinc-600">
+                Chave: <span className="font-mono text-zinc-400">{plan.key}</span> · {plan.tenant_count} tenant(s) · {plan.open_invoice_count} cobrança(s) aberta(s)
+              </p>
+            </div>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-zinc-500">Valor mensal</span>
+              <input
+                className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+                defaultValue={centsToInput(plan.amount_cents)}
+                inputMode="decimal"
+                name="planAmount"
+                required
+              />
+            </label>
+            <label className="flex min-h-10 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-sm text-zinc-300">
+              <input className="h-4 w-4 accent-emerald-300" defaultChecked={plan.active} name="planActive" type="checkbox" />
+              Ativo
+            </label>
+            <button
+              className="focus-ring inline-flex min-h-10 items-center justify-center rounded-md bg-emerald-300 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-200 disabled:opacity-60"
+              disabled={disabledKey === plan.key}
+              type="submit"
+            >
+              {disabledKey === plan.key ? "Salvando..." : "Salvar preço"}
+            </button>
+          </form>
+        ))}
+        {plans.length === 0 ? <EmptyState text="Nenhum plano de cobrança cadastrado." /> : null}
+      </div>
+
+      <form className="grid h-fit gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3" onSubmit={(event) => submitPlan(event)}>
+        <div>
+          <p className="text-sm font-semibold text-white">Novo plano base</p>
+          <p className="mt-1 text-xs leading-5 text-zinc-500">
+            Use para criar uma nova opção de preço da plataforma. Novos tenants ainda usam o plano starter padrão até alterarmos a regra de onboarding.
+          </p>
+        </div>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-zinc-500">Chave</span>
+          <input
+            className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+            name="planKey"
+            onChange={(event) => setNewPlanKey(event.target.value)}
+            pattern="[a-z0-9]+(_[a-z0-9]+)*"
+            placeholder="starter_99"
+            required
+            value={newPlanKey}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-zinc-500">Nome</span>
+          <input
+            className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+            name="planName"
+            onChange={(event) => setNewPlanName(event.target.value)}
+            placeholder="Starter"
+            required
+            value={newPlanName}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-zinc-500">Valor mensal</span>
+          <input
+            className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+            inputMode="decimal"
+            name="planAmount"
+            onChange={(event) => setNewPlanAmount(event.target.value)}
+            required
+            value={newPlanAmount}
+          />
+        </label>
+        <label className="flex min-h-10 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-sm text-zinc-300">
+          <input className="h-4 w-4 accent-emerald-300" defaultChecked name="planActive" type="checkbox" />
+          Ativo
+        </label>
+        <button
+          className="focus-ring inline-flex min-h-10 items-center justify-center rounded-md border border-emerald-300/30 bg-emerald-300/10 px-3 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-300/20 disabled:opacity-60"
+          disabled={disabledKey === "new"}
+          type="submit"
+        >
+          {disabledKey === "new" ? "Criando..." : "Criar plano"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function StatusBlock({ detail, label, value }: { detail: string; label: string; value: string }) {
   return (
     <div className="rounded-md border border-zinc-800 bg-zinc-950/50 p-3">
@@ -453,6 +629,23 @@ function slugify(value: string) {
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function moneyToCents(value: string) {
+  const normalized = value
+    .replace(/[^\d,.-]/g, "")
+    .replace(/\.(?=\d{3}(?:\D|$))/g, "")
+    .replace(",", ".");
+  const amount = Number(normalized);
+  if (!Number.isFinite(amount)) return 0;
+  return Math.round(amount * 100);
+}
+
+function centsToInput(value: number) {
+  return (Number(value) / 100).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
 }
 
 function formatError(error: unknown) {

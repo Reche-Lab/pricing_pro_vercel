@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { SuperadminPanel } from "@/components/superadmin/SuperadminPanel";
 import { getCurrentSession } from "@/lib/auth/session";
+import { listBillingPlans } from "@/repositories/billing";
 import { isSuperAdmin, listSuperadminTenants } from "@/repositories/superadmin";
 import { getSessionProfile } from "@/repositories/users";
 
@@ -16,7 +17,10 @@ export default async function SuperadminPage() {
   if (!profile) redirect("/login");
   if (!allowed) redirect("/dashboard");
 
-  const tenants = await listSuperadminTenants();
+  const [tenants, billingPlans] = await Promise.all([
+    listSuperadminTenants(),
+    listBillingPlans()
+  ]);
 
   return (
     <AppShell
@@ -26,7 +30,7 @@ export default async function SuperadminPage() {
       tenantLogoUrl={profile.tenant_logo_url}
       tenantName={profile.tenant_name}
     >
-      <SuperadminPanel tenants={tenants} />
+      <SuperadminPanel billingPlans={billingPlans} tenants={tenants} />
     </AppShell>
   );
 }

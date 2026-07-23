@@ -44,6 +44,139 @@ export type BillingAccess = {
   reason: string | null;
 };
 
+export type BillingPlanRow = {
+  id: string;
+  key: string;
+  name: string;
+  amount_cents: number;
+  currency: string;
+  interval: string;
+  active: boolean;
+  tenant_count: number;
+  open_invoice_count: number;
+  updated_at: string;
+};
+
+export async function listBillingPlans(): Promise<BillingPlanRow[]> {
+  const rows = await query<BillingPlanRow>(
+    `
+      select
+        p.id,
+        p.key,
+        p.name,
+        p.amount_cents,
+        p.currency::text as currency,
+        p.interval,
+        p.active,
+        count(distinct ts.tenant_id)::int as tenant_count,
+        count(distinct bi.id) filter (where bi.status in ('open', 'pending'))::int as open_invoice_count,
+        p.updated_at::text as updated_at
+      from billing_plans p
+      left join tenant_subscriptions ts on ts.plan_id = p.id
+      left join billing_invoices bi on bi.subscription_id = ts.id
+      group by p.id
+      order by p.active desc, p.created_at asc
+    `
+  );
+  return rows;
+}
+
+export async function upsertBillingPlan(input: {
+  actorUserId: string;
+  key: string;
+  name: string;
+  amountCents: number;
+  active: boolean;
+}): Promise<BillingPlanRow> {
+  const client = await getPool().connect();
+  try {
+    await client.query("begin");
+    await client.query("select set_config('app.user_id', $1, true)", [input.actorUserId]);
+    const actor = await client.query<{ is_super_admin: boolean }>(
+      "select is_super_admin from app_users where id = $1 and status = 'active'",
+      [input.actorUserId]
+    );
+    if (!actor.rows[0]?.is_super_admin) throw new Error("Forbidden.");
+
+    const previous = await client.query<{ id: string; amount_cents: number }>(
+      "select id, amount_cents from billing_plans where key = $1 for update",
+      [input.key]
+    );
+    const previousAmount = previous.rows[0]?.amount_cents ?? null;
+
+    const saved = await client.query<BillingPlanRow>(
+      `
+        insert into billing_plans (key, name, amount_cents, currency, interval, active)
+        values ($1, $2, $3, 'BRL', 'month', $4)
+        on conflict (key) do update
+          set name = excluded.name,
+              amount_cents = excluded.amount_cents,
+              active = excluded.active,
+              updated_at = now()
+        returning
+          id,
+          key,
+          name,
+          amount_cents,
+          currency::text as currency,
+          interval,
+          active,
+          0::int as tenant_count,
+          0::int as open_invoice_count,
+          updated_at::text as updated_at
+      `,
+      [input.key, input.name, input.amountCents, input.active]
+    );
+
+    if (previousAmount !== null && previousAmount !== input.amountCents) {
+      await client.query(
+        `
+          update billing_invoices bi
+          set status = 'cancelled',
+              updated_at = now(),
+              metadata = metadata || jsonb_build_object(
+                'cancelled_by_plan_price_update', true,
+                'previous_amount_cents', $2,
+                'next_amount_cents', $3
+              )
+          from tenant_subscriptions ts
+          where bi.subscription_id = ts.id
+            and ts.plan_id = $1
+            and bi.status in ('open', 'pending')
+        `,
+        [saved.rows[0].id, previousAmount, input.amountCents]
+      );
+    }
+
+    await client.query(
+      `
+        insert into audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, 'billing.plan_upsert', 'billing_plan', $2, $3)
+      `,
+      [
+        input.actorUserId,
+        saved.rows[0].id,
+        JSON.stringify({
+          key: input.key,
+          name: input.name,
+          amountCents: input.amountCents,
+          active: input.active,
+          previousAmountCents: previousAmount
+        })
+      ]
+    );
+
+    await client.query("commit");
+    const hydrated = await listBillingPlans();
+    return hydrated.find((plan) => plan.id === saved.rows[0].id) ?? saved.rows[0];
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function getBillingOverview(userId: string, tenantId: string): Promise<BillingOverview | null> {
   return withTenantContext(userId, tenantId, async (client) => {
     const result = await client.query<BillingOverview>(
