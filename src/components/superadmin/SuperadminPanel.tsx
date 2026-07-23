@@ -111,8 +111,10 @@ export function SuperadminPanel({
 
     const affectedTenants = Number(data.plan?.tenant_count ?? 0);
     setMessage(
-      `Preço base atualizado para ${affectedTenants} ${affectedTenants === 1 ? "tenant vinculado" : "tenants vinculados"}. ` +
-      "Cobranças abertas foram invalidadas e o próximo checkout usará o novo valor."
+      affectedTenants > 0
+        ? `Preço base atualizado para ${affectedTenants} ${affectedTenants === 1 ? "tenant vinculado" : "tenants vinculados"}. ` +
+          "Cobranças abertas foram invalidadas e o próximo checkout usará o novo valor."
+        : "Plano salvo, mas nenhum tenant utiliza esse plano. Para aplicar o preço, abra o tenant e use “Alterar plano”."
     );
     router.refresh();
   }
@@ -516,7 +518,7 @@ function BillingPlansPanel({
         {plans.map((plan) => (
           <form
             className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3"
-            key={plan.id}
+            key={`${plan.id}-${plan.updated_at}`}
             onSubmit={(event) => submitPlan(event, plan.key)}
           >
             <input name="planKey" type="hidden" value={plan.key} />
@@ -559,7 +561,9 @@ function BillingPlansPanel({
               <span>
                 Chave: <span className="font-mono text-zinc-300">{plan.key}</span>
               </span>
-              <span>{plan.tenant_count} {plan.tenant_count === 1 ? "tenant vinculado" : "tenants vinculados"}</span>
+              <span className={plan.tenant_count === 0 ? "font-medium text-amber-300" : "text-emerald-300"}>
+                {plan.tenant_count} {plan.tenant_count === 1 ? "tenant vinculado" : "tenants vinculados"}
+              </span>
               <span>{plan.open_invoice_count} {plan.open_invoice_count === 1 ? "cobrança aberta" : "cobranças abertas"}</span>
             </div>
           </form>
