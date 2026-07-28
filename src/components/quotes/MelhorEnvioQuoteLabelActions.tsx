@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
+  ClipboardCopy,
   CreditCard,
+  ExternalLink,
   FileText,
   Lock,
   PackagePlus,
@@ -355,6 +357,9 @@ export function MelhorEnvioQuoteLabelActions({
       </div>
 
       {result ? <ResultBox result={result} /> : null}
+      {selectedShipment && (selectedShipment.label_url || selectedShipment.tracking_code) ? (
+        <ShipmentReadyDetails shipment={selectedShipment} />
+      ) : null}
       {message ? <p className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">{message}</p> : null}
     </div>
   );
@@ -457,6 +462,95 @@ function ResultBox({ result }: { result: { tone: "success" | "error" | "info"; t
       <p className="mt-1 text-xs leading-5 opacity-85">{result.message}</p>
     </div>
   );
+}
+
+function ShipmentReadyDetails({ shipment }: { shipment: ShipmentRow }) {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const labelUrl = safeHttpUrl(shipment.label_url);
+
+  async function copyTrackingCode() {
+    if (!shipment.tracking_code) return;
+    try {
+      await navigator.clipboard.writeText(shipment.tracking_code);
+      setCopyState("copied");
+      window.setTimeout(() => setCopyState("idle"), 2500);
+    } catch {
+      setCopyState("error");
+    }
+  }
+
+  return (
+    <section className="rounded-md border border-emerald-400/30 bg-emerald-400/10 p-4 text-emerald-50">
+      <div className="flex items-start gap-3">
+        <CheckCircle2 className="mt-0.5 shrink-0 text-emerald-300" size={19} />
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-semibold">
+            {labelUrl ? "Etiqueta pronta para impressão" : "Código de rastreio disponível"}
+          </h3>
+          <p className="mt-1 text-xs leading-5 text-emerald-100/75">
+            Estes dados estão salvos no orçamento e continuarão disponíveis quando você voltar a esta tela.
+          </p>
+
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            {labelUrl ? (
+              <div className="grid gap-2 rounded-md border border-emerald-300/20 bg-zinc-950/35 p-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-200/65">
+                    Etiqueta Melhor Envio
+                  </p>
+                  <p className="mt-1 text-xs text-emerald-50/80">Abra o arquivo para visualizar e imprimir.</p>
+                </div>
+                <a
+                  className="focus-ring inline-flex min-h-10 w-fit items-center gap-2 rounded-md bg-emerald-300 px-3 py-2 text-sm font-semibold text-zinc-950 transition-colors hover:bg-emerald-200"
+                  href={labelUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <ExternalLink size={16} />
+                  Abrir etiqueta para impressão
+                </a>
+              </div>
+            ) : null}
+
+            {shipment.tracking_code ? (
+              <div className="grid gap-2 rounded-md border border-emerald-300/20 bg-zinc-950/35 p-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-200/65">
+                    Código de rastreio
+                  </p>
+                  <p className="mt-1 break-all font-mono text-base font-semibold text-white">
+                    {shipment.tracking_code}
+                  </p>
+                </div>
+                <button
+                  className="focus-ring inline-flex min-h-10 w-fit items-center gap-2 rounded-md border border-emerald-300/30 px-3 py-2 text-sm font-medium text-emerald-50 transition-colors hover:bg-emerald-300/10"
+                  onClick={copyTrackingCode}
+                  type="button"
+                >
+                  <ClipboardCopy size={16} />
+                  {copyState === "copied"
+                    ? "Código copiado"
+                    : copyState === "error"
+                      ? "Não foi possível copiar"
+                      : "Copiar código"}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function safeHttpUrl(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function currency(value: unknown) {
