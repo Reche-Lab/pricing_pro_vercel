@@ -14,6 +14,7 @@ import {
   Radar,
   RefreshCw,
   Truck,
+  UserRoundPen,
   X
 } from "lucide-react";
 import type { ShipmentRow } from "@/repositories/shipments";
@@ -64,6 +65,7 @@ export function MelhorEnvioQuoteLabelActions({
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<{ tone: "success" | "error" | "info"; title: string; message: string } | null>(null);
   const [completedOperation, setCompletedOperation] = useState<OperationKey | null>(null);
+  const [hasCustomerValidationError, setHasCustomerValidationError] = useState(false);
 
   const selectedShipment = localShipments.find((shipment) => shipment.id === selectedShipmentId) ?? localShipments[0] ?? null;
 
@@ -168,6 +170,7 @@ export function MelhorEnvioQuoteLabelActions({
     setLoading(operation);
     setMessage("");
     setResult(null);
+    setHasCustomerValidationError(false);
 
     const payloadResponse = await fetch(`/api/shipments/${selectedShipment.id}/melhor-envio/payload?operation=${operation}`);
     const payloadData = await payloadResponse.json().catch(() => null);
@@ -183,10 +186,12 @@ export function MelhorEnvioQuoteLabelActions({
 
     if (Array.isArray(payloadData.missingFields) && payloadData.missingFields.length > 0) {
       setLoading("");
+      const missingFields = payloadData.missingFields as string[];
+      setHasCustomerValidationError(missingFields.some((field) => field.startsWith("customer.")));
       setResult({
         tone: "error",
         title: "Dados incompletos para etiqueta",
-        message: `Complete os campos obrigatórios antes de continuar: ${payloadData.missingFields.join(", ")}.`
+        message: `Complete os campos obrigatórios antes de continuar: ${missingFields.map(missingFieldLabel).join(", ")}.`
       });
       return;
     }
@@ -387,6 +392,16 @@ export function MelhorEnvioQuoteLabelActions({
       </div>
 
       {result ? <ResultBox result={result} /> : null}
+      {hasCustomerValidationError ? (
+        <button
+          className="focus-ring inline-flex min-h-10 w-fit items-center gap-2 rounded-md border border-rose-300/30 bg-rose-400/10 px-3 text-sm font-medium text-rose-100 hover:bg-rose-400/15"
+          onClick={() => window.dispatchEvent(new Event("quote-customer-delivery:open"))}
+          type="button"
+        >
+          <UserRoundPen size={16} />
+          Completar dados do cliente
+        </button>
+      ) : null}
       {selectedShipment && (selectedShipment.label_url || selectedShipment.tracking_code) ? (
         <ShipmentReadyDetails shipment={selectedShipment} />
       ) : null}
@@ -487,6 +502,32 @@ function statusLabel(status: string) {
     error: "Erro"
   };
   return labels[status] ?? status;
+}
+
+function missingFieldLabel(field: string) {
+  const labels: Record<string, string> = {
+    "customer.name": "nome do cliente",
+    "customer.phone": "telefone do cliente",
+    "customer.document": "CPF/CNPJ do cliente",
+    "customer.postal_code": "CEP de entrega",
+    "customer.address_line": "endereço de entrega",
+    "customer.address_number": "número do endereço",
+    "customer.district": "bairro",
+    "customer.city": "cidade",
+    "customer.state": "UF",
+    "tenant.name": "nome do remetente",
+    "tenant.company_phone": "telefone do remetente",
+    "tenant.company_document": "CPF/CNPJ do remetente",
+    "tenant.postal_code": "CEP do remetente",
+    "tenant.address_line": "endereço do remetente",
+    "tenant.address_number": "número do remetente",
+    "tenant.district": "bairro do remetente",
+    "tenant.city": "cidade do remetente",
+    "tenant.state": "UF do remetente",
+    "shipment.service_code": "serviço de envio",
+    "shipment.volumes": "embalagem e peso"
+  };
+  return labels[field] ?? field;
 }
 
 function Info({ label, value }: { label: string; value: string }) {

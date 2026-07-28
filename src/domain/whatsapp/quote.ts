@@ -7,6 +7,7 @@ export function buildQuoteWhatsAppText(input: { quote: QuoteDetail; items: Quote
   const lines = [
     "*ORCAMENTO*",
     quote.customer_name ? `*Cliente:* ${quote.customer_name}` : null,
+    quote.delivery_attention_to ? `*Aos cuidados de:* ${quote.delivery_attention_to}` : null,
     "",
     ...items.map(
       (item) =>

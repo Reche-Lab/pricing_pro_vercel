@@ -29,6 +29,7 @@ describe("quote whatsapp text", () => {
         customer_city: null,
         customer_state: null,
         customer_external_olist_id: null,
+        delivery_attention_to: "Marina - Marketing",
         external_crm_id: null,
         created_by_name: "Admin"
       },
@@ -44,6 +45,7 @@ describe("quote whatsapp text", () => {
     });
 
     expect(text).toContain("*Cliente:* Cliente Teste");
+    expect(text).toContain("*Aos cuidados de:* Marina - Marketing");
     expect(text).toContain("*100x* Botton - 2,5 cm");
     expect(text.replace(/\s/g, " ")).toContain("*Total:* R$ 220,00");
   });

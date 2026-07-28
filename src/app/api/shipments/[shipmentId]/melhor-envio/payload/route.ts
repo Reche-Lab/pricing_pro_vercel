@@ -46,5 +46,22 @@ export async function GET(request: Request, context: { params: Promise<{ shipmen
     shipment
   });
 
+  if (draft.missingFields.length > 0) {
+    console.warn("Melhor Envio payload validation blocked operation.", {
+      shipmentId,
+      quoteId: shipment.quote_id,
+      operation: operationParsed.data,
+      missingFields: draft.missingFields,
+      warnings: draft.warnings
+    });
+  } else {
+    console.info("Melhor Envio payload validation completed.", {
+      shipmentId,
+      quoteId: shipment.quote_id,
+      operation: operationParsed.data,
+      warnings: draft.warnings
+    });
+  }
+
   return NextResponse.json({ ok: true, ...draft });
 }

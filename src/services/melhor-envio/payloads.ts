@@ -271,12 +271,20 @@ function buildToAddress(quote: QuoteDetail, missingFields: string[]): MelhorEnvi
     postal_code: onlyDigits(quote.customer_postal_code),
     address: quote.customer_address_line ?? undefined,
     number: quote.customer_address_number ?? undefined,
-    complement: quote.customer_address_complement ?? undefined,
+    complement: deliveryComplement(quote.customer_address_complement, quote.delivery_attention_to),
     district: quote.customer_district ?? undefined,
     city: quote.customer_city ?? undefined,
     country_id: "BR",
     state_abbr: quote.customer_state?.toUpperCase()
   };
+}
+
+function deliveryComplement(complement: string | null | undefined, attentionTo: string | null | undefined) {
+  const parts = [
+    complement?.trim() || null,
+    attentionTo?.trim() ? `A/C: ${attentionTo.trim()}` : null
+  ].filter((value): value is string => Boolean(value));
+  return parts.length ? parts.join(" | ").slice(0, 120) : undefined;
 }
 
 function requireField(value: string | null | undefined, field: string, missingFields: string[]) {

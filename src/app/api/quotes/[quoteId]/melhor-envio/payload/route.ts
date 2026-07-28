@@ -33,5 +33,14 @@ export async function GET(_request: Request, context: { params: Promise<{ quoteI
     shipment
   });
 
+  if (draft.missingFields.length > 0) {
+    console.warn("Melhor Envio quote payload validation blocked operation.", {
+      quoteId,
+      shipmentId: shipment?.id ?? null,
+      missingFields: draft.missingFields,
+      warnings: draft.warnings
+    });
+  }
+
   return NextResponse.json({ ok: true, ...draft });
 }

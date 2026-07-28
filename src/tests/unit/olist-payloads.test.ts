@@ -42,7 +42,10 @@ describe("olist payloads", () => {
   });
 
   it("builds sales order payload with Olist product id and quote price", () => {
-    const payload = buildOlistSalesOrderPayload({ quote: quote(), items: [item()] });
+    const payload = buildOlistSalesOrderPayload({
+      quote: { ...quote(), delivery_attention_to: "Marina - Marketing" },
+      items: [item()]
+    });
 
     expect(payload.itens[0]).toMatchObject({
       produto: { id: 98765, tipo: "P" },
@@ -51,6 +54,7 @@ describe("olist payloads", () => {
     });
     expect(payload.itens[0].infoAdicional).toContain("Arte azul");
     expect(payload.valorFrete).toBe(20);
+    expect(payload.enderecoEntrega).toMatchObject({ complemento: "A/C: Marina - Marketing" });
   });
 
   it("omits delivery address when quote address is incomplete", () => {

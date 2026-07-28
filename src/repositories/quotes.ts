@@ -47,6 +47,7 @@ export type QuoteDetail = {
   customer_city: string | null;
   customer_state: string | null;
   customer_external_olist_id: string | null;
+  delivery_attention_to?: string | null;
   external_crm_id: string | null;
   external_crm_task_id?: string | null;
   external_crm_task_created_at?: string | null;
@@ -261,6 +262,7 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           c.city as customer_city,
           c.state as customer_state,
           c.external_olist_id as customer_external_olist_id,
+          to_jsonb(q)->>'delivery_attention_to' as delivery_attention_to,
           q.external_crm_id,
           to_jsonb(q)->>'external_crm_task_id' as external_crm_task_id,
           to_jsonb(q)->>'external_crm_task_created_at' as external_crm_task_created_at,
@@ -433,6 +435,7 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           c.city as customer_city,
           c.state as customer_state,
           c.external_olist_id as customer_external_olist_id,
+          to_jsonb(q)->>'delivery_attention_to' as delivery_attention_to,
           q.external_crm_id,
           u.name as created_by_name,
           q.public_token_expires_at::text as public_token_expires_at,
@@ -1089,6 +1092,7 @@ export async function updateQuoteEditable(
             null::text as customer_city,
             null::text as customer_state,
             null::text as customer_external_olist_id,
+            to_jsonb(q)->>'delivery_attention_to' as delivery_attention_to,
             q.external_crm_id,
             to_jsonb(q)->>'external_olist_order_id' as external_olist_order_id,
             to_jsonb(q)->>'external_olist_invoice_id' as external_olist_invoice_id,
@@ -1292,6 +1296,163 @@ export async function updateQuoteEditable(
       );
 
       return { id: quoteId, subtotal, shippingTotal, grandTotal };
+  });
+}
+
+export type UpdateQuoteCustomerDeliveryInput = {
+  name: string;
+  document?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  postalCode?: string | null;
+  addressLine?: string | null;
+  addressNumber?: string | null;
+  addressComplement?: string | null;
+  district?: string | null;
+  city?: string | null;
+  state?: string | null;
+  attentionTo?: string | null;
+};
+
+export async function updateQuoteCustomerDelivery(
+  userId: string,
+  tenantId: string,
+  quoteId: string,
+  input: UpdateQuoteCustomerDeliveryInput
+) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const quoteResult = await client.query<{
+      customer_id: string | null;
+      external_olist_invoice_id: string | null;
+      delivery_attention_to: string | null;
+    }>(
+      `
+        select
+          customer_id,
+          to_jsonb(quotes)->>'external_olist_invoice_id' as external_olist_invoice_id,
+          to_jsonb(quotes)->>'delivery_attention_to' as delivery_attention_to
+        from quotes
+        where tenant_id = $1 and id = $2
+        for update
+      `,
+      [tenantId, quoteId]
+    );
+    const quote = quoteResult.rows[0];
+    if (!quote) return null;
+    if (!quote.customer_id) throw new Error("Este orçamento não possui um cliente local para atualizar.");
+    if (quote.external_olist_invoice_id) {
+      throw new Error("Os dados de entrega não podem ser alterados após a emissão da nota fiscal.");
+    }
+
+    const beforeResult = await client.query(
+      `
+        select
+          name,
+          document,
+          email,
+          phone,
+          postal_code,
+          address_line,
+          address_number,
+          address_complement,
+          district,
+          city,
+          state,
+          external_olist_id
+        from customers
+        where tenant_id = $1 and id = $2
+        for update
+      `,
+      [tenantId, quote.customer_id]
+    );
+    if (!beforeResult.rows[0]) throw new Error("Cliente do orçamento não encontrado.");
+
+    const customerResult = await client.query(
+      `
+        update customers
+        set name = $3,
+            document = $4,
+            email = $5,
+            phone = $6,
+            postal_code = $7,
+            address_line = $8,
+            address_number = $9,
+            address_complement = $10,
+            district = $11,
+            city = $12,
+            state = $13,
+            updated_at = now()
+        where tenant_id = $1 and id = $2
+        returning
+          id,
+          name,
+          document,
+          email,
+          phone,
+          postal_code,
+          address_line,
+          address_number,
+          address_complement,
+          district,
+          city,
+          state,
+          external_olist_id
+      `,
+      [
+        tenantId,
+        quote.customer_id,
+        input.name.trim(),
+        clean(input.document),
+        clean(input.email)?.toLowerCase() ?? null,
+        clean(input.phone),
+        clean(input.postalCode),
+        clean(input.addressLine),
+        clean(input.addressNumber),
+        clean(input.addressComplement),
+        clean(input.district),
+        clean(input.city),
+        clean(input.state)?.toUpperCase() ?? null
+      ]
+    );
+
+    const attentionTo = clean(input.attentionTo);
+    await client.query(
+      `
+        update quotes
+        set delivery_attention_to = $3,
+            updated_at = now()
+        where tenant_id = $1 and id = $2
+      `,
+      [tenantId, quoteId, attentionTo]
+    );
+
+    const beforeCustomer = beforeResult.rows[0] as Record<string, unknown>;
+    const afterCustomer = customerResult.rows[0] as Record<string, unknown>;
+    const changedFields = Object.keys(afterCustomer).filter(
+      (key) => key !== "id" && key !== "external_olist_id" && beforeCustomer[key] !== afterCustomer[key]
+    );
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'quotes.customer_delivery_update', 'quote', $3, $4)
+      `,
+      [
+        tenantId,
+        userId,
+        quoteId,
+        JSON.stringify({
+          customerId: quote.customer_id,
+          changedFields,
+          attentionToChanged: quote.delivery_attention_to !== attentionTo
+        })
+      ]
+    );
+
+    return {
+      customer: customerResult.rows[0],
+      deliveryAttentionTo: attentionTo
+    };
   });
 }
 

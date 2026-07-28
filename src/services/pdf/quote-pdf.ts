@@ -89,12 +89,27 @@ export async function generateQuotePdf(input: {
 
   drawSectionTitle("Cliente");
   const customerParts = [
-    input.quote.customer_name ? `Aos cuidados de ${input.quote.customer_name}` : "Cliente nao informado",
+    input.quote.customer_name ?? "Cliente nao informado",
     input.quote.customer_document ? `CPF/CNPJ: ${input.quote.customer_document}` : null,
     input.quote.customer_email ? `email: ${input.quote.customer_email}` : null,
     input.quote.customer_phone ? `telefone: ${input.quote.customer_phone}` : null
   ].filter(Boolean) as string[];
   for (const line of wrapText(customerParts.join(", "), 95)) drawText(line, { size: 10 });
+  if (input.quote.delivery_attention_to) {
+    drawText(`Aos cuidados de: ${input.quote.delivery_attention_to}`, { size: 10, bold: true });
+  }
+  const deliveryAddress = [
+    input.quote.customer_address_line,
+    input.quote.customer_address_number,
+    input.quote.customer_address_complement,
+    input.quote.customer_district,
+    input.quote.customer_city,
+    input.quote.customer_state,
+    input.quote.customer_postal_code
+  ].filter(Boolean).join(", ");
+  if (deliveryAddress) {
+    for (const line of wrapText(`Entrega: ${deliveryAddress}`, 95)) drawText(line, { size: 9 });
+  }
   y -= 8;
 
   drawSectionTitle("Itens");

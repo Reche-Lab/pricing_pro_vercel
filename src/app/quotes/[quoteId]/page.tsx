@@ -7,6 +7,7 @@ import { MelhorEnvioQuoteLabelActions } from "@/components/quotes/MelhorEnvioQuo
 import { MelhorEnvioPayloadPreview } from "@/components/quotes/MelhorEnvioPayloadPreview";
 import { OlistQuoteActions } from "@/components/quotes/OlistQuoteActions";
 import { QuoteItemsEditModal } from "@/components/quotes/QuoteItemsEditModal";
+import { QuoteCustomerDeliveryModal } from "@/components/quotes/QuoteCustomerDeliveryModal";
 import { QuotePaymentTermPanel } from "@/components/quotes/QuotePaymentTermPanel";
 import { QuoteStatusActions } from "@/components/quotes/QuoteStatusActions";
 import { QuoteWhatsAppButton } from "@/components/quotes/QuoteWhatsAppButton";
@@ -75,13 +76,21 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
             <div className="grid gap-4">
               <div>
-                <p className="text-sm text-zinc-500">Cliente</p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-zinc-500">Cliente</p>
+                  <QuoteCustomerDeliveryModal quote={detail.quote} />
+                </div>
                 <h2 className="text-lg font-semibold text-white">
                   {detail.quote.customer_name ?? "Cliente nao informado"}
                 </h2>
                 <p className="text-sm text-zinc-500">
                   {[detail.quote.customer_email, detail.quote.customer_phone].filter(Boolean).join(" - ")}
                 </p>
+                {detail.quote.delivery_attention_to ? (
+                  <p className="mt-2 text-sm text-cyan-200">
+                    Aos cuidados de: {detail.quote.delivery_attention_to}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>

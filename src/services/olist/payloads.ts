@@ -183,7 +183,7 @@ function quoteDeliveryAddress(quote: QuoteDetail) {
   return {
     endereco: quote.customer_address_line,
     enderecoNro: quote.customer_address_number,
-    complemento: quote.customer_address_complement,
+    complemento: deliveryComplement(quote.customer_address_complement, quote.delivery_attention_to),
     bairro: quote.customer_district,
     municipio: quote.customer_city,
     cep: postalCode,
@@ -193,6 +193,13 @@ function quoteDeliveryAddress(quote: QuoteDetail) {
     cpfCnpj: digits(quote.customer_document),
     tipoPessoa: documentType(quote.customer_document)
   };
+}
+
+function deliveryComplement(complement: string | null | undefined, attentionTo: string | null | undefined) {
+  return [
+    cleanString(complement),
+    cleanString(attentionTo) ? `A/C: ${cleanString(attentionTo)}` : null
+  ].filter(Boolean).join(" | ") || null;
 }
 
 function nativeOrderItem(item: QuoteItemRow) {

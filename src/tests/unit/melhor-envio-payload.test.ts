@@ -16,7 +16,7 @@ describe("melhor envio cart payload draft", () => {
   it("builds a cart payload from tenant, customer and quote data", () => {
     const draft = buildMelhorEnvioCartPayloadDraft({
       tenant: tenantProfile(),
-      quote: quoteDetail(),
+      quote: { ...quoteDetail(), delivery_attention_to: "Marina - Marketing" },
       items: [quoteItem()],
       shipment: shipment()
     });
@@ -44,7 +44,8 @@ describe("melhor envio cart payload draft", () => {
       number: "20",
       district: "Se",
       city: "Sao Paulo",
-      state_abbr: "SP"
+      state_abbr: "SP",
+      complement: "A/C: Marina - Marketing"
     });
     expect(draft.payload.products).toEqual([
       {
