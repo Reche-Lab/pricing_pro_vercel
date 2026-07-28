@@ -13,7 +13,8 @@ import {
   Printer,
   Radar,
   RefreshCw,
-  Truck
+  Truck,
+  X
 } from "lucide-react";
 import type { ShipmentRow } from "@/repositories/shipments";
 
@@ -27,6 +28,7 @@ type QuoteOption = {
 };
 
 type OperationKey = "cart" | "checkout" | "generate" | "print" | "tracking";
+const PROTECTED_COMPLETED_OPERATIONS: OperationKey[] = ["cart", "checkout", "generate"];
 
 const OPERATIONS: Array<{
   key: OperationKey;
@@ -61,6 +63,7 @@ export function MelhorEnvioQuoteLabelActions({
   const [loading, setLoading] = useState("");
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<{ tone: "success" | "error" | "info"; title: string; message: string } | null>(null);
+  const [completedOperation, setCompletedOperation] = useState<OperationKey | null>(null);
 
   const selectedShipment = localShipments.find((shipment) => shipment.id === selectedShipmentId) ?? localShipments[0] ?? null;
 
@@ -69,6 +72,15 @@ export function MelhorEnvioQuoteLabelActions({
       setManualShippingAmount(Number(selectedShipment.shipping_amount));
     }
   }, [selectedShipment]);
+
+  useEffect(() => {
+    if (!completedOperation) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setCompletedOperation(null);
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [completedOperation]);
 
   async function refreshShipments(preferredShipmentId?: string) {
     const response = await fetch(`/api/quotes/${quoteId}/shipments`);
@@ -336,13 +348,31 @@ export function MelhorEnvioQuoteLabelActions({
           const previous = OPERATIONS[index - 1];
           const previousDone = !previous || (selectedShipment ? operationDone(selectedShipment, previous.key) : false);
           const disabled = !selectedShipment || (!previousDone && operation.key !== "cart") || loading === operation.key;
+          const actionLabel = completedOperationLabel(operation.key, done, Boolean(selectedShipment?.label_url));
           const Icon = operation.icon;
           return (
             <button
-              className="focus-ring grid min-h-28 gap-2 rounded-md border border-zinc-800 bg-zinc-900/60 p-3 text-left text-xs text-zinc-400 hover:bg-zinc-900 disabled:opacity-60"
+              className={`focus-ring grid min-h-28 gap-2 rounded-md border p-3 text-left text-xs transition-colors disabled:opacity-60 ${
+                done
+                  ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100 hover:bg-emerald-400/15"
+                  : "border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:bg-zinc-900"
+              }`}
               disabled={disabled}
               key={operation.key}
-              onClick={() => runOperation(operation.key)}
+              onClick={() => {
+                if (done && PROTECTED_COMPLETED_OPERATIONS.includes(operation.key)) {
+                  setCompletedOperation(operation.key);
+                  return;
+                }
+                if (done && operation.key === "print" && selectedShipment?.label_url) {
+                  const url = safeHttpUrl(selectedShipment.label_url);
+                  if (url) {
+                    window.open(url, "_blank", "noopener,noreferrer");
+                    return;
+                  }
+                }
+                runOperation(operation.key);
+              }}
               type="button"
             >
               <span className="flex items-center justify-between gap-2">
@@ -350,7 +380,7 @@ export function MelhorEnvioQuoteLabelActions({
                 {done ? <CheckCircle2 className="text-emerald-300" size={16} /> : disabled ? <Lock size={15} /> : null}
               </span>
               <span className="font-medium text-white">{index + 1}. {operation.title}</span>
-              <span>{loading === operation.key ? "Executando..." : operation.label}</span>
+              <span>{loading === operation.key ? "Executando..." : actionLabel}</span>
             </button>
           );
         })}
@@ -361,6 +391,13 @@ export function MelhorEnvioQuoteLabelActions({
         <ShipmentReadyDetails shipment={selectedShipment} />
       ) : null}
       {message ? <p className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">{message}</p> : null}
+      {completedOperation && selectedShipment ? (
+        <CompletedOperationModal
+          operation={completedOperation}
+          shipment={selectedShipment}
+          onClose={() => setCompletedOperation(null)}
+        />
+      ) : null}
     </div>
   );
 
@@ -402,6 +439,18 @@ function operationDone(shipment: ShipmentRow, operation: OperationKey) {
   if (operation === "cart" && shipment.provider_shipment_id) return true;
   if (operation === "tracking" && shipment.tracking_code) return true;
   return config.doneStatuses.includes(shipment.status);
+}
+
+function completedOperationLabel(operation: OperationKey, done: boolean, hasLabelUrl: boolean) {
+  if (!done) return OPERATIONS.find((item) => item.key === operation)?.label ?? operation;
+  const labels: Record<OperationKey, string> = {
+    cart: "Concluído · ver detalhes",
+    checkout: "Pagamento confirmado · ver detalhes",
+    generate: "Etiqueta gerada · ver detalhes",
+    print: hasLabelUrl ? "Abrir etiqueta" : "Obter link de impressão",
+    tracking: "Atualizar rastreio"
+  };
+  return labels[operation];
 }
 
 function operationTitle(operation: OperationKey, success: boolean) {
@@ -460,6 +509,103 @@ function ResultBox({ result }: { result: { tone: "success" | "error" | "info"; t
     <div className={`rounded-md border px-3 py-3 ${tone}`}>
       <p className="text-sm font-semibold">{result.title}</p>
       <p className="mt-1 text-xs leading-5 opacity-85">{result.message}</p>
+    </div>
+  );
+}
+
+function CompletedOperationModal({
+  onClose,
+  operation,
+  shipment
+}: {
+  onClose: () => void;
+  operation: OperationKey;
+  shipment: ShipmentRow;
+}) {
+  const content: Record<"cart" | "checkout" | "generate", { title: string; message: string; warning: string }> = {
+    cart: {
+      title: "Envio já adicionado ao carrinho",
+      message: "Esta etapa foi concluída e o identificador do envio já está salvo neste orçamento.",
+      warning: "Adicionar novamente criaria outro item no carrinho do Melhor Envio."
+    },
+    checkout: {
+      title: "Compra já realizada",
+      message: "O pagamento da etiqueta já foi confirmado e registrado neste orçamento.",
+      warning: "A compra não pode ser executada novamente, pois poderia gerar uma cobrança duplicada."
+    },
+    generate: {
+      title: "Etiqueta já gerada",
+      message: "A etiqueta deste envio já foi gerada com sucesso no Melhor Envio.",
+      warning: "Para corrigir serviço, endereço ou embalagem, será necessário criar um novo envio."
+    }
+  };
+  const detail = content[operation as keyof typeof content] ?? content.generate;
+
+  return (
+    <div
+      aria-labelledby="completed-operation-title"
+      aria-modal="true"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.currentTarget === event.target) onClose();
+      }}
+      role="dialog"
+    >
+      <div className="w-full max-w-md rounded-lg border border-emerald-400/25 bg-zinc-950 p-5 shadow-2xl shadow-black/50">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-emerald-400/10 text-emerald-300">
+              <CheckCircle2 size={19} />
+            </span>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">Etapa concluída</p>
+              <h3 className="mt-1 text-lg font-semibold text-white" id="completed-operation-title">
+                {detail.title}
+              </h3>
+            </div>
+          </div>
+          <button
+            aria-label="Fechar"
+            className="focus-ring inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-white"
+            onClick={onClose}
+            type="button"
+          >
+            <X size={17} />
+          </button>
+        </div>
+
+        <p className="mt-4 text-sm leading-6 text-zinc-300">{detail.message}</p>
+        <p className="mt-3 rounded-md border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">
+          {detail.warning}
+        </p>
+
+        <dl className="mt-4 grid gap-2 rounded-md border border-zinc-800 bg-zinc-900/60 p-3 text-xs">
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-zinc-500">Serviço</dt>
+            <dd className="truncate font-medium text-zinc-200">
+              {shipment.service_name ?? shipment.service_code ?? "Melhor Envio"}
+            </dd>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-zinc-500">Status atual</dt>
+            <dd className="font-medium text-emerald-300">{statusLabel(shipment.status)}</dd>
+          </div>
+          {shipment.provider_order_id ? (
+            <div className="flex items-center justify-between gap-3">
+              <dt className="text-zinc-500">Pedido Melhor Envio</dt>
+              <dd className="truncate font-mono text-zinc-300">{shipment.provider_order_id}</dd>
+            </div>
+          ) : null}
+        </dl>
+
+        <button
+          className="focus-ring mt-5 inline-flex min-h-10 w-full items-center justify-center rounded-md bg-emerald-300 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-200"
+          onClick={onClose}
+          type="button"
+        >
+          Entendi
+        </button>
+      </div>
     </div>
   );
 }

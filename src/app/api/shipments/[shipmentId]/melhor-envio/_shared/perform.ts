@@ -49,7 +49,10 @@ export async function performShipmentMelhorEnvioOperation(
   if (shipment.provider !== "melhor_envio") {
     return NextResponse.json({ ok: false, error: "Shipment provider is not Melhor Envio." }, { status: 409 });
   }
-  const alreadyCompleted = completedOperationResponse(nextStatus, shipment.status);
+  const repeatableOperation =
+    nextStatus === "posted" ||
+    (nextStatus === "printed" && !shipment.label_url);
+  const alreadyCompleted = repeatableOperation ? null : completedOperationResponse(nextStatus, shipment.status);
   if (alreadyCompleted) return NextResponse.json(alreadyCompleted);
 
   const connection = await getIntegrationConnection(session.userId, session.tenantId, "melhor_envio");
