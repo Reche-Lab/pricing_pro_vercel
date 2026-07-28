@@ -1859,7 +1859,7 @@ export function PricingCalculator({
                   <tr>
                     <th className="px-4 py-3 font-semibold">Qtd</th>
                     <th className="px-4 py-3 font-semibold">Atual</th>
-                    <th className="px-4 py-3 font-semibold">Simulado</th>
+                    <th className="px-4 py-3 font-semibold">Preço final</th>
                     <th className="px-4 py-3 font-semibold">Margem</th>
                     <th className="px-4 py-3 font-semibold">Lucro</th>
                   </tr>
@@ -1869,7 +1869,7 @@ export function PricingCalculator({
                     <tr key={point.quantity}>
                       <td className="px-4 py-3 font-medium text-white">{point.label}</td>
                       <td className="px-4 py-3 text-zinc-300">{brl.format(currentSeries[index].finalUnitPrice)}</td>
-                      <td className="px-4 py-3 text-emerald-300">{brl.format(point.finalUnitPrice)}</td>
+                      <td className="px-4 py-3 font-medium text-emerald-300">{brl.format(point.subtotal)}</td>
                       <td className="px-4 py-3 text-zinc-300">{percent.format(point.marginPercent)}%</td>
                       <td className="px-4 py-3 text-zinc-300">{brl.format(point.profit)}</td>
                     </tr>
