@@ -7,7 +7,13 @@ import {
   logIntegrationEvent
 } from "@/repositories/integrations";
 import { getShipment, updateShipmentFlow } from "@/repositories/shipments";
-import { MelhorEnvioRequestError } from "@/services/melhor-envio/melhor-envio";
+import {
+  findMelhorEnvioOrder,
+  melhorEnvioOrderFlowStatus,
+  MelhorEnvioRequestError,
+  sanitizeMelhorEnvioLogValue,
+  type MelhorEnvioOrder
+} from "@/services/melhor-envio/melhor-envio";
 import type { MelhorEnvioCredentials, MelhorEnvioSettings } from "@/services/melhor-envio/types";
 
 type MelhorEnvioOperation = (
@@ -53,22 +59,105 @@ export async function performShipmentMelhorEnvioOperation(
 
   try {
     const credentials = decryptIntegrationCredentials<MelhorEnvioCredentials>(connection);
-    const result = await operation(payload, connection.settings as MelhorEnvioSettings, credentials);
-    const extracted = extractShipmentFields(result);
+    const settings = connection.settings as MelhorEnvioSettings;
+    const identifier = shipment.provider_shipment_id ?? shipment.provider_order_id;
+    const reconciledBefore = operationName === "shipment.cart.add" || !identifier
+      ? null
+      : await safelyFindOrder(identifier, settings, credentials, operationName, shipmentId);
+
+    if (reconciledBefore) {
+      const recoveredStatus = laterStatus(shipment.status, melhorEnvioOrderFlowStatus(reconciledBefore));
+      await updateShipmentFlow(session.userId, session.tenantId, {
+        shipmentId,
+        status: recoveredStatus,
+        providerShipmentId: reconciledBefore.id,
+        providerOrderId: stringOrNull(reconciledBefore.protocol),
+        trackingCode: stringOrNull(reconciledBefore.tracking)
+      });
+
+      if (nextStatus === "paid" && statusReached(recoveredStatus, "paid")) {
+        const recoveredResult = {
+          message: "Compra já confirmada no Melhor Envio e reconciliada no envio.",
+          order: sanitizeMelhorEnvioLogValue(reconciledBefore)
+        };
+        console.info("Melhor Envio shipment operation reconciled.", {
+          operation: operationName,
+          shipmentId,
+          previousStatus: shipment.status,
+          status: recoveredStatus,
+          providerShipmentId: reconciledBefore.id,
+          providerOrderId: reconciledBefore.protocol
+        });
+        await logIntegrationEvent(session.userId, session.tenantId, {
+          provider: "melhor_envio",
+          operation: operationName,
+          status: "success",
+          externalId: reconciledBefore.id,
+          message: "Operação recuperada a partir da etiqueta já comprada no Melhor Envio.",
+          metadata: {
+            shipmentId,
+            reconciled: true,
+            previousStatus: shipment.status,
+            nextStatus: recoveredStatus,
+            order: sanitizeMelhorEnvioLogValue(reconciledBefore)
+          }
+        });
+        return NextResponse.json({ ok: true, reconciled: true, result: recoveredResult });
+      }
+    }
+
+    const effectivePayload = reconciledBefore
+      ? replacePayloadOrder(payload, reconciledBefore.id)
+      : payload;
+    console.info("Melhor Envio shipment operation started.", {
+      operation: operationName,
+      shipmentId,
+      previousStatus: shipment.status,
+      targetStatus: nextStatus,
+      payload: sanitizeMelhorEnvioLogValue(effectivePayload)
+    });
+
+    const result = await operation(effectivePayload, settings, credentials);
+    const reconciledAfter = nextStatus === "paid" && identifier
+      ? await safelyFindOrder(identifier, settings, credentials, operationName, shipmentId)
+      : null;
+    const extracted = extractShipmentFields(result, reconciledAfter ?? reconciledBefore);
+    const persistedResponse = reconciledAfter
+      ? { operation: result, order: reconciledAfter }
+      : result;
     await updateShipmentFlow(session.userId, session.tenantId, {
       shipmentId,
       status: nextStatus,
-      rawPayload: payload,
-      rawResponse: result,
+      rawPayload: effectivePayload,
+      rawResponse: persistedResponse,
       ...extracted
+    });
+    console.info("Melhor Envio shipment operation completed.", {
+      operation: operationName,
+      shipmentId,
+      previousStatus: shipment.status,
+      status: nextStatus,
+      persisted: true,
+      extracted,
+      payload: sanitizeMelhorEnvioLogValue(effectivePayload),
+      response: sanitizeMelhorEnvioLogValue(persistedResponse)
     });
     await logIntegrationEvent(session.userId, session.tenantId, {
       provider: "melhor_envio",
       operation: operationName,
       status: "success",
-      metadata: { shipmentId }
+      externalId: extracted.providerShipmentId ?? shipment.provider_shipment_id,
+      metadata: {
+        shipmentId,
+        previousStatus: shipment.status,
+        nextStatus,
+        persisted: true,
+        payload: sanitizeMelhorEnvioLogValue(effectivePayload),
+        response: sanitizeMelhorEnvioLogValue(persistedResponse),
+        extracted
+      }
     });
-    return NextResponse.json({ ok: true, result });
+    return NextResponse.json({ ok: true, result, reconciledOrder: reconciledAfter ?? undefined });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown Melhor Envio error";
     const status = error instanceof MelhorEnvioRequestError ? error.status : undefined;
@@ -76,23 +165,26 @@ export async function performShipmentMelhorEnvioOperation(
     console.error("Melhor Envio shipment operation failed.", {
       operation: operationName,
       shipmentId,
+      preservedStatus: shipment.status,
+      payload: sanitizeMelhorEnvioLogValue(payload),
       httpStatus: status,
-      response,
+      response: sanitizeMelhorEnvioLogValue(response),
       message,
       stack: error instanceof Error ? error.stack : undefined
-    });
-    await updateShipmentFlow(session.userId, session.tenantId, {
-      shipmentId,
-      status: "error",
-      rawPayload: payload,
-      rawResponse: { error: message, httpStatus: status, response }
     });
     await logIntegrationEvent(session.userId, session.tenantId, {
       provider: "melhor_envio",
       operation: operationName,
       status: "error",
       message,
-      metadata: { shipmentId, httpStatus: status, response }
+      externalId: shipment.provider_shipment_id,
+      metadata: {
+        shipmentId,
+        preservedStatus: shipment.status,
+        payload: sanitizeMelhorEnvioLogValue(payload),
+        httpStatus: status,
+        response: sanitizeMelhorEnvioLogValue(response)
+      }
     });
 
     return NextResponse.json(
@@ -125,17 +217,57 @@ function completedOperationResponse(nextStatus: string, currentStatus: string) {
   };
 }
 
-function extractShipmentFields(result: unknown) {
+function extractShipmentFields(result: unknown, order?: MelhorEnvioOrder | null) {
   const record = firstRecord(result);
-  if (!record || typeof record !== "object") return {};
-  const data = record as Record<string, unknown>;
+  const data = record && typeof record === "object" ? record as Record<string, unknown> : {};
 
   return {
-    providerShipmentId: pickString(data, ["id", "order_id", "orderId"]),
-    providerOrderId: pickString(data, ["order_id", "orderId", "protocol", "protocol_id"]),
-    trackingCode: pickString(data, ["tracking", "tracking_code", "trackingCode"]),
+    providerShipmentId: stringOrNull(order?.id) ?? pickString(data, ["id", "order_id", "orderId"]),
+    providerOrderId: stringOrNull(order?.protocol) ?? pickString(data, ["order_id", "orderId", "protocol", "protocol_id"]),
+    trackingCode: stringOrNull(order?.tracking) ?? pickString(data, ["tracking", "tracking_code", "trackingCode"]),
     labelUrl: pickString(data, ["url", "label_url", "labelUrl", "print_url"])
   };
+}
+
+async function safelyFindOrder(
+  identifier: string,
+  settings: MelhorEnvioSettings,
+  credentials: MelhorEnvioCredentials,
+  operation: string,
+  shipmentId: string
+) {
+  try {
+    return await findMelhorEnvioOrder(identifier, settings, credentials);
+  } catch (error) {
+    console.warn("Melhor Envio order reconciliation was not completed.", {
+      operation,
+      shipmentId,
+      identifier,
+      message: error instanceof Error ? error.message : String(error)
+    });
+    return null;
+  }
+}
+
+function replacePayloadOrder(payload: unknown, orderId: string) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return { orders: [orderId] };
+  return {
+    ...(payload as Record<string, unknown>),
+    orders: [orderId]
+  };
+}
+
+function laterStatus(current: string, candidate: string) {
+  if (current === "error") return candidate;
+  return flowStatusIndex(candidate) > flowStatusIndex(current) ? candidate : current;
+}
+
+function statusReached(current: string, target: string) {
+  return flowStatusIndex(current) >= flowStatusIndex(target);
+}
+
+function flowStatusIndex(status: string) {
+  return ["draft", "quoted", "cart", "paid", "label_generated", "printed", "posted", "delivered"].indexOf(status);
 }
 
 function firstRecord(value: unknown): unknown {

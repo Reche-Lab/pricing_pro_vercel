@@ -6,6 +6,11 @@ import {
   buildMelhorEnvioCartPayloadDraft,
   buildMelhorEnvioOperationPayloadDraft
 } from "@/services/melhor-envio/payloads";
+import {
+  extractMelhorEnvioOrders,
+  melhorEnvioOrderFlowStatus,
+  sanitizeMelhorEnvioLogValue
+} from "@/services/melhor-envio/melhor-envio";
 
 describe("melhor envio cart payload draft", () => {
   it("builds a cart payload from tenant, customer and quote data", () => {
@@ -149,6 +154,66 @@ describe("melhor envio cart payload draft", () => {
     expect(draft.payload).toEqual({ orders: [] });
     expect(draft.missingFields).toEqual(["shipment.provider_shipment_id"]);
     expect(draft.warnings).toEqual(["checkout_should_use_cart_order_id_after_cart_step"]);
+  });
+
+  it("requests a public URL when printing a label", () => {
+    const draft = buildMelhorEnvioOperationPayloadDraft({
+      operation: "print",
+      tenant: tenantProfile(),
+      quote: quoteDetail(),
+      items: [quoteItem()],
+      shipment: {
+        ...shipment(),
+        provider_shipment_id: "order-123"
+      }
+    });
+
+    expect(draft.payload).toEqual({
+      mode: "public",
+      orders: ["order-123"]
+    });
+  });
+});
+
+describe("melhor envio order reconciliation", () => {
+  it("extracts the purchased order that references the cart purchase id", () => {
+    const orders = extractMelhorEnvioOrders({
+      data: [
+        {
+          id: "order-123",
+          purchase_id: "cart-456",
+          protocol: "ORD-789",
+          status: "released",
+          paid_at: "2026-07-28 15:18:26"
+        }
+      ]
+    });
+
+    expect(orders).toHaveLength(1);
+    expect(orders[0]).toMatchObject({
+      id: "order-123",
+      purchase_id: "cart-456",
+      protocol: "ORD-789"
+    });
+    expect(melhorEnvioOrderFlowStatus(orders[0])).toBe("paid");
+  });
+
+  it("preserves order ids in logs while masking customer documents", () => {
+    expect(
+      sanitizeMelhorEnvioLogValue({
+        orders: ["order-123"],
+        from: {
+          document: "52998224725",
+          email: "cliente@example.com"
+        }
+      })
+    ).toEqual({
+      orders: ["order-123"],
+      from: {
+        document: "*******4725",
+        email: "***@example.com"
+      }
+    });
   });
 });
 

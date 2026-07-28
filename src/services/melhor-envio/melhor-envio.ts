@@ -204,6 +204,70 @@ export async function trackMelhorEnvioShipments(
   });
 }
 
+export type MelhorEnvioOrder = {
+  id: string;
+  protocol?: string | null;
+  purchase_id?: string | null;
+  status?: string | null;
+  tracking?: string | null;
+  paid_at?: string | null;
+  generated_at?: string | null;
+  posted_at?: string | null;
+  delivered_at?: string | null;
+  files?: unknown[];
+  [key: string]: unknown;
+};
+
+export async function findMelhorEnvioOrder(
+  identifier: string,
+  settings: MelhorEnvioSettings,
+  credentials: MelhorEnvioCredentials
+): Promise<MelhorEnvioOrder | null> {
+  try {
+    const direct = await melhorEnvioRequest<unknown>({
+      method: "GET",
+      path: `/me/orders/${encodeURIComponent(identifier)}`,
+      settings,
+      credentials
+    });
+    const directOrder = asMelhorEnvioOrder(direct);
+    if (directOrder) return directOrder;
+  } catch (error) {
+    if (!(error instanceof MelhorEnvioRequestError) || error.status !== 404) throw error;
+  }
+
+  const listed = await melhorEnvioRequest<unknown>({
+    method: "GET",
+    path: "/me/orders",
+    settings,
+    credentials
+  });
+
+  return extractMelhorEnvioOrders(listed).find(
+    (order) =>
+      order.id === identifier ||
+      order.purchase_id === identifier ||
+      order.protocol === identifier
+  ) ?? null;
+}
+
+export function extractMelhorEnvioOrders(value: unknown): MelhorEnvioOrder[] {
+  if (Array.isArray(value)) return value.map(asMelhorEnvioOrder).filter(isPresent);
+  if (!value || typeof value !== "object") return [];
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.data)) return record.data.map(asMelhorEnvioOrder).filter(isPresent);
+  const single = asMelhorEnvioOrder(record);
+  return single ? [single] : [];
+}
+
+export function melhorEnvioOrderFlowStatus(order: MelhorEnvioOrder): string {
+  if (order.delivered_at || order.status === "delivered") return "delivered";
+  if (order.posted_at || order.tracking || order.status === "posted") return "posted";
+  if (order.generated_at) return "label_generated";
+  if (order.paid_at || order.status === "released") return "paid";
+  return "cart";
+}
+
 export async function melhorEnvioRequest<T = unknown>({
   method = "POST",
   path,
@@ -218,7 +282,8 @@ export async function melhorEnvioRequest<T = unknown>({
   console.info("Melhor Envio API request prepared.", {
     method,
     endpoint: sanitizeUrl(endpoint),
-    hasBody: body != null
+    hasBody: body != null,
+    body: sanitizeMelhorEnvioLogValue(body)
   });
 
   const response = await fetch(endpoint, {
@@ -248,7 +313,8 @@ async function parseMelhorEnvioResponse<T>(
       status: response.status,
       ok: response.ok,
       durationMs: context.durationMs,
-      error: response.ok ? null : extractError(data) ?? truncate(text)
+      error: response.ok ? null : extractError(data) ?? truncate(text),
+      response: sanitizeMelhorEnvioLogValue(data)
     });
   }
   if (!response.ok) {
@@ -326,6 +392,51 @@ function sanitizeUrl(value: string) {
   } catch {
     return value;
   }
+}
+
+export function sanitizeMelhorEnvioLogValue(value: unknown, depth = 0, keyName = ""): unknown {
+  if (value == null || typeof value === "boolean" || typeof value === "number") return value;
+  if (typeof value === "string") {
+    if (["authorization", "access_token", "refresh_token", "client_secret", "token"].includes(keyName.toLowerCase())) {
+      return "[redacted]";
+    }
+    if (keyName === "document" || keyName === "company_document") return maskEnding(value, 4);
+    if (keyName === "phone") return maskEnding(value, 4);
+    if (keyName === "email") {
+      const domain = value.includes("@") ? value.slice(value.indexOf("@")) : "";
+      return `***${domain}`;
+    }
+    return truncate(value, 2000);
+  }
+  if (depth >= 7) return "[max-depth]";
+  if (Array.isArray(value)) {
+    return value.slice(0, 30).map((item) => sanitizeMelhorEnvioLogValue(item, depth + 1, keyName));
+  }
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .slice(0, 80)
+        .map(([key, item]) => [key, sanitizeMelhorEnvioLogValue(item, depth + 1, key)])
+    );
+  }
+  return String(value);
+}
+
+function asMelhorEnvioOrder(value: unknown): MelhorEnvioOrder | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.id !== "string" || !record.id.trim()) return null;
+  return record as MelhorEnvioOrder;
+}
+
+function isPresent<T>(value: T | null): value is T {
+  return value !== null;
+}
+
+function maskEnding(value: string, visible: number) {
+  const normalized = value.trim();
+  if (!normalized) return "";
+  return `${"*".repeat(Math.max(4, normalized.length - visible))}${normalized.slice(-visible)}`;
 }
 
 function onlyDigits(value: string): string {

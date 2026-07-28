@@ -138,6 +138,18 @@ export function buildMelhorEnvioOperationPayloadDraft(
     };
   }
 
+  if (input.operation === "print") {
+    return {
+      operation: input.operation,
+      payload: {
+        mode: "public",
+        orders: shipmentIdentifier ? [shipmentIdentifier] : []
+      },
+      missingFields,
+      warnings
+    };
+  }
+
   if (input.operation === "checkout" && !input.shipment?.provider_shipment_id) {
     warnings.push("checkout_should_use_cart_order_id_after_cart_step");
   }
