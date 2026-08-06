@@ -65,6 +65,61 @@ export async function listOlistPaymentOptions(userId: string, tenantId: string):
   });
 }
 
+export async function upsertOlistBankAccount(
+  userId: string,
+  tenantId: string,
+  input: { externalId: string; name: string }
+) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    await client.query(
+      `
+        insert into olist_payment_options (
+          tenant_id, kind, external_id, name, group_name, raw, active, synced_at
+        )
+        values ($1, 'payment_method', $2, $3, 'Banco', $4, true, now())
+        on conflict (tenant_id, kind, external_id) do update
+          set name = excluded.name,
+              group_name = 'Banco',
+              raw = excluded.raw,
+              active = true,
+              synced_at = now(),
+              updated_at = now()
+      `,
+      [tenantId, input.externalId.trim(), input.name.trim(), JSON.stringify({ source: "manual_bank_account", medium: "Banco" })]
+    );
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, metadata)
+        values ($1, $2, 'olist.bank_account_upsert', 'olist_payment_options', $3)
+      `,
+      [tenantId, userId, JSON.stringify({ externalId: input.externalId.trim(), name: input.name.trim() })]
+    );
+  });
+}
+
+export async function deactivateOlistBankAccount(userId: string, tenantId: string, externalId: string) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    await client.query(
+      `
+        update olist_payment_options
+        set active = false, updated_at = now()
+        where tenant_id = $1
+          and kind = 'payment_method'
+          and group_name = 'Banco'
+          and external_id = $2
+      `,
+      [tenantId, externalId]
+    );
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, metadata)
+        values ($1, $2, 'olist.bank_account_deactivate', 'olist_payment_options', $3)
+      `,
+      [tenantId, userId, JSON.stringify({ externalId })]
+    );
+  });
+}
+
 export async function replaceOlistPaymentOptions(
   userId: string,
   tenantId: string,

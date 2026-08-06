@@ -227,7 +227,7 @@ function buildPaymentPayload(paymentTerm: QuotePaymentTermRow | null | undefined
     observacoes: [
       installment.notes,
       installment.receivingMethodName ? `Forma de recebimento: ${installment.receivingMethodName}` : null,
-      installment.paymentMethodName ? `Conta/meio: ${installment.paymentMethodName}` : null
+      installment.paymentMethodName ? `Meio: Banco | Conta bancária: ${installment.paymentMethodName}` : null
     ].filter(Boolean).join(" | "),
     formaRecebimento: paymentObject(numericId(installment.receivingMethodExternalId) ?? formaRecebimentoId),
     meioPagamento: paymentObject(numericId(installment.paymentMethodExternalId) ?? meioPagamentoId)

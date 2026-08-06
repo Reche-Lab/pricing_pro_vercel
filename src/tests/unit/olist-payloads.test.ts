@@ -125,7 +125,7 @@ describe("olist payloads", () => {
           dias: 0,
           data: "2026-07-20",
           valor: 135,
-          observacoes: "Entrada | Forma de recebimento: Pix | Conta/meio: Nu Bank",
+          observacoes: "Entrada | Forma de recebimento: Pix | Meio: Banco | Conta bancária: Nu Bank",
           formaRecebimento: { id: 20 },
           meioPagamento: { id: 10 }
         },
@@ -133,7 +133,7 @@ describe("olist payloads", () => {
           dias: 30,
           data: "2026-08-19",
           valor: 135,
-          observacoes: "Saldo | Forma de recebimento: Pix | Conta/meio: Nu Bank",
+          observacoes: "Saldo | Forma de recebimento: Pix | Meio: Banco | Conta bancária: Nu Bank",
           formaRecebimento: { id: 20 },
           meioPagamento: { id: 10 }
         }

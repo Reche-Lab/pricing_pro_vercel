@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CreditCard, KeyRound, PlayCircle, Route, Save, Search, Store, X } from "lucide-react";
+import { CreditCard, KeyRound, Landmark, PlayCircle, Plus, Route, Save, Search, Store, Trash2, X } from "lucide-react";
 import { OLIST_API_V3_BASE_URL, OLIST_APP_BASE_URL, OLIST_DEFAULT_PATHS } from "@/services/olist/defaults";
 
 type OlistConnectionView = {
@@ -191,13 +191,13 @@ export function OlistIntegrationPanel() {
     }
 
     if (data.requiresReauthorization) {
-      setMessage(data.permissionMessage ?? "Habilite as permissões de formas de recebimento e formas de pagamento no aplicativo Olist e reconecte o OAuth.");
+      setMessage(data.permissionMessage ?? "Habilite a permissão de formas de recebimento no aplicativo Olist e reconecte o OAuth.");
       await loadPaymentOptions();
       return;
     }
 
     setMessage(
-      `Opções financeiras sincronizadas: ${data.counts?.receivingMethods ?? 0} formas de recebimento, ${data.counts?.paymentMethods ?? 0} contas/meios e ${data.counts?.categories ?? 0} categorias.`
+      `Opções financeiras sincronizadas: ${data.counts?.receivingMethods ?? 0} formas de recebimento e ${data.counts?.categories ?? 0} categorias. As contas bancárias são mantidas separadamente abaixo.`
     );
     await loadPaymentOptions();
   }
@@ -244,6 +244,7 @@ export function OlistIntegrationPanel() {
           loading={loading === "olist"}
           oauthLoading={loading === "olist_oauth"}
           onConnect={connect}
+          onPaymentOptionsChanged={loadPaymentOptions}
           onSyncPaymentOptions={syncPaymentOptions}
           onSubmit={save}
           paymentSyncLoading={loading === "olist_payments"}
@@ -961,12 +962,114 @@ function setNestedValue(target: Record<string, unknown>, path: Array<string | nu
   });
 }
 
+function BankAccountManager({
+  onChanged,
+  options
+}: {
+  onChanged: () => Promise<void>;
+  options: OlistPaymentOptionView[];
+}) {
+  const accounts = options.filter((option) => option.kind === "payment_method" && option.groupName === "Banco");
+  const [externalId, setExternalId] = useState("");
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function addAccount() {
+    if (!externalId.trim() || name.trim().length < 2 || loading) {
+      setMessage("Informe o nome e o ID da conta bancária no Olist.");
+      return;
+    }
+    setLoading("add");
+    setMessage("");
+    const response = await fetch("/api/olist/payment-options/bank-accounts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ externalId, name })
+    });
+    const data = await response.json().catch(() => null);
+    setLoading("");
+    if (!response.ok || !data?.ok) {
+      setMessage(data?.error ?? "Não foi possível cadastrar a conta bancária.");
+      return;
+    }
+    setExternalId("");
+    setName("");
+    setMessage("Conta bancária cadastrada para os pedidos Olist.");
+    await onChanged();
+  }
+
+  async function removeAccount(accountExternalId: string) {
+    if (loading) return;
+    setLoading(accountExternalId);
+    setMessage("");
+    const response = await fetch("/api/olist/payment-options/bank-accounts", {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ externalId: accountExternalId })
+    });
+    const data = await response.json().catch(() => null);
+    setLoading("");
+    if (!response.ok || !data?.ok) {
+      setMessage(data?.error ?? "Não foi possível remover a conta bancária.");
+      return;
+    }
+    setMessage("Conta bancária removida.");
+    await onChanged();
+  }
+
+  return (
+    <section className="rounded-md border border-cyan-400/20 bg-cyan-400/5 p-3">
+      <div className="flex items-start gap-2">
+        <Landmark className="mt-0.5 shrink-0 text-cyan-300" size={17} />
+        <div>
+          <p className="text-sm font-medium text-cyan-100">Contas bancárias dos pedidos Olist</p>
+          <p className="mt-1 text-xs leading-5 text-zinc-500">
+            A API v3 não disponibiliza a listagem de contas bancárias. Cadastre aqui o nome e o ID da conta existente no Olist, por exemplo “Nu Bank”. O meio será exibido como Banco. Para descobrir o ID, consulte no laboratório um pedido configurado manualmente no Olist e use pagamento.meioPagamento.id.
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_180px_auto] md:items-end">
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-zinc-400">Nome da conta</span>
+          <input className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm" placeholder="Ex.: Nu Bank" value={name} onChange={(event) => setName(event.currentTarget.value)} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-zinc-400">ID da conta no Olist</span>
+          <input className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm" placeholder="ID numérico" value={externalId} onChange={(event) => setExternalId(event.currentTarget.value)} />
+        </label>
+        <button className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-cyan-400 px-3 text-sm font-semibold text-zinc-950 hover:bg-cyan-300 disabled:opacity-60" disabled={loading === "add"} onClick={addAccount} type="button">
+          <Plus size={15} />
+          Adicionar
+        </button>
+      </div>
+      {accounts.length ? (
+        <div className="mt-3 grid gap-2">
+          {accounts.map((account) => (
+            <div className="flex items-center justify-between gap-3 rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2" key={account.externalId}>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-zinc-200">{account.name}</p>
+                <p className="text-xs text-zinc-500">Meio: Banco · ID {account.externalId}</p>
+              </div>
+              <button aria-label={`Remover ${account.name}`} className="focus-ring rounded-md p-2 text-zinc-500 hover:bg-rose-400/10 hover:text-rose-200" disabled={loading === account.externalId} onClick={() => removeAccount(account.externalId)} type="button">
+                <Trash2 size={15} />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {message ? <p className="mt-2 text-xs text-zinc-400">{message}</p> : null}
+    </section>
+  );
+}
+
 function IntegrationForm({
   title,
   connection,
   loading,
   oauthLoading,
   onConnect,
+  onPaymentOptionsChanged,
   onSyncPaymentOptions,
   onSubmit,
   onSearchShippingOptions,
@@ -980,6 +1083,7 @@ function IntegrationForm({
   loading: boolean;
   oauthLoading: boolean;
   onConnect: () => void;
+  onPaymentOptionsChanged: () => Promise<void>;
   onSyncPaymentOptions: () => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   onSearchShippingOptions: (form: HTMLFormElement) => void;
@@ -1039,6 +1143,7 @@ function IntegrationForm({
             Use “Sincronizar pagamentos” para carregar as categorias do Olist. A categoria padrão será enviada no pedido de venda.
           </span>
         </label>
+        <BankAccountManager options={paymentOptions} onChanged={onPaymentOptionsChanged} />
         <details className="rounded-md border border-zinc-800 bg-zinc-950/50">
           <summary className="focus-ring flex cursor-pointer list-none items-center justify-between gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-900/80">
             <span className="inline-flex items-center gap-2">

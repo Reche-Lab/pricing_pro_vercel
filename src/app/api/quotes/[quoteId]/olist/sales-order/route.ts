@@ -53,7 +53,11 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     const body = await request.json().catch(() => null);
     const shipments = await listQuoteShipments(loaded.session.userId, loaded.session.tenantId, quoteId);
     let paymentTerm = await getQuotePaymentTerm(loaded.session.userId, loaded.session.tenantId, quoteId);
-    if (!paymentTerm?.receiving_method_external_id && body?.paymentTerm) {
+    const needsPaymentCompletion = !paymentTerm?.receiving_method_external_id || paymentNeedsBankAccount(
+      paymentTerm?.receiving_method_name,
+      paymentTerm?.payment_method_external_id
+    );
+    if (needsPaymentCompletion && body?.paymentTerm) {
       const parsedPaymentTerm = paymentTermSchema.safeParse(body.paymentTerm);
       if (!parsedPaymentTerm.success) {
         return NextResponse.json({ ok: false, error: parsedPaymentTerm.error.flatten(), paymentRequired: true }, { status: 400 });
@@ -66,6 +70,17 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
         {
           ok: false,
           error: "Selecione e salve uma forma de recebimento do Olist antes de gerar o pedido de venda.",
+          paymentRequired: true,
+          paymentTerm
+        },
+        { status: 409 }
+      );
+    }
+    if (paymentNeedsBankAccount(paymentTerm.receiving_method_name, paymentTerm.payment_method_external_id)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Selecione a conta bancária que receberá este pagamento antes de gerar o pedido de venda.",
           paymentRequired: true,
           paymentTerm
         },
@@ -120,6 +135,12 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     });
     return NextResponse.json(olistOperationErrorResponse(error, "Unknown Olist error"), { status: 502 });
   }
+}
+
+function paymentNeedsBankAccount(receivingMethodName: string | null | undefined, bankAccountId: string | null | undefined) {
+  if (bankAccountId) return false;
+  const normalized = (receivingMethodName ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return ["pix", "boleto", "deposito", "transferencia"].some((term) => normalized.includes(term));
 }
 
 function selectBestMelhorEnvioShipment(shipments: ShipmentRow[]) {

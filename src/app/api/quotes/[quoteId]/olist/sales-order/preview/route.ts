@@ -58,7 +58,7 @@ export async function GET(_request: Request, context: { params: Promise<{ quoteI
       totalPrice: item.total_price,
       artworkName: item.artwork_name
     }));
-    if (!paymentTerm?.receiving_method_external_id) {
+    if (!paymentTerm?.receiving_method_external_id || paymentNeedsBankAccount(paymentTerm.receiving_method_name, paymentTerm.payment_method_external_id)) {
       return NextResponse.json(
         {
           ok: true,
@@ -98,6 +98,12 @@ export async function GET(_request: Request, context: { params: Promise<{ quoteI
     });
     return NextResponse.json(olistOperationErrorResponse(error, "Falha ao montar prévia do pedido Olist."), { status: 500 });
   }
+}
+
+function paymentNeedsBankAccount(receivingMethodName: string | null | undefined, bankAccountId: string | null | undefined) {
+  if (bankAccountId) return false;
+  const normalized = (receivingMethodName ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return ["pix", "boleto", "deposito", "transferencia"].some((term) => normalized.includes(term));
 }
 
 function selectBestMelhorEnvioShipment(shipments: ShipmentRow[]) {

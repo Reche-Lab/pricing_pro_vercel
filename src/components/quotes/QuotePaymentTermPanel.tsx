@@ -50,7 +50,10 @@ export function QuotePaymentTermPanel({
   const [reconnecting, setReconnecting] = useState(false);
   const [open, setOpen] = useState(false);
 
-  const paymentMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "payment_method"), [paymentOptions]);
+  const paymentMethods = useMemo(
+    () => paymentOptions.filter((option) => option.kind === "payment_method" && option.groupName === "Banco"),
+    [paymentOptions]
+  );
   const receivingMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "receiving_method"), [paymentOptions]);
   const categories = useMemo(() => paymentOptions.filter((option) => option.kind === "category"), [paymentOptions]);
   const selectedPaymentMethod = paymentMethods.find((option) => option.externalId === paymentMethodId) ?? null;
@@ -97,12 +100,12 @@ export function QuotePaymentTermPanel({
     const receivingFailure = Array.isArray(data.failures)
       ? data.failures.find((failure: Record<string, unknown>) => failure.path === "/formas-recebimento")
       : null;
-    const paymentCount = nextOptions.filter((option: PaymentOption) => option.kind === "payment_method").length;
+    const paymentCount = nextOptions.filter((option: PaymentOption) => option.kind === "payment_method" && option.groupName === "Banco").length;
     const receivingCount = nextOptions.filter((option: PaymentOption) => option.kind === "receiving_method").length;
     setRequiresReauthorization(Boolean(data.requiresReauthorization));
     setState(receivingCount > 0 ? "idle" : "error");
     setMessage(receivingCount > 0
-      ? `${receivingCount} forma(s) e ${paymentCount} conta(s)/meio(s) de recebimento sincronizados.`
+      ? `${receivingCount} forma(s) sincronizada(s). ${paymentCount} conta(s) bancária(s) configurada(s).`
       : typeof data.permissionMessage === "string"
         ? data.permissionMessage
         : typeof receivingFailure?.message === "string"
@@ -129,6 +132,11 @@ export function QuotePaymentTermPanel({
     if (!paymentTerm || state === "saving") {
       setState("error");
       setMessage("Selecione uma forma de recebimento.");
+      return;
+    }
+    if (requiresBankAccount(selectedReceivingMethod?.name) && !selectedPaymentMethod) {
+      setState("error");
+      setMessage("Para PIX, boleto, depósito ou transferência, selecione a conta bancária que receberá o valor.");
       return;
     }
     setState("saving");
@@ -220,7 +228,11 @@ export function QuotePaymentTermPanel({
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             <SelectOption label="Forma de recebimento" options={receivingMethods} placeholder={receivingMethods.length ? "Selecione" : "Sincronize formas de recebimento"} value={receivingMethodId} onChange={setReceivingMethodId} />
-            <SelectOption label="Conta bancária / meio de recebimento" options={paymentMethods} placeholder={paymentMethods.length ? "Selecione se aplicável" : "Sincronize contas do Olist"} value={paymentMethodId} onChange={setPaymentMethodId} />
+            <SelectOption label={`Conta bancária${requiresBankAccount(selectedReceivingMethod?.name) ? " (obrigatória)" : ""}`} options={paymentMethods} placeholder={paymentMethods.length ? "Selecione a conta" : "Cadastre a conta em Configurações"} value={paymentMethodId} onChange={setPaymentMethodId} />
+            <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-500">
+              <span className="block font-medium text-zinc-300">Meio</span>
+              <span className="mt-1 block">{selectedPaymentMethod ? "Banco" : "Definido após selecionar a conta"}</span>
+            </div>
             <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-500">
               <span className="block font-medium text-zinc-300">Categoria padrão</span>
               <span className="mt-1 block">{selectedCategory?.name ?? "Não definida"}</span>
@@ -259,7 +271,7 @@ export function QuotePaymentTermPanel({
               </p>
               {requiresReauthorization ? (
                 <p className="text-xs leading-5 text-amber-100/80">
-                  Primeiro habilite as permissões de consulta às formas de recebimento e formas de pagamento no aplicativo Olist. Depois reautorize abaixo.
+                  Primeiro habilite a permissão de consulta às formas de recebimento no aplicativo Olist. Depois reautorize abaixo.
                 </p>
               ) : null}
             </div>
@@ -425,6 +437,11 @@ function buildPaymentTermPayload({
 function shouldShowPaymentInstallments(name: string | null | undefined) {
   const normalized = normalizeText(name ?? "");
   return normalized.includes("cartao de credito") || normalized.includes("credito") || normalized.includes("link de pagamento");
+}
+
+function requiresBankAccount(name: string | null | undefined) {
+  const normalized = normalizeText(name ?? "");
+  return ["pix", "boleto", "deposito", "transferencia"].some((term) => normalized.includes(term));
 }
 
 function normalizeText(value: string) {

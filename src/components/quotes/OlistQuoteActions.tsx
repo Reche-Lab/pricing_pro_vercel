@@ -838,7 +838,10 @@ function ActionModal({
     [defaultResponsibleExternalId, responsibleUsers]
   );
   const salesOrderNeedsPayment = action === "salesOrder" && Boolean(salesOrderPreview.data?.paymentRequired);
-  const paymentMethods = useMemo(() => modalPaymentOptions.filter((option) => option.kind === "payment_method"), [modalPaymentOptions]);
+  const paymentMethods = useMemo(
+    () => modalPaymentOptions.filter((option) => option.kind === "payment_method" && option.groupName === "Banco"),
+    [modalPaymentOptions]
+  );
   const receivingMethods = useMemo(() => modalPaymentOptions.filter((option) => option.kind === "receiving_method"), [modalPaymentOptions]);
   const paymentCategories = useMemo(() => modalPaymentOptions.filter((option) => option.kind === "category"), [modalPaymentOptions]);
 
@@ -863,7 +866,7 @@ function ActionModal({
       }
 
       const nextOptions = normalizePaymentOptions(data.options);
-      const paymentCount = nextOptions.filter((option) => option.kind === "payment_method").length;
+      const paymentCount = nextOptions.filter((option) => option.kind === "payment_method" && option.groupName === "Banco").length;
       const receivingCount = nextOptions.filter((option) => option.kind === "receiving_method").length;
       const receivingFailure = Array.isArray(data.failures)
         ? data.failures.find((failure: Record<string, unknown>) => failure.path === "/formas-recebimento")
@@ -872,7 +875,7 @@ function ActionModal({
       setPaymentRequiresReauthorization(Boolean(data.requiresReauthorization));
       setPaymentSyncState(receivingCount > 0 ? "success" : "error");
       setPaymentSyncMessage(receivingCount > 0
-        ? `${receivingCount} forma(s) e ${paymentCount} conta(s)/meio(s) de recebimento disponíveis.`
+        ? `${receivingCount} forma(s) disponível(is). ${paymentCount} conta(s) bancária(s) configurada(s).`
         : typeof data.permissionMessage === "string"
           ? data.permissionMessage
           : typeof receivingFailure?.message === "string"
@@ -1400,7 +1403,8 @@ function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }
         {paymentTerm ? (
           <div className="mt-2 grid gap-2 sm:grid-cols-3">
             <InfoTile compact label="Forma de recebimento" value={stringValue(paymentTerm.receiving_method_name)} />
-            <InfoTile compact label="Conta bancária / meio" value={stringValue(paymentTerm.payment_method_name)} />
+            <InfoTile compact label="Meio" value={paymentTerm.payment_method_name ? "Banco" : "-"} />
+            <InfoTile compact label="Conta bancária" value={stringValue(paymentTerm.payment_method_name)} />
             <InfoTile compact label="Categoria" value={stringValue(paymentTerm.category_name)} />
             <InfoTile compact label="Parcelas" value={stringValue(paymentTerm.installments_count)} />
             <InfoTile compact label="Observação financeira" value={stringValue(paymentTerm.notes)} />
@@ -1520,7 +1524,7 @@ function SalesOrderPaymentFields({
       {needsReauthorization ? (
         <div className="flex flex-col gap-2 rounded-md border border-cyan-400/20 bg-cyan-400/10 p-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs leading-5 text-cyan-100/85">
-            Habilite no aplicativo Olist as permissões de consulta às formas de recebimento e formas de pagamento. Em seguida, autorize novamente o acesso desta conta.
+            Habilite no aplicativo Olist a permissão de consulta às formas de recebimento. Em seguida, autorize novamente o acesso desta conta.
           </p>
           <button
             className="focus-ring inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-cyan-300/30 px-3 text-xs font-semibold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-60"
@@ -1553,14 +1557,15 @@ function SalesOrderPaymentFields({
           </select>
         </label>
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-zinc-300">Conta bancária / meio de recebimento</span>
+          <span className="mb-1 block text-sm font-medium text-zinc-300">Conta bancária</span>
           <select
             className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
             name="salesOrderPaymentMethod"
+            required={requiresBankAccount(selectedReceivingMethod?.name)}
             value={selectedPaymentValue}
             onChange={(event) => setSelectedPaymentValue(event.currentTarget.value)}
           >
-            <option value="">{paymentMethods.length ? "Selecione se aplicável" : "Sincronize contas do Olist"}</option>
+            <option value="">{paymentMethods.length ? "Selecione a conta" : "Cadastre a conta em Configurações"}</option>
             {paymentMethods.map((option) => (
               <option key={option.externalId} value={encodePaymentOption(option)}>
                 {option.groupName ? `${option.name} - ${option.groupName}` : option.name}
@@ -1568,6 +1573,10 @@ function SalesOrderPaymentFields({
             ))}
           </select>
         </label>
+        <div className="rounded-md border border-zinc-700 bg-zinc-950/60 px-3 py-2">
+          <span className="block text-sm font-medium text-zinc-300">Meio</span>
+          <span className="mt-1 block text-sm text-zinc-400">{selectedPaymentValue ? "Banco" : "Definido após selecionar a conta"}</span>
+        </div>
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-zinc-300">Categoria</span>
           <select
@@ -2140,6 +2149,9 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
     if (!receivingMethod) return { body: undefined };
 
     const paymentMethod = decodePaymentOption(stringField(formData, "salesOrderPaymentMethod"));
+    if (requiresBankAccount(receivingMethod.name) && !paymentMethod) {
+      return { error: "Selecione a conta bancária para esta forma de recebimento." };
+    }
     const category = decodePaymentOption(stringField(formData, "salesOrderPaymentCategory"));
     const notes = stringField(formData, "salesOrderPaymentNotes");
     const total = Math.max(0, Number(stringField(formData, "paymentTotal")) || 0);
@@ -2211,6 +2223,11 @@ function decodePaymentOption(value: string) {
 function shouldShowPaymentInstallments(name: string | null | undefined) {
   const normalized = normalizeText(name ?? "");
   return normalized.includes("cartao de credito") || normalized.includes("credito") || normalized.includes("link de pagamento");
+}
+
+function requiresBankAccount(name: string | null | undefined) {
+  const normalized = normalizeText(name ?? "");
+  return ["pix", "boleto", "deposito", "transferencia"].some((term) => normalized.includes(term));
 }
 
 function normalizeText(value: string) {
