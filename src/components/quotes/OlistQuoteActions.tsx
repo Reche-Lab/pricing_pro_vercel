@@ -13,6 +13,7 @@ import {
   Lock,
   PlugZap,
   ReceiptText,
+  RotateCcw,
   Send,
   ShoppingCart,
   Truck,
@@ -827,14 +828,53 @@ function ActionModal({
     error: null,
     data: null
   });
+  const [modalPaymentOptions, setModalPaymentOptions] = useState(paymentOptions);
+  const [paymentSyncState, setPaymentSyncState] = useState<"idle" | "syncing" | "success" | "error">("idle");
+  const [paymentSyncMessage, setPaymentSyncMessage] = useState("");
   const melhorEnvioShipment = useMemo(() => selectBestMelhorEnvioShipment(shipments), [shipments]);
   const defaultResponsibleUser = useMemo(
     () => responsibleUsers.find((user) => user.id === defaultResponsibleExternalId) ?? null,
     [defaultResponsibleExternalId, responsibleUsers]
   );
   const salesOrderNeedsPayment = action === "salesOrder" && Boolean(salesOrderPreview.data?.paymentRequired);
-  const receivingMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "receiving_method"), [paymentOptions]);
-  const paymentCategories = useMemo(() => paymentOptions.filter((option) => option.kind === "category"), [paymentOptions]);
+  const receivingMethods = useMemo(() => modalPaymentOptions.filter((option) => option.kind === "receiving_method"), [modalPaymentOptions]);
+  const paymentCategories = useMemo(() => modalPaymentOptions.filter((option) => option.kind === "category"), [modalPaymentOptions]);
+
+  useEffect(() => {
+    setModalPaymentOptions(paymentOptions);
+  }, [paymentOptions]);
+
+  async function syncPaymentOptions() {
+    if (paymentSyncState === "syncing") return;
+    setPaymentSyncState("syncing");
+    setPaymentSyncMessage("Sincronizando formas de recebimento...");
+
+    try {
+      const response = await fetch("/api/olist/payment-options/sync", { method: "POST" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) {
+        setPaymentSyncState("error");
+        setPaymentSyncMessage(data?.error ?? "Não foi possível sincronizar as opções financeiras do Olist.");
+        return;
+      }
+
+      const nextOptions = normalizePaymentOptions(data.options);
+      const receivingCount = nextOptions.filter((option) => option.kind === "receiving_method").length;
+      const receivingFailure = Array.isArray(data.failures)
+        ? data.failures.find((failure: Record<string, unknown>) => failure.path === "/formas-recebimento")
+        : null;
+      setModalPaymentOptions(nextOptions);
+      setPaymentSyncState(receivingCount > 0 ? "success" : "error");
+      setPaymentSyncMessage(receivingCount > 0
+        ? `${receivingCount} forma(s) de recebimento disponível(is).`
+        : typeof receivingFailure?.message === "string"
+          ? `Olist não sincronizou formas de recebimento: ${receivingFailure.message}`
+          : "O Olist não retornou formas de recebimento para esta conta.");
+    } catch (error) {
+      setPaymentSyncState("error");
+      setPaymentSyncMessage(error instanceof Error ? error.message : "Falha de comunicação ao sincronizar com o Olist.");
+    }
+  }
 
   useEffect(() => {
     if (action !== "salesOrder") return;
@@ -1115,7 +1155,10 @@ function ActionModal({
                 <SalesOrderPaymentFields
                   categories={paymentCategories}
                   defaultCategory={defaultPaymentCategory}
+                  onSync={syncPaymentOptions}
                   receivingMethods={receivingMethods}
+                  syncMessage={paymentSyncMessage}
+                  syncing={paymentSyncState === "syncing"}
                   total={Number(salesOrderPreview.data?.quote?.grandTotal ?? 0)}
                 />
               ) : null}
@@ -1397,12 +1440,18 @@ function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }
 function SalesOrderPaymentFields({
   categories,
   defaultCategory,
+  onSync,
   receivingMethods,
+  syncMessage,
+  syncing,
   total
 }: {
   categories: PaymentOption[];
   defaultCategory: { externalId: string; name: string };
+  onSync: () => void;
   receivingMethods: PaymentOption[];
+  syncMessage: string;
+  syncing: boolean;
   total: number;
 }) {
   const [selectedReceivingValue, setSelectedReceivingValue] = useState("");
@@ -1415,12 +1464,24 @@ function SalesOrderPaymentFields({
 
   return (
     <div className="grid gap-3 rounded-md border border-amber-400/25 bg-amber-400/10 p-3">
-      <div>
-        <p className="text-sm font-semibold text-amber-100">Pagamento obrigatório para o pedido</p>
-        <p className="mt-1 text-xs text-amber-100/80">
-          Essa condição será salva no orçamento e enviada junto com o pedido de venda Olist.
-        </p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-amber-100">Pagamento obrigatório para o pedido</p>
+          <p className="mt-1 text-xs text-amber-100/80">
+            Essa condição será salva no orçamento e enviada junto com o pedido de venda Olist.
+          </p>
+        </div>
+        <button
+          className="focus-ring inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-amber-200/25 px-3 text-xs font-semibold text-amber-100 hover:bg-amber-200/10 disabled:opacity-60"
+          disabled={syncing}
+          onClick={onSync}
+          type="button"
+        >
+          <RotateCcw size={14} />
+          {syncing ? "Sincronizando..." : "Sincronizar com Olist"}
+        </button>
       </div>
+      {syncMessage ? <p className="text-xs text-amber-100/80">{syncMessage}</p> : null}
       <input name="paymentTotal" type="hidden" value={Number.isFinite(total) ? total : 0} />
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
@@ -1471,6 +1532,24 @@ function SalesOrderPaymentFields({
       </div>
     </div>
   );
+}
+
+function normalizePaymentOptions(options: unknown): PaymentOption[] {
+  if (!Array.isArray(options)) return [];
+  return options.map((option) => {
+    const record = option && typeof option === "object" ? option as Record<string, unknown> : {};
+    return {
+      kind: record.kind,
+      externalId: record.external_id,
+      name: record.name,
+      groupName: record.group_name ?? null
+    };
+  }).filter((option): option is PaymentOption => (
+    (option.kind === "payment_method" || option.kind === "receiving_method" || option.kind === "category") &&
+    typeof option.externalId === "string" && option.externalId.length > 0 &&
+    typeof option.name === "string" && option.name.length > 0 &&
+    (option.groupName === null || typeof option.groupName === "string")
+  ));
 }
 
 function InvoicePreviewPanel({ preview }: { preview: InvoicePreviewState }) {

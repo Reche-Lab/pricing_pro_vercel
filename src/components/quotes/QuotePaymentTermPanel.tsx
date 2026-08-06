@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, CreditCard, RotateCcw, Save } from "lucide-react";
 
 type PaymentOption = {
@@ -34,8 +35,9 @@ export function QuotePaymentTermPanel({
   quoteId: string;
   total: number;
 }) {
+  const router = useRouter();
   const [paymentOptions, setPaymentOptions] = useState(options);
-  const [paymentMethodId, setPaymentMethodId] = useState(initialPaymentTerm?.payment_method_external_id ?? "");
+  const [receivingMethodId, setReceivingMethodId] = useState(initialPaymentTerm?.receiving_method_external_id ?? "");
   const [categoryId, setCategoryId] = useState(initialPaymentTerm?.category_external_id ?? defaultCategory.externalId ?? "");
   const [installmentsCount, setInstallmentsCount] = useState(initialPaymentTerm?.installments_count ?? 1);
   const [firstDueDays, setFirstDueDays] = useState(0);
@@ -45,26 +47,26 @@ export function QuotePaymentTermPanel({
   const [message, setMessage] = useState("");
   const [open, setOpen] = useState(false);
 
-  const paymentMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "payment_method"), [paymentOptions]);
+  const receivingMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "receiving_method"), [paymentOptions]);
   const categories = useMemo(() => paymentOptions.filter((option) => option.kind === "category"), [paymentOptions]);
-  const selectedPaymentMethod = paymentMethods.find((option) => option.externalId === paymentMethodId) ?? null;
+  const selectedReceivingMethod = receivingMethods.find((option) => option.externalId === receivingMethodId) ?? null;
   const selectedCategory = categories.find((option) => option.externalId === categoryId) ?? (defaultCategory.externalId ? {
     kind: "category" as const,
     externalId: defaultCategory.externalId,
     name: defaultCategory.name || "Categoria padrão",
     groupName: null
   } : null);
-  const showInstallments = shouldShowPaymentInstallments(selectedPaymentMethod?.name);
+  const showInstallments = shouldShowPaymentInstallments(selectedReceivingMethod?.name);
   const paymentTerm = buildPaymentTermPayload({
     total,
-    paymentMethod: selectedPaymentMethod,
+    receivingMethod: selectedReceivingMethod,
     category: selectedCategory,
     installmentsCount: showInstallments ? installmentsCount : 1,
     firstDueDays,
     intervalDays: showInstallments ? intervalDays : 0,
     notes
   });
-  const selected = Boolean(paymentTerm);
+  const selected = Boolean(selectedReceivingMethod);
 
   async function syncOptions() {
     setState("syncing");
@@ -83,14 +85,23 @@ export function QuotePaymentTermPanel({
       groupName: option.group_name ?? null
     })).filter((option: PaymentOption) => option.kind && option.externalId && option.name);
     setPaymentOptions(nextOptions);
-    setState("idle");
-    setMessage(`Opções sincronizadas: ${nextOptions.length}.`);
+    router.refresh();
+    const receivingFailure = Array.isArray(data.failures)
+      ? data.failures.find((failure: Record<string, unknown>) => failure.path === "/formas-recebimento")
+      : null;
+    const receivingCount = nextOptions.filter((option: PaymentOption) => option.kind === "receiving_method").length;
+    setState(receivingCount > 0 ? "idle" : "error");
+    setMessage(receivingCount > 0
+      ? `${receivingCount} forma(s) de recebimento sincronizada(s).`
+      : typeof receivingFailure?.message === "string"
+        ? `Olist não sincronizou formas de recebimento: ${receivingFailure.message}`
+        : "A sincronização terminou, mas o Olist não retornou formas de recebimento.");
   }
 
   async function save() {
     if (!paymentTerm || state === "saving") {
       setState("error");
-      setMessage("Selecione pelo menos uma forma de pagamento ou recebimento.");
+      setMessage("Selecione uma forma de recebimento.");
       return;
     }
     setState("saving");
@@ -150,8 +161,8 @@ export function QuotePaymentTermPanel({
             Pagamento do pedido Olist
           </p>
           <p className="mt-1 text-xs text-zinc-400">
-            {selectedPaymentMethod?.name
-              ? `${selectedPaymentMethod.name}${selectedCategory?.name ? ` · ${selectedCategory.name}` : ""}`
+            {selectedReceivingMethod?.name
+              ? `${selectedReceivingMethod.name}${selectedCategory?.name ? ` · ${selectedCategory.name}` : ""}`
               : "Ainda não selecionado. Será exigido ao gerar pedido de venda."}
           </p>
         </button>
@@ -181,7 +192,7 @@ export function QuotePaymentTermPanel({
             Obrigatório para gerar pedido de venda no Olist; a nota fiscal herdará essa condição.
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
-            <SelectOption label="Forma de pagamento" options={paymentMethods} placeholder={paymentMethods.length ? "Selecione" : "Sincronize"} value={paymentMethodId} onChange={setPaymentMethodId} />
+            <SelectOption label="Forma de recebimento" options={receivingMethods} placeholder={receivingMethods.length ? "Selecione" : "Sincronize formas de recebimento"} value={receivingMethodId} onChange={setReceivingMethodId} />
             <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-500">
               <span className="block font-medium text-zinc-300">Categoria padrão</span>
               <span className="mt-1 block">{selectedCategory?.name ?? "Não definida"}</span>
@@ -301,7 +312,7 @@ function buildPaymentTermPayload({
   installmentsCount,
   intervalDays,
   notes,
-  paymentMethod,
+  receivingMethod,
   total
 }: {
   category: PaymentOption | null;
@@ -309,10 +320,10 @@ function buildPaymentTermPayload({
   installmentsCount: number;
   intervalDays: number;
   notes: string;
-  paymentMethod: PaymentOption | null;
+  receivingMethod: PaymentOption | null;
   total: number;
 }) {
-  if (!paymentMethod && !category) return null;
+  if (!receivingMethod) return null;
   const count = Math.max(1, Math.min(24, Math.trunc(installmentsCount || 1)));
   const totalCents = Math.max(0, Math.round(total * 100));
   const baseCents = Math.floor(totalCents / count);
@@ -328,18 +339,18 @@ function buildPaymentTermPayload({
       days,
       amount: cents / 100,
       notes: notes.trim() || `Parcela ${index + 1}/${count}`,
-      paymentMethodExternalId: paymentMethod?.externalId ?? null,
-      paymentMethodName: paymentMethod?.name ?? null,
-      receivingMethodExternalId: null,
-      receivingMethodName: null
+      paymentMethodExternalId: null,
+      paymentMethodName: null,
+      receivingMethodExternalId: receivingMethod.externalId,
+      receivingMethodName: receivingMethod.name
     };
   });
 
   return {
-    paymentMethodExternalId: paymentMethod?.externalId ?? null,
-    paymentMethodName: paymentMethod?.name ?? null,
-    receivingMethodExternalId: null,
-    receivingMethodName: null,
+    paymentMethodExternalId: null,
+    paymentMethodName: null,
+    receivingMethodExternalId: receivingMethod.externalId,
+    receivingMethodName: receivingMethod.name,
     categoryExternalId: category?.externalId ?? null,
     categoryName: category?.name ?? null,
     installmentsCount: count,

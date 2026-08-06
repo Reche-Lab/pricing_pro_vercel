@@ -74,10 +74,20 @@ export async function replaceOlistPaymentOptions(
     name: string;
     groupName?: string | null;
     raw?: unknown;
-  }>
+  }>,
+  syncedKinds: OlistPaymentOptionKind[] = [...new Set(options.map((option) => option.kind))]
 ) {
   return withTenantContext(userId, tenantId, async (client) => {
-    await client.query("update olist_payment_options set active = false, updated_at = now() where tenant_id = $1", [tenantId]);
+    if (syncedKinds.length > 0) {
+      await client.query(
+        `
+          update olist_payment_options
+          set active = false, updated_at = now()
+          where tenant_id = $1 and kind = any($2::text[])
+        `,
+        [tenantId, syncedKinds]
+      );
+    }
 
     for (const option of options) {
       await client.query(
@@ -117,7 +127,7 @@ export async function replaceOlistPaymentOptions(
         insert into audit_logs (tenant_id, actor_user_id, action, entity_type, metadata)
         values ($1, $2, 'olist.payment_options_sync', 'olist_payment_options', $3)
       `,
-      [tenantId, userId, JSON.stringify({ count: options.length })]
+      [tenantId, userId, JSON.stringify({ count: options.length, syncedKinds })]
     );
 
     const result = await client.query<OlistPaymentOptionRow>(

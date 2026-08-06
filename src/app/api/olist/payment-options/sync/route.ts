@@ -9,6 +9,7 @@ import {
 } from "@/repositories/integrations";
 import { replaceOlistPaymentOptions, type OlistPaymentOptionKind } from "@/repositories/olist-payment-options";
 import { OlistRequestError, olistRequest, refreshOlistToken } from "@/services/olist/olist";
+import { extractOlistPaymentOptions } from "@/services/olist/payment-options";
 import type { OlistCredentials, OlistSettings } from "@/services/olist/types";
 
 const OPTION_PATHS: Array<{ kind: OlistPaymentOptionKind; path: string; label: string }> = [
@@ -30,6 +31,7 @@ export async function POST() {
   const settings = connection.settings as OlistSettings;
   let credentials = decryptIntegrationCredentials<OlistCredentials>(connection);
   const collected: Array<{ kind: OlistPaymentOptionKind; externalId: string; name: string; groupName?: string | null; raw?: unknown }> = [];
+  const syncedKinds: OlistPaymentOptionKind[] = [];
   const failures: Array<{ path: string; label: string; message: string }> = [];
 
   console.info("Olist payment options sync started.", { debugId, tenantId: session.tenantId });
@@ -44,8 +46,9 @@ export async function POST() {
         path: target.path
       });
       if (data.credentials) credentials = data.credentials;
-      const options = extractOptions(data.result, target.kind);
+      const options = extractOlistPaymentOptions(data.result, target.kind);
       collected.push(...options);
+      syncedKinds.push(target.kind);
       console.info("Olist payment options path synced.", {
         debugId,
         path: target.path,
@@ -80,12 +83,12 @@ export async function POST() {
     }, { status: 502 });
   }
 
-  const options = await replaceOlistPaymentOptions(session.userId, session.tenantId, collected);
+  const options = await replaceOlistPaymentOptions(session.userId, session.tenantId, collected, syncedKinds);
   await safeLog(session.userId, session.tenantId, {
     operation: "payment_options.sync",
     status: failures.length ? "pending" : "success",
     message: failures.length ? "Sincronização parcial das opções financeiras do Olist." : null,
-    metadata: { debugId, count: options.length, failures }
+    metadata: { debugId, count: options.length, syncedKinds, failures }
   });
 
   return NextResponse.json({
@@ -93,6 +96,7 @@ export async function POST() {
     debugId,
     options,
     failures,
+    syncedKinds,
     counts: {
       paymentMethods: options.filter((option) => option.kind === "payment_method").length,
       receivingMethods: options.filter((option) => option.kind === "receiving_method").length,
@@ -140,44 +144,6 @@ async function requestWithRefresh(input: {
       })
     };
   }
-}
-
-function extractOptions(data: unknown, kind: OlistPaymentOptionKind) {
-  return records(data)
-    .map((record) => normalizeOption(record, kind))
-    .filter((option): option is NonNullable<ReturnType<typeof normalizeOption>> => Boolean(option));
-}
-
-function normalizeOption(record: unknown, kind: OlistPaymentOptionKind) {
-  if (!record || typeof record !== "object") return null;
-  const item = record as Record<string, unknown>;
-  const id = stringValue(item.id ?? item.codigo);
-  const name = stringValue(item.nome ?? item.descricao ?? item.name);
-  if (!id || !name) return null;
-  return {
-    kind,
-    externalId: id,
-    name,
-    groupName: stringValue(item.grupo ?? item.group ?? item.categoria),
-    raw: item
-  };
-}
-
-function records(data: unknown): unknown[] {
-  if (Array.isArray(data)) return data;
-  if (!data || typeof data !== "object") return [];
-  const record = data as Record<string, unknown>;
-  if (Array.isArray(record.itens)) return record.itens;
-  if (Array.isArray(record.items)) return record.items;
-  if (Array.isArray(record.data)) return record.data;
-  if (record.retorno) return records(record.retorno);
-  return [];
-}
-
-function stringValue(value: unknown) {
-  if (typeof value === "number") return String(value);
-  if (typeof value === "string" && value.trim()) return value.trim();
-  return null;
 }
 
 async function safeLog(
