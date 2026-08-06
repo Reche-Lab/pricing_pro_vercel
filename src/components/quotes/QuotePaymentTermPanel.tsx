@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, CreditCard, RotateCcw, Save } from "lucide-react";
+import { CheckCircle2, CreditCard, KeyRound, RotateCcw, Save } from "lucide-react";
 
 type PaymentOption = {
   kind: "payment_method" | "receiving_method" | "category";
@@ -45,6 +45,8 @@ export function QuotePaymentTermPanel({
   const [notes, setNotes] = useState(initialPaymentTerm?.notes ?? "");
   const [state, setState] = useState<"idle" | "saving" | "syncing" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [requiresReauthorization, setRequiresReauthorization] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [open, setOpen] = useState(false);
 
   const receivingMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "receiving_method"), [paymentOptions]);
@@ -71,10 +73,12 @@ export function QuotePaymentTermPanel({
   async function syncOptions() {
     setState("syncing");
     setMessage("Sincronizando opções do Olist...");
+    setRequiresReauthorization(false);
     const response = await fetch("/api/olist/payment-options/sync", { method: "POST" });
     const data = await response.json().catch(() => null);
     if (!response.ok || !data?.ok) {
       setState("error");
+      setRequiresReauthorization(Boolean(data?.requiresReauthorization));
       setMessage(data?.error ?? "Não foi possível sincronizar opções do Olist.");
       return;
     }
@@ -90,12 +94,30 @@ export function QuotePaymentTermPanel({
       ? data.failures.find((failure: Record<string, unknown>) => failure.path === "/formas-recebimento")
       : null;
     const receivingCount = nextOptions.filter((option: PaymentOption) => option.kind === "receiving_method").length;
+    setRequiresReauthorization(Boolean(data.requiresReauthorization));
     setState(receivingCount > 0 ? "idle" : "error");
     setMessage(receivingCount > 0
       ? `${receivingCount} forma(s) de recebimento sincronizada(s).`
-      : typeof receivingFailure?.message === "string"
-        ? `Olist não sincronizou formas de recebimento: ${receivingFailure.message}`
-        : "A sincronização terminou, mas o Olist não retornou formas de recebimento.");
+      : typeof data.permissionMessage === "string"
+        ? data.permissionMessage
+        : typeof receivingFailure?.message === "string"
+          ? `Olist não sincronizou formas de recebimento: ${receivingFailure.message}`
+          : "A sincronização terminou, mas o Olist não retornou formas de recebimento.");
+  }
+
+  async function reconnectOlist() {
+    if (reconnecting) return;
+    setReconnecting(true);
+    const redirectPath = `/quotes/${encodeURIComponent(quoteId)}`;
+    const response = await fetch(`/api/olist/auth-url?redirectPath=${encodeURIComponent(redirectPath)}`);
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.authUrl) {
+      setReconnecting(false);
+      setState("error");
+      setMessage(data?.error ?? "Não foi possível iniciar a reautorização Olist.");
+      return;
+    }
+    window.location.href = data.authUrl;
   }
 
   async function save() {
@@ -225,22 +247,55 @@ export function QuotePaymentTermPanel({
             />
           </label>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className={`text-xs ${state === "error" ? "text-rose-200" : "text-zinc-400"}`}>
-              {message || (selected ? "Condição pronta para o pedido Olist." : "Pagamento ainda não selecionado.")}
-            </p>
-            <button
-              className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-amber-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:opacity-60"
-              disabled={state === "saving"}
-              type="button"
-              onClick={save}
-            >
-              <Save size={15} />
-              {state === "saving" ? "Salvando..." : "Salvar pagamento"}
-            </button>
+            <div className="grid gap-2">
+              <p className={`text-xs ${state === "error" ? "text-rose-200" : "text-zinc-400"}`}>
+                {message || (selected ? "Condição pronta para o pedido Olist." : "Pagamento ainda não selecionado.")}
+              </p>
+              {requiresReauthorization ? (
+                <p className="text-xs leading-5 text-amber-100/80">
+                  Primeiro habilite a permissão de consulta às formas de recebimento no cadastro do aplicativo dentro do Olist. Depois reautorize abaixo.
+                </p>
+              ) : null}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              {requiresReauthorization ? (
+                <button
+                  className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-cyan-400/30 px-4 text-sm font-semibold text-cyan-100 hover:bg-cyan-400/10 disabled:opacity-60"
+                  disabled={reconnecting}
+                  type="button"
+                  onClick={reconnectOlist}
+                >
+                  <KeyRound size={15} />
+                  {reconnecting ? "Abrindo OAuth..." : "Reautorizar Olist"}
+                </button>
+              ) : null}
+              <button
+                className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-amber-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:opacity-60"
+                disabled={state === "saving"}
+                type="button"
+                onClick={save}
+              >
+                <Save size={15} />
+                {state === "saving" ? "Salvando..." : "Salvar pagamento"}
+              </button>
+            </div>
           </div>
         </div>
       ) : message ? (
-        <p className={`mt-2 text-xs ${state === "error" ? "text-rose-200" : "text-zinc-400"}`}>{message}</p>
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className={`text-xs ${state === "error" ? "text-rose-200" : "text-zinc-400"}`}>{message}</p>
+          {requiresReauthorization ? (
+            <button
+              className="focus-ring inline-flex h-8 w-fit shrink-0 items-center justify-center gap-2 rounded-md border border-cyan-400/30 px-3 text-xs font-semibold text-cyan-100 hover:bg-cyan-400/10 disabled:opacity-60"
+              disabled={reconnecting}
+              type="button"
+              onClick={reconnectOlist}
+            >
+              <KeyRound size={13} />
+              {reconnecting ? "Abrindo..." : "Reautorizar Olist"}
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );

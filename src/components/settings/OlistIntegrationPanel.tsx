@@ -190,8 +190,14 @@ export function OlistIntegrationPanel() {
       return;
     }
 
+    if (data.requiresReauthorization) {
+      setMessage(data.permissionMessage ?? "Habilite a permissão de formas de recebimento no aplicativo Olist e reconecte o OAuth.");
+      await loadPaymentOptions();
+      return;
+    }
+
     setMessage(
-      `Opções financeiras sincronizadas: ${data.counts?.paymentMethods ?? 0} formas de pagamento, ${data.counts?.receivingMethods ?? 0} formas de recebimento.`
+      `Opções financeiras sincronizadas: ${data.counts?.receivingMethods ?? 0} formas de recebimento e ${data.counts?.categories ?? 0} categorias.`
     );
     await loadPaymentOptions();
   }

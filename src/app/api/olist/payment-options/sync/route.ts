@@ -13,7 +13,6 @@ import { extractOlistPaymentOptions } from "@/services/olist/payment-options";
 import type { OlistCredentials, OlistSettings } from "@/services/olist/types";
 
 const OPTION_PATHS: Array<{ kind: OlistPaymentOptionKind; path: string; label: string }> = [
-  { kind: "payment_method", path: "/formas-pagamento", label: "formas de pagamento" },
   { kind: "receiving_method", path: "/formas-recebimento", label: "formas de recebimento" },
   { kind: "category", path: "/categorias-receita-despesa", label: "categorias financeiras" }
 ];
@@ -32,7 +31,7 @@ export async function POST() {
   let credentials = decryptIntegrationCredentials<OlistCredentials>(connection);
   const collected: Array<{ kind: OlistPaymentOptionKind; externalId: string; name: string; groupName?: string | null; raw?: unknown }> = [];
   const syncedKinds: OlistPaymentOptionKind[] = [];
-  const failures: Array<{ path: string; label: string; message: string }> = [];
+  const failures: Array<{ path: string; kind: OlistPaymentOptionKind; label: string; message: string; status: number | null }> = [];
 
   console.info("Olist payment options sync started.", { debugId, tenantId: session.tenantId });
 
@@ -57,16 +56,25 @@ export async function POST() {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha desconhecida.";
-      failures.push({ path: target.path, label: target.label, message });
+      const status = error instanceof OlistRequestError ? error.status : null;
+      failures.push({ path: target.path, kind: target.kind, label: target.label, message, status });
       console.error("Olist payment options path failed.", {
         debugId,
         path: target.path,
         kind: target.kind,
+        status,
         message,
         stack: error instanceof Error ? error.stack : undefined
       });
     }
   }
+
+  const receivingPermissionDenied = failures.some((failure) => (
+    failure.kind === "receiving_method" && failure.status === 403
+  ));
+  const permissionMessage = receivingPermissionDenied
+    ? "O aplicativo Olist não tem permissão para consultar formas de recebimento. Habilite essa permissão no cadastro do aplicativo Olist e reautorize o OAuth."
+    : null;
 
   if (collected.length === 0) {
     await safeLog(session.userId, session.tenantId, {
@@ -78,8 +86,10 @@ export async function POST() {
     return NextResponse.json({
       ok: false,
       debugId,
-      error: "Não foi possível sincronizar opções de pagamento do Olist.",
-      failures
+      error: permissionMessage ?? "Não foi possível sincronizar opções financeiras do Olist.",
+      failures,
+      requiresReauthorization: receivingPermissionDenied,
+      permissionMessage
     }, { status: 502 });
   }
 
@@ -97,6 +107,8 @@ export async function POST() {
     options,
     failures,
     syncedKinds,
+    requiresReauthorization: receivingPermissionDenied,
+    permissionMessage,
     counts: {
       paymentMethods: options.filter((option) => option.kind === "payment_method").length,
       receivingMethods: options.filter((option) => option.kind === "receiving_method").length,

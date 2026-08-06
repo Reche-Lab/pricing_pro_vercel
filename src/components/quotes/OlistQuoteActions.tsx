@@ -831,6 +831,7 @@ function ActionModal({
   const [modalPaymentOptions, setModalPaymentOptions] = useState(paymentOptions);
   const [paymentSyncState, setPaymentSyncState] = useState<"idle" | "syncing" | "success" | "error">("idle");
   const [paymentSyncMessage, setPaymentSyncMessage] = useState("");
+  const [paymentRequiresReauthorization, setPaymentRequiresReauthorization] = useState(false);
   const melhorEnvioShipment = useMemo(() => selectBestMelhorEnvioShipment(shipments), [shipments]);
   const defaultResponsibleUser = useMemo(
     () => responsibleUsers.find((user) => user.id === defaultResponsibleExternalId) ?? null,
@@ -848,12 +849,14 @@ function ActionModal({
     if (paymentSyncState === "syncing") return;
     setPaymentSyncState("syncing");
     setPaymentSyncMessage("Sincronizando formas de recebimento...");
+    setPaymentRequiresReauthorization(false);
 
     try {
       const response = await fetch("/api/olist/payment-options/sync", { method: "POST" });
       const data = await response.json().catch(() => null);
       if (!response.ok || !data?.ok) {
         setPaymentSyncState("error");
+        setPaymentRequiresReauthorization(Boolean(data?.requiresReauthorization));
         setPaymentSyncMessage(data?.error ?? "Não foi possível sincronizar as opções financeiras do Olist.");
         return;
       }
@@ -864,16 +867,34 @@ function ActionModal({
         ? data.failures.find((failure: Record<string, unknown>) => failure.path === "/formas-recebimento")
         : null;
       setModalPaymentOptions(nextOptions);
+      setPaymentRequiresReauthorization(Boolean(data.requiresReauthorization));
       setPaymentSyncState(receivingCount > 0 ? "success" : "error");
       setPaymentSyncMessage(receivingCount > 0
         ? `${receivingCount} forma(s) de recebimento disponível(is).`
-        : typeof receivingFailure?.message === "string"
-          ? `Olist não sincronizou formas de recebimento: ${receivingFailure.message}`
-          : "O Olist não retornou formas de recebimento para esta conta.");
+        : typeof data.permissionMessage === "string"
+          ? data.permissionMessage
+          : typeof receivingFailure?.message === "string"
+            ? `Olist não sincronizou formas de recebimento: ${receivingFailure.message}`
+            : "O Olist não retornou formas de recebimento para esta conta.");
     } catch (error) {
       setPaymentSyncState("error");
       setPaymentSyncMessage(error instanceof Error ? error.message : "Falha de comunicação ao sincronizar com o Olist.");
     }
+  }
+
+  async function reconnectOlistForPayment() {
+    if (paymentSyncState === "syncing") return;
+    setPaymentSyncState("syncing");
+    setPaymentSyncMessage("Abrindo autenticação Olist...");
+    const redirectPath = `/quotes/${encodeURIComponent(quoteId)}`;
+    const response = await fetch(`/api/olist/auth-url?redirectPath=${encodeURIComponent(redirectPath)}`);
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.authUrl) {
+      setPaymentSyncState("error");
+      setPaymentSyncMessage(data?.error ?? "Não foi possível iniciar a reautorização Olist.");
+      return;
+    }
+    window.location.href = data.authUrl;
   }
 
   useEffect(() => {
@@ -1155,6 +1176,8 @@ function ActionModal({
                 <SalesOrderPaymentFields
                   categories={paymentCategories}
                   defaultCategory={defaultPaymentCategory}
+                  needsReauthorization={paymentRequiresReauthorization}
+                  onReconnect={reconnectOlistForPayment}
                   onSync={syncPaymentOptions}
                   receivingMethods={receivingMethods}
                   syncMessage={paymentSyncMessage}
@@ -1440,6 +1463,8 @@ function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }
 function SalesOrderPaymentFields({
   categories,
   defaultCategory,
+  needsReauthorization,
+  onReconnect,
   onSync,
   receivingMethods,
   syncMessage,
@@ -1448,6 +1473,8 @@ function SalesOrderPaymentFields({
 }: {
   categories: PaymentOption[];
   defaultCategory: { externalId: string; name: string };
+  needsReauthorization: boolean;
+  onReconnect: () => void;
   onSync: () => void;
   receivingMethods: PaymentOption[];
   syncMessage: string;
@@ -1482,6 +1509,22 @@ function SalesOrderPaymentFields({
         </button>
       </div>
       {syncMessage ? <p className="text-xs text-amber-100/80">{syncMessage}</p> : null}
+      {needsReauthorization ? (
+        <div className="flex flex-col gap-2 rounded-md border border-cyan-400/20 bg-cyan-400/10 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs leading-5 text-cyan-100/85">
+            Habilite no aplicativo Olist a permissão de consulta às formas de recebimento. Em seguida, autorize novamente o acesso desta conta.
+          </p>
+          <button
+            className="focus-ring inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-cyan-300/30 px-3 text-xs font-semibold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-60"
+            disabled={syncing}
+            onClick={onReconnect}
+            type="button"
+          >
+            <KeyRound size={14} />
+            {syncing ? "Abrindo OAuth..." : "Reautorizar Olist"}
+          </button>
+        </div>
+      ) : null}
       <input name="paymentTotal" type="hidden" value={Number.isFinite(total) ? total : 0} />
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
