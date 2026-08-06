@@ -66,6 +66,7 @@ export function buildOlistSalesOrderPayload(input: {
     observacoes: buildOlistNotes(input),
     observacoesInternas: [
       `Pricing Pro quote ${input.quote.id}`,
+      paymentNote(input.paymentTerm),
       buildPackageLine(input.shipment)
     ].filter(Boolean).join("\n"),
     valorFrete: money(input.quote.shipping_total),
@@ -217,6 +218,7 @@ function nativeOrderItem(item: QuoteItemRow) {
 function buildPaymentPayload(paymentTerm: QuotePaymentTermRow | null | undefined) {
   if (!paymentTerm) return null;
   const formaRecebimentoId = numericId(paymentTerm.receiving_method_external_id);
+  const meioPagamentoId = numericId(paymentTerm.payment_method_external_id);
   const categoriaId = numericId(paymentTerm.category_external_id);
   const parcelas = paymentTerm.installments.map((installment) => compactObject({
     dias: installment.days,
@@ -224,13 +226,16 @@ function buildPaymentPayload(paymentTerm: QuotePaymentTermRow | null | undefined
     valor: money(installment.amount),
     observacoes: [
       installment.notes,
-      installment.receivingMethodName ? `Forma de recebimento: ${installment.receivingMethodName}` : null
+      installment.receivingMethodName ? `Forma de recebimento: ${installment.receivingMethodName}` : null,
+      installment.paymentMethodName ? `Conta/meio: ${installment.paymentMethodName}` : null
     ].filter(Boolean).join(" | "),
-    formaRecebimento: paymentObject(numericId(installment.receivingMethodExternalId) ?? formaRecebimentoId)
+    formaRecebimento: paymentObject(numericId(installment.receivingMethodExternalId) ?? formaRecebimentoId),
+    meioPagamento: paymentObject(numericId(installment.paymentMethodExternalId) ?? meioPagamentoId)
   }));
 
   return compactObject({
     formaRecebimento: paymentObject(formaRecebimentoId),
+    meioPagamento: paymentObject(meioPagamentoId),
     categoria: categoriaId ? { id: categoriaId } : null,
     parcelas: parcelas.length ? parcelas : null
   });
@@ -261,7 +266,12 @@ function paymentObject(id: number | null) {
   return id ? { id } : null;
 }
 
-function buildOlistNotes(input: { quote: QuoteDetail; items: QuoteItemRow[]; shipment?: ShipmentRow | null }) {
+function buildOlistNotes(input: {
+  quote: QuoteDetail;
+  items: QuoteItemRow[];
+  shipment?: ShipmentRow | null;
+  paymentTerm?: QuotePaymentTermRow | null;
+}) {
   const itemLines = input.items.map((item, index) => {
     const art = item.artwork_name ? ` | Arte: ${item.artwork_name}` : "";
     const olistId = item.external_olist_product_id ? ` | Olist ID: ${item.external_olist_product_id}` : "";
@@ -269,12 +279,18 @@ function buildOlistNotes(input: { quote: QuoteDetail; items: QuoteItemRow[]; shi
   });
   return [
     input.quote.notes,
+    paymentNote(input.paymentTerm),
     `Orçamento Pricing Pro: ${input.quote.id}`,
     `Frete: ${money(input.quote.shipping_total).toFixed(2)}`,
     buildPackageLine(input.shipment),
     `Total final: ${money(input.quote.grand_total).toFixed(2)}`,
     itemLines.join("\n")
   ].filter(Boolean).join("\n");
+}
+
+function paymentNote(paymentTerm: QuotePaymentTermRow | null | undefined) {
+  const note = cleanString(paymentTerm?.notes);
+  return note ? `Observação financeira: ${note}` : null;
 }
 
 function buildPackageLine(shipment: ShipmentRow | null | undefined) {

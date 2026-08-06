@@ -13,6 +13,7 @@ import { extractOlistPaymentOptions } from "@/services/olist/payment-options";
 import type { OlistCredentials, OlistSettings } from "@/services/olist/types";
 
 const OPTION_PATHS: Array<{ kind: OlistPaymentOptionKind; path: string; label: string }> = [
+  { kind: "payment_method", path: "/formas-pagamento", label: "contas bancárias/meios de recebimento" },
   { kind: "receiving_method", path: "/formas-recebimento", label: "formas de recebimento" },
   { kind: "category", path: "/categorias-receita-despesa", label: "categorias financeiras" }
 ];
@@ -69,11 +70,11 @@ export async function POST() {
     }
   }
 
-  const receivingPermissionDenied = failures.some((failure) => (
-    failure.kind === "receiving_method" && failure.status === 403
+  const paymentPermissionDenied = failures.some((failure) => (
+    (failure.kind === "receiving_method" || failure.kind === "payment_method") && failure.status === 403
   ));
-  const permissionMessage = receivingPermissionDenied
-    ? "O aplicativo Olist não tem permissão para consultar formas de recebimento. Habilite essa permissão no cadastro do aplicativo Olist e reautorize o OAuth."
+  const permissionMessage = paymentPermissionDenied
+    ? "O aplicativo Olist não tem permissão para consultar todas as formas e contas de recebimento. Habilite as permissões de leitura de Formas de recebimento e Formas de pagamento no aplicativo Olist e reautorize o OAuth."
     : null;
 
   if (collected.length === 0) {
@@ -88,7 +89,7 @@ export async function POST() {
       debugId,
       error: permissionMessage ?? "Não foi possível sincronizar opções financeiras do Olist.",
       failures,
-      requiresReauthorization: receivingPermissionDenied,
+      requiresReauthorization: paymentPermissionDenied,
       permissionMessage
     }, { status: 502 });
   }
@@ -107,7 +108,7 @@ export async function POST() {
     options,
     failures,
     syncedKinds,
-    requiresReauthorization: receivingPermissionDenied,
+    requiresReauthorization: paymentPermissionDenied,
     permissionMessage,
     counts: {
       paymentMethods: options.filter((option) => option.kind === "payment_method").length,

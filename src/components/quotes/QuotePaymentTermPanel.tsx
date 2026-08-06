@@ -37,6 +37,7 @@ export function QuotePaymentTermPanel({
 }) {
   const router = useRouter();
   const [paymentOptions, setPaymentOptions] = useState(options);
+  const [paymentMethodId, setPaymentMethodId] = useState(initialPaymentTerm?.payment_method_external_id ?? "");
   const [receivingMethodId, setReceivingMethodId] = useState(initialPaymentTerm?.receiving_method_external_id ?? "");
   const [categoryId, setCategoryId] = useState(initialPaymentTerm?.category_external_id ?? defaultCategory.externalId ?? "");
   const [installmentsCount, setInstallmentsCount] = useState(initialPaymentTerm?.installments_count ?? 1);
@@ -49,8 +50,10 @@ export function QuotePaymentTermPanel({
   const [reconnecting, setReconnecting] = useState(false);
   const [open, setOpen] = useState(false);
 
+  const paymentMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "payment_method"), [paymentOptions]);
   const receivingMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "receiving_method"), [paymentOptions]);
   const categories = useMemo(() => paymentOptions.filter((option) => option.kind === "category"), [paymentOptions]);
+  const selectedPaymentMethod = paymentMethods.find((option) => option.externalId === paymentMethodId) ?? null;
   const selectedReceivingMethod = receivingMethods.find((option) => option.externalId === receivingMethodId) ?? null;
   const selectedCategory = categories.find((option) => option.externalId === categoryId) ?? (defaultCategory.externalId ? {
     kind: "category" as const,
@@ -66,7 +69,8 @@ export function QuotePaymentTermPanel({
     installmentsCount: showInstallments ? installmentsCount : 1,
     firstDueDays,
     intervalDays: showInstallments ? intervalDays : 0,
-    notes
+    notes,
+    paymentMethod: selectedPaymentMethod
   });
   const selected = Boolean(selectedReceivingMethod);
 
@@ -93,11 +97,12 @@ export function QuotePaymentTermPanel({
     const receivingFailure = Array.isArray(data.failures)
       ? data.failures.find((failure: Record<string, unknown>) => failure.path === "/formas-recebimento")
       : null;
+    const paymentCount = nextOptions.filter((option: PaymentOption) => option.kind === "payment_method").length;
     const receivingCount = nextOptions.filter((option: PaymentOption) => option.kind === "receiving_method").length;
     setRequiresReauthorization(Boolean(data.requiresReauthorization));
     setState(receivingCount > 0 ? "idle" : "error");
     setMessage(receivingCount > 0
-      ? `${receivingCount} forma(s) de recebimento sincronizada(s).`
+      ? `${receivingCount} forma(s) e ${paymentCount} conta(s)/meio(s) de recebimento sincronizados.`
       : typeof data.permissionMessage === "string"
         ? data.permissionMessage
         : typeof receivingFailure?.message === "string"
@@ -184,7 +189,7 @@ export function QuotePaymentTermPanel({
           </p>
           <p className="mt-1 text-xs text-zinc-400">
             {selectedReceivingMethod?.name
-              ? `${selectedReceivingMethod.name}${selectedCategory?.name ? ` · ${selectedCategory.name}` : ""}`
+              ? `${selectedReceivingMethod.name}${selectedPaymentMethod?.name ? ` · ${selectedPaymentMethod.name}` : ""}${selectedCategory?.name ? ` · ${selectedCategory.name}` : ""}`
               : "Ainda não selecionado. Será exigido ao gerar pedido de venda."}
           </p>
         </button>
@@ -215,6 +220,7 @@ export function QuotePaymentTermPanel({
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             <SelectOption label="Forma de recebimento" options={receivingMethods} placeholder={receivingMethods.length ? "Selecione" : "Sincronize formas de recebimento"} value={receivingMethodId} onChange={setReceivingMethodId} />
+            <SelectOption label="Conta bancária / meio de recebimento" options={paymentMethods} placeholder={paymentMethods.length ? "Selecione se aplicável" : "Sincronize contas do Olist"} value={paymentMethodId} onChange={setPaymentMethodId} />
             <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-500">
               <span className="block font-medium text-zinc-300">Categoria padrão</span>
               <span className="mt-1 block">{selectedCategory?.name ?? "Não definida"}</span>
@@ -253,7 +259,7 @@ export function QuotePaymentTermPanel({
               </p>
               {requiresReauthorization ? (
                 <p className="text-xs leading-5 text-amber-100/80">
-                  Primeiro habilite a permissão de consulta às formas de recebimento no cadastro do aplicativo dentro do Olist. Depois reautorize abaixo.
+                  Primeiro habilite as permissões de consulta às formas de recebimento e formas de pagamento no aplicativo Olist. Depois reautorize abaixo.
                 </p>
               ) : null}
             </div>
@@ -367,6 +373,7 @@ function buildPaymentTermPayload({
   installmentsCount,
   intervalDays,
   notes,
+  paymentMethod,
   receivingMethod,
   total
 }: {
@@ -375,6 +382,7 @@ function buildPaymentTermPayload({
   installmentsCount: number;
   intervalDays: number;
   notes: string;
+  paymentMethod: PaymentOption | null;
   receivingMethod: PaymentOption | null;
   total: number;
 }) {
@@ -394,16 +402,16 @@ function buildPaymentTermPayload({
       days,
       amount: cents / 100,
       notes: notes.trim() || `Parcela ${index + 1}/${count}`,
-      paymentMethodExternalId: null,
-      paymentMethodName: null,
+      paymentMethodExternalId: paymentMethod?.externalId ?? null,
+      paymentMethodName: paymentMethod?.name ?? null,
       receivingMethodExternalId: receivingMethod.externalId,
       receivingMethodName: receivingMethod.name
     };
   });
 
   return {
-    paymentMethodExternalId: null,
-    paymentMethodName: null,
+    paymentMethodExternalId: paymentMethod?.externalId ?? null,
+    paymentMethodName: paymentMethod?.name ?? null,
     receivingMethodExternalId: receivingMethod.externalId,
     receivingMethodName: receivingMethod.name,
     categoryExternalId: category?.externalId ?? null,

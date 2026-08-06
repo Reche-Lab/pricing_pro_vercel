@@ -82,9 +82,9 @@ describe("olist payloads", () => {
         id: "term-1",
         quote_id: "quote-1",
         payment_method_external_id: "10",
-        payment_method_name: "Pix",
+        payment_method_name: "Nu Bank",
         receiving_method_external_id: "20",
-        receiving_method_name: "Conta principal",
+        receiving_method_name: "Pix",
         category_external_id: "30",
         category_name: "Vendas",
         installments_count: 2,
@@ -97,9 +97,9 @@ describe("olist payloads", () => {
             amount: 135,
             notes: "Entrada",
             paymentMethodExternalId: "10",
-            paymentMethodName: "Pix",
+            paymentMethodName: "Nu Bank",
             receivingMethodExternalId: "20",
-            receivingMethodName: "Conta principal"
+            receivingMethodName: "Pix"
           },
           {
             installmentNumber: 2,
@@ -108,9 +108,9 @@ describe("olist payloads", () => {
             amount: 135,
             notes: "Saldo",
             paymentMethodExternalId: "10",
-            paymentMethodName: "Pix",
+            paymentMethodName: "Nu Bank",
             receivingMethodExternalId: "20",
-            receivingMethodName: "Conta principal"
+            receivingMethodName: "Pix"
           }
         ]
       }
@@ -118,24 +118,29 @@ describe("olist payloads", () => {
 
     expect(payload.pagamento).toEqual({
       formaRecebimento: { id: 20 },
+      meioPagamento: { id: 10 },
       categoria: { id: 30 },
       parcelas: [
         {
           dias: 0,
           data: "2026-07-20",
           valor: 135,
-          observacoes: "Entrada | Forma de recebimento: Conta principal",
-          formaRecebimento: { id: 20 }
+          observacoes: "Entrada | Forma de recebimento: Pix | Conta/meio: Nu Bank",
+          formaRecebimento: { id: 20 },
+          meioPagamento: { id: 10 }
         },
         {
           dias: 30,
           data: "2026-08-19",
           valor: 135,
-          observacoes: "Saldo | Forma de recebimento: Conta principal",
-          formaRecebimento: { id: 20 }
+          observacoes: "Saldo | Forma de recebimento: Pix | Conta/meio: Nu Bank",
+          formaRecebimento: { id: 20 },
+          meioPagamento: { id: 10 }
         }
       ]
     });
+    expect(payload.observacoes).toContain("Observação financeira: Pix em 2 parcelas");
+    expect(payload.observacoesInternas).toContain("Observação financeira: Pix em 2 parcelas");
   });
 
   it("adds package dimensions and gross weight to sales order notes", () => {

@@ -838,6 +838,7 @@ function ActionModal({
     [defaultResponsibleExternalId, responsibleUsers]
   );
   const salesOrderNeedsPayment = action === "salesOrder" && Boolean(salesOrderPreview.data?.paymentRequired);
+  const paymentMethods = useMemo(() => modalPaymentOptions.filter((option) => option.kind === "payment_method"), [modalPaymentOptions]);
   const receivingMethods = useMemo(() => modalPaymentOptions.filter((option) => option.kind === "receiving_method"), [modalPaymentOptions]);
   const paymentCategories = useMemo(() => modalPaymentOptions.filter((option) => option.kind === "category"), [modalPaymentOptions]);
 
@@ -862,6 +863,7 @@ function ActionModal({
       }
 
       const nextOptions = normalizePaymentOptions(data.options);
+      const paymentCount = nextOptions.filter((option) => option.kind === "payment_method").length;
       const receivingCount = nextOptions.filter((option) => option.kind === "receiving_method").length;
       const receivingFailure = Array.isArray(data.failures)
         ? data.failures.find((failure: Record<string, unknown>) => failure.path === "/formas-recebimento")
@@ -870,7 +872,7 @@ function ActionModal({
       setPaymentRequiresReauthorization(Boolean(data.requiresReauthorization));
       setPaymentSyncState(receivingCount > 0 ? "success" : "error");
       setPaymentSyncMessage(receivingCount > 0
-        ? `${receivingCount} forma(s) de recebimento disponível(is).`
+        ? `${receivingCount} forma(s) e ${paymentCount} conta(s)/meio(s) de recebimento disponíveis.`
         : typeof data.permissionMessage === "string"
           ? data.permissionMessage
           : typeof receivingFailure?.message === "string"
@@ -1179,6 +1181,7 @@ function ActionModal({
                   needsReauthorization={paymentRequiresReauthorization}
                   onReconnect={reconnectOlistForPayment}
                   onSync={syncPaymentOptions}
+                  paymentMethods={paymentMethods}
                   receivingMethods={receivingMethods}
                   syncMessage={paymentSyncMessage}
                   syncing={paymentSyncState === "syncing"}
@@ -1396,9 +1399,11 @@ function SalesOrderPreviewPanel({ preview }: { preview: SalesOrderPreviewState }
         <p className="font-semibold">Pagamento do pedido Olist</p>
         {paymentTerm ? (
           <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            <InfoTile compact label="Forma recebimento" value={stringValue(paymentTerm.receiving_method_name ?? paymentTerm.payment_method_name)} />
+            <InfoTile compact label="Forma de recebimento" value={stringValue(paymentTerm.receiving_method_name)} />
+            <InfoTile compact label="Conta bancária / meio" value={stringValue(paymentTerm.payment_method_name)} />
             <InfoTile compact label="Categoria" value={stringValue(paymentTerm.category_name)} />
             <InfoTile compact label="Parcelas" value={stringValue(paymentTerm.installments_count)} />
+            <InfoTile compact label="Observação financeira" value={stringValue(paymentTerm.notes)} />
           </div>
         ) : (
           <p className="mt-1 text-xs text-amber-100/80">
@@ -1466,6 +1471,7 @@ function SalesOrderPaymentFields({
   needsReauthorization,
   onReconnect,
   onSync,
+  paymentMethods,
   receivingMethods,
   syncMessage,
   syncing,
@@ -1476,12 +1482,14 @@ function SalesOrderPaymentFields({
   needsReauthorization: boolean;
   onReconnect: () => void;
   onSync: () => void;
+  paymentMethods: PaymentOption[];
   receivingMethods: PaymentOption[];
   syncMessage: string;
   syncing: boolean;
   total: number;
 }) {
   const [selectedReceivingValue, setSelectedReceivingValue] = useState("");
+  const [selectedPaymentValue, setSelectedPaymentValue] = useState("");
   const [selectedCategoryValue, setSelectedCategoryValue] = useState(() => encodePaymentOption({
     externalId: defaultCategory.externalId,
     name: defaultCategory.name
@@ -1512,7 +1520,7 @@ function SalesOrderPaymentFields({
       {needsReauthorization ? (
         <div className="flex flex-col gap-2 rounded-md border border-cyan-400/20 bg-cyan-400/10 p-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs leading-5 text-cyan-100/85">
-            Habilite no aplicativo Olist a permissão de consulta às formas de recebimento. Em seguida, autorize novamente o acesso desta conta.
+            Habilite no aplicativo Olist as permissões de consulta às formas de recebimento e formas de pagamento. Em seguida, autorize novamente o acesso desta conta.
           </p>
           <button
             className="focus-ring inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-cyan-300/30 px-3 text-xs font-semibold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-60"
@@ -1538,6 +1546,22 @@ function SalesOrderPaymentFields({
           >
             <option value="">{receivingMethods.length ? "Selecione" : "Sincronize formas de recebimento"}</option>
             {receivingMethods.map((option) => (
+              <option key={option.externalId} value={encodePaymentOption(option)}>
+                {option.groupName ? `${option.name} - ${option.groupName}` : option.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-zinc-300">Conta bancária / meio de recebimento</span>
+          <select
+            className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2"
+            name="salesOrderPaymentMethod"
+            value={selectedPaymentValue}
+            onChange={(event) => setSelectedPaymentValue(event.currentTarget.value)}
+          >
+            <option value="">{paymentMethods.length ? "Selecione se aplicável" : "Sincronize contas do Olist"}</option>
+            {paymentMethods.map((option) => (
               <option key={option.externalId} value={encodePaymentOption(option)}>
                 {option.groupName ? `${option.name} - ${option.groupName}` : option.name}
               </option>
@@ -1572,6 +1596,15 @@ function SalesOrderPaymentFields({
             <Input label="Intervalo entre parcelas" name="salesOrderInstallmentIntervalDays" type="number" defaultValue="30" />
           </>
         ) : null}
+        <label className="block sm:col-span-2">
+          <span className="mb-1 block text-sm font-medium text-zinc-300">Observação financeira</span>
+          <textarea
+            className="focus-ring min-h-20 w-full resize-y rounded-md border border-zinc-700 px-3 py-2"
+            name="salesOrderPaymentNotes"
+            placeholder="Ex.: pagamento confirmado por PIX; enviar comprovante ao financeiro."
+          />
+          <span className="mt-1 block text-xs text-zinc-500">A observação será registrada no pedido e nas parcelas enviadas ao Olist.</span>
+        </label>
       </div>
     </div>
   );
@@ -2106,7 +2139,9 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
     const receivingMethod = decodePaymentOption(stringField(formData, "salesOrderReceivingMethod"));
     if (!receivingMethod) return { body: undefined };
 
+    const paymentMethod = decodePaymentOption(stringField(formData, "salesOrderPaymentMethod"));
     const category = decodePaymentOption(stringField(formData, "salesOrderPaymentCategory"));
+    const notes = stringField(formData, "salesOrderPaymentNotes");
     const total = Math.max(0, Number(stringField(formData, "paymentTotal")) || 0);
     const installmentsCount = Math.max(1, Math.min(24, Math.trunc(Number(stringField(formData, "salesOrderInstallmentsCount")) || 1)));
     const intervalDays = Math.max(0, Math.trunc(Number(stringField(formData, "salesOrderInstallmentIntervalDays")) || 0));
@@ -2118,7 +2153,10 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
         ? Number((total - installmentAmount * (installmentsCount - 1)).toFixed(2))
         : installmentAmount,
       receivingMethodExternalId: receivingMethod.externalId,
-      receivingMethodName: receivingMethod.name
+      receivingMethodName: receivingMethod.name,
+      paymentMethodExternalId: paymentMethod?.externalId || undefined,
+      paymentMethodName: paymentMethod?.name || undefined,
+      notes: notes || undefined
     }));
 
     return {
@@ -2126,9 +2164,12 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
         paymentTerm: {
           receivingMethodExternalId: receivingMethod.externalId,
           receivingMethodName: receivingMethod.name,
+          paymentMethodExternalId: paymentMethod?.externalId || undefined,
+          paymentMethodName: paymentMethod?.name || undefined,
           categoryExternalId: category?.externalId || undefined,
           categoryName: category?.name || undefined,
           installmentsCount,
+          notes: notes || undefined,
           installments
         }
       }
