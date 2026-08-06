@@ -1198,6 +1198,15 @@ export async function updateQuoteEditable(
           ]
         );
 
+        await client.query(
+          `
+            update quote_item_artworks
+            set artwork_name = $4
+            where tenant_id = $1 and quote_id = $2 and quote_item_id = $3
+          `,
+          [tenantId, quoteId, current.id, clean(item.artworkName)]
+        );
+
         subtotal += totalPrice;
         totalCost += quantity * Number(variant.unit_cost);
         updatedItems.push({
@@ -1297,6 +1306,212 @@ export async function updateQuoteEditable(
 
       return { id: quoteId, subtotal, shippingTotal, grandTotal };
   });
+}
+
+export async function addQuoteItemArtwork(
+  userId: string,
+  tenantId: string,
+  quoteId: string,
+  quoteItemId: string,
+  input: { artworkName?: string | null; artworkFile: QuoteArtworkFileInput }
+): Promise<QuoteItemArtworkRow> {
+  return withTenantContext(userId, tenantId, async (client) => {
+    await assertQuoteArtworkEditable(client, tenantId, quoteId, quoteItemId);
+    const artworkFile = normalizeArtworkFile(input.artworkFile);
+    if (!artworkFile || !artworkFile.mimeType.startsWith("image/")) {
+      throw new Error("Arquivo de imagem inválido. Use PNG, JPEG ou WebP com até 3 MB.");
+    }
+    if (artworkFile.fileSize > 3 * 1024 * 1024) {
+      throw new Error("A imagem deve ter no máximo 3 MB.");
+    }
+
+    const currentResult = await client.query<Pick<QuoteItemArtworkRow, "id" | "file_name" | "mime_type" | "file_size">>(
+      `
+        select id, file_name, mime_type, file_size
+        from quote_item_artworks
+        where tenant_id = $1 and quote_id = $2 and quote_item_id = $3
+        order by created_at asc
+      `,
+      [tenantId, quoteId, quoteItemId]
+    );
+    if (currentResult.rowCount !== null && currentResult.rowCount >= 10) {
+      throw new Error("Cada item pode ter no máximo 10 imagens de arte.");
+    }
+
+    const result = await client.query<QuoteItemArtworkRow>(
+      `
+        insert into quote_item_artworks (
+          tenant_id,
+          quote_id,
+          quote_item_id,
+          artwork_name,
+          file_name,
+          mime_type,
+          file_size,
+          data_url,
+          storage_path,
+          created_by
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        returning id, quote_item_id, artwork_name, file_name, mime_type, file_size, data_url, storage_path
+      `,
+      [
+        tenantId,
+        quoteId,
+        quoteItemId,
+        clean(input.artworkName),
+        artworkFile.fileName,
+        artworkFile.mimeType,
+        artworkFile.fileSize,
+        artworkFile.dataUrl,
+        `quotes/${quoteId}/items/${quoteItemId}/${artworkFile.fileName}`,
+        userId
+      ]
+    );
+    const artwork = result.rows[0];
+
+    await recordQuoteArtworkEdit(client, {
+      tenantId,
+      userId,
+      quoteId,
+      quoteItemId,
+      action: "quotes.artwork.add",
+      reason: "Imagem de arte adicionada ao item.",
+      before: currentResult.rows,
+      after: [...currentResult.rows, artworkMetadata(artwork)]
+    });
+
+    return artwork;
+  });
+}
+
+export async function deleteQuoteItemArtwork(
+  userId: string,
+  tenantId: string,
+  quoteId: string,
+  quoteItemId: string,
+  artworkId: string
+): Promise<Pick<QuoteItemArtworkRow, "id" | "file_name" | "mime_type" | "file_size"> | null> {
+  return withTenantContext(userId, tenantId, async (client) => {
+    await assertQuoteArtworkEditable(client, tenantId, quoteId, quoteItemId);
+    const currentResult = await client.query<Pick<QuoteItemArtworkRow, "id" | "file_name" | "mime_type" | "file_size">>(
+      `
+        select id, file_name, mime_type, file_size
+        from quote_item_artworks
+        where tenant_id = $1 and quote_id = $2 and quote_item_id = $3
+        order by created_at asc
+        for update
+      `,
+      [tenantId, quoteId, quoteItemId]
+    );
+    const artwork = currentResult.rows.find((item) => item.id === artworkId);
+    if (!artwork) return null;
+
+    await client.query(
+      `
+        delete from quote_item_artworks
+        where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4
+      `,
+      [tenantId, quoteId, quoteItemId, artworkId]
+    );
+
+    await recordQuoteArtworkEdit(client, {
+      tenantId,
+      userId,
+      quoteId,
+      quoteItemId,
+      action: "quotes.artwork.delete",
+      reason: "Imagem de arte removida do item.",
+      before: currentResult.rows,
+      after: currentResult.rows.filter((item) => item.id !== artworkId)
+    });
+
+    return artwork;
+  });
+}
+
+async function assertQuoteArtworkEditable(
+  client: pg.PoolClient,
+  tenantId: string,
+  quoteId: string,
+  quoteItemId: string
+) {
+  const result = await client.query<{
+    status: QuoteStatus;
+    external_olist_invoice_id: string | null;
+    public_accepted_at: string | null;
+  }>(
+    `
+      select
+        q.status,
+        to_jsonb(q)->>'external_olist_invoice_id' as external_olist_invoice_id,
+        to_jsonb(q)->>'public_accepted_at' as public_accepted_at
+      from quotes q
+      join quote_items qi on qi.quote_id = q.id and qi.tenant_id = q.tenant_id
+      where q.tenant_id = $1 and q.id = $2 and qi.id = $3
+      for update of q, qi
+    `,
+    [tenantId, quoteId, quoteItemId]
+  );
+  const quote = result.rows[0];
+  if (!quote) throw new Error("Item do orçamento não encontrado.");
+  if (quote.external_olist_invoice_id) throw new Error("Orçamento com nota fiscal Olist não pode ser editado.");
+  if (quote.public_accepted_at || quote.status === "accepted") {
+    throw new Error("Orçamento aceito pelo cliente não pode ser editado.");
+  }
+}
+
+async function recordQuoteArtworkEdit(
+  client: pg.PoolClient,
+  input: {
+    tenantId: string;
+    userId: string;
+    quoteId: string;
+    quoteItemId: string;
+    action: "quotes.artwork.add" | "quotes.artwork.delete";
+    reason: string;
+    before: unknown;
+    after: unknown;
+  }
+) {
+  await client.query(
+    `
+      insert into quote_edit_logs (
+        tenant_id, quote_id, edited_by, reason, before_snapshot, after_snapshot
+      )
+      values ($1, $2, $3, $4, $5, $6)
+    `,
+    [
+      input.tenantId,
+      input.quoteId,
+      input.userId,
+      input.reason,
+      JSON.stringify({ quoteItemId: input.quoteItemId, artworks: input.before }),
+      JSON.stringify({ quoteItemId: input.quoteItemId, artworks: input.after })
+    ]
+  );
+  await client.query(
+    `
+      insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+      values ($1, $2, $3, 'quote', $4, $5)
+    `,
+    [
+      input.tenantId,
+      input.userId,
+      input.action,
+      input.quoteId,
+      JSON.stringify({ quoteItemId: input.quoteItemId })
+    ]
+  );
+}
+
+function artworkMetadata(artwork: QuoteItemArtworkRow) {
+  return {
+    id: artwork.id,
+    file_name: artwork.file_name,
+    mime_type: artwork.mime_type,
+    file_size: artwork.file_size
+  };
 }
 
 export type UpdateQuoteCustomerDeliveryInput = {

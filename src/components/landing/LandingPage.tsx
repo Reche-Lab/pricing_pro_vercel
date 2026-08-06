@@ -1,12 +1,14 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   BarChart3,
   Building2,
   ClipboardCheck,
+  ExternalLink,
   FileText,
   LockKeyhole,
   MousePointerClick,
@@ -14,7 +16,8 @@ import {
   ShieldCheck,
   Sparkles,
   Truck,
-  Users
+  Users,
+  X
 } from "lucide-react";
 
 const scenarios = [
@@ -80,11 +83,40 @@ const features = [
   }
 ];
 
+const brandStories = [
+  {
+    name: "Ground Shop",
+    relationship: "Cliente",
+    image: "/brands/ground-shop.jpeg",
+    href: "https://www.groundshop.com.br/",
+    description: "Operação de produtos personalizados que deu origem aos primeiros fluxos de precificação, orçamento e frete do Pricing Pro."
+  },
+  {
+    name: "LIA Flow",
+    relationship: "Parceiro de tecnologia",
+    image: "/brands/lia-flow.png",
+    href: "https://liaflow.com.br/",
+    description: "Plataforma de automação conversacional integrada ao Pricing Pro para consultar produtos, calcular preços e criar orçamentos durante o atendimento."
+  }
+] as const;
+
+type BrandStory = (typeof brandStories)[number];
+
 export function LandingPage() {
   const [scenarioIndex, setScenarioIndex] = useState(0);
   const [pulse, setPulse] = useState(false);
+  const [activeBrand, setActiveBrand] = useState<BrandStory | null>(null);
   const heroRef = useRef<HTMLElement>(null);
   const scenario = scenarios[scenarioIndex];
+
+  useEffect(() => {
+    if (!activeBrand) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setActiveBrand(null);
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [activeBrand]);
 
   const path = useMemo(() => {
     const width = 340;
@@ -270,6 +302,55 @@ export function LandingPage() {
         </div>
       </section>
 
+      <section className="border-b border-zinc-800 bg-zinc-900/30 py-14">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">Clientes e parceiros</p>
+              <h2 className="mt-2 text-3xl font-semibold text-white">Marcas que fazem parte dessa evolução.</h2>
+              <p className="mt-3 text-sm leading-6 text-zinc-400">
+                Relações construídas entre operação, atendimento e tecnologia. Selecione uma marca para conhecer sua conexão com o Pricing Pro.
+              </p>
+            </div>
+            <p className="text-xs text-zinc-500">Clique em uma marca para ver detalhes</p>
+          </div>
+
+          <div className="mt-8 grid gap-4 lg:grid-cols-2">
+            {brandStories.map((brand) => (
+              <button
+                aria-label={`Conhecer ${brand.name}`}
+                className="landing-brand group grid min-h-56 w-full overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/70 text-left transition duration-300 hover:-translate-y-1 hover:border-emerald-300/40 hover:shadow-2xl hover:shadow-emerald-950/30 focus-ring sm:grid-cols-[220px_minmax(0,1fr)]"
+                key={brand.name}
+                onClick={() => setActiveBrand(brand)}
+                type="button"
+              >
+                <span className="relative block min-h-52 overflow-hidden border-b border-zinc-800 bg-zinc-900 sm:min-h-full sm:border-b-0 sm:border-r">
+                  <Image
+                    alt={`Marca ${brand.name}`}
+                    className="object-contain p-7 transition duration-500 group-hover:scale-105"
+                    fill
+                    sizes="(max-width: 640px) 100vw, 220px"
+                    src={brand.image}
+                  />
+                  <span className="landing-brand-shine" />
+                </span>
+                <span className="flex min-w-0 flex-col justify-center p-5 sm:p-6">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-emerald-300">
+                    {brand.relationship}
+                  </span>
+                  <span className="mt-2 text-2xl font-semibold text-white">{brand.name}</span>
+                  <span className="mt-3 line-clamp-3 text-sm leading-6 text-zinc-400">{brand.description}</span>
+                  <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-zinc-200 transition group-hover:text-emerald-200">
+                    Conhecer esta parceria
+                    <ArrowRight className="transition-transform group-hover:translate-x-1" size={16} />
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
         <div className="mb-8 max-w-2xl">
           <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">Funcionalidades</p>
@@ -292,7 +373,68 @@ export function LandingPage() {
           ))}
         </div>
       </section>
+
+      {activeBrand ? (
+        <BrandStoryModal brand={activeBrand} onClose={() => setActiveBrand(null)} />
+      ) : null}
     </main>
+  );
+}
+
+function BrandStoryModal({ brand, onClose }: { brand: BrandStory; onClose: () => void }) {
+  return (
+    <div
+      aria-labelledby="brand-story-title"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.currentTarget === event.target) onClose();
+      }}
+      role="dialog"
+    >
+      <div className="w-full max-w-2xl overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950 shadow-2xl shadow-black/60">
+        <div className="relative h-64 border-b border-zinc-800 bg-zinc-900 sm:h-72">
+          <Image
+            alt={`Marca ${brand.name}`}
+            className="object-contain p-10 sm:p-12"
+            fill
+            sizes="(max-width: 672px) 100vw, 672px"
+            src={brand.image}
+          />
+          <button
+            aria-label="Fechar"
+            className="focus-ring absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-md border border-zinc-700 bg-zinc-950/90 text-zinc-300 hover:border-zinc-500 hover:text-white"
+            onClick={onClose}
+            type="button"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5 sm:p-7">
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">{brand.relationship}</p>
+          <h2 className="mt-2 text-2xl font-semibold text-white" id="brand-story-title">{brand.name}</h2>
+          <p className="mt-3 text-sm leading-7 text-zinc-400">{brand.description}</p>
+          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button
+              className="focus-ring min-h-10 rounded-md border border-zinc-700 px-4 text-sm font-medium text-zinc-300 hover:bg-zinc-900"
+              onClick={onClose}
+              type="button"
+            >
+              Fechar
+            </button>
+            <a
+              className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-emerald-300 px-4 text-sm font-semibold text-zinc-950 hover:bg-emerald-200"
+              href={brand.href}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Visitar site
+              <ExternalLink size={16} />
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Edit3, History, Lock, Save } from "lucide-react";
+import { CheckCircle2, Edit3, History, ImagePlus, Lock, Save, Trash2, Upload } from "lucide-react";
 import { calculateQuote, roundMoney } from "@/domain/pricing/pricing";
 import type { PricingCurve } from "@/domain/pricing/types";
 import type { QuoteDetail, QuoteEditLogRow, QuoteItemRow } from "@/repositories/quotes";
@@ -24,6 +24,13 @@ type EditableItem = {
   artworkName: string;
   curveUnitPrice?: number | null;
   priceManuallyEdited?: boolean;
+};
+
+type ArtworkFilePayload = {
+  fileName: string;
+  mimeType: "image/png" | "image/jpeg" | "image/jpg" | "image/webp";
+  fileSize: number;
+  dataUrl: string;
 };
 
 export type QuoteEditPricingContext = {
@@ -202,6 +209,11 @@ export function QuoteItemEditPanel({
   const [reason, setReason] = useState("");
   const [state, setState] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [pendingArtwork, setPendingArtwork] = useState<ArtworkFilePayload | null>(null);
+  const [artworkState, setArtworkState] = useState<"idle" | "saving" | "success" | "error">("idle");
+  const [artworkMessage, setArtworkMessage] = useState("");
+  const [removingArtworkId, setRemovingArtworkId] = useState<string | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(0);
 
   const blockedReason = editBlockedReason(quote);
   const original = draft ? items.find((item) => item.id === draft.id) ?? null : null;
@@ -252,6 +264,81 @@ export function QuoteItemEditPanel({
     router.refresh();
   }
 
+  async function selectArtworkFile(file: File | null) {
+    setArtworkState("idle");
+    setArtworkMessage("");
+    setPendingArtwork(null);
+    if (!file) return;
+    const allowedTypes = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp"]);
+    if (!allowedTypes.has(file.type)) {
+      setArtworkState("error");
+      setArtworkMessage("Use uma imagem PNG, JPEG ou WebP.");
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      setArtworkState("error");
+      setArtworkMessage("A imagem deve ter no máximo 3 MB.");
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setPendingArtwork({
+        fileName: file.name,
+        mimeType: file.type as ArtworkFilePayload["mimeType"],
+        fileSize: file.size,
+        dataUrl
+      });
+    } catch {
+      setArtworkState("error");
+      setArtworkMessage("Não foi possível ler esta imagem.");
+    }
+  }
+
+  async function addArtwork() {
+    if (!draft || !pendingArtwork || artworkState === "saving") return;
+    setArtworkState("saving");
+    setArtworkMessage("");
+    const response = await fetch(`/api/quotes/${quote.id}/items/${draft.id}/artworks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        artworkName: draft.artworkName,
+        artworkFile: pendingArtwork
+      })
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.ok) {
+      setArtworkState("error");
+      setArtworkMessage(data?.error ?? "Não foi possível incluir a imagem.");
+      return;
+    }
+    setArtworkState("success");
+    setArtworkMessage("Imagem adicionada ao item e registrada no histórico.");
+    setPendingArtwork(null);
+    setFileInputKey((current) => current + 1);
+    router.refresh();
+  }
+
+  async function removeArtwork(artworkId: string) {
+    if (!draft || artworkState === "saving") return;
+    setArtworkState("saving");
+    setArtworkMessage("");
+    const response = await fetch(
+      `/api/quotes/${quote.id}/items/${draft.id}/artworks?artworkId=${encodeURIComponent(artworkId)}`,
+      { method: "DELETE" }
+    );
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.ok) {
+      setArtworkState("error");
+      setArtworkMessage(data?.error ?? "Não foi possível remover a imagem.");
+      return;
+    }
+    setArtworkState("success");
+    setArtworkMessage("Imagem removida e alteração registrada no histórico.");
+    setRemovingArtworkId(null);
+    router.refresh();
+  }
+
   return (
     <section className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -286,6 +373,11 @@ export function QuoteItemEditPanel({
                     setReason("");
                     setState("idle");
                     setMessage("");
+                    setPendingArtwork(null);
+                    setArtworkState("idle");
+                    setArtworkMessage("");
+                    setRemovingArtworkId(null);
+                    setFileInputKey((current) => current + 1);
                   }}
                 >
                   <Edit3 size={13} />
@@ -324,6 +416,116 @@ export function QuoteItemEditPanel({
                       />
                     </label>
                   </div>
+                  <section className="rounded-md border border-zinc-800 bg-zinc-950/55 p-3">
+                    <div className="flex items-start gap-2">
+                      <ImagePlus className="mt-0.5 shrink-0 text-cyan-300" size={16} />
+                      <div>
+                        <p className="text-sm font-semibold text-white">Imagens do produto neste orçamento</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">
+                          Inclua até 10 imagens PNG, JPEG ou WebP. Elas também aparecerão no PDF do orçamento.
+                        </p>
+                      </div>
+                    </div>
+
+                    {original?.artworks?.length ? (
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {original.artworks.map((artwork) => (
+                          <div className="flex min-w-0 items-center gap-3 rounded-md border border-zinc-800 bg-zinc-900/70 p-2" key={artwork.id}>
+                            {artwork.data_url.startsWith("data:image/") ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                alt={`Arte ${artwork.file_name}`}
+                                className="h-16 w-16 shrink-0 rounded-md border border-zinc-700 object-cover"
+                                src={artwork.data_url}
+                              />
+                            ) : (
+                              <span className="grid h-16 w-16 shrink-0 place-items-center rounded-md border border-zinc-700 text-xs text-zinc-500">ARQ</span>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-medium text-zinc-200">{artwork.file_name}</p>
+                              <p className="mt-1 text-[11px] text-zinc-500">{formatBytes(artwork.file_size)}</p>
+                              {removingArtworkId === artwork.id ? (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    className="focus-ring h-8 rounded-md bg-rose-400 px-2 text-xs font-semibold text-zinc-950 hover:bg-rose-300 disabled:opacity-60"
+                                    disabled={artworkState === "saving"}
+                                    onClick={() => removeArtwork(artwork.id)}
+                                    type="button"
+                                  >
+                                    Confirmar remoção
+                                  </button>
+                                  <button
+                                    className="focus-ring h-8 rounded-md border border-zinc-700 px-2 text-xs text-zinc-300 hover:bg-zinc-800"
+                                    onClick={() => setRemovingArtworkId(null)}
+                                    type="button"
+                                  >
+                                    Cancelar
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  aria-label={`Remover ${artwork.file_name}`}
+                                  className="focus-ring mt-2 inline-flex h-8 items-center gap-1 rounded-md border border-rose-400/25 px-2 text-xs text-rose-200 hover:bg-rose-400/10"
+                                  onClick={() => setRemovingArtworkId(artwork.id)}
+                                  type="button"
+                                >
+                                  <Trash2 size={13} />
+                                  Remover
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-3 rounded-md border border-dashed border-zinc-800 px-3 py-3 text-xs text-zinc-500">
+                        Nenhuma imagem vinculada a este item.
+                      </p>
+                    )}
+
+                    <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                      <label className="block min-w-0">
+                        <span className="mb-1 block text-xs font-medium text-zinc-400">Nova imagem</span>
+                        <input
+                          accept="image/png,image/jpeg,image/webp"
+                          className="focus-ring block h-10 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-300 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-800 file:px-3 file:py-1 file:text-xs file:font-medium file:text-zinc-200"
+                          key={fileInputKey}
+                          onChange={(event) => selectArtworkFile(event.currentTarget.files?.[0] ?? null)}
+                          type="file"
+                        />
+                      </label>
+                      <button
+                        className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-cyan-300 px-3 text-sm font-semibold text-zinc-950 hover:bg-cyan-200 disabled:opacity-50"
+                        disabled={!pendingArtwork || artworkState === "saving"}
+                        onClick={addArtwork}
+                        type="button"
+                      >
+                        <Upload size={15} />
+                        {artworkState === "saving" ? "Enviando..." : "Adicionar imagem"}
+                      </button>
+                    </div>
+
+                    {pendingArtwork ? (
+                      <div className="mt-3 flex items-center gap-3 rounded-md border border-cyan-400/20 bg-cyan-400/5 p-2">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img alt="Prévia da nova arte" className="h-16 w-16 rounded-md border border-cyan-300/20 object-cover" src={pendingArtwork.dataUrl} />
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-medium text-cyan-50">{pendingArtwork.fileName}</p>
+                          <p className="mt-1 text-[11px] text-cyan-100/60">{formatBytes(pendingArtwork.fileSize)}</p>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {artworkMessage ? (
+                      <p className={`mt-3 rounded-md border px-3 py-2 text-xs ${
+                        artworkState === "error"
+                          ? "border-rose-400/20 bg-rose-400/10 text-rose-100"
+                          : "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+                      }`}>
+                        {artworkMessage}
+                      </p>
+                    ) : null}
+                  </section>
                   <p className="text-right text-sm font-semibold text-white">
                     Novo total: {brl.format(roundMoney(draft.quantity * draft.unitPrice))}
                   </p>
@@ -396,6 +598,21 @@ export function QuoteItemEditPanel({
     setState("idle");
     setMessage("");
   }
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("invalid_file"));
+    reader.onerror = () => reject(reader.error ?? new Error("file_read_failed"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatBytes(value: number) {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function SaveFooter({

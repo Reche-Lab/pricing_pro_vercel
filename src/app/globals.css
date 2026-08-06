@@ -91,6 +91,41 @@ textarea::placeholder {
     repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 12px);
 }
 
+.landing-brand {
+  position: relative;
+  isolation: isolate;
+}
+
+.landing-brand::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(120deg, transparent 48%, rgba(52, 211, 153, 0.08));
+  transition: opacity 300ms ease;
+}
+
+.landing-brand:hover::after,
+.landing-brand:focus-visible::after {
+  opacity: 1;
+}
+
+.landing-brand-shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, 0.12) 50%, transparent 65%);
+  transform: translateX(-130%);
+  transition: transform 650ms ease;
+}
+
+.landing-brand:hover .landing-brand-shine,
+.landing-brand:focus-visible .landing-brand-shine {
+  transform: translateX(130%);
+}
+
 .landing-anchor {
   filter: drop-shadow(0 0 10px rgba(252, 211, 77, 0.55));
 }
