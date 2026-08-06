@@ -999,6 +999,24 @@ function BankAccountManager({
     await onChanged();
   }
 
+  async function discoverAccounts() {
+    if (loading) return;
+    setLoading("discover");
+    setMessage("Consultando os pedidos recentes no Olist...");
+    const response = await fetch("/api/olist/payment-options/bank-accounts/discover", { method: "POST" });
+    const data = await response.json().catch(() => null);
+    setLoading("");
+    if (!response.ok || !data?.ok) {
+      setMessage(data?.debugId ? `${data?.error ?? "Não foi possível consultar as contas."} Debug: ${data.debugId}` : data?.error ?? "Não foi possível consultar as contas.");
+      return;
+    }
+    const count = Array.isArray(data.accounts) ? data.accounts.length : 0;
+    setMessage(count
+      ? `${count} conta(s) bancária(s) encontrada(s) em ${data.ordersInspected ?? 0} pedido(s) recente(s).`
+      : `Nenhuma conta nova foi encontrada em ${data.ordersInspected ?? 0} pedido(s). Configure a conta em um pedido no Olist e tente novamente.`);
+    await onChanged();
+  }
+
   async function removeAccount(accountExternalId: string) {
     if (loading) return;
     setLoading(accountExternalId);
@@ -1029,6 +1047,10 @@ function BankAccountManager({
           </p>
         </div>
       </div>
+      <button className="focus-ring mt-3 inline-flex h-9 items-center justify-center gap-2 rounded-md border border-cyan-300/30 bg-cyan-300/10 px-3 text-xs font-semibold text-cyan-100 hover:bg-cyan-300/20 disabled:opacity-60" disabled={Boolean(loading)} onClick={discoverAccounts} type="button">
+        <Search size={14} />
+        {loading === "discover" ? "Consultando pedidos..." : "Buscar contas nos pedidos Olist"}
+      </button>
       <div className="mt-3 grid gap-2 md:grid-cols-[1fr_180px_auto] md:items-end">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-zinc-400">Nome da conta</span>

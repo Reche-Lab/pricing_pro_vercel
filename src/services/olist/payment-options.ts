@@ -30,6 +30,30 @@ export function extractOlistPaymentOptions(
     .filter((option): option is NormalizedOlistPaymentOption => Boolean(option));
 }
 
+export function extractOlistOrderIds(data: unknown): string[] {
+  if (!data || typeof data !== "object") return [];
+  const record = data as Record<string, unknown>;
+  const items = Array.isArray(record.itens) ? record.itens : Array.isArray(record.items) ? record.items : [];
+  return items.map((item) => {
+    if (!item || typeof item !== "object") return null;
+    const value = (item as Record<string, unknown>).id;
+    return typeof value === "string" || typeof value === "number" ? String(value) : null;
+  }).filter((value): value is string => Boolean(value));
+}
+
+export function extractOlistBankAccount(data: unknown): { externalId: string; name: string } | null {
+  if (!data || typeof data !== "object") return null;
+  const payment = (data as Record<string, unknown>).pagamento;
+  if (!payment || typeof payment !== "object") return null;
+  const method = (payment as Record<string, unknown>).meioPagamento;
+  if (!method || typeof method !== "object") return null;
+  const methodRecord = method as Record<string, unknown>;
+  const id = methodRecord.id;
+  const name = methodRecord.nome;
+  if ((typeof id !== "string" && typeof id !== "number") || typeof name !== "string" || !name.trim()) return null;
+  return { externalId: String(id), name: name.trim() };
+}
+
 function normalizeOption(record: unknown, kind: OlistPaymentOptionKind): NormalizedOlistPaymentOption | null {
   if (!record || typeof record !== "object") return null;
   const item = record as Record<string, unknown>;
