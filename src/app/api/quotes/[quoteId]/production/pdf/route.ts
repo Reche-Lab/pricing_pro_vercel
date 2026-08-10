@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getArtworkProductionData, recordArtworkPrintJob, resolveArtworkDiameterMm } from "@/repositories/artwork-production";
 import { generatePrintPdf, resolveArtworkProductionQuantities } from "@/services/artwork/imposition";
+import { resolveDrawCutLines } from "@/services/artwork/production";
 import { loadArtworkDataUrl, uploadArtworkObject } from "@/services/storage/artwork-storage";
 
 export const runtime = "nodejs";
@@ -32,8 +33,13 @@ export async function GET(request: Request, context: { params: Promise<{ quoteId
         preparedDataUrl: await loadArtworkDataUrl(artwork.prepared_data_url, artwork.prepared_storage_path)
       };
     }));
-    const { bytes, plan } = await generatePrintPdf(printArtworks, production.profile);
-    const preview = new URL(request.url).searchParams.get("preview") === "1";
+    const searchParams = new URL(request.url).searchParams;
+    const effectiveProfile = {
+      ...production.profile,
+      drawCutLines: resolveDrawCutLines(production.profile.drawCutLines, searchParams.get("cutLines"))
+    };
+    const { bytes, plan } = await generatePrintPdf(printArtworks, effectiveProfile);
+    const preview = searchParams.get("preview") === "1";
     if (!preview) {
       const storagePath = await uploadArtworkObject({
         path: `${session.tenantId}/quotes/${quoteId.data}/print-jobs/producao-${Date.now()}.pdf`,
@@ -46,14 +52,14 @@ export async function GET(request: Request, context: { params: Promise<{ quoteId
         quoteId: quoteId.data,
         pageCount: plan.pageCount,
         copyCount: plan.copyCount,
-        profile: production.profile,
+        profile: effectiveProfile,
         artworks: printArtworks.map((artwork) => ({ id: artwork.id, quantity: artwork.quantity, diameterMm: artwork.diameterMm })),
         storagePath
       });
     }
-    console.info("Artwork production PDF generated.", { quoteId: quoteId.data, pageCount: plan.pageCount, copyCount: plan.copyCount });
+    console.info("Artwork production PDF generated.", { quoteId: quoteId.data, pageCount: plan.pageCount, copyCount: plan.copyCount, drawCutLines: effectiveProfile.drawCutLines });
     return new NextResponse(Buffer.from(bytes), {
-      headers: { "content-type": "application/pdf", "content-disposition": `${preview ? "inline" : "attachment"}; filename="producao-${quoteId.data.slice(0, 8)}.pdf"`, "x-production-pages": String(plan.pageCount), "x-production-copies": String(plan.copyCount) }
+      headers: { "content-type": "application/pdf", "content-disposition": `${preview ? "inline" : "attachment"}; filename="producao-${quoteId.data.slice(0, 8)}.pdf"`, "x-production-pages": String(plan.pageCount), "x-production-copies": String(plan.copyCount), "x-production-cut-lines": effectiveProfile.drawCutLines ? "1" : "0" }
     });
   } catch (error) {
     console.error("Artwork production PDF failed.", { quoteId: quoteId.data, message: error instanceof Error ? error.message : "Erro desconhecido" });

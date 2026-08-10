@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, ChevronUp, Download, Eye, ImageIcon, Printer, Upload, WandSparkles, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Download, Eye, ImageIcon, Printer, Scissors, Upload, WandSparkles, X } from "lucide-react";
 import { ArtworkCropEditor } from "@/components/quotes/ArtworkCropEditor";
 import { ArtworkPdfPreview } from "@/components/quotes/ArtworkPdfPreview";
 import type { QuoteItemArtworkRow, QuoteItemRow } from "@/repositories/quotes";
@@ -21,6 +21,8 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
   const [editing, setEditing] = useState<ArtworkEntry | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [printJobs, setPrintJobs] = useState<PrintJob[]>([]);
+  const [drawCutLines, setDrawCutLines] = useState(true);
+  const printProfileLoaded = useRef(false);
   const artworks = useMemo(() => items.flatMap((item) => (item.artworks ?? []).map((artwork) => ({ item, artwork }))), [items]);
   const aiItem = items.find((item) => item.id === aiItemId) ?? items[0];
   const aiItemArtworks = artworks.filter((entry) => entry.item.id === aiItem?.id);
@@ -53,13 +55,19 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
   async function loadProduction() {
     const response = await fetch(`/api/quotes/${quoteId}/production`, { cache: "no-store" });
     const data = await response.json().catch(() => null);
-    if (response.ok) setPrintJobs(data?.printJobs ?? []);
+    if (response.ok) {
+      setPrintJobs(data?.printJobs ?? []);
+      if (!printProfileLoaded.current && typeof data?.profile?.drawCutLines === "boolean") {
+        setDrawCutLines(data.profile.drawCutLines);
+        printProfileLoaded.current = true;
+      }
+    }
   }
 
   async function downloadPdf() {
     setBusy("pdf-download"); setMessage("");
     try {
-      const response = await fetch(`/api/quotes/${quoteId}/production/pdf`);
+      const response = await fetch(`/api/quotes/${quoteId}/production/pdf?cutLines=${drawCutLines ? "1" : "0"}`);
       if (!response.ok) { const data = await response.json().catch(() => null); throw new Error(data?.error ?? "Não foi possível gerar o PDF."); }
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement("a"); link.href = url; link.download = `producao-${quoteId.slice(0, 8)}.pdf`; link.click(); URL.revokeObjectURL(url);
@@ -194,11 +202,11 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
 
         {printJobs.length ? <details className="rounded-md border border-zinc-800 bg-zinc-900/40 p-3"><summary className="cursor-pointer text-sm font-medium text-zinc-300">Histórico de produção · {printJobs.length} lote(s)</summary><div className="mt-3 grid gap-2">{printJobs.map((job) => <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs" key={job.id}><div><p className="font-medium text-zinc-200">{job.page_count} página(s) · {job.copy_count} cópias</p><p className="text-zinc-500">{new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(job.created_at))}</p></div>{job.status === "printed" ? <span className="inline-flex items-center gap-1 rounded bg-emerald-400/10 px-2 py-1 text-emerald-300"><Check size={13} /> Impresso</span> : <button className="focus-ring rounded-md border border-zinc-700 px-3 py-2 text-zinc-300 hover:bg-zinc-900 disabled:opacity-50" disabled={Boolean(busy)} type="button" onClick={() => markPrinted(job.id)}>Marcar como impresso</button>}</div>)}</div></details> : null}
         {message ? <p className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300">{message}</p> : null}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 pt-4"><p className="text-xs text-zinc-500">A soma das artes aprovadas deve corresponder à quantidade de cada item.</p><div className="flex gap-2"><button className={`focus-ring inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium ${readyToPrint ? "border-zinc-700 text-zinc-200 hover:bg-zinc-900" : "cursor-not-allowed border-zinc-800 text-zinc-600"}`} disabled={!readyToPrint} type="button" onClick={() => setPreviewOpen(true)}><Eye size={16} /> Visualizar folhas</button><button className={`focus-ring inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold ${readyToPrint ? "bg-amber-400 text-zinc-950 hover:bg-amber-300" : "cursor-not-allowed bg-zinc-800 text-zinc-500"}`} disabled={!readyToPrint || Boolean(busy)} type="button" onClick={downloadPdf}><Download size={16} /> {busy === "pdf-download" ? "Gerando..." : "Baixar PDF"}</button></div></div>
+        <div className="flex flex-wrap items-end justify-between gap-3 border-t border-zinc-800 pt-4"><div><p className="text-xs text-zinc-500">A soma das artes aprovadas deve corresponder à quantidade de cada item.</p><button aria-pressed={drawCutLines} className={`focus-ring mt-3 inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${drawCutLines ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-200" : "border-zinc-700 bg-zinc-950 text-zinc-400 hover:bg-zinc-900"}`} type="button" onClick={() => setDrawCutLines((current) => !current)}><Scissors size={14} /> Linhas de corte <span className={`rounded px-1.5 py-0.5 text-[10px] ${drawCutLines ? "bg-cyan-400 text-cyan-950" : "bg-zinc-800 text-zinc-400"}`}>{drawCutLines ? "Incluídas" : "Removidas"}</span></button></div><div className="flex flex-wrap gap-2"><button className={`focus-ring inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium ${readyToPrint ? "border-zinc-700 text-zinc-200 hover:bg-zinc-900" : "cursor-not-allowed border-zinc-800 text-zinc-600"}`} disabled={!readyToPrint} type="button" onClick={() => setPreviewOpen(true)}><Eye size={16} /> Visualizar folhas</button><button className={`focus-ring inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold ${readyToPrint ? "bg-amber-400 text-zinc-950 hover:bg-amber-300" : "cursor-not-allowed bg-zinc-800 text-zinc-500"}`} disabled={!readyToPrint || Boolean(busy)} type="button" onClick={downloadPdf}><Download size={16} /> {busy === "pdf-download" ? "Gerando..." : "Baixar PDF"}</button></div></div>
       </div> : null}
 
       {editing ? <ArtworkCropEditor artwork={editing.artwork} diameterMm={inferDiameter(editing.item, editing.artwork.target_diameter_mm) || 0} imageUrl={artworkImageUrl(quoteId, editing, "original")} itemId={editing.item.id} quoteId={quoteId} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setMessage("Arte preparada. Confira a qualidade e aprove a versão."); router.refresh(); }} /> : null}
-      {previewOpen ? <ArtworkPdfPreview quoteId={quoteId} onClose={() => setPreviewOpen(false)} /> : null}
+      {previewOpen ? <ArtworkPdfPreview drawCutLines={drawCutLines} quoteId={quoteId} onClose={() => setPreviewOpen(false)} /> : null}
     </section>
   );
 }

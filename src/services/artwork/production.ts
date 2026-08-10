@@ -24,6 +24,12 @@ export const DEFAULT_ARTWORK_PROFILE: ArtworkProductionProfile = {
   drawCutLines: true
 };
 
+export function resolveDrawCutLines(defaultValue: boolean, override: string | null | undefined) {
+  if (override === "1" || override === "true") return true;
+  if (override === "0" || override === "false") return false;
+  return defaultValue;
+}
+
 export type PreparedArtwork = {
   dataUrl: string;
   widthPx: number;

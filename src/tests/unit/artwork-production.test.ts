@@ -2,7 +2,7 @@ import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { createImpositionPlan, generatePrintPdf, resolveArtworkProductionQuantities } from "@/services/artwork/imposition";
-import { DEFAULT_ARTWORK_PROFILE, mmToPixels, prepareCircularArtwork } from "@/services/artwork/production";
+import { DEFAULT_ARTWORK_PROFILE, mmToPixels, prepareCircularArtwork, resolveDrawCutLines } from "@/services/artwork/production";
 
 describe("artwork production", () => {
   it("prepares a circular PNG at the exact diameter plus bleed", async () => {
@@ -61,5 +61,11 @@ describe("artwork production", () => {
         { id: "art-2", quote_item_id: "item-1", production_quantity: 10 }
       ]
     )).toThrow("Distribua exatamente 30 unidades");
+  });
+
+  it("allows each print job to override the default cut lines setting", () => {
+    expect(resolveDrawCutLines(true, "0")).toBe(false);
+    expect(resolveDrawCutLines(false, "1")).toBe(true);
+    expect(resolveDrawCutLines(false, null)).toBe(false);
   });
 });

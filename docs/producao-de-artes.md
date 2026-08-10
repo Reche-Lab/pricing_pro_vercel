@@ -15,6 +15,8 @@ O módulo transforma as imagens vinculadas aos itens de um orçamento em arquivo
 7. Clique em `Visualizar folhas` para revisar as páginas A4 antes da geração definitiva.
 8. Baixe o PDF e, depois da produção física, marque o lote como impresso.
 
+Antes de visualizar ou baixar as folhas, o controle `Linhas de corte` permite incluir ou remover os círculos de corte somente para aquele PDF. A configuração do tenant continua sendo usada como padrão e não é alterada por essa escolha. O snapshot do lote registra se as linhas foram incluídas.
+
 ## Aprovação pelo link público
 
 O cliente que recebe o link público do orçamento também pode revisar as artes sem possuir usuário interno. O acesso fica limitado ao orçamento associado ao token e permanece disponível somente enquanto o link estiver válido e o orçamento estiver aguardando decisão.
