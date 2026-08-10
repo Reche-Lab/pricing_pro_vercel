@@ -366,6 +366,7 @@ export async function markArtworkAsGenerated(input: {
   userId: string;
   tenantId: string;
   artworkId: string;
+  referenceArtworkId?: string | null;
   prompt: string;
 }) {
   return withTenantContext(input.userId, input.tenantId, async (client) => {
@@ -374,6 +375,15 @@ export async function markArtworkAsGenerated(input: {
        set source_kind = 'openrouter', ai_prompt = $4
        where tenant_id = $1 and id = $2 and created_by = $3`,
       [input.tenantId, input.artworkId, input.userId, input.prompt]
+    );
+    await client.query(
+      `insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+       values ($1, $2, 'artwork.ai_generate', 'quote_item_artwork', $3, $4)`,
+      [input.tenantId, input.userId, input.artworkId, JSON.stringify({
+        referenceArtworkId: input.referenceArtworkId ?? null,
+        hasReference: Boolean(input.referenceArtworkId),
+        promptLength: input.prompt.length
+      })]
     );
   });
 }

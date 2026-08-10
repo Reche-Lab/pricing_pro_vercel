@@ -7,7 +7,7 @@ O módulo transforma as imagens vinculadas aos itens de um orçamento em arquivo
 ## Fluxo do usuário
 
 1. Cadastre em `Produtos` o diâmetro final de impressão da variante em milímetros.
-2. Anexe uma imagem ao item do orçamento ou gere uma nova versão no assistente criativo.
+2. Anexe uma imagem ao item do orçamento, envie uma referência diretamente pelo assistente ou crie uma arte do zero.
 3. Abra `Itens > Produção de artes` no orçamento.
 4. Clique em `Enquadrar` e ajuste zoom, posição e rotação com as áreas de corte e segurança visíveis.
 5. Confira o alerta de qualidade, informe quantas cópias pertencem à arte e aprove a versão.
@@ -43,7 +43,9 @@ OPENROUTER_TEXT_MODEL="openai/gpt-4.1-mini"
 OPENROUTER_IMAGE_MODEL="openai/gpt-image-1"
 ```
 
-`Sugerir direção` usa o modelo de texto para devolver conceito, composição, paleta, tipografia e cuidados de produção. `Gerar nova versão` usa a API de imagens e inclui a saída como uma nova arte pendente. O modelo configurado deve aceitar geração de imagem e, para usar uma referência, entrada de imagem.
+`Sugerir direção` usa o modelo de texto para devolver conceito, composição, paleta, tipografia e cuidados de produção. O usuário pode escolher qualquer arte do item como base ou enviar uma imagem PNG, JPEG ou WebP de até 3 MB diretamente pelo assistente. Ao gerar com uma referência, a instrução pede que o modelo preserve tudo o que não foi explicitamente alterado.
+
+Cada geração é salva como uma nova arte pendente e nunca sobrescreve a original. A versão criada fica selecionada como referência para a próxima solicitação, permitindo ajustes sucessivos até a aprovação. O modelo configurado deve aceitar geração e edição de imagem com entrada de referência.
 
 ## Supabase Storage
 

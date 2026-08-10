@@ -55,7 +55,13 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
       artworkFile: { fileName, mimeType: "image/webp", fileSize: optimized.length, dataUrl: `data:image/webp;base64,${optimized.toString("base64")}` },
       storagePath
     });
-    await markArtworkAsGenerated({ userId: session.userId, tenantId: session.tenantId, artworkId: artwork.id, prompt: generated.prompt });
+    await markArtworkAsGenerated({
+      userId: session.userId,
+      tenantId: session.tenantId,
+      artworkId: artwork.id,
+      referenceArtworkId: reference?.id ?? null,
+      prompt: generated.prompt
+    });
     return NextResponse.json({ ok: true, artwork }, { status: 201 });
   } catch (error) {
     console.error("OpenRouter artwork action failed.", { ...params.data, action: body.data.action, message: error instanceof Error ? error.message : "Erro desconhecido" });

@@ -20,7 +20,7 @@ export async function suggestArtworkDirection(input: {
   const content: Array<Record<string, unknown>> = [
     {
       type: "text",
-      text: `Crie uma direção de arte para um produto circular de ${input.diameterMm} mm (${input.product}). Briefing: ${input.brief}. Evite texto pequeno e elementos importantes próximos ao corte. Responda somente JSON válido com concept, composition, palette (array), typography, productionWarnings (array) e generationPrompt.`
+      text: buildArtworkSuggestionPrompt(input)
     }
   ];
   if (input.referenceDataUrl) content.push({ type: "image_url", image_url: { url: input.referenceDataUrl } });
@@ -44,7 +44,7 @@ export async function generateArtworkImage(input: {
 }) {
   const env = getServerEnv();
   assertConfigured(env.OPENROUTER_API_KEY);
-  const productionPrompt = `${input.prompt}\nArte quadrada para recorte circular de ${input.diameterMm} mm, composição centralizada, fundo preenchendo toda a borda, sem mockup, sem fotografia do produto, sem linha de corte.`;
+  const productionPrompt = buildArtworkGenerationPrompt(input);
   const body: Record<string, unknown> = {
     model: env.OPENROUTER_IMAGE_MODEL,
     prompt: productionPrompt,
@@ -62,6 +62,29 @@ export async function generateArtworkImage(input: {
   if (!first || typeof first.b64_json !== "string") throw new Error("O OpenRouter não retornou uma imagem válida.");
   const mimeType = typeof first.media_type === "string" ? first.media_type : "image/png";
   return { dataUrl: `data:${mimeType};base64,${first.b64_json}`, prompt: productionPrompt };
+}
+
+export function buildArtworkSuggestionPrompt(input: {
+  brief: string;
+  product: string;
+  diameterMm: number;
+  referenceDataUrl?: string | null;
+}) {
+  const referenceInstruction = input.referenceDataUrl
+    ? "Analise a imagem de referência como a versão atual. Proponha melhorias coerentes com o pedido, preserve os elementos que não foram mencionados e descreva claramente o que deve mudar."
+    : "Crie a direção a partir do briefing, pois não há imagem de referência.";
+  return `Crie uma direção de arte para um produto circular de ${input.diameterMm} mm (${input.product}). ${referenceInstruction} Briefing ou alterações solicitadas: ${input.brief}. Evite texto pequeno e elementos importantes próximos ao corte. Responda somente JSON válido com concept, composition, palette (array), typography, productionWarnings (array) e generationPrompt.`;
+}
+
+export function buildArtworkGenerationPrompt(input: {
+  prompt: string;
+  diameterMm: number;
+  referenceDataUrl?: string | null;
+}) {
+  const referenceInstruction = input.referenceDataUrl
+    ? "Use a imagem de referência como base da nova versão. Preserve composição, identidade, textos e elementos que não tenham sido explicitamente alterados. Aplique somente as mudanças solicitadas e não redesenhe arbitrariamente a arte."
+    : "Crie uma arte original a partir da solicitação, sem depender de uma imagem anterior.";
+  return `${referenceInstruction}\nSolicitação: ${input.prompt}\nArte quadrada para recorte circular de ${input.diameterMm} mm, composição centralizada, fundo preenchendo toda a borda, sem mockup, sem fotografia do produto, sem linha de corte.`;
 }
 
 async function openRouterFetch(path: string, body: Record<string, unknown>) {
