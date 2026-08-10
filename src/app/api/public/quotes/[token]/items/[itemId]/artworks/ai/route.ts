@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { z } from "zod";
-import { ARTWORK_AI_GENERATION_LIMIT } from "@/domain/artwork/ai-generation-limit";
 import { addPublicArtwork, getPublicArtworkContext, markPublicArtworkAsGenerated, reservePublicArtworkAiAttempt } from "@/repositories/public-artworks";
 import { decodeImageDataUrl } from "@/services/artwork/production";
 import { generateArtworkImage, suggestArtworkDirection } from "@/services/openrouter/artwork-agent";
@@ -25,7 +24,7 @@ export async function POST(request: Request, route: { params: Promise<{ token: s
   if (!context) return NextResponse.json({ ok: false, error: "Orçamento ou referência indisponível." }, { status: 409 });
   if (!context.diameterMm) return NextResponse.json({ ok: false, error: "O produto não possui diâmetro de impressão configurado." }, { status: 422 });
   if (body.data.action === "generate" && context.artworkCount >= 10) return NextResponse.json({ ok: false, error: "Este produto já possui o limite de 10 versões." }, { status: 409 });
-  let generationAttempt: { attemptsUsed: number; attemptsRemaining: number } | null = null;
+  let generationAttempt: { reserved: boolean; limit: number; attemptsUsed: number; attemptsRemaining: number } | null = null;
   try {
     const referenceDataUrl = context.artwork ? await loadArtworkDataUrl(context.artwork.data_url, context.artwork.storage_path) : null;
     if (body.data.action === "suggest") {
@@ -33,8 +32,11 @@ export async function POST(request: Request, route: { params: Promise<{ token: s
       return NextResponse.json({ ok: true, suggestions });
     }
     generationAttempt = await reservePublicArtworkAiAttempt(context);
-    if (!generationAttempt) {
-      return NextResponse.json({ ok: false, error: `O limite de ${ARTWORK_AI_GENERATION_LIMIT} tentativas de geração para este produto foi atingido.`, attemptsUsed: ARTWORK_AI_GENERATION_LIMIT, attemptsRemaining: 0 }, { status: 429 });
+    if (!generationAttempt.reserved) {
+      const error = generationAttempt.limit === 0
+        ? "A geração de artes por IA está desativada para este orçamento."
+        : `O limite de ${generationAttempt.limit} tentativas de geração para este produto foi atingido.`;
+      return NextResponse.json({ ok: false, error, ...generationAttempt }, { status: 429 });
     }
     const generated = await generateArtworkImage({ prompt: body.data.brief, diameterMm: context.diameterMm, referenceDataUrl });
     const bytes = await optimize(generated.dataUrl);

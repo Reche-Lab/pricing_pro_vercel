@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Copy, DollarSign, Gift, ShieldCheck, TimerReset, Users } from "lucide-react";
+import { Building2, Copy, DollarSign, Gift, Save, ShieldCheck, TimerReset, Users, WandSparkles } from "lucide-react";
+import { MAX_ARTWORK_AI_GENERATION_LIMIT } from "@/domain/artwork/ai-generation-limit";
 import type { BillingPlanRow } from "@/repositories/billing";
 import type { SuperadminTenantRow } from "@/repositories/superadmin";
 
@@ -248,7 +249,7 @@ export function SuperadminPanel({
                       <Badge>{billingLabel(tenant.subscription_status ?? tenant.billing_status)}</Badge>
                     </div>
                     <p className="mt-1 text-sm text-zinc-500">{tenant.slug}</p>
-                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 sm:grid-cols-2 2xl:grid-cols-4">
+                    <div className="mt-3 grid gap-2 text-xs text-zinc-500 sm:grid-cols-2 2xl:grid-cols-5">
                       <SummaryPill
                         label="Owner"
                         value={tenant.owner_name ? `${tenant.owner_name} (${tenant.owner_email})` : "não definido"}
@@ -265,6 +266,10 @@ export function SuperadminPanel({
                       <SummaryPill
                         label="Voucher"
                         value={tenant.discount_percent && Number(tenant.discount_percent) > 0 ? `${Number(tenant.discount_percent).toFixed(0)}% ativo` : "sem voucher"}
+                      />
+                      <SummaryPill
+                        label="IA por produto"
+                        value={tenant.artwork_ai_generation_limit === 0 ? "desativada" : `${tenant.artwork_ai_generation_limit} gerações`}
                       />
                     </div>
                   </div>
@@ -306,6 +311,22 @@ export function SuperadminPanel({
                         </div>
                       )) : <EmptyState text="Nenhum usuário vinculado a este tenant." />}
                     </div>
+                  </details>
+
+                  <details className="rounded-md border border-zinc-800 bg-zinc-900/50">
+                    <summary className="focus-ring flex cursor-pointer list-none items-center justify-between gap-3 rounded-md px-3 py-3 text-sm font-medium text-zinc-200 hover:bg-zinc-900">
+                      <span className="inline-flex items-center gap-2">
+                        <WandSparkles size={15} />
+                        Assistente criativo
+                      </span>
+                      <span className="text-xs text-zinc-500">
+                        {tenant.artwork_ai_generation_limit === 0 ? "Geração desativada" : `${tenant.artwork_ai_generation_limit} tentativas por produto`}
+                      </span>
+                    </summary>
+                    <TenantArtworkAiLimit
+                      currentLimit={tenant.artwork_ai_generation_limit}
+                      tenantId={tenant.id}
+                    />
                   </details>
 
                   <details className="rounded-md border border-zinc-800 bg-zinc-900/50">
@@ -353,6 +374,68 @@ export function SuperadminPanel({
             {tenants.length === 0 ? <EmptyState text="Nenhum tenant cadastrado." /> : null}
           </div>
         </section>
+      </div>
+    </div>
+  );
+}
+
+function TenantArtworkAiLimit({ currentLimit, tenantId }: { currentLimit: number; tenantId: string }) {
+  const router = useRouter();
+  const [limit, setLimit] = useState(currentLimit);
+  const [loading, setLoading] = useState(false);
+  const [feedback, setFeedback] = useState("");
+
+  async function saveLimit() {
+    setLoading(true);
+    setFeedback("");
+    const response = await fetch(`/api/superadmin/tenants/${tenantId}/settings`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ artworkAiGenerationLimit: limit })
+    });
+    const data = await response.json().catch(() => null);
+    setLoading(false);
+    if (!response.ok || !data?.ok) {
+      setFeedback(typeof data?.error === "string" ? data.error : "Não foi possível salvar o limite.");
+      return;
+    }
+    setFeedback(limit === 0 ? "Geração de artes por IA desativada para este tenant." : `Limite atualizado para ${limit} gerações por produto.`);
+    router.refresh();
+  }
+
+  return (
+    <div className="grid gap-3 border-t border-zinc-800 p-3 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-end">
+      <div>
+        <p className="text-sm font-medium text-white">Tentativas de geração por item do orçamento</p>
+        <p className="mt-1 max-w-2xl text-xs leading-5 text-zinc-500">
+          O limite vale para usuários internos e clientes no link público. Use zero para desativar somente a geração de imagens; sugestões, uploads e reenquadramentos continuam disponíveis.
+        </p>
+      </div>
+      <div className="grid gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+          <label>
+            <span className="mb-1 block text-[11px] text-zinc-500">Gerações por produto</span>
+            <input
+              className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+              max={MAX_ARTWORK_AI_GENERATION_LIMIT}
+              min={0}
+              onChange={(event) => setLimit(Number(event.target.value))}
+              step={1}
+              type="number"
+              value={limit}
+            />
+          </label>
+          <button
+            className="focus-ring mt-5 inline-flex h-9 items-center gap-2 rounded-md bg-violet-400 px-3 text-xs font-semibold text-violet-950 hover:bg-violet-300 disabled:opacity-50"
+            disabled={loading || !Number.isInteger(limit) || limit < 0 || limit > MAX_ARTWORK_AI_GENERATION_LIMIT || limit === currentLimit}
+            onClick={saveLimit}
+            type="button"
+          >
+            <Save size={14} />
+            {loading ? "Salvando..." : "Salvar limite"}
+          </button>
+        </div>
+        {feedback ? <p className={`rounded-md px-3 py-2 text-xs ${feedback.startsWith("Não") ? "bg-red-950/50 text-red-200" : "bg-emerald-950/50 text-emerald-200"}`}>{feedback}</p> : null}
       </div>
     </div>
   );

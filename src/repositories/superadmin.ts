@@ -16,6 +16,7 @@ export type SuperadminTenantRow = {
   plan_amount_cents: number | null;
   discount_percent: number | null;
   discount_expires_at: string | null;
+  artwork_ai_generation_limit: number;
   member_count: number;
   members: Array<{
     membership_id: string;
@@ -69,6 +70,7 @@ export async function listSuperadminTenants(): Promise<SuperadminTenantRow[]> {
         p.amount_cents as plan_amount_cents,
         ts.discount_percent,
         ts.discount_expires_at,
+        coalesce((to_jsonb(t)->>'artwork_ai_generation_limit')::integer, 3) as artwork_ai_generation_limit,
         coalesce(members.member_count, 0)::int as member_count,
         coalesce(members.members, '[]'::jsonb) as members,
         t.created_at
@@ -138,6 +140,45 @@ export async function listSuperadminUsers(): Promise<SuperadminUserRow[]> {
   );
 
   return rows;
+}
+
+export async function updateTenantArtworkAiGenerationLimit(input: {
+  actorUserId: string;
+  tenantId: string;
+  limit: number;
+}) {
+  const client = await getPool().connect();
+  try {
+    await client.query("begin");
+    await client.query("select set_config('app.user_id', $1, true)", [input.actorUserId]);
+    const actor = await client.query<{ is_super_admin: boolean }>(
+      "select is_super_admin from app_users where id = $1 and status = 'active'",
+      [input.actorUserId]
+    );
+    if (!actor.rows[0]?.is_super_admin) throw new Error("Forbidden.");
+
+    const updated = await client.query<{ id: string; artwork_ai_generation_limit: number }>(
+      `update tenants
+       set artwork_ai_generation_limit = $2, updated_at = now()
+       where id = $1
+       returning id, artwork_ai_generation_limit`,
+      [input.tenantId, input.limit]
+    );
+    if (!updated.rows[0]) throw new Error("Tenant not found.");
+
+    await client.query(
+      `insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+       values ($1, $2, 'superadmin.artwork_ai_limit_update', 'tenant', $1, $3)`,
+      [input.tenantId, input.actorUserId, JSON.stringify({ limit: input.limit })]
+    );
+    await client.query("commit");
+    return updated.rows[0];
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function createTenantWithOwner(input: {

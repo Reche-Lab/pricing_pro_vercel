@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { ARTWORK_AI_GENERATION_LIMIT } from "@/domain/artwork/ai-generation-limit";
+import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
 import { getPool } from "@/lib/db/client";
 import { DEFAULT_ARTWORK_PROFILE, type ArtworkProductionProfile, type PreparedArtwork } from "@/services/artwork/production";
 
@@ -13,6 +13,7 @@ export type PublicArtworkContext = {
   diameterMm: number | null;
   artworkCount: number;
   aiAttempts: number;
+  aiGenerationLimit: number;
   profile: ArtworkProductionProfile;
   artwork: {
     id: string;
@@ -27,15 +28,17 @@ export async function getPublicArtworkContext(token: string, itemId: string, art
   try {
     const result = await client.query<{
       quote_id: string; tenant_id: string; item_id: string; description: string; quantity: number;
-      print_diameter_mm: string | null; width_cm: string | null; length_cm: string | null; artwork_count: number; artwork_ai_attempts: number;
+      print_diameter_mm: string | null; width_cm: string | null; length_cm: string | null; artwork_count: number; artwork_ai_attempts: number; artwork_ai_generation_limit: number;
     }>(
       `select q.id as quote_id, q.tenant_id, qi.id as item_id, qi.description, qi.quantity,
               to_jsonb(pv)->>'print_diameter_mm' as print_diameter_mm, pv.width_cm, pv.length_cm,
               (select count(*)::int from quote_item_artworks count_art
                where count_art.quote_id = q.id and count_art.quote_item_id = qi.id) as artwork_count,
-              coalesce((to_jsonb(qi)->>'artwork_ai_attempts')::integer, 0) as artwork_ai_attempts
+              coalesce((to_jsonb(qi)->>'artwork_ai_attempts')::integer, 0) as artwork_ai_attempts,
+              coalesce((to_jsonb(t)->>'artwork_ai_generation_limit')::integer, 3) as artwork_ai_generation_limit
        from quotes q
        join quote_items qi on qi.quote_id = q.id and qi.tenant_id = q.tenant_id
+       join tenants t on t.id = q.tenant_id
        left join product_variants pv on pv.id = qi.product_variant_id and pv.tenant_id = q.tenant_id
        where q.public_token_hash = $1 and q.public_token_expires_at > now()
          and q.status in ('draft', 'sent') and qi.id = $2
@@ -72,6 +75,7 @@ export async function getPublicArtworkContext(token: string, itemId: string, art
       diameterMm: explicitDiameter > 0 ? explicitDiameter : packageDiameter > 0 ? packageDiameter : null,
       artworkCount: row.artwork_count,
       aiAttempts: row.artwork_ai_attempts,
+      aiGenerationLimit: normalizeArtworkAiGenerationLimit(row.artwork_ai_generation_limit),
       profile: mapProfile(profileResult.rows[0]),
       artwork: artworkResult.rows[0] ?? null
     } satisfies PublicArtworkContext;
@@ -83,6 +87,7 @@ export async function getPublicArtworkContext(token: string, itemId: string, art
 export async function reservePublicArtworkAiAttempt(context: PublicArtworkContext) {
   const client = await getPool().connect();
   try {
+    const limit = normalizeArtworkAiGenerationLimit(context.aiGenerationLimit);
     const result = await client.query<{ artwork_ai_attempts: number }>(
       `update quote_items qi
        set artwork_ai_attempts = qi.artwork_ai_attempts + 1
@@ -93,13 +98,17 @@ export async function reservePublicArtworkAiAttempt(context: PublicArtworkContex
          and q.public_token_hash = $4 and q.public_token_expires_at > now()
          and q.status in ('draft', 'sent')
        returning qi.artwork_ai_attempts`,
-      [context.tenantId, context.quoteId, context.itemId, context.tokenHash, ARTWORK_AI_GENERATION_LIMIT]
+      [context.tenantId, context.quoteId, context.itemId, context.tokenHash, limit]
     );
-    const attemptsUsed = result.rows[0]?.artwork_ai_attempts;
-    if (!attemptsUsed) return null;
-    const attemptsRemaining = ARTWORK_AI_GENERATION_LIMIT - attemptsUsed;
-    await recordPublicEvent(client, context, "artworks.public_ai_attempt_reserved", context.itemId, { attemptsUsed, attemptsRemaining });
-    return { attemptsUsed, attemptsRemaining };
+    const current = result.rows[0] ?? (await client.query<{ artwork_ai_attempts: number }>(
+      "select artwork_ai_attempts from quote_items where tenant_id = $1 and quote_id = $2 and id = $3 limit 1",
+      [context.tenantId, context.quoteId, context.itemId]
+    )).rows[0];
+    const attemptsUsed = current?.artwork_ai_attempts ?? 0;
+    const attemptsRemaining = getArtworkAiAttemptsRemaining(attemptsUsed, limit);
+    if (!result.rows[0]) return { reserved: false, limit, attemptsUsed, attemptsRemaining };
+    await recordPublicEvent(client, context, "artworks.public_ai_attempt_reserved", context.itemId, { limit, attemptsUsed, attemptsRemaining });
+    return { reserved: true, limit, attemptsUsed, attemptsRemaining };
   } finally {
     client.release();
   }

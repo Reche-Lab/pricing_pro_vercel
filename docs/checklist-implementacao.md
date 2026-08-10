@@ -132,7 +132,7 @@ Status atualizado durante a refatoracao inicial.
 - [x] Distribuir automaticamente artes iguais e mistas na folha.
 - [x] Configurar folha, margem, sangria, área segura, intervalo, DPI e linhas de corte por tenant.
 - [x] Gerar direção criativa textual e novas imagens via OpenRouter.
-- [x] Limitar a geração por IA a 3 tentativas persistentes por item do orçamento, incluindo o acesso público.
+- [x] Limitar a geração por IA por item do orçamento, com padrão 3, configuração por tenant no Superadmin e aplicação no acesso público.
 - [x] Manter aprovação humana obrigatória para imagens geradas por IA.
 - [x] Adicionar testes unitários de preparação, quantidade e PDF.
 - [x] Armazenar novos originais, preparados e PDFs em Supabase Storage privado, com fallback legado.

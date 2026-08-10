@@ -1,5 +1,5 @@
 import { withTenantContext } from "@/lib/db/client";
-import { ARTWORK_AI_GENERATION_LIMIT } from "@/domain/artwork/ai-generation-limit";
+import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
 import {
   DEFAULT_ARTWORK_PROFILE,
   type ArtworkProductionProfile,
@@ -419,22 +419,31 @@ export async function reserveArtworkAiGenerationAttempt(input: {
 }) {
   return withTenantContext(input.userId, input.tenantId, async (client) => {
     await assertInternalArtworkEditingAllowed(client, input.tenantId, input.quoteId, input.itemId);
+    const tenant = await client.query<{ artwork_ai_generation_limit: number }>(
+      "select artwork_ai_generation_limit from tenants where id = $1 limit 1",
+      [input.tenantId]
+    );
+    const limit = normalizeArtworkAiGenerationLimit(tenant.rows[0]?.artwork_ai_generation_limit);
     const result = await client.query<{ artwork_ai_attempts: number }>(
       `update quote_items
        set artwork_ai_attempts = artwork_ai_attempts + 1
        where tenant_id = $1 and quote_id = $2 and id = $3 and artwork_ai_attempts < $4
        returning artwork_ai_attempts`,
-      [input.tenantId, input.quoteId, input.itemId, ARTWORK_AI_GENERATION_LIMIT]
+      [input.tenantId, input.quoteId, input.itemId, limit]
     );
-    const attemptsUsed = result.rows[0]?.artwork_ai_attempts;
-    if (!attemptsUsed) return null;
-    const attemptsRemaining = ARTWORK_AI_GENERATION_LIMIT - attemptsUsed;
+    const current = result.rows[0] ?? (await client.query<{ artwork_ai_attempts: number }>(
+      "select artwork_ai_attempts from quote_items where tenant_id = $1 and quote_id = $2 and id = $3 limit 1",
+      [input.tenantId, input.quoteId, input.itemId]
+    )).rows[0];
+    const attemptsUsed = current?.artwork_ai_attempts ?? 0;
+    const attemptsRemaining = getArtworkAiAttemptsRemaining(attemptsUsed, limit);
+    if (!result.rows[0]) return { reserved: false, limit, attemptsUsed, attemptsRemaining };
     await client.query(
       `insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
        values ($1, $2, 'artworks.ai_attempt_reserved', 'quote_item', $3, $4)`,
-      [input.tenantId, input.userId, input.itemId, JSON.stringify({ quoteId: input.quoteId, attemptsUsed, attemptsRemaining })]
+      [input.tenantId, input.userId, input.itemId, JSON.stringify({ quoteId: input.quoteId, limit, attemptsUsed, attemptsRemaining })]
     );
-    return { attemptsUsed, attemptsRemaining };
+    return { reserved: true, limit, attemptsUsed, attemptsRemaining };
   });
 }
 

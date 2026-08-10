@@ -97,6 +97,7 @@ export type QuoteItemRow = {
   manual_price_changed_by_name?: string | null;
   artworks?: QuoteItemArtworkRow[];
   artwork_ai_attempts?: number;
+  artwork_ai_generation_limit?: number;
 };
 
 export type QuoteEditLogRow = {
@@ -356,7 +357,8 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           to_jsonb(qi)->>'manual_price_reason' as manual_price_reason,
           to_jsonb(qi)->>'manual_price_changed_at' as manual_price_changed_at,
           manual_user.name as manual_price_changed_by_name,
-          coalesce((to_jsonb(qi)->>'artwork_ai_attempts')::integer, 0) as artwork_ai_attempts
+          coalesce((to_jsonb(qi)->>'artwork_ai_attempts')::integer, 0) as artwork_ai_attempts,
+          coalesce((select (to_jsonb(t)->>'artwork_ai_generation_limit')::integer from tenants t where t.id = qi.tenant_id), 3) as artwork_ai_generation_limit
         from quote_items qi
         left join product_variants pv on pv.id = qi.product_variant_id and pv.tenant_id = qi.tenant_id
         left join app_users manual_user on manual_user.id::text = to_jsonb(qi)->>'manual_price_changed_by'
@@ -552,7 +554,8 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           to_jsonb(pv)->>'print_diameter_mm' as print_diameter_mm,
           pv.width_cm,
           pv.length_cm,
-          coalesce((to_jsonb(qi)->>'artwork_ai_attempts')::integer, 0) as artwork_ai_attempts
+          coalesce((to_jsonb(qi)->>'artwork_ai_attempts')::integer, 0) as artwork_ai_attempts,
+          coalesce((select (to_jsonb(t)->>'artwork_ai_generation_limit')::integer from tenants t where t.id = qi.tenant_id), 3) as artwork_ai_generation_limit
         from quote_items qi
         left join product_variants pv on pv.id = qi.product_variant_id and pv.tenant_id = qi.tenant_id
         where qi.quote_id = $1

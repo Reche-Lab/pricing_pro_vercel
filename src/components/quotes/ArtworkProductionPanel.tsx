@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, ChevronDown, ChevronUp, Download, Eye, ImageIcon, Printer, Scissors, Upload, WandSparkles, X } from "lucide-react";
 import { ArtworkCropEditor } from "@/components/quotes/ArtworkCropEditor";
 import { ArtworkPdfPreview } from "@/components/quotes/ArtworkPdfPreview";
-import { ARTWORK_AI_GENERATION_LIMIT, getArtworkAiAttemptsRemaining } from "@/domain/artwork/ai-generation-limit";
+import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
 import type { QuoteItemArtworkRow, QuoteItemRow } from "@/repositories/quotes";
 
 type ArtworkEntry = { item: QuoteItemRow; artwork: QuoteItemArtworkRow };
@@ -28,7 +28,8 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
   const aiItem = items.find((item) => item.id === aiItemId) ?? items[0];
   const aiItemArtworks = artworks.filter((entry) => entry.item.id === aiItem?.id);
   const aiReference = aiItemArtworks.find((entry) => entry.artwork.id === aiReferenceArtworkId) ?? null;
-  const aiAttemptsRemaining = getArtworkAiAttemptsRemaining(aiItem?.artwork_ai_attempts);
+  const aiGenerationLimit = normalizeArtworkAiGenerationLimit(aiItem?.artwork_ai_generation_limit);
+  const aiAttemptsRemaining = getArtworkAiAttemptsRemaining(aiItem?.artwork_ai_attempts, aiGenerationLimit);
   const [quantities, setQuantities] = useState<Record<string, number>>(() => initialQuantities(items));
 
   useEffect(() => setQuantities(initialQuantities(items)), [items]);
@@ -184,7 +185,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
               <label><span className="mb-1 block text-xs font-medium text-zinc-400">2. Arte usada como base</span><select className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white" value={aiReferenceArtworkId} onChange={(event) => { setAiReferenceArtworkId(event.target.value); setSuggestions(null); }}><option value="">Criar do zero, sem imagem de referência</option>{aiItemArtworks.map(({ artwork }) => <option key={artwork.id} value={artwork.id}>{artwork.artwork_name || artwork.file_name}{artwork.source_kind === "openrouter" ? " · versão criada por IA" : ""}</option>)}</select></label>
             </div>
 
-            <div className={`rounded-md border px-3 py-2 text-xs ${aiAttemptsRemaining ? "border-violet-900/60 bg-violet-950/30 text-violet-200" : "border-amber-900/60 bg-amber-950/30 text-amber-200"}`}><div className="flex flex-wrap items-center justify-between gap-2"><span>Limite de geração deste produto</span><strong>{aiAttemptsRemaining} de {ARTWORK_AI_GENERATION_LIMIT} gerações restantes</strong></div><p className="mt-1 text-[11px] opacity-75">Sugestões, uploads e reenquadramentos não consomem tentativas.</p></div>
+            <div className={`rounded-md border px-3 py-2 text-xs ${aiAttemptsRemaining ? "border-violet-900/60 bg-violet-950/30 text-violet-200" : "border-amber-900/60 bg-amber-950/30 text-amber-200"}`}><div className="flex flex-wrap items-center justify-between gap-2"><span>Limite de geração deste produto</span><strong>{aiGenerationLimit === 0 ? "Geração por IA desativada" : `${aiAttemptsRemaining} de ${aiGenerationLimit} gerações restantes`}</strong></div><p className="mt-1 text-[11px] opacity-75">Sugestões, uploads e reenquadramentos não consomem tentativas.</p></div>
 
             <div className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-950/70 p-3 sm:grid-cols-[96px_minmax(0,1fr)]">
               {aiReference ? <>

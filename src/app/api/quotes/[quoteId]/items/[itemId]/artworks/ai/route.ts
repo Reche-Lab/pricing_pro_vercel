@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { z } from "zod";
-import { ARTWORK_AI_GENERATION_LIMIT } from "@/domain/artwork/ai-generation-limit";
 import { getCurrentSession } from "@/lib/auth/session";
 import { requireWritableBilling } from "@/lib/billing/guard";
 import { addQuoteItemArtwork, assertQuoteCanBeEdited } from "@/repositories/quotes";
@@ -31,7 +30,7 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
   const body = bodySchema.safeParse(await request.json().catch(() => null));
   if (!params.success || !body.success) return NextResponse.json({ ok: false, error: "Informe um briefing com pelo menos 10 caracteres." }, { status: 400 });
 
-  let generationAttempt: { attemptsUsed: number; attemptsRemaining: number } | null = null;
+  let generationAttempt: { reserved: boolean; limit: number; attemptsUsed: number; attemptsRemaining: number } | null = null;
   try {
     await assertQuoteCanBeEdited(session.userId, session.tenantId, params.data.quoteId);
     const reference = body.data.artworkId
@@ -46,8 +45,11 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     }
 
     generationAttempt = await reserveArtworkAiGenerationAttempt({ userId: session.userId, tenantId: session.tenantId, quoteId: params.data.quoteId, itemId: params.data.itemId });
-    if (!generationAttempt) {
-      return NextResponse.json({ ok: false, error: `O limite de ${ARTWORK_AI_GENERATION_LIMIT} tentativas de geração para este produto foi atingido.`, attemptsUsed: ARTWORK_AI_GENERATION_LIMIT, attemptsRemaining: 0 }, { status: 429 });
+    if (!generationAttempt.reserved) {
+      const error = generationAttempt.limit === 0
+        ? "A geração de artes por IA está desativada para este tenant."
+        : `O limite de ${generationAttempt.limit} tentativas de geração para este produto foi atingido.`;
+      return NextResponse.json({ ok: false, error, ...generationAttempt }, { status: 429 });
     }
 
     const generated = await generateArtworkImage({ prompt: body.data.brief, diameterMm, referenceDataUrl });
