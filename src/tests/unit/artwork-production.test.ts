@@ -21,6 +21,30 @@ describe("artwork production", () => {
     expect(metadata.channels).toBe(4);
   });
 
+  it("supports zoom out and fills the uncovered circular area with white", async () => {
+    const source = await sharp({ create: { width: 800, height: 800, channels: 4, background: "#e11d48" } }).png().toBuffer();
+    const prepared = await prepareCircularArtwork({
+      dataUrl: `data:image/png;base64,${source.toString("base64")}`,
+      diameterMm: 45,
+      bleedMm: 2,
+      dpi: 150,
+      scale: 0.5
+    });
+    const { data, info } = await sharp(Buffer.from(prepared.dataUrl.split(",")[1], "base64"))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const pixel = (x: number, y: number) => {
+      const index = (y * info.width + x) * info.channels;
+      return Array.from(data.subarray(index, index + 4));
+    };
+
+    expect(pixel(Math.floor(info.width / 2), Math.floor(info.height / 2))).toEqual([225, 29, 72, 255]);
+    expect(pixel(Math.floor(info.width / 2), Math.floor(info.height * 0.15))).toEqual([255, 255, 255, 255]);
+    expect(pixel(0, 0)[3]).toBe(0);
+    expect(prepared.notes).toContain("preenchimento branco");
+  });
+
   it("creates enough A4 pages for every requested copy", () => {
     const plan = createImpositionPlan([
       { id: "art-1", label: "Arte 1", quantity: 30, diameterMm: 55, preparedDataUrl: "unused" }

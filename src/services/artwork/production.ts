@@ -69,30 +69,33 @@ export async function prepareCircularArtwork(input: {
   const requiredFinishedPx = mmToPixels(input.diameterMm, input.dpi);
   const availableFinishedPx = Math.min(metadata.width, metadata.height) * (input.diameterMm / outputDiameterMm);
   const qualityStatus = availableFinishedPx + 1 >= requiredFinishedPx ? "ready" : "warning";
-  const scale = clamp(input.scale ?? 1, 1, 5);
+  const scale = clamp(input.scale ?? 1, 0.1, 5);
   const offsetX = clamp(input.offsetX ?? 0, -1, 1);
   const offsetY = clamp(input.offsetY ?? 0, -1, 1);
   const rotationDegrees = clamp(input.rotationDegrees ?? 0, -180, 180);
-  const scaledPx = Math.max(outputPx, Math.ceil(outputPx * scale));
-  const overflowPx = scaledPx - outputPx;
-  const left = Math.round(overflowPx * ((offsetX + 1) / 2));
-  const top = Math.round(overflowPx * ((offsetY + 1) / 2));
+  const scaledPx = Math.max(1, Math.ceil(outputPx * scale));
 
   const circleMask = Buffer.from(
     `<svg width="${outputPx}" height="${outputPx}"><circle cx="${outputPx / 2}" cy="${outputPx / 2}" r="${outputPx / 2}" fill="white"/></svg>`
   );
-  const output = await image
+  const transformed = await image
     .rotate(rotationDegrees, { background: { r: 255, g: 255, b: 255, alpha: 0 } })
     .resize(scaledPx, scaledPx, { fit: "cover", position: "centre" })
-    .extract({ left, top, width: outputPx, height: outputPx })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const framed = scale >= 1
+    ? await cropOversizedArtwork(transformed, outputPx, scaledPx, offsetX, offsetY)
+    : await placeReducedArtwork(transformed, outputPx, scaledPx, offsetX, offsetY);
+  const output = await sharp(framed)
     .ensureAlpha()
     .composite([{ input: circleMask, blend: "dest-in" }])
     .png({ compressionLevel: 9 })
     .toBuffer();
 
+  const whiteMarginNote = scale < 1 ? ` Zoom reduzido para ${scale.toFixed(2)}x com preenchimento branco.` : "";
   const notes = qualityStatus === "ready"
-    ? `Arte preparada em ${input.dpi} DPI com ${input.bleedMm} mm de sangria.`
-    : `A imagem original tem ${metadata.width} x ${metadata.height} px e pode perder nitidez em ${input.dpi} DPI.`;
+    ? `Arte preparada em ${input.dpi} DPI com ${input.bleedMm} mm de sangria.${whiteMarginNote}`
+    : `A imagem original tem ${metadata.width} x ${metadata.height} px e pode perder nitidez em ${input.dpi} DPI.${whiteMarginNote}`;
 
   return {
     dataUrl: `data:image/png;base64,${output.toString("base64")}`,
@@ -103,6 +106,39 @@ export async function prepareCircularArtwork(input: {
     qualityStatus,
     notes
   };
+}
+
+async function cropOversizedArtwork(
+  image: Buffer,
+  outputPx: number,
+  scaledPx: number,
+  offsetX: number,
+  offsetY: number
+) {
+  const overflowPx = Math.max(0, scaledPx - outputPx);
+  const left = Math.round(overflowPx * ((offsetX + 1) / 2));
+  const top = Math.round(overflowPx * ((offsetY + 1) / 2));
+  return sharp(image)
+    .extract({ left, top, width: outputPx, height: outputPx })
+    .flatten({ background: "#ffffff" })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+async function placeReducedArtwork(
+  image: Buffer,
+  outputPx: number,
+  scaledPx: number,
+  offsetX: number,
+  offsetY: number
+) {
+  const availablePx = outputPx - scaledPx;
+  const left = Math.round(availablePx * ((offsetX + 1) / 2));
+  const top = Math.round(availablePx * ((offsetY + 1) / 2));
+  return sharp({ create: { width: outputPx, height: outputPx, channels: 4, background: "#ffffff" } })
+    .composite([{ input: image, left, top }])
+    .png({ compressionLevel: 9 })
+    .toBuffer();
 }
 
 function clamp(value: number, min: number, max: number) {

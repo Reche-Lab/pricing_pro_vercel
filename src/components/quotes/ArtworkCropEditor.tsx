@@ -51,6 +51,8 @@ export function ArtworkCropEditor({
     setScale(1); setOffsetX(0); setOffsetY(0); setRotation(0);
   }
 
+  const positionFactor = (1 - scale) * 50;
+
   return (
     <div className="fixed inset-0 z-[70] grid place-items-center overflow-y-auto bg-black/80 p-3 backdrop-blur-sm sm:p-6">
       <div className="my-auto grid max-h-[94vh] w-full max-w-4xl overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950 shadow-2xl lg:grid-cols-[minmax(320px,1fr)_360px]">
@@ -59,10 +61,16 @@ export function ArtworkCropEditor({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               alt={artwork.artwork_name ?? artwork.file_name}
-              className="absolute inset-0 h-full w-full select-none object-cover"
+              className="absolute select-none object-cover"
               draggable={false}
               src={imageUrl}
-              style={{ transform: `translate(${offsetX * -18}%, ${offsetY * -18}%) scale(${scale}) rotate(${rotation}deg)` }}
+              style={{
+                height: `${scale * 100}%`,
+                left: `${50 + offsetX * positionFactor}%`,
+                top: `${50 + offsetY * positionFactor}%`,
+                transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+                width: `${scale * 100}%`
+              }}
             />
             <div className="pointer-events-none absolute inset-[4.1%] rounded-full border border-dashed border-red-500/90" />
             <div className="pointer-events-none absolute inset-[9%] rounded-full border border-dashed border-cyan-300/90" />
@@ -77,7 +85,10 @@ export function ArtworkCropEditor({
             <button className="focus-ring rounded-md p-2 text-zinc-500 hover:bg-zinc-900 hover:text-white" type="button" onClick={onClose}><X size={18} /></button>
           </div>
           <div className="mt-5 grid gap-5">
-            <Slider label="Zoom" min={1} max={5} step={0.05} value={scale} onChange={setScale} display={`${scale.toFixed(2)}x`} />
+            <div>
+              <Slider label="Zoom" min={0.1} max={5} step={0.05} value={scale} onChange={setScale} display={`${scale.toFixed(2)}x`} />
+              <p className="mt-1 text-[11px] leading-4 text-zinc-600">Abaixo de 1x, a área sem imagem será preenchida em branco.</p>
+            </div>
             <Slider label="Posição horizontal" min={-1} max={1} step={0.01} value={offsetX} onChange={setOffsetX} display={`${Math.round(offsetX * 100)}%`} />
             <Slider label="Posição vertical" min={-1} max={1} step={0.01} value={offsetY} onChange={setOffsetY} display={`${Math.round(offsetY * 100)}%`} />
             <Slider label="Rotação" min={-180} max={180} step={1} value={rotation} onChange={setRotation} display={`${Math.round(rotation)}°`} />

@@ -9,7 +9,7 @@ O módulo transforma as imagens vinculadas aos itens de um orçamento em arquivo
 1. Cadastre em `Produtos` o diâmetro final de impressão da variante em milímetros.
 2. Anexe uma imagem ao item do orçamento, envie uma referência diretamente pelo assistente ou crie uma arte do zero.
 3. Abra `Itens > Produção de artes` no orçamento.
-4. Clique em `Enquadrar` e ajuste zoom, posição e rotação com as áreas de corte e segurança visíveis.
+4. Clique em `Enquadrar` e ajuste zoom, posição e rotação com as áreas de corte e segurança visíveis. O zoom pode ficar abaixo de `1x`; nesse caso, a região do corte sem imagem recebe fundo branco.
 5. Confira o alerta de qualidade, informe quantas cópias pertencem à arte e aprove a versão.
 6. Quando houver várias artes no item, distribua exatamente a quantidade vendida entre elas.
 7. Clique em `Visualizar folhas` para revisar as páginas A4 antes da geração definitiva.

@@ -137,6 +137,7 @@ Status atualizado durante a refatoracao inicial.
 - [x] Adicionar testes unitários de preparação, quantidade e PDF.
 - [x] Armazenar novos originais, preparados e PDFs em Supabase Storage privado, com fallback legado.
 - [x] Adicionar editor visual de enquadramento, zoom e rotação.
+- [x] Permitir zoom out no enquadramento e preencher em branco a área circular sem imagem.
 - [x] Distribuir a quantidade de um item entre várias artes aprovadas.
 - [x] Pré-visualizar as folhas A4 antes do download.
 - [x] Registrar lotes de produção e permitir marcá-los como impressos.

@@ -6,7 +6,7 @@ import { decodeDataUrl, loadArtworkDataUrl, uploadArtworkObject } from "@/servic
 
 const paramsSchema = z.object({ token: z.string().min(20).max(200), itemId: z.string().uuid(), artworkId: z.string().uuid() });
 const bodySchema = z.object({
-  diameterMm: z.number().min(10).max(300).optional(), scale: z.number().min(1).max(5).default(1),
+  diameterMm: z.number().min(10).max(300).optional(), scale: z.number().min(0.1).max(5).default(1),
   offsetX: z.number().min(-1).max(1).default(0), offsetY: z.number().min(-1).max(1).default(0),
   rotationDegrees: z.number().min(-180).max(180).default(0)
 });
