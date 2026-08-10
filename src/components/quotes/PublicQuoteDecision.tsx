@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, XCircle } from "lucide-react";
 
 export function PublicQuoteDecision({
@@ -10,6 +11,7 @@ export function PublicQuoteDecision({
   token: string;
   disabled: boolean;
 }) {
+  const router = useRouter();
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState<"accepted" | "rejected" | "">("");
   const [message, setMessage] = useState("");
@@ -33,6 +35,7 @@ export function PublicQuoteDecision({
 
     setDone(true);
     setMessage(decision === "accepted" ? "Orçamento aceito. Obrigado!" : "Orçamento recusado. Obrigado pelo retorno.");
+    router.refresh();
   }
 
   if (disabled || done) {

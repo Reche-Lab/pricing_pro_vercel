@@ -15,6 +15,21 @@ O módulo transforma as imagens vinculadas aos itens de um orçamento em arquivo
 7. Clique em `Visualizar folhas` para revisar as páginas A4 antes da geração definitiva.
 8. Baixe o PDF e, depois da produção física, marque o lote como impresso.
 
+## Aprovação pelo link público
+
+O cliente que recebe o link público do orçamento também pode revisar as artes sem possuir usuário interno. O acesso fica limitado ao orçamento associado ao token e permanece disponível somente enquanto o link estiver válido e o orçamento estiver aguardando decisão.
+
+No `Estúdio de aprovação das artes`, o cliente pode:
+
+- comparar as versões de cada produto;
+- enviar uma imagem PNG, JPEG ou WebP como referência;
+- criar uma arte do zero ou solicitar alterações sobre uma versão existente;
+- reenquadrar a imagem para o corte circular e conferir a área segura;
+- selecionar e aprovar uma única versão por produto;
+- aceitar ou recusar o orçamento após concluir a revisão.
+
+A arte original nunca é sobrescrita. A aprovação de uma versão desmarca as demais versões do mesmo produto. Para itens personalizados, o aceite final do orçamento é bloqueado enquanto não houver uma arte preparada e aprovada. Todas as ações públicas são auditadas sem expor uma sessão interna do tenant.
+
 O PDF mantém escala física, quantidade de cada item, margens, espaçamento, sangria e linhas de corte. Para artes do mesmo diâmetro, o modo automático compara a grade com a distribuição alternada. Para diâmetros mistos, utiliza organização por linhas com os maiores itens primeiro.
 
 ## Configuração
@@ -73,6 +88,10 @@ Nunca exponha a chave `service_role` com prefixo `NEXT_PUBLIC_`. Originais, arte
 - `GET /api/quotes/:quoteId/production`
 - `POST /api/quotes/:quoteId/items/:itemId/artworks/:artworkId/prepare`
 - `POST /api/quotes/:quoteId/items/:itemId/artworks/:artworkId/approval`
+- `POST /api/public/quotes/:token/items/:itemId/artworks`
+- `POST /api/public/quotes/:token/items/:itemId/artworks/ai`
+- `POST /api/public/quotes/:token/items/:itemId/artworks/:artworkId/prepare`
+- `POST /api/public/quotes/:token/items/:itemId/artworks/:artworkId/approval`
 - `POST /api/quotes/:quoteId/items/:itemId/artworks/ai`
 - `GET /api/quotes/:quoteId/production/pdf`
 - `GET /api/quotes/:quoteId/production/pdf?preview=1`

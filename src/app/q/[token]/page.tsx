@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { PublicQuoteDecision } from "@/components/quotes/PublicQuoteDecision";
+import { PublicArtworkStudio } from "@/components/quotes/PublicArtworkStudio";
 import { getPublicQuoteByToken } from "@/repositories/quotes";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -134,14 +135,14 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
               </dl>
             </section>
 
-            <PublicQuoteDecision disabled={decisionLocked} token={token} />
-
             <p className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4 text-xs leading-5 text-zinc-500">
               Os valores estão sujeitos à confirmação final de disponibilidade, pagamento e produção. Ao aceitar,
               a equipe responsável será avisada para seguir com o atendimento.
             </p>
           </aside>
         </section>
+        <PublicArtworkStudio disabled={decisionLocked} items={detail.items} quoteId={detail.quote.id} token={token} />
+        <div className="ml-auto mt-5 max-w-md"><PublicQuoteDecision disabled={decisionLocked} token={token} /></div>
       </div>
     </main>
   );

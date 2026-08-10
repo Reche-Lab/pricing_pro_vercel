@@ -525,19 +525,24 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
     const itemsResult = await client.query<QuoteItemRow>(
       `
         select
-          id,
-          description,
-          quantity,
-          unit_price::text as unit_price,
-          total_price::text as total_price,
-          artwork_name,
-          pricing_rule,
-          pricing_group_key,
-          reference_quantity,
-          base_unit_price::text as base_unit_price
-        from quote_items
-        where quote_id = $1
-        order by created_at asc
+          qi.id,
+          qi.product_variant_id,
+          qi.description,
+          qi.quantity,
+          qi.unit_price::text as unit_price,
+          qi.total_price::text as total_price,
+          qi.artwork_name,
+          qi.pricing_rule,
+          qi.pricing_group_key,
+          qi.reference_quantity,
+          qi.base_unit_price::text as base_unit_price,
+          to_jsonb(pv)->>'print_diameter_mm' as print_diameter_mm,
+          pv.width_cm,
+          pv.length_cm
+        from quote_items qi
+        left join product_variants pv on pv.id = qi.product_variant_id and pv.tenant_id = qi.tenant_id
+        where qi.quote_id = $1
+        order by qi.created_at asc
       `,
       [quote.id]
     );
@@ -551,7 +556,21 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           mime_type,
           file_size,
           data_url,
-          storage_path
+          storage_path,
+          prepared_data_url,
+          prepared_storage_path,
+          target_diameter_mm,
+          dpi,
+          quality_status,
+          approval_status,
+          preparation_notes,
+          source_kind,
+          crop_scale,
+          crop_offset_x,
+          crop_offset_y,
+          rotation_degrees,
+          version,
+          production_quantity
         from quote_item_artworks
         where quote_id = $1
         order by created_at asc
@@ -587,6 +606,29 @@ export async function decidePublicQuote(
   const tokenHash = hashPublicToken(token);
   const client = await getPool().connect();
   try {
+    if (decision === "accepted") {
+      const pendingArtwork = await client.query<{ description: string }>(
+        `select qi.description
+         from quotes q
+         join quote_items qi on qi.quote_id = q.id and qi.tenant_id = q.tenant_id
+         where q.public_token_hash = $1 and q.public_token_expires_at > now()
+           and q.status in ('draft', 'sent')
+           and (qi.artwork_name is not null or exists (
+             select 1 from quote_item_artworks existing
+             where existing.quote_id = q.id and existing.quote_item_id = qi.id
+           ))
+           and not exists (
+             select 1 from quote_item_artworks approved
+             where approved.quote_id = q.id and approved.quote_item_id = qi.id
+               and approved.approval_status = 'approved'
+           )
+         limit 1`,
+        [tokenHash]
+      );
+      if (pendingArtwork.rows[0]) {
+        throw new Error(`Selecione, reenquadre e aprove uma arte para ${pendingArtwork.rows[0].description} antes de aceitar o orçamento.`);
+      }
+    }
     const result = await client.query<{ id: string; tenant_id: string; status: QuoteStatus }>(
       `
         update quotes

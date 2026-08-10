@@ -19,13 +19,16 @@ export async function POST(request: Request, context: { params: Promise<{ token:
     return NextResponse.json({ ok: false, error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const result = await decidePublicQuote(token, parsed.data.decision, parsed.data.note);
-  if (!result) {
-    return NextResponse.json(
-      { ok: false, error: "Este orçamento não está mais disponível para decisão." },
-      { status: 409 }
-    );
+  try {
+    const result = await decidePublicQuote(token, parsed.data.decision, parsed.data.note);
+    if (!result) {
+      return NextResponse.json(
+        { ok: false, error: "Este orçamento não está mais disponível para decisão." },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ ok: true, result });
+  } catch (error) {
+    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Não foi possível registrar a decisão." }, { status: 409 });
   }
-
-  return NextResponse.json({ ok: true, result });
 }

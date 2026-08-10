@@ -10,6 +10,7 @@ export function ArtworkCropEditor({
   imageUrl,
   itemId,
   quoteId,
+  prepareUrl,
   onClose,
   onSaved
 }: {
@@ -18,6 +19,7 @@ export function ArtworkCropEditor({
   imageUrl: string;
   itemId: string;
   quoteId: string;
+  prepareUrl?: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -31,7 +33,7 @@ export function ArtworkCropEditor({
   async function prepare() {
     setSaving(true);
     setError("");
-    const response = await fetch(`/api/quotes/${quoteId}/items/${itemId}/artworks/${artwork.id}/prepare`, {
+    const response = await fetch(prepareUrl ?? `/api/quotes/${quoteId}/items/${itemId}/artworks/${artwork.id}/prepare`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ diameterMm, scale, offsetX, offsetY, rotationDegrees: rotation })
