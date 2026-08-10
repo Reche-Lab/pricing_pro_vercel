@@ -4,7 +4,8 @@ import { decidePublicQuote } from "@/repositories/quotes";
 
 const decisionSchema = z.object({
   decision: z.enum(["accepted", "rejected"]),
-  note: z.string().trim().max(1000).optional().nullable()
+  note: z.string().trim().max(1000).optional().nullable(),
+  acceptArtworkAsIs: z.boolean().optional().default(false)
 });
 
 export async function POST(request: Request, context: { params: Promise<{ token: string }> }) {
@@ -20,7 +21,9 @@ export async function POST(request: Request, context: { params: Promise<{ token:
   }
 
   try {
-    const result = await decidePublicQuote(token, parsed.data.decision, parsed.data.note);
+    const result = await decidePublicQuote(token, parsed.data.decision, parsed.data.note, {
+      acceptArtworkAsIs: parsed.data.acceptArtworkAsIs
+    });
     if (!result) {
       return NextResponse.json(
         { ok: false, error: "Este orçamento não está mais disponível para decisão." },

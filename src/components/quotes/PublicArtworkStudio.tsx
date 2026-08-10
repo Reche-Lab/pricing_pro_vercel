@@ -82,7 +82,7 @@ export function PublicArtworkStudio({ token, quoteId, items, disabled }: { token
   }
 
   if (!item) return null;
-  return <section className="mt-5 overflow-hidden rounded-lg border border-violet-400/20 bg-zinc-900/70">
+  return <section className="mt-5 scroll-mt-6 overflow-hidden rounded-lg border border-violet-400/20 bg-zinc-900/70" id="public-artwork-studio">
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 px-5 py-4">
       <div><p className="inline-flex items-center gap-2 text-sm font-semibold text-white"><Sparkles className="text-violet-300" size={17} /> Estúdio de aprovação das artes</p><p className="mt-1 text-xs leading-5 text-zinc-400">Escolha, ajuste ou crie uma versão para cada produto antes de aceitar o orçamento.</p></div>
       <span className={`rounded-md px-2.5 py-1 text-xs font-medium ${progress.approved === progress.required ? "bg-emerald-400/10 text-emerald-300" : "bg-violet-400/10 text-violet-200"}`}>{progress.approved} de {progress.required} produto(s) aprovados</span>

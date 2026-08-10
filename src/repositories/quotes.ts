@@ -601,10 +601,12 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
 export async function decidePublicQuote(
   token: string,
   decision: "accepted" | "rejected",
-  note?: string | null
+  note?: string | null,
+  options?: { acceptArtworkAsIs?: boolean }
 ): Promise<{ id: string; status: QuoteStatus } | null> {
   const tokenHash = hashPublicToken(token);
   const client = await getPool().connect();
+  let acceptedArtworkAsIs = false;
   try {
     if (decision === "accepted") {
       const pendingArtwork = await client.query<{ description: string }>(
@@ -625,9 +627,10 @@ export async function decidePublicQuote(
          limit 1`,
         [tokenHash]
       );
-      if (pendingArtwork.rows[0]) {
+      if (pendingArtwork.rows[0] && !options?.acceptArtworkAsIs) {
         throw new Error(`Selecione, reenquadre e aprove uma arte para ${pendingArtwork.rows[0].description} antes de aceitar o orçamento.`);
       }
+      acceptedArtworkAsIs = Boolean(pendingArtwork.rows[0] && options?.acceptArtworkAsIs);
     }
     const result = await client.query<{ id: string; tenant_id: string; status: QuoteStatus }>(
       `
@@ -653,7 +656,11 @@ export async function decidePublicQuote(
         insert into audit_logs (tenant_id, action, entity_type, entity_id, metadata)
         values ($1, 'quotes.public_decision', 'quote', $2, $3)
       `,
-      [row.tenant_id, row.id, JSON.stringify({ decision, hasNote: Boolean(clean(note)) })]
+      [row.tenant_id, row.id, JSON.stringify({
+        decision,
+        hasNote: Boolean(clean(note)),
+        acceptedArtworkAsIs
+      })]
     );
 
     return { id: row.id, status: row.status };

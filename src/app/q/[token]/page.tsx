@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { PublicQuoteDecision } from "@/components/quotes/PublicQuoteDecision";
 import { PublicArtworkStudio } from "@/components/quotes/PublicArtworkStudio";
+import { getPublicArtworkReviewProgress } from "@/domain/quotes/public-artwork-review";
 import { getPublicQuoteByToken } from "@/repositories/quotes";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -23,6 +24,11 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
   if (!detail) notFound();
 
   const decisionLocked = detail.quote.status === "accepted" || detail.quote.status === "rejected";
+  const artworkProgress = getPublicArtworkReviewProgress(detail.items.map((item) => ({
+    artworkName: item.artwork_name,
+    artworks: item.artworks?.map((artwork) => ({ approvalStatus: artwork.approval_status }))
+  })));
+  const artworkReviewPending = artworkProgress.approved < artworkProgress.required;
 
   return (
     <main className="min-h-screen bg-zinc-950 px-4 py-6 text-zinc-100 sm:px-6 lg:px-8">
@@ -135,6 +141,8 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
               </dl>
             </section>
 
+            <PublicQuoteDecision artworkReviewPending={artworkReviewPending} disabled={decisionLocked} token={token} />
+
             <p className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4 text-xs leading-5 text-zinc-500">
               Os valores estão sujeitos à confirmação final de disponibilidade, pagamento e produção. Ao aceitar,
               a equipe responsável será avisada para seguir com o atendimento.
@@ -142,7 +150,6 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
           </aside>
         </section>
         <PublicArtworkStudio disabled={decisionLocked} items={detail.items} quoteId={detail.quote.id} token={token} />
-        <div className="ml-auto mt-5 max-w-md"><PublicQuoteDecision disabled={decisionLocked} token={token} /></div>
       </div>
     </main>
   );

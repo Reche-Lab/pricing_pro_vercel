@@ -2,28 +2,31 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ImageIcon, X, XCircle } from "lucide-react";
 
 export function PublicQuoteDecision({
   token,
-  disabled
+  disabled,
+  artworkReviewPending
 }: {
   token: string;
   disabled: boolean;
+  artworkReviewPending: boolean;
 }) {
   const router = useRouter();
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState<"accepted" | "rejected" | "">("");
   const [message, setMessage] = useState("");
   const [done, setDone] = useState(false);
+  const [confirmArtwork, setConfirmArtwork] = useState(false);
 
-  async function decide(decision: "accepted" | "rejected") {
+  async function decide(decision: "accepted" | "rejected", acceptArtworkAsIs = false) {
     setLoading(decision);
     setMessage("");
     const response = await fetch(`/api/public/quotes/${token}/decision`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ decision, note })
+      body: JSON.stringify({ decision, note, acceptArtworkAsIs })
     });
     setLoading("");
 
@@ -34,6 +37,7 @@ export function PublicQuoteDecision({
     }
 
     setDone(true);
+    setConfirmArtwork(false);
     setMessage(decision === "accepted" ? "Orçamento aceito. Obrigado!" : "Orçamento recusado. Obrigado pelo retorno.");
     router.refresh();
   }
@@ -46,7 +50,21 @@ export function PublicQuoteDecision({
     );
   }
 
+  function requestAcceptance() {
+    if (artworkReviewPending) {
+      setConfirmArtwork(true);
+      return;
+    }
+    void decide("accepted");
+  }
+
+  function reviewArtwork() {
+    setConfirmArtwork(false);
+    document.getElementById("public-artwork-studio")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   return (
+    <>
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
       <h2 className="text-base font-semibold text-white">Decisão do orçamento</h2>
       <p className="mt-1 text-sm text-zinc-400">
@@ -63,7 +81,7 @@ export function PublicQuoteDecision({
         <button
           className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-emerald-950 transition-colors hover:bg-emerald-300 disabled:opacity-60"
           disabled={Boolean(loading)}
-          onClick={() => decide("accepted")}
+          onClick={requestAcceptance}
           type="button"
         >
           <CheckCircle2 size={17} />
@@ -72,7 +90,7 @@ export function PublicQuoteDecision({
         <button
           className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg border border-rose-400/30 bg-rose-400/10 px-4 py-2 text-sm font-semibold text-rose-100 transition-colors hover:bg-rose-400/20 disabled:opacity-60"
           disabled={Boolean(loading)}
-          onClick={() => decide("rejected")}
+          onClick={() => void decide("rejected")}
           type="button"
         >
           <XCircle size={17} />
@@ -81,5 +99,19 @@ export function PublicQuoteDecision({
       </div>
       {message ? <p className="mt-3 text-sm text-amber-200">{message}</p> : null}
     </div>
+    {confirmArtwork ? <div className="fixed inset-0 z-[80] grid place-items-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="artwork-confirm-title">
+      <div className="my-auto w-full max-w-lg overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950 shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-zinc-800 p-5">
+          <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-400/10 text-amber-300"><AlertTriangle size={19} /></span><div><h2 className="font-semibold text-white" id="artwork-confirm-title">Existem artes sem aprovação</h2><p className="mt-1 text-sm leading-6 text-zinc-400">Você ainda não revisou e aprovou todas as artes deste orçamento.</p></div></div>
+          <button aria-label="Fechar" className="focus-ring rounded-md p-2 text-zinc-500 hover:bg-zinc-900 hover:text-white" type="button" onClick={() => setConfirmArtwork(false)}><X size={18} /></button>
+        </div>
+        <div className="p-5"><p className="text-sm leading-6 text-zinc-300">Deseja aceitar o orçamento usando as artes exatamente como estão agora, sem concluir o reenquadramento e a seleção das versões?</p><p className="mt-3 rounded-md border border-amber-900/50 bg-amber-950/30 p-3 text-xs leading-5 text-amber-200">Ao confirmar, a equipe receberá o aceite com a indicação de que as artes atuais foram aceitas sem revisão final.</p></div>
+        <div className="grid gap-2 border-t border-zinc-800 p-4 sm:grid-cols-2">
+          <button className="focus-ring inline-flex items-center justify-center gap-2 rounded-md border border-violet-700 px-4 py-2.5 text-sm font-medium text-violet-200 hover:bg-violet-950/50" type="button" onClick={reviewArtwork}><ImageIcon size={16} /> Revisar e reenquadrar a(s) arte(s)</button>
+          <button className="focus-ring inline-flex items-center justify-center gap-2 rounded-md bg-emerald-400 px-4 py-2.5 text-sm font-semibold text-emerald-950 hover:bg-emerald-300 disabled:opacity-60" disabled={Boolean(loading)} type="button" onClick={() => void decide("accepted", true)}><CheckCircle2 size={16} /> {loading === "accepted" ? "Confirmando..." : "Sim, aceitar como estão"}</button>
+        </div>
+      </div>
+    </div> : null}
+    </>
   );
 }
