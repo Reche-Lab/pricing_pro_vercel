@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
 import { isValidCpfOrCnpj } from "@/lib/validation/documents";
-import { updateQuoteCustomerDelivery } from "@/repositories/quotes";
+import { assertQuoteCanBeEdited, updateQuoteCustomerDelivery } from "@/repositories/quotes";
 
 const schema = z.object({
   name: z.string().trim().min(2).max(180),
@@ -55,6 +55,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ quote
   }
 
   try {
+    await assertQuoteCanBeEdited(session.userId, session.tenantId, quoteId);
     const result = await updateQuoteCustomerDelivery(
       session.userId,
       session.tenantId,

@@ -27,13 +27,15 @@ export function QuotePaymentTermPanel({
   initialPaymentTerm,
   options,
   quoteId,
-  total
+  total,
+  disabled = false
 }: {
   defaultCategory: { externalId: string; name: string };
   initialPaymentTerm: PaymentTerm | null;
   options: PaymentOption[];
   quoteId: string;
   total: number;
+  disabled?: boolean;
 }) {
   const router = useRouter();
   const [paymentOptions, setPaymentOptions] = useState(options);
@@ -203,7 +205,8 @@ export function QuotePaymentTermPanel({
         </button>
         <div className="flex items-center gap-2">
           <button
-            className="focus-ring inline-flex h-8 w-fit items-center justify-center rounded-md border border-zinc-700 px-2 text-xs font-medium text-zinc-300 hover:bg-zinc-900"
+          className="focus-ring inline-flex h-8 w-fit items-center justify-center rounded-md border border-zinc-700 px-2 text-xs font-medium text-zinc-300 hover:bg-zinc-900"
+          disabled={disabled}
             type="button"
             onClick={() => setOpen((current) => !current)}
           >
@@ -211,7 +214,7 @@ export function QuotePaymentTermPanel({
           </button>
           <button
             className="focus-ring inline-flex h-8 w-fit items-center justify-center gap-2 rounded-md border border-zinc-700 px-2 text-xs font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-60"
-            disabled={state === "syncing"}
+            disabled={disabled || state === "syncing"}
             type="button"
             onClick={syncOptions}
           >
@@ -221,7 +224,7 @@ export function QuotePaymentTermPanel({
         </div>
       </div>
 
-      {open ? (
+      {disabled ? <p className="mt-3 border-t border-zinc-800/70 pt-3 text-xs text-amber-200">Reabra administrativamente o orçamento para alterar a condição de pagamento.</p> : open ? (
         <div className="mt-3 grid gap-3 border-t border-zinc-800/70 pt-3">
           <p className="text-xs text-zinc-400">
             Obrigatório para gerar pedido de venda no Olist; a nota fiscal herdará essa condição.

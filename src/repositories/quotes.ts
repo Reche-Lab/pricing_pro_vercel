@@ -6,7 +6,7 @@ import {
   type CompositePricingRule,
   type CompositeQuoteInputItem
 } from "@/domain/quotes/composite-pricing";
-import { canTransitionQuoteStatus, createQuoteCalculationSnapshot } from "@/domain/quotes/quotes";
+import { canTransitionQuoteStatus, createQuoteCalculationSnapshot, isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
 import type { QuoteStatus } from "@/domain/quotes/types";
 import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
 import { getPool, withTenantContext } from "@/lib/db/client";
@@ -67,6 +67,11 @@ export type QuoteDetail = {
   public_accepted_at?: string | null;
   public_rejected_at?: string | null;
   customer_decision_note?: string | null;
+  edit_reopened_at?: string | null;
+  edit_reopened_by?: string | null;
+  edit_reopened_by_name?: string | null;
+  edit_reopened_reason?: string | null;
+  edit_relocked_at?: string | null;
 };
 
 export type QuoteItemRow = {
@@ -309,9 +314,15 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           q.public_accepted_at,
           q.public_rejected_at,
           q.customer_decision_note
+          ,to_jsonb(q)->>'edit_reopened_at' as edit_reopened_at
+          ,to_jsonb(q)->>'edit_reopened_by' as edit_reopened_by
+          ,reopen_user.name as edit_reopened_by_name
+          ,to_jsonb(q)->>'edit_reopened_reason' as edit_reopened_reason
+          ,to_jsonb(q)->>'edit_relocked_at' as edit_relocked_at
         from quotes q
         left join customers c on c.id = q.customer_id and c.tenant_id = q.tenant_id
         left join app_users u on u.id = q.created_by
+        left join app_users reopen_user on reopen_user.id::text = to_jsonb(q)->>'edit_reopened_by'
         where q.tenant_id = $1 and q.id = $2
         limit 1
       `,
@@ -1200,6 +1211,8 @@ export async function updateQuoteEditable(
             to_jsonb(q)->>'external_olist_order_id' as external_olist_order_id,
             to_jsonb(q)->>'external_olist_invoice_id' as external_olist_invoice_id,
             to_jsonb(q)->>'public_accepted_at' as public_accepted_at,
+            to_jsonb(q)->>'edit_reopened_at' as edit_reopened_at,
+            to_jsonb(q)->>'edit_relocked_at' as edit_relocked_at,
             null::text as created_by_name
           from quotes q
           where q.tenant_id = $1 and q.id = $2
@@ -1210,7 +1223,9 @@ export async function updateQuoteEditable(
       const quote = quoteResult.rows[0];
       if (!quote) throw new Error("Quote not found.");
       if (quote.external_olist_invoice_id) throw new Error("Orçamento com nota fiscal Olist não pode ser editado.");
-      if (quote.public_accepted_at || quote.status === "accepted") throw new Error("Orçamento aceito pelo cliente não pode ser editado.");
+      if ((quote.public_accepted_at || quote.status === "accepted") && !isQuoteAdministrativeEditingOpen({ editReopenedAt: quote.edit_reopened_at, editRelockedAt: quote.edit_relocked_at })) {
+        throw new Error("Orçamento aceito pelo cliente está fechado para edição.");
+      }
 
       const currentItemsResult = await client.query<QuoteItemRow>(
         `
@@ -1543,12 +1558,16 @@ async function assertQuoteArtworkEditable(
     status: QuoteStatus;
     external_olist_invoice_id: string | null;
     public_accepted_at: string | null;
+    edit_reopened_at: string | null;
+    edit_relocked_at: string | null;
   }>(
     `
       select
         q.status,
         to_jsonb(q)->>'external_olist_invoice_id' as external_olist_invoice_id,
-        to_jsonb(q)->>'public_accepted_at' as public_accepted_at
+        to_jsonb(q)->>'public_accepted_at' as public_accepted_at,
+        to_jsonb(q)->>'edit_reopened_at' as edit_reopened_at,
+        to_jsonb(q)->>'edit_relocked_at' as edit_relocked_at
       from quotes q
       join quote_items qi on qi.quote_id = q.id and qi.tenant_id = q.tenant_id
       where q.tenant_id = $1 and q.id = $2 and qi.id = $3
@@ -1559,9 +1578,76 @@ async function assertQuoteArtworkEditable(
   const quote = result.rows[0];
   if (!quote) throw new Error("Item do orçamento não encontrado.");
   if (quote.external_olist_invoice_id) throw new Error("Orçamento com nota fiscal Olist não pode ser editado.");
-  if (quote.public_accepted_at || quote.status === "accepted") {
-    throw new Error("Orçamento aceito pelo cliente não pode ser editado.");
+  if ((quote.public_accepted_at || quote.status === "accepted") && !isQuoteAdministrativeEditingOpen({ editReopenedAt: quote.edit_reopened_at, editRelockedAt: quote.edit_relocked_at })) {
+    throw new Error("Orçamento aceito pelo cliente está fechado para edição.");
   }
+}
+
+export async function setQuoteAdministrativeEditing(input: {
+  userId: string;
+  tenantId: string;
+  quoteId: string;
+  action: "reopen" | "lock";
+  reason?: string | null;
+}) {
+  return withTenantContext(input.userId, input.tenantId, async (client) => {
+    const current = await client.query<{
+      id: string; status: QuoteStatus; public_accepted_at: string | null;
+      external_olist_invoice_id: string | null;
+    }>(
+      `select id, status, to_jsonb(quotes)->>'public_accepted_at' as public_accepted_at,
+              to_jsonb(quotes)->>'external_olist_invoice_id' as external_olist_invoice_id
+       from quotes where tenant_id = $1 and id = $2 for update`,
+      [input.tenantId, input.quoteId]
+    );
+    const quote = current.rows[0];
+    if (!quote) throw new Error("Orçamento não encontrado.");
+    if (!quote.public_accepted_at && quote.status !== "accepted") throw new Error("Somente um orçamento aceito precisa ser reaberto.");
+    if (quote.external_olist_invoice_id) throw new Error("Orçamento com nota fiscal Olist não pode ser reaberto para edição.");
+    if (input.action === "reopen" && !input.reason?.trim()) throw new Error("Informe o motivo da reabertura.");
+
+    await client.query(
+      input.action === "reopen"
+        ? `update quotes set edit_reopened_at = now(), edit_reopened_by = $3,
+             edit_reopened_reason = $4, edit_relocked_at = null, updated_at = now()
+           where tenant_id = $1 and id = $2`
+        : `update quotes set edit_relocked_at = now(), updated_at = now()
+           where tenant_id = $1 and id = $2`,
+      input.action === "reopen"
+        ? [input.tenantId, input.quoteId, input.userId, input.reason?.trim()]
+        : [input.tenantId, input.quoteId]
+    );
+    await client.query(
+      `insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+       values ($1, $2, $3, 'quote', $4, $5)`,
+      [input.tenantId, input.userId, input.action === "reopen" ? "quotes.edit_reopen" : "quotes.edit_relock", input.quoteId,
+        JSON.stringify({ reason: input.action === "reopen" ? input.reason?.trim() : null, publicAcceptancePreserved: true })]
+    );
+    return { id: input.quoteId, action: input.action };
+  });
+}
+
+export async function assertQuoteCanBeEdited(userId: string, tenantId: string, quoteId: string) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const result = await client.query<{
+      status: QuoteStatus; public_accepted_at: string | null; edit_reopened_at: string | null;
+      edit_relocked_at: string | null; external_olist_invoice_id: string | null;
+    }>(
+      `select status, to_jsonb(quotes)->>'public_accepted_at' as public_accepted_at,
+              to_jsonb(quotes)->>'edit_reopened_at' as edit_reopened_at,
+              to_jsonb(quotes)->>'edit_relocked_at' as edit_relocked_at,
+              to_jsonb(quotes)->>'external_olist_invoice_id' as external_olist_invoice_id
+       from quotes where tenant_id = $1 and id = $2 limit 1`,
+      [tenantId, quoteId]
+    );
+    const quote = result.rows[0];
+    if (!quote) throw new Error("Orçamento não encontrado.");
+    if (quote.external_olist_invoice_id) throw new Error("Orçamento com nota fiscal Olist não pode ser editado.");
+    if ((quote.public_accepted_at || quote.status === "accepted") && !isQuoteAdministrativeEditingOpen({ editReopenedAt: quote.edit_reopened_at, editRelockedAt: quote.edit_relocked_at })) {
+      throw new Error("Orçamento aceito pelo cliente está fechado para edição.");
+    }
+    return true;
+  });
 }
 
 async function recordQuoteArtworkEdit(

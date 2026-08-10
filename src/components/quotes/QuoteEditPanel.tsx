@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Edit3, History, ImagePlus, Lock, Save, Trash2, Upload } from "lucide-react";
 import { calculateQuote, roundMoney } from "@/domain/pricing/pricing";
+import { isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
 import type { PricingCurve } from "@/domain/pricing/types";
 import type { QuoteDetail, QuoteEditLogRow, QuoteItemRow } from "@/repositories/quotes";
 
@@ -746,7 +747,7 @@ function calculateSuggestedUnitPrice(
 
 function editBlockedReason(quote: QuoteDetail) {
   if (quote.external_olist_invoice_id) return "Este orçamento já possui nota fiscal Olist. Para alterar valores ou itens, crie um novo orçamento ou cancele/substitua a nota conforme o fluxo fiscal.";
-  if (quote.public_accepted_at || quote.status === "accepted") return "Este orçamento já foi aceito pelo cliente. Para alterar condições, gere uma nova versão/orçamento.";
+  if ((quote.public_accepted_at || quote.status === "accepted") && !isQuoteAdministrativeEditingOpen({ editReopenedAt: quote.edit_reopened_at, editRelockedAt: quote.edit_relocked_at })) return "Este orçamento foi aceito e está fechado. Um owner ou usuário com permissão de aprovação precisa reabri-lo para edição.";
   return null;
 }
 

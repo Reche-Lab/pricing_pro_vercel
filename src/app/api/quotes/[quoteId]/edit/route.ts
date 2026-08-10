@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
 import { requireWritableBilling } from "@/lib/billing/guard";
+import { isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
 import { getQuoteDetail, updateQuoteEditable, type QuoteItemRow } from "@/repositories/quotes";
 import { listProductVariants } from "@/repositories/products";
 import { OLIST_DEFAULT_PATHS } from "@/services/olist/defaults";
@@ -46,8 +47,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ quote
   if (detail.quote.external_olist_invoice_id) {
     return NextResponse.json({ ok: false, error: "Orçamento com nota fiscal Olist não pode ser editado." }, { status: 409 });
   }
-  if (detail.quote.public_accepted_at || detail.quote.status === "accepted") {
-    return NextResponse.json({ ok: false, error: "Orçamento aceito pelo cliente não pode ser editado." }, { status: 409 });
+  if ((detail.quote.public_accepted_at || detail.quote.status === "accepted") && !isQuoteAdministrativeEditingOpen({ editReopenedAt: detail.quote.edit_reopened_at, editRelockedAt: detail.quote.edit_relocked_at })) {
+    return NextResponse.json({ ok: false, error: "Orçamento aceito pelo cliente está fechado para edição." }, { status: 409 });
   }
 
   const changedUnitPrice = parsed.data.items.some((item) => {

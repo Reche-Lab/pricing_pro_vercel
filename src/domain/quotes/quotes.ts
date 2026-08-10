@@ -13,6 +13,15 @@ export function canTransitionQuoteStatus(from: QuoteStatus, to: QuoteStatus): bo
   return ALLOWED_TRANSITIONS[from].includes(to);
 }
 
+export function isQuoteAdministrativeEditingOpen(input: {
+  editReopenedAt?: string | null;
+  editRelockedAt?: string | null;
+}) {
+  if (!input.editReopenedAt) return false;
+  if (!input.editRelockedAt) return true;
+  return new Date(input.editReopenedAt).getTime() > new Date(input.editRelockedAt).getTime();
+}
+
 export function createQuoteCalculationSnapshot(input: QuoteSnapshotInput): QuoteCalculationSnapshot {
   return {
     schemaVersion: 1,

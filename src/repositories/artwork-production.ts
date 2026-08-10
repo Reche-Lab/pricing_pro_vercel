@@ -202,6 +202,7 @@ export async function savePreparedArtwork(input: {
   crop: { scale: number; offsetX: number; offsetY: number; rotationDegrees: number };
 }) {
   return withTenantContext(input.userId, input.tenantId, async (client) => {
+    await assertInternalArtworkEditingAllowed(client, input.tenantId, input.quoteId, input.itemId);
     const result = await client.query<ArtworkProductionRow>(
       `
         update quote_item_artworks
@@ -273,6 +274,7 @@ export async function setArtworkApproval(input: {
   productionQuantity?: number | null;
 }) {
   return withTenantContext(input.userId, input.tenantId, async (client) => {
+    await assertInternalArtworkEditingAllowed(client, input.tenantId, input.quoteId, input.itemId);
     const result = await client.query<{ id: string }>(
       `
         update quote_item_artworks
@@ -294,6 +296,26 @@ export async function setArtworkApproval(input: {
     );
     return result.rows[0];
   });
+}
+
+async function assertInternalArtworkEditingAllowed(client: import("pg").PoolClient, tenantId: string, quoteId: string, itemId: string) {
+  const result = await client.query<{
+    status: string; public_accepted_at: string | null; edit_reopened_at: string | null;
+    edit_relocked_at: string | null; external_olist_invoice_id: string | null;
+  }>(
+    `select q.status, to_jsonb(q)->>'public_accepted_at' as public_accepted_at,
+            to_jsonb(q)->>'edit_reopened_at' as edit_reopened_at,
+            to_jsonb(q)->>'edit_relocked_at' as edit_relocked_at,
+            to_jsonb(q)->>'external_olist_invoice_id' as external_olist_invoice_id
+     from quotes q join quote_items qi on qi.quote_id = q.id and qi.tenant_id = q.tenant_id
+     where q.tenant_id = $1 and q.id = $2 and qi.id = $3 for update of q, qi`,
+    [tenantId, quoteId, itemId]
+  );
+  const quote = result.rows[0];
+  if (!quote) throw new Error("Item do orçamento não encontrado.");
+  if (quote.external_olist_invoice_id) throw new Error("Orçamento com nota fiscal Olist não pode ser editado.");
+  const reopened = Boolean(quote.edit_reopened_at) && (!quote.edit_relocked_at || new Date(quote.edit_reopened_at as string).getTime() > new Date(quote.edit_relocked_at).getTime());
+  if ((quote.public_accepted_at || quote.status === "accepted") && !reopened) throw new Error("Orçamento aceito pelo cliente está fechado para edição.");
 }
 
 export async function recordArtworkPrintJob(input: {

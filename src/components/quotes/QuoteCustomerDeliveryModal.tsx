@@ -6,7 +6,7 @@ import { CheckCircle2, Link2, MapPin, Pencil, Unlink, X } from "lucide-react";
 import { fetchCepAddress, formatCep, normalizeCep } from "@/lib/cep";
 import type { QuoteDetail } from "@/repositories/quotes";
 
-export function QuoteCustomerDeliveryModal({ quote }: { quote: QuoteDetail }) {
+export function QuoteCustomerDeliveryModal({ quote, disabled = false }: { quote: QuoteDetail; disabled?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -97,7 +97,9 @@ export function QuoteCustomerDeliveryModal({ quote }: { quote: QuoteDetail }) {
   return (
     <>
       <button
-        className="focus-ring inline-flex h-9 items-center gap-2 rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-950"
+        className="focus-ring inline-flex h-9 items-center gap-2 rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-950 disabled:cursor-not-allowed disabled:opacity-40"
+        disabled={disabled}
+        title={disabled ? "Reabra administrativamente o orçamento para editar os dados." : "Editar dados do cliente e entrega"}
         onClick={() => {
           setError("");
           setMessage("");

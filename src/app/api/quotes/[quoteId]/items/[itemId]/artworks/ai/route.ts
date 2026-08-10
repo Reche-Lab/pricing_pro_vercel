@@ -3,7 +3,7 @@ import sharp from "sharp";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
 import { requireWritableBilling } from "@/lib/billing/guard";
-import { addQuoteItemArtwork } from "@/repositories/quotes";
+import { addQuoteItemArtwork, assertQuoteCanBeEdited } from "@/repositories/quotes";
 import { getArtworkPreparationSource, markArtworkAsGenerated, resolveArtworkDiameterMm } from "@/repositories/artwork-production";
 import { decodeImageDataUrl } from "@/services/artwork/production";
 import { generateArtworkImage, suggestArtworkDirection } from "@/services/openrouter/artwork-agent";
@@ -31,6 +31,7 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
   if (!params.success || !body.success) return NextResponse.json({ ok: false, error: "Informe um briefing com pelo menos 10 caracteres." }, { status: 400 });
 
   try {
+    await assertQuoteCanBeEdited(session.userId, session.tenantId, params.data.quoteId);
     const reference = body.data.artworkId
       ? await getArtworkPreparationSource(session.userId, session.tenantId, params.data.quoteId, params.data.itemId, body.data.artworkId)
       : null;

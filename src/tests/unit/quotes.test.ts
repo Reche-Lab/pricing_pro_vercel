@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canTransitionQuoteStatus, createQuoteCalculationSnapshot } from "@/domain/quotes/quotes";
+import { canTransitionQuoteStatus, createQuoteCalculationSnapshot, isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
 
 describe("quotes domain", () => {
   it("allows only valid quote status transitions", () => {
@@ -31,5 +31,11 @@ describe("quotes domain", () => {
     expect(snapshot.schemaVersion).toBe(1);
     expect(snapshot.createdAt).toEqual(expect.any(String));
     expect(snapshot.calculation.marginPercent).toBe(60);
+  });
+
+  it("opens accepted quote editing only until it is administratively locked again", () => {
+    expect(isQuoteAdministrativeEditingOpen({ editReopenedAt: null, editRelockedAt: null })).toBe(false);
+    expect(isQuoteAdministrativeEditingOpen({ editReopenedAt: "2026-08-10T12:00:00Z", editRelockedAt: null })).toBe(true);
+    expect(isQuoteAdministrativeEditingOpen({ editReopenedAt: "2026-08-10T12:00:00Z", editRelockedAt: "2026-08-10T13:00:00Z" })).toBe(false);
   });
 });

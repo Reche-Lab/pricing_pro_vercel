@@ -11,9 +11,11 @@ import { ArtworkProductionPanel } from "@/components/quotes/ArtworkProductionPan
 import { QuoteCustomerDeliveryModal } from "@/components/quotes/QuoteCustomerDeliveryModal";
 import { QuotePaymentTermPanel } from "@/components/quotes/QuotePaymentTermPanel";
 import { QuoteStatusActions } from "@/components/quotes/QuoteStatusActions";
+import { QuoteAdministrativeEditingControl } from "@/components/quotes/QuoteAdministrativeEditingControl";
 import { QuoteWhatsAppButton } from "@/components/quotes/QuoteWhatsAppButton";
 import { PublicQuoteLinkButton } from "@/components/quotes/PublicQuoteLinkButton";
 import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
+import { isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getQuoteDetail, listQuoteEditLogs } from "@/repositories/quotes";
 import { getQuotePaymentTerm, listOlistPaymentOptions } from "@/repositories/olist-payment-options";
@@ -33,12 +35,13 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
   const quoteIdParsed = z.string().uuid().safeParse(quoteId);
   if (!quoteIdParsed.success) notFound();
 
-  const [profile, detail, shipments, members, canDeleteQuotesByPermission, variants, editLogs, paymentOptions, paymentTerm, olistConnection] = await Promise.all([
+  const [profile, detail, shipments, members, canDeleteQuotesByPermission, canReopenQuotesByPermission, variants, editLogs, paymentOptions, paymentTerm, olistConnection] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
     getQuoteDetail(session.userId, session.tenantId, quoteId),
     listQuoteShipments(session.userId, session.tenantId, quoteId),
     listTenantMembers(session.userId, session.tenantId),
     userHasPermission(session.userId, session.tenantId, "quotes:delete"),
+    userHasPermission(session.userId, session.tenantId, "quotes:approve"),
     listProductVariants(session.userId, session.tenantId),
     listQuoteEditLogs(session.userId, session.tenantId, quoteId),
     listOlistPaymentOptions(session.userId, session.tenantId),
@@ -49,6 +52,9 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
   if (!profile) redirect("/login");
   if (!detail) notFound();
   const canDeleteQuotes = profile.role === "owner" || canDeleteQuotesByPermission;
+  const canReopenQuotes = profile.role === "owner" || canReopenQuotesByPermission;
+  const accepted = Boolean(detail.quote.public_accepted_at || detail.quote.status === "accepted");
+  const administrativeEditingOpen = isQuoteAdministrativeEditingOpen({ editReopenedAt: detail.quote.edit_reopened_at, editRelockedAt: detail.quote.edit_relocked_at });
   const quoteEditVariants = variants.map((variant) => ({
     id: variant.variant_id,
     label: `${variant.product_name} - ${variant.variant_name}`,
@@ -72,6 +78,16 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
       tenantLogoUrl={profile.tenant_logo_url}
       tenantName={profile.tenant_name}
     >
+      <QuoteAdministrativeEditingControl
+        accepted={accepted}
+        canManage={canReopenQuotes}
+        hasInvoice={Boolean(detail.quote.external_olist_invoice_id)}
+        open={administrativeEditingOpen}
+        quoteId={quoteId}
+        reason={detail.quote.edit_reopened_reason}
+        reopenedAt={detail.quote.edit_reopened_at}
+        reopenedBy={detail.quote.edit_reopened_by_name}
+      />
       <div className="grid gap-6 xl:grid-cols-[minmax(320px,0.8fr)_minmax(560px,1.2fr)] 2xl:grid-cols-[minmax(360px,0.75fr)_minmax(720px,1.25fr)]">
         <section className="grid h-fit gap-4">
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
@@ -79,7 +95,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
               <div>
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm text-zinc-500">Cliente</p>
-                  <QuoteCustomerDeliveryModal quote={detail.quote} />
+                  <QuoteCustomerDeliveryModal disabled={accepted && !administrativeEditingOpen} quote={detail.quote} />
                 </div>
                 <h2 className="text-lg font-semibold text-white">
                   {detail.quote.customer_name ?? "Cliente nao informado"}
@@ -115,6 +131,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
 
           <QuotePaymentTermPanel
             initialPaymentTerm={paymentTerm}
+            disabled={accepted && !administrativeEditingOpen}
             defaultCategory={{
               externalId: typeof olistConnection?.settings.default_payment_category_external_id === "string"
                 ? olistConnection.settings.default_payment_category_external_id
@@ -190,7 +207,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                 </div>
               ))}
             </div>
-            <ArtworkProductionPanel items={detail.items} quoteId={quoteId} />
+            <ArtworkProductionPanel items={detail.items} quoteId={quoteId} readOnly={accepted && !administrativeEditingOpen} />
           </section>
 
           <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">

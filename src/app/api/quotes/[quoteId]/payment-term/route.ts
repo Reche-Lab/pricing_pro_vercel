@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getQuotePaymentTerm, upsertQuotePaymentTerm } from "@/repositories/olist-payment-options";
+import { assertQuoteCanBeEdited } from "@/repositories/quotes";
 
 const installmentSchema = z.object({
   installmentNumber: z.number().int().min(1).max(24),
@@ -51,7 +52,12 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     return NextResponse.json({ ok: false, error: parsed.error.flatten() }, { status: 400 });
   }
 
-  await upsertQuotePaymentTerm(session.userId, session.tenantId, quoteId, parsed.data);
-  const paymentTerm = await getQuotePaymentTerm(session.userId, session.tenantId, quoteId);
-  return NextResponse.json({ ok: true, paymentTerm });
+  try {
+    await assertQuoteCanBeEdited(session.userId, session.tenantId, quoteId);
+    await upsertQuotePaymentTerm(session.userId, session.tenantId, quoteId, parsed.data);
+    const paymentTerm = await getQuotePaymentTerm(session.userId, session.tenantId, quoteId);
+    return NextResponse.json({ ok: true, paymentTerm });
+  } catch (error) {
+    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Não foi possível atualizar o pagamento." }, { status: 409 });
+  }
 }
