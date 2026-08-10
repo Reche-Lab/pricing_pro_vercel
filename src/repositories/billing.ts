@@ -230,7 +230,7 @@ export async function changeTenantBillingPlan(input: {
             updated_at = now(),
             metadata = metadata || jsonb_build_object(
               'cancelled_by_plan_change', true,
-              'next_plan_id', $2
+              'next_plan_id', $2::text
             )
         where tenant_id = $1
           and status in ('open', 'pending')

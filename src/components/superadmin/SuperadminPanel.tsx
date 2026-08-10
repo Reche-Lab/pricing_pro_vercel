@@ -81,7 +81,7 @@ export function SuperadminPanel({
     setBillingLoading("");
 
     if (!response.ok || !data?.ok) {
-      setMessage(data?.error ? "Não foi possível atualizar a cobrança." : "Não foi possível atualizar a cobrança.");
+      setMessage(formatError(data?.error) || "Não foi possível atualizar a cobrança.");
       return;
     }
 
