@@ -88,12 +88,12 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
                               className="flex max-w-full items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 px-2 py-1.5"
                               key={artwork.id}
                             >
-                              {artwork.data_url.startsWith("data:image/") ? (
+                              {artwork.data_url?.startsWith("data:image/") || artwork.storage_path ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img
                                   alt=""
                                   className="h-10 w-10 shrink-0 rounded border border-zinc-800 object-cover"
-                                  src={artwork.data_url}
+                                  src={artwork.data_url || `/api/public/quotes/${token}/artworks/${artwork.id}`}
                                 />
                               ) : (
                                 <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded border border-zinc-800 text-xs text-zinc-500">

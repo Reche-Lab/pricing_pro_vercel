@@ -7,6 +7,7 @@ import { MelhorEnvioQuoteLabelActions } from "@/components/quotes/MelhorEnvioQuo
 import { MelhorEnvioPayloadPreview } from "@/components/quotes/MelhorEnvioPayloadPreview";
 import { OlistQuoteActions } from "@/components/quotes/OlistQuoteActions";
 import { QuoteItemsEditModal } from "@/components/quotes/QuoteItemsEditModal";
+import { ArtworkProductionPanel } from "@/components/quotes/ArtworkProductionPanel";
 import { QuoteCustomerDeliveryModal } from "@/components/quotes/QuoteCustomerDeliveryModal";
 import { QuotePaymentTermPanel } from "@/components/quotes/QuotePaymentTermPanel";
 import { QuoteStatusActions } from "@/components/quotes/QuoteStatusActions";
@@ -162,12 +163,12 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                             className="flex max-w-full items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 px-2 py-1.5"
                             key={artwork.id}
                           >
-                            {artwork.data_url.startsWith("data:image/") ? (
+                            {artwork.data_url?.startsWith("data:image/") || artwork.storage_path ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
                                 alt=""
                                 className="h-10 w-10 shrink-0 rounded border border-zinc-800 object-cover"
-                                src={artwork.data_url}
+                                src={artwork.data_url || `/api/quotes/${quoteId}/items/${item.id}/artworks/${artwork.id}/file?kind=original`}
                               />
                             ) : (
                               <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded border border-zinc-800 text-xs text-zinc-500">
@@ -189,6 +190,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                 </div>
               ))}
             </div>
+            <ArtworkProductionPanel items={detail.items} quoteId={quoteId} />
           </section>
 
           <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">

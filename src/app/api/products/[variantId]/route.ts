@@ -17,6 +17,7 @@ const updateProductSchema = z.object({
   heightCm: z.number().min(0).optional().nullable(),
   widthCm: z.number().min(0).optional().nullable(),
   lengthCm: z.number().min(0).optional().nullable(),
+  printDiameterMm: z.number().min(10).max(300).optional().nullable(),
   variantActive: z.boolean()
 });
 

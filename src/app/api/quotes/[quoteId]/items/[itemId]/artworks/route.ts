@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
 import { requireWritableBilling } from "@/lib/billing/guard";
 import { addQuoteItemArtwork, deleteQuoteItemArtwork } from "@/repositories/quotes";
+import { decodeDataUrl, deleteArtworkObject, uploadArtworkObject } from "@/services/storage/artwork-storage";
 
 const paramsSchema = z.object({
   quoteId: z.string().uuid(),
@@ -33,12 +35,18 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
   }
 
   try {
+    const decoded = decodeDataUrl(parsed.data.artworkFile.dataUrl);
+    const storagePath = await uploadArtworkObject({
+      path: `${session.tenantId}/quotes/${params.data.quoteId}/items/${params.data.itemId}/original/${randomUUID()}-${safeFileName(parsed.data.artworkFile.fileName)}`,
+      contentType: decoded.contentType,
+      bytes: decoded.bytes
+    });
     const artwork = await addQuoteItemArtwork(
       session.userId,
       session.tenantId,
       params.data.quoteId,
       params.data.itemId,
-      parsed.data
+      { ...parsed.data, storagePath }
     );
     console.info("Quote artwork uploaded.", {
       quoteId: params.data.quoteId,
@@ -83,6 +91,8 @@ export async function DELETE(request: Request, context: { params: Promise<{ quot
       artworkId.data
     );
     if (!artwork) return NextResponse.json({ ok: false, error: "Imagem não encontrada." }, { status: 404 });
+    await deleteArtworkObject(artwork.storage_path);
+    await deleteArtworkObject(artwork.prepared_storage_path);
     console.info("Quote artwork deleted.", {
       quoteId: params.data.quoteId,
       itemId: params.data.itemId,
@@ -102,4 +112,8 @@ export async function DELETE(request: Request, context: { params: Promise<{ quot
       { status: 409 }
     );
   }
+}
+
+function safeFileName(value: string) {
+  return value.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-");
 }

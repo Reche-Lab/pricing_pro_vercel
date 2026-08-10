@@ -84,6 +84,7 @@ export default async function ProductsPage() {
                       heightCm: item.height_cm,
                       widthCm: item.width_cm,
                       lengthCm: item.length_cm,
+                      printDiameterMm: item.print_diameter_mm,
                       variantActive: item.variant_active
                     }}
                   />

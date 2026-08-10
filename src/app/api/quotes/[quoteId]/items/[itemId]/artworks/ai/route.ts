@@ -1,0 +1,75 @@
+import { NextResponse } from "next/server";
+import sharp from "sharp";
+import { z } from "zod";
+import { getCurrentSession } from "@/lib/auth/session";
+import { requireWritableBilling } from "@/lib/billing/guard";
+import { addQuoteItemArtwork } from "@/repositories/quotes";
+import { getArtworkPreparationSource, markArtworkAsGenerated, resolveArtworkDiameterMm } from "@/repositories/artwork-production";
+import { decodeImageDataUrl } from "@/services/artwork/production";
+import { generateArtworkImage, suggestArtworkDirection } from "@/services/openrouter/artwork-agent";
+import { loadArtworkDataUrl, uploadArtworkObject } from "@/services/storage/artwork-storage";
+
+export const runtime = "nodejs";
+export const maxDuration = 120;
+
+const paramsSchema = z.object({ quoteId: z.string().uuid(), itemId: z.string().uuid() });
+const bodySchema = z.object({
+  action: z.enum(["suggest", "generate"]),
+  brief: z.string().trim().min(10).max(3000),
+  artworkId: z.string().uuid().optional().nullable(),
+  diameterMm: z.number().min(10).max(300).optional(),
+  product: z.string().trim().max(200).default("produto circular")
+});
+
+export async function POST(request: Request, context: { params: Promise<{ quoteId: string; itemId: string }> }) {
+  const session = await getCurrentSession();
+  if (!session) return NextResponse.json({ ok: false, error: "Não autenticado." }, { status: 401 });
+  const billingBlock = await requireWritableBilling(session.userId, session.tenantId);
+  if (billingBlock) return billingBlock;
+  const params = paramsSchema.safeParse(await context.params);
+  const body = bodySchema.safeParse(await request.json().catch(() => null));
+  if (!params.success || !body.success) return NextResponse.json({ ok: false, error: "Informe um briefing com pelo menos 10 caracteres." }, { status: 400 });
+
+  try {
+    const reference = body.data.artworkId
+      ? await getArtworkPreparationSource(session.userId, session.tenantId, params.data.quoteId, params.data.itemId, body.data.artworkId)
+      : null;
+    const diameterMm = body.data.diameterMm ?? (reference ? resolveArtworkDiameterMm(reference) : null);
+    if (!diameterMm) throw new Error("Informe o diâmetro da arte ou configure-o no produto.");
+    const referenceDataUrl = reference ? await loadArtworkDataUrl(reference.data_url, reference.storage_path) : null;
+    if (body.data.action === "suggest") {
+      const suggestions = await suggestArtworkDirection({ brief: body.data.brief, product: body.data.product, diameterMm, referenceDataUrl });
+      return NextResponse.json({ ok: true, suggestions });
+    }
+
+    const generated = await generateArtworkImage({ prompt: body.data.brief, diameterMm, referenceDataUrl });
+    const optimized = await optimizeGeneratedImage(generated.dataUrl);
+    const fileName = `arte-openrouter-${Date.now()}.webp`;
+    const storagePath = await uploadArtworkObject({
+      path: `${session.tenantId}/quotes/${params.data.quoteId}/items/${params.data.itemId}/original/${fileName}`,
+      contentType: "image/webp",
+      bytes: optimized
+    });
+    const artwork = await addQuoteItemArtwork(session.userId, session.tenantId, params.data.quoteId, params.data.itemId, {
+      artworkName: "Arte gerada por IA",
+      artworkFile: { fileName, mimeType: "image/webp", fileSize: optimized.length, dataUrl: `data:image/webp;base64,${optimized.toString("base64")}` },
+      storagePath
+    });
+    await markArtworkAsGenerated({ userId: session.userId, tenantId: session.tenantId, artworkId: artwork.id, prompt: generated.prompt });
+    return NextResponse.json({ ok: true, artwork }, { status: 201 });
+  } catch (error) {
+    console.error("OpenRouter artwork action failed.", { ...params.data, action: body.data.action, message: error instanceof Error ? error.message : "Erro desconhecido" });
+    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Não foi possível executar o assistente criativo." }, { status: 502 });
+  }
+}
+
+async function optimizeGeneratedImage(dataUrl: string) {
+  let quality = 92;
+  let output = await sharp(decodeImageDataUrl(dataUrl)).rotate().resize(1800, 1800, { fit: "cover" }).webp({ quality }).toBuffer();
+  while (output.length > 3 * 1024 * 1024 && quality > 60) {
+    quality -= 10;
+    output = await sharp(decodeImageDataUrl(dataUrl)).rotate().resize(1600, 1600, { fit: "cover" }).webp({ quality }).toBuffer();
+  }
+  if (output.length > 3 * 1024 * 1024) throw new Error("A imagem gerada ficou maior que o limite de 3 MB.");
+  return output;
+}

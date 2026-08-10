@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import sharp from "sharp";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
+import { loadArtworkDataUrl } from "@/services/storage/artwork-storage";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const PAGE_SIZE: [number, number] = [595.28, 841.89];
@@ -162,7 +163,8 @@ export async function generateQuotePdf(input: {
         borderColor: rgb(0.82, 0.82, 0.86),
         borderWidth: 0.5
       });
-      const embedded = await loadDataImage(pdf, entry.artwork.data_url);
+      const artworkDataUrl = await loadArtworkDataUrl(entry.artwork.data_url, entry.artwork.storage_path).catch(() => null);
+      const embedded = artworkDataUrl ? await loadDataImage(pdf, artworkDataUrl) : null;
       if (embedded) {
         const fitted = fitImage(embedded.width, embedded.height, ARTWORK_THUMBNAIL.width - 8, ARTWORK_THUMBNAIL.height - 8);
         page.drawImage(embedded, {

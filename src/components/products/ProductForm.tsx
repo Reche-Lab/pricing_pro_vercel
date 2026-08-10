@@ -67,6 +67,7 @@ export function ProductForm() {
         heightCm: Number(form.get("heightCm") || 0) || null,
         widthCm: Number(form.get("widthCm") || 0) || null,
         lengthCm: Number(form.get("lengthCm") || 0) || null,
+        printDiameterMm: Number(form.get("printDiameterMm") || 0) || null,
         curve: {
           mode: curveMode,
           points: curvePoints
@@ -116,6 +117,14 @@ export function ProductForm() {
           <Input label="Altura cm" name="heightCm" step="0.001" type="number" />
           <Input label="Largura cm" name="widthCm" step="0.001" type="number" />
           <Input label="Comprimento cm" name="lengthCm" step="0.001" type="number" />
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-lg border border-cyan-900/60 bg-cyan-950/20 p-4">
+        <p className="text-sm font-medium text-cyan-100">Produção da arte</p>
+        <p className="mt-1 text-xs text-zinc-500">Diâmetro final do corte, sem a sangria. Para bottons, use 25, 35, 45 ou 55 mm.</p>
+        <div className="mt-3 max-w-xs">
+          <Input label="Diâmetro de impressão (mm)" min="10" name="printDiameterMm" step="0.1" type="number" />
         </div>
       </div>
 

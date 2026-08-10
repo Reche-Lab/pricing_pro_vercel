@@ -74,6 +74,9 @@ export type QuoteItemRow = {
   product_variant_id?: string | null;
   sku?: string | null;
   external_olist_product_id?: string | null;
+  print_diameter_mm?: string | null;
+  width_cm?: string | null;
+  length_cm?: string | null;
   description: string;
   quantity: number;
   unit_price: string;
@@ -107,8 +110,32 @@ export type QuoteItemArtworkRow = {
   file_name: string;
   mime_type: string;
   file_size: number;
-  data_url: string;
+  data_url: string | null;
   storage_path: string | null;
+  original_width_px?: number | null;
+  original_height_px?: number | null;
+  target_diameter_mm?: string | null;
+  bleed_mm?: string | null;
+  safe_margin_mm?: string | null;
+  dpi?: number | null;
+  prepared_data_url?: string | null;
+  prepared_file_name?: string | null;
+  prepared_width_px?: number | null;
+  prepared_height_px?: number | null;
+  quality_status?: "pending" | "warning" | "ready";
+  approval_status?: "pending" | "approved" | "rejected";
+  preparation_notes?: string | null;
+  source_kind?: "upload" | "openrouter";
+  ai_prompt?: string | null;
+  approved_at?: string | null;
+  prepared_at?: string | null;
+  version?: number;
+  prepared_storage_path?: string | null;
+  production_quantity?: number | null;
+  crop_scale?: string | null;
+  crop_offset_x?: string | null;
+  crop_offset_y?: string | null;
+  rotation_degrees?: string | null;
 };
 
 export type QuoteSnapshotRow = {
@@ -301,6 +328,9 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           qi.product_variant_id,
           pv.sku,
           to_jsonb(pv)->>'external_olist_product_id' as external_olist_product_id,
+          to_jsonb(pv)->>'print_diameter_mm' as print_diameter_mm,
+          pv.width_cm,
+          pv.length_cm,
           qi.description,
           qi.quantity,
           qi.unit_price,
@@ -333,7 +363,31 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           mime_type,
           file_size,
           data_url,
-          storage_path
+          storage_path,
+          original_width_px,
+          original_height_px,
+          target_diameter_mm,
+          bleed_mm,
+          safe_margin_mm,
+          dpi,
+          prepared_data_url,
+          prepared_file_name,
+          prepared_width_px,
+          prepared_height_px,
+          quality_status,
+          approval_status,
+          preparation_notes,
+          source_kind,
+          ai_prompt,
+          approved_at,
+          prepared_at,
+          version,
+          prepared_storage_path,
+          production_quantity,
+          crop_scale,
+          crop_offset_x,
+          crop_offset_y,
+          rotation_degrees
         from quote_item_artworks
         where tenant_id = $1 and quote_id = $2
         order by created_at asc
@@ -1313,7 +1367,7 @@ export async function addQuoteItemArtwork(
   tenantId: string,
   quoteId: string,
   quoteItemId: string,
-  input: { artworkName?: string | null; artworkFile: QuoteArtworkFileInput }
+  input: { artworkName?: string | null; artworkFile: QuoteArtworkFileInput; storagePath?: string | null }
 ): Promise<QuoteItemArtworkRow> {
   return withTenantContext(userId, tenantId, async (client) => {
     await assertQuoteArtworkEditable(client, tenantId, quoteId, quoteItemId);
@@ -1363,8 +1417,8 @@ export async function addQuoteItemArtwork(
         artworkFile.fileName,
         artworkFile.mimeType,
         artworkFile.fileSize,
-        artworkFile.dataUrl,
-        `quotes/${quoteId}/items/${quoteItemId}/${artworkFile.fileName}`,
+        input.storagePath ? null : artworkFile.dataUrl,
+        input.storagePath ?? `quotes/${quoteId}/items/${quoteItemId}/${artworkFile.fileName}`,
         userId
       ]
     );
@@ -1391,12 +1445,12 @@ export async function deleteQuoteItemArtwork(
   quoteId: string,
   quoteItemId: string,
   artworkId: string
-): Promise<Pick<QuoteItemArtworkRow, "id" | "file_name" | "mime_type" | "file_size"> | null> {
+): Promise<Pick<QuoteItemArtworkRow, "id" | "file_name" | "mime_type" | "file_size" | "storage_path" | "prepared_storage_path"> | null> {
   return withTenantContext(userId, tenantId, async (client) => {
     await assertQuoteArtworkEditable(client, tenantId, quoteId, quoteItemId);
-    const currentResult = await client.query<Pick<QuoteItemArtworkRow, "id" | "file_name" | "mime_type" | "file_size">>(
+    const currentResult = await client.query<Pick<QuoteItemArtworkRow, "id" | "file_name" | "mime_type" | "file_size" | "storage_path" | "prepared_storage_path">>(
       `
-        select id, file_name, mime_type, file_size
+        select id, file_name, mime_type, file_size, storage_path, prepared_storage_path
         from quote_item_artworks
         where tenant_id = $1 and quote_id = $2 and quote_item_id = $3
         order by created_at asc

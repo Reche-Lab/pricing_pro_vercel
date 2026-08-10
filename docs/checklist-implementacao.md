@@ -122,6 +122,25 @@ Status atualizado durante a refatoracao inicial.
 
 ## Validacao Local
 
+### Produção de artes
+
+- [x] Cadastrar diâmetro final de impressão por variante.
+- [x] Preservar a imagem original e preparar uma versão circular em PNG.
+- [x] Calcular pixels, sangria e alerta de qualidade pela resolução configurada.
+- [x] Aprovar uma única versão de arte por item com auditoria.
+- [x] Gerar PDF A4 na escala física e na quantidade do orçamento.
+- [x] Distribuir automaticamente artes iguais e mistas na folha.
+- [x] Configurar folha, margem, sangria, área segura, intervalo, DPI e linhas de corte por tenant.
+- [x] Gerar direção criativa textual e novas imagens via OpenRouter.
+- [x] Manter aprovação humana obrigatória para imagens geradas por IA.
+- [x] Adicionar testes unitários de preparação, quantidade e PDF.
+- [x] Armazenar novos originais, preparados e PDFs em Supabase Storage privado, com fallback legado.
+- [x] Adicionar editor visual de enquadramento, zoom e rotação.
+- [x] Distribuir a quantidade de um item entre várias artes aprovadas.
+- [x] Pré-visualizar as folhas A4 antes do download.
+- [x] Registrar lotes de produção e permitir marcá-los como impressos.
+- [ ] Migrar em lote os arquivos legados que ainda estão em `data_url`.
+
 Ultima validacao executada:
 
 ```bash

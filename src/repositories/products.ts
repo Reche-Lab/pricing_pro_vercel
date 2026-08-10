@@ -19,6 +19,7 @@ export type ProductVariantRow = {
   height_cm: string | null;
   width_cm: string | null;
   length_cm: string | null;
+  print_diameter_mm: string | null;
   curve_mode: PricingCurveMode | null;
   anchors: Record<string, number> | null;
   platform_curves?: Record<string, { mode: PricingCurveMode; anchors: Record<string, number> | null }> | null;
@@ -43,6 +44,7 @@ export type CreateProductWithVariantInput = {
   heightCm?: number | null;
   widthCm?: number | null;
   lengthCm?: number | null;
+  printDiameterMm?: number | null;
   curve: PricingCurve;
 };
 
@@ -63,6 +65,7 @@ export type UpdateProductVariantInput = {
   heightCm?: number | null;
   widthCm?: number | null;
   lengthCm?: number | null;
+  printDiameterMm?: number | null;
   variantActive: boolean;
 };
 
@@ -86,6 +89,7 @@ export async function listProductVariants(userId: string, tenantId: string): Pro
           v.height_cm,
           v.width_cm,
           v.length_cm,
+          to_jsonb(v)->>'print_diameter_mm' as print_diameter_mm,
           pc.mode as curve_mode,
           (
             select jsonb_object_agg(pa.quantity::text, pa.unit_price order by pa.quantity)
@@ -159,6 +163,7 @@ export async function listProductsAdmin(userId: string, tenantId: string): Promi
           v.height_cm,
           v.width_cm,
           v.length_cm,
+          to_jsonb(v)->>'print_diameter_mm' as print_diameter_mm,
           v.active as variant_active,
           pc.id as curve_id,
           pc.version as curve_version,
@@ -223,9 +228,10 @@ export async function createProductWithVariant(
           height_cm,
           width_cm,
           length_cm,
+          print_diameter_mm,
           active
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true)
         returning id
       `,
       [
@@ -239,7 +245,8 @@ export async function createProductWithVariant(
         input.unitWeightKg,
         input.heightCm ?? null,
         input.widthCm ?? null,
-        input.lengthCm ?? null
+        input.lengthCm ?? null,
+        input.printDiameterMm ?? null
       ]
     );
     const variantId = variantResult.rows[0].id;
@@ -345,7 +352,8 @@ export async function updateProductVariant(
             height_cm = $9,
             width_cm = $10,
             length_cm = $11,
-            active = $12,
+            print_diameter_mm = $12,
+            active = $13,
             updated_at = now()
         where tenant_id = $1 and id = $2
       `,
@@ -361,6 +369,7 @@ export async function updateProductVariant(
         input.heightCm ?? null,
         input.widthCm ?? null,
         input.lengthCm ?? null,
+        input.printDiameterMm ?? null,
         input.variantActive
       ]
     );

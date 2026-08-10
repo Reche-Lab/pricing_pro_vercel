@@ -5,8 +5,10 @@ import { OlistIntegrationPanel } from "@/components/settings/OlistIntegrationPan
 import { AgentApiKeysPanel } from "@/components/settings/AgentApiKeysPanel";
 import { ChangePasswordForm } from "@/components/settings/ChangePasswordForm";
 import { TenantSettingsForm } from "@/components/settings/TenantSettingsForm";
+import { ArtworkProductionSettings } from "@/components/settings/ArtworkProductionSettings";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getTenantShippingProfile } from "@/repositories/tenant-settings";
+import { getArtworkProductionProfile } from "@/repositories/artwork-production";
 import { getSessionProfile } from "@/repositories/users";
 
 export default async function SettingsPage({
@@ -17,9 +19,10 @@ export default async function SettingsPage({
   const session = await getCurrentSession();
   if (!session) redirect("/login");
 
-  const [profile, tenant] = await Promise.all([
+  const [profile, tenant, artworkProfile] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
-    getTenantShippingProfile(session.userId, session.tenantId)
+    getTenantShippingProfile(session.userId, session.tenantId),
+    getArtworkProductionProfile(session.userId, session.tenantId)
   ]);
   if (!profile || !tenant) redirect("/login");
   const params = await searchParams;
@@ -37,6 +40,7 @@ export default async function SettingsPage({
         <AgentApiKeysPanel />
         <MelhorEnvioIntegrationPanel callbackMessage={params.message} callbackStatus={params.melhor_envio} />
         <OlistIntegrationPanel />
+        <ArtworkProductionSettings profile={artworkProfile} />
         <TenantSettingsForm tenant={tenant} />
       </div>
     </AppShell>

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
 import { requireWritableBilling } from "@/lib/billing/guard";
 import { createQuote, listQuotes } from "@/repositories/quotes";
+import { persistQuoteArtworksToStorage } from "@/services/artwork/persist-artworks";
 
 const artworkFileSchema = z.object({
   fileName: z.string().trim().min(1).max(180),
@@ -126,5 +127,6 @@ export async function POST(request: Request) {
   }
 
   const quote = await createQuote(session.userId, session.tenantId, parsed.data);
+  await persistQuoteArtworksToStorage(session.userId, session.tenantId, quote.id);
   return NextResponse.json({ ok: true, quote }, { status: 201 });
 }

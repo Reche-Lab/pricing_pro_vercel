@@ -431,12 +431,12 @@ export function QuoteItemEditPanel({
                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
                         {original.artworks.map((artwork) => (
                           <div className="flex min-w-0 items-center gap-3 rounded-md border border-zinc-800 bg-zinc-900/70 p-2" key={artwork.id}>
-                            {artwork.data_url.startsWith("data:image/") ? (
+                            {artwork.data_url?.startsWith("data:image/") || artwork.storage_path ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
                                 alt={`Arte ${artwork.file_name}`}
                                 className="h-16 w-16 shrink-0 rounded-md border border-zinc-700 object-cover"
-                                src={artwork.data_url}
+                                src={artwork.data_url || `/api/quotes/${quote.id}/items/${original.id}/artworks/${artwork.id}/file?kind=original`}
                               />
                             ) : (
                               <span className="grid h-16 w-16 shrink-0 place-items-center rounded-md border border-zinc-700 text-xs text-zinc-500">ARQ</span>

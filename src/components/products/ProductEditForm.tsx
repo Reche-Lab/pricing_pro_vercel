@@ -19,6 +19,7 @@ type ProductEditValues = {
   heightCm: string | null;
   widthCm: string | null;
   lengthCm: string | null;
+  printDiameterMm: string | null;
   variantActive: boolean;
 };
 
@@ -51,6 +52,7 @@ export function ProductEditForm({ product }: { product: ProductEditValues }) {
         heightCm: optionalNumber(form.get("heightCm")),
         widthCm: optionalNumber(form.get("widthCm")),
         lengthCm: optionalNumber(form.get("lengthCm")),
+        printDiameterMm: optionalNumber(form.get("printDiameterMm")),
         variantActive: form.get("variantActive") === "on"
       })
     });
@@ -117,6 +119,14 @@ export function ProductEditForm({ product }: { product: ProductEditValues }) {
               <Input defaultValue={product.heightCm ?? ""} label="Altura cm" name="heightCm" step="0.001" type="number" />
               <Input defaultValue={product.widthCm ?? ""} label="Largura cm" name="widthCm" step="0.001" type="number" />
               <Input defaultValue={product.lengthCm ?? ""} label="Comprimento cm" name="lengthCm" step="0.001" type="number" />
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-cyan-900/60 bg-cyan-950/20 p-3">
+            <p className="text-sm font-medium text-cyan-100">Produção da arte</p>
+            <p className="mt-1 text-xs text-zinc-500">Informe o diâmetro final do corte, sem a sangria.</p>
+            <div className="mt-3 max-w-xs">
+              <Input defaultValue={product.printDiameterMm ?? ""} label="Diâmetro de impressão (mm)" name="printDiameterMm" step="0.1" type="number" />
             </div>
           </div>
 

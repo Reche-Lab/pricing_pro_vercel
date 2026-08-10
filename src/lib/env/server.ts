@@ -7,13 +7,19 @@ const serverEnvSchema = z.object({
   APP_URL: z.string().url().default("http://localhost:3000"),
   COOKIE_NAME: z.string().default("pricing_session"),
   DATABASE_SSL: z.enum(["true", "false", "auto"]).default("auto"),
+  SUPABASE_URL: z.string().default(""),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().default(""),
   SMTP_HOST: z.string().default(""),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_SECURE: z.enum(["true", "false"]).default("false"),
   SMTP_USER: z.string().default(""),
   SMTP_PASS: z.string().default(""),
   MERCADO_PAGO_ACCESS_TOKEN: z.string().default(""),
-  MERCADO_PAGO_WEBHOOK_SECRET: z.string().default("")
+  MERCADO_PAGO_WEBHOOK_SECRET: z.string().default(""),
+  OPENROUTER_API_KEY: z.string().default(""),
+  OPENROUTER_BASE_URL: z.string().url().default("https://openrouter.ai/api/v1"),
+  OPENROUTER_TEXT_MODEL: z.string().default("openai/gpt-4.1-mini"),
+  OPENROUTER_IMAGE_MODEL: z.string().default("openai/gpt-image-1")
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
