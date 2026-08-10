@@ -139,6 +139,7 @@ Status atualizado durante a refatoracao inicial.
 - [x] Armazenar novos originais, preparados e PDFs em Supabase Storage privado, com fallback legado.
 - [x] Adicionar editor visual de enquadramento, zoom e rotação com contorno específico por formato.
 - [x] Permitir zoom out no enquadramento e preencher em branco a área sem imagem.
+- [x] Permitir deslocamento horizontal e vertical independente do zoom, inclusive com a imagem em 1x.
 - [x] Gerar linhas de corte para círculo, quadrado, retângulo, triângulo e hexágono, com cantos retos ou arredondados.
 - [x] Instruir o assistente criativo com a geometria e a proporção reais do produto.
 - [x] Distribuir a quantidade de um item entre várias artes aprovadas.
@@ -159,7 +160,7 @@ Resultado:
 
 - lint passou;
 - typecheck passou;
-- testes passaram: 89 testes em 22 arquivos;
+- testes passaram: 90 testes em 22 arquivos;
 - build Next passou.
 
 ## Acoes Manuais Pendentes

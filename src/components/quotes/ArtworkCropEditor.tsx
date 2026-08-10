@@ -52,7 +52,6 @@ export function ArtworkCropEditor({
     setScale(1); setOffsetX(0); setOffsetY(0); setRotation(0);
   }
 
-  const positionFactor = (1 - scale) * 50;
   const viewWidth = 1000;
   const viewHeight = Math.max(200, 1000 * geometry.heightMm / geometry.widthMm);
   const cornerRadius = geometry.cornerRadiusMm / geometry.widthMm * viewWidth;
@@ -61,8 +60,8 @@ export function ArtworkCropEditor({
   const safePath = createShapePath({ shape: geometry.shape, width: viewWidth, height: viewHeight, cornerRadius, rotationDegrees: geometry.rotationDegrees, inset: Math.min(viewWidth, viewHeight) * 0.09 });
   const imageWidth = viewWidth * scale;
   const imageHeight = viewHeight * scale;
-  const imageX = (viewWidth - imageWidth) / 2 + offsetX * positionFactor / 100 * viewWidth;
-  const imageY = (viewHeight - imageHeight) / 2 + offsetY * positionFactor / 100 * viewHeight;
+  const imageX = (viewWidth - imageWidth) / 2 + offsetX * viewWidth / 2;
+  const imageY = (viewHeight - imageHeight) / 2 + offsetY * viewHeight / 2;
 
   return (
     <div className="fixed inset-0 z-[70] grid place-items-center overflow-y-auto bg-black/80 p-3 backdrop-blur-sm sm:p-6">
@@ -92,6 +91,7 @@ export function ArtworkCropEditor({
             </div>
             <Slider label="Posição horizontal" min={-1} max={1} step={0.01} value={offsetX} onChange={setOffsetX} display={`${Math.round(offsetX * 100)}%`} />
             <Slider label="Posição vertical" min={-1} max={1} step={0.01} value={offsetY} onChange={setOffsetY} display={`${Math.round(offsetY * 100)}%`} />
+            <p className="-mt-3 text-[11px] leading-4 text-zinc-600">O deslocamento move a imagem em relação ao corte em qualquer nível de zoom, inclusive em 1x.</p>
             <Slider label="Rotação" min={-180} max={180} step={1} value={rotation} onChange={setRotation} display={`${Math.round(rotation)}°`} />
             <button className="focus-ring inline-flex w-fit items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-900" type="button" onClick={reset}><RotateCcw size={14} /> Restaurar enquadramento</button>
           </div>

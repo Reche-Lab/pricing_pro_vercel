@@ -2,7 +2,7 @@ import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { createImpositionPlan, generatePrintPdf, resolveArtworkProductionQuantities } from "@/services/artwork/imposition";
-import { DEFAULT_ARTWORK_PROFILE, mmToPixels, prepareCircularArtwork, resolveDrawCutLines } from "@/services/artwork/production";
+import { DEFAULT_ARTWORK_PROFILE, mmToPixels, prepareArtwork, prepareCircularArtwork, resolveDrawCutLines } from "@/services/artwork/production";
 
 const circle55 = { shape: "circle", widthMm: 55, heightMm: 55, cornerStyle: "sharp", cornerRadiusMm: 0, rotationDegrees: 0, allowPrintRotation: true } as const;
 const roundedRectangle = { shape: "rectangle", widthMm: 80, heightMm: 50, cornerStyle: "rounded", cornerRadiusMm: 5, rotationDegrees: 0, allowPrintRotation: true } as const;
@@ -46,6 +46,24 @@ describe("artwork production", () => {
     expect(pixel(Math.floor(info.width / 2), Math.floor(info.height * 0.15))).toEqual([255, 255, 255, 255]);
     expect(pixel(0, 0)[3]).toBe(0);
     expect(prepared.notes).toContain("preenchimento branco");
+  });
+
+  it("applies horizontal and vertical displacement independently at 1x zoom", async () => {
+    const source = await sharp({ create: { width: 600, height: 600, channels: 4, background: "#e11d48" } }).png().toBuffer();
+    const prepared = await prepareArtwork({
+      dataUrl: `data:image/png;base64,${source.toString("base64")}`,
+      geometry: { shape: "square", widthMm: 50, heightMm: 50, cornerStyle: "sharp", cornerRadiusMm: 0, rotationDegrees: 0, allowPrintRotation: true },
+      bleedMm: 0,
+      dpi: 100,
+      scale: 1,
+      offsetX: 0.5,
+      offsetY: 0.5
+    });
+    const { data, info } = await sharp(Buffer.from(prepared.dataUrl.split(",")[1], "base64")).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const pixel = (x: number, y: number) => Array.from(data.subarray((y * info.width + x) * info.channels, (y * info.width + x) * info.channels + 4));
+    expect(pixel(Math.floor(info.width * 0.1), Math.floor(info.height * 0.5))).toEqual([255, 255, 255, 255]);
+    expect(pixel(Math.floor(info.width * 0.5), Math.floor(info.height * 0.1))).toEqual([255, 255, 255, 255]);
+    expect(pixel(Math.floor(info.width * 0.7), Math.floor(info.height * 0.7))).toEqual([225, 29, 72, 255]);
   });
 
   it("creates enough A4 pages for every requested copy", () => {

@@ -9,7 +9,7 @@ O módulo transforma as imagens vinculadas aos itens de um orçamento em arquivo
 1. Cadastre em `Produtos` o formato e as dimensões finais de impressão da variante em milímetros.
 2. Anexe uma imagem ao item do orçamento, envie uma referência diretamente pelo assistente ou crie uma arte do zero.
 3. Abra `Itens > Produção de artes` no orçamento.
-4. Clique em `Enquadrar` e ajuste zoom, posição e rotação com as áreas de corte e segurança visíveis. O zoom pode ficar abaixo de `1x`; nesse caso, a região do corte sem imagem recebe fundo branco.
+4. Clique em `Enquadrar` e ajuste zoom, posição e rotação com as áreas de corte e segurança visíveis. O deslocamento horizontal e vertical funciona independentemente do zoom, inclusive em `1x`. O zoom pode ficar abaixo de `1x`; nesse caso, a região do corte sem imagem recebe fundo branco.
 5. Confira o alerta de qualidade, informe quantas cópias pertencem à arte e aprove a versão.
 6. Quando houver várias artes no item, distribua exatamente a quantidade vendida entre elas.
 7. Clique em `Visualizar folhas` para revisar as páginas A4 antes da geração definitiva.
@@ -72,7 +72,7 @@ OPENROUTER_TEXT_MODEL="openai/gpt-4.1-mini"
 OPENROUTER_IMAGE_MODEL="openai/gpt-image-1"
 ```
 
-`Sugerir direção` usa o modelo de texto para devolver conceito, composição, paleta, tipografia e cuidados de produção. O usuário pode escolher qualquer arte do item como base ou enviar uma imagem PNG, JPEG ou WebP de até 3 MB diretamente pelo assistente. Ao gerar com uma referência, a instrução pede que o modelo preserve tudo o que não foi explicitamente alterado.
+`Sugerir direção` usa o modelo de texto para devolver conceito, composição, paleta, tipografia e cuidados de produção. O usuário pode escolher qualquer arte do item como base ou enviar uma imagem PNG, JPEG ou WebP de até 3 MB diretamente pelo assistente. Ao gerar com uma referência, a instrução pede que o modelo preserve tudo o que não foi explicitamente alterado. Toda geração recebe explicitamente o formato geométrico, a largura, a altura, o acabamento dos cantos e a orientação configurados na variante.
 
 Cada item de orçamento possui um limite de solicitações de geração de imagem por IA. O padrão é 3, mas o Superadmin pode definir um valor diferente para cada tenant em `Superadmin > Tenants > Assistente criativo`; zero desativa a geração. O contador é compartilhado entre a área interna e o link público e é persistido no banco, portanto recarregar a página não reinicia o limite. Pedir sugestões textuais, enviar arquivos e reenquadrar artes não consome tentativas. Uma tentativa é consumida quando a solicitação de geração é reservada e enviada ao provedor, inclusive se o provedor falhar depois desse ponto, pois a chamada pode ter gerado custo.
 

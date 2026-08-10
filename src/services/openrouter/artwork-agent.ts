@@ -77,7 +77,7 @@ export function buildArtworkSuggestionPrompt(input: {
   const referenceInstruction = input.referenceDataUrl
     ? "Analise a imagem de referência como a versão atual. Proponha melhorias coerentes com o pedido, preserve os elementos que não foram mencionados e descreva claramente o que deve mudar."
     : "Crie a direção a partir do briefing, pois não há imagem de referência.";
-  return `Crie uma direção de arte para ${formatDescription(input)} (${input.product}). ${referenceInstruction} Briefing ou alterações solicitadas: ${input.brief}. A composição deve considerar o contorno e a orientação do produto. Evite texto pequeno e elementos importantes próximos ao corte. Responda somente JSON válido com concept, composition, palette (array), typography, productionWarnings (array) e generationPrompt.`;
+  return `Crie uma direção de arte para ${formatDescription(input)} (${input.product}). ${geometryInstruction(input.geometry)} ${referenceInstruction} Briefing ou alterações solicitadas: ${input.brief}. A composição deve considerar o contorno e a orientação do produto. Evite texto pequeno e elementos importantes próximos ao corte. Responda somente JSON válido com concept, composition, palette (array), typography, productionWarnings (array) e generationPrompt.`;
 }
 
 export function buildArtworkGenerationPrompt(input: {
@@ -89,13 +89,38 @@ export function buildArtworkGenerationPrompt(input: {
   const referenceInstruction = input.referenceDataUrl
     ? "Use a imagem de referência como base da nova versão. Preserve composição, identidade, textos e elementos que não tenham sido explicitamente alterados. Aplique somente as mudanças solicitadas e não redesenhe arbitrariamente a arte."
     : "Crie uma arte original a partir da solicitação, sem depender de uma imagem anterior.";
-  return `${referenceInstruction}\nSolicitação: ${input.prompt}\nCrie a imagem para ${formatDescription(input)}, respeitando a proporção e a orientação do formato final. Mantenha a composição centralizada, o fundo preenchendo toda a área até além do corte e os elementos importantes dentro da margem segura. Sem mockup, sem fotografia do produto e sem linha de corte.`;
+  return `${referenceInstruction}\nSolicitação: ${input.prompt}\n${geometryInstruction(input.geometry, input.diameterMm)}\nCrie a imagem respeitando exatamente a proporção e a orientação do formato final. Mantenha a composição centralizada, o fundo preenchendo toda a área até além do corte e os elementos importantes dentro da margem segura. Sem mockup, sem fotografia do produto e sem linha de corte.`;
 }
 
 function formatDescription(input: { geometry?: PrintGeometry; diameterMm?: number }) {
   if (input.geometry) return `um produto com ${geometryLabel(input.geometry).toLocaleLowerCase("pt-BR")}`;
   if (input.diameterMm) return `um produto circular de ${input.diameterMm} mm`;
   return "o formato de impressão informado";
+}
+
+function geometryInstruction(geometry?: PrintGeometry, legacyDiameterMm?: number) {
+  if (!geometry) return legacyDiameterMm
+    ? `Formato geométrico: circular. Tamanho final de corte: ${legacyDiameterMm} mm de diâmetro.`
+    : "";
+  const shapeLabels: Record<PrintGeometry["shape"], string> = {
+    circle: "circular",
+    square: "quadrado",
+    rectangle: "retangular",
+    triangle: "triangular",
+    hexagon: "hexagonal"
+  };
+  const size = geometry.shape === "circle"
+    ? `${geometry.widthMm} mm de diâmetro`
+    : `${geometry.widthMm} mm de largura por ${geometry.heightMm} mm de altura`;
+  const corners = geometry.shape === "circle"
+    ? ""
+    : geometry.cornerStyle === "rounded"
+      ? ` Cantos arredondados com raio de ${geometry.cornerRadiusMm} mm.`
+      : " Cantos e pontas retos.";
+  const orientation = geometry.rotationDegrees
+    ? ` Orientação do contorno: ${geometry.rotationDegrees} graus.`
+    : "";
+  return `Formato geométrico: ${shapeLabels[geometry.shape]}. Tamanho final de corte: ${size}.${corners}${orientation}`;
 }
 
 function imageAspectRatio(geometry?: PrintGeometry) {

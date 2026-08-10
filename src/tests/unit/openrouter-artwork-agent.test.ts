@@ -30,7 +30,9 @@ describe("OpenRouter artwork prompts", () => {
       prompt: "Crie uma placa de identificação.",
       geometry: { shape: "rectangle", widthMm: 80, heightMm: 50, cornerStyle: "rounded", cornerRadiusMm: 5, rotationDegrees: 0, allowPrintRotation: true }
     });
-    expect(prompt).toContain("retangular 80 × 50 mm");
-    expect(prompt).toContain("respeitando a proporção");
+    expect(prompt).toContain("Formato geométrico: retangular");
+    expect(prompt).toContain("Tamanho final de corte: 80 mm de largura por 50 mm de altura");
+    expect(prompt).toContain("Cantos arredondados com raio de 5 mm");
+    expect(prompt).toContain("respeitando exatamente a proporção");
   });
 });

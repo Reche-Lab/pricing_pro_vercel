@@ -109,16 +109,26 @@ export async function prepareArtwork(input: {
     .resize(scaledWidthPx, scaledHeightPx, { fit: "cover", position: "centre" })
     .png({ compressionLevel: 9 })
     .toBuffer();
-  const framed = scale >= 1
-    ? await cropOversizedArtwork(transformed, outputWidthPx, outputHeightPx, scaledWidthPx, scaledHeightPx, offsetX, offsetY)
-    : await placeReducedArtwork(transformed, outputWidthPx, outputHeightPx, scaledWidthPx, scaledHeightPx, offsetX, offsetY);
+  const framed = await placeArtworkOnCanvas(
+    transformed,
+    outputWidthPx,
+    outputHeightPx,
+    scaledWidthPx,
+    scaledHeightPx,
+    offsetX,
+    offsetY
+  );
   const output = await sharp(framed)
     .ensureAlpha()
     .composite([{ input: shapeMask, blend: "dest-in" }])
     .png({ compressionLevel: 9 })
     .toBuffer();
 
-  const whiteMarginNote = scale < 1 ? ` Zoom reduzido para ${scale.toFixed(2)}x com preenchimento branco.` : "";
+  const whiteMarginNote = scale < 1
+    ? ` Zoom reduzido para ${scale.toFixed(2)}x com preenchimento branco.`
+    : Math.abs(offsetX) > 0.001 || Math.abs(offsetY) > 0.001
+      ? " A imagem foi deslocada de forma independente dentro da área de corte."
+      : "";
   const notes = qualityStatus === "ready"
     ? `Arte preparada em ${input.dpi} DPI com ${input.bleedMm} mm de sangria.${whiteMarginNote}`
     : `A imagem original tem ${metadata.width} x ${metadata.height} px e pode perder nitidez em ${input.dpi} DPI.${whiteMarginNote}`;
@@ -134,7 +144,7 @@ export async function prepareArtwork(input: {
   };
 }
 
-async function cropOversizedArtwork(
+async function placeArtworkOnCanvas(
   image: Buffer,
   outputWidthPx: number,
   outputHeightPx: number,
@@ -143,30 +153,22 @@ async function cropOversizedArtwork(
   offsetX: number,
   offsetY: number
 ) {
-  const overflowX = Math.max(0, scaledWidthPx - outputWidthPx);
-  const overflowY = Math.max(0, scaledHeightPx - outputHeightPx);
-  const left = Math.round(overflowX * ((offsetX + 1) / 2));
-  const top = Math.round(overflowY * ((offsetY + 1) / 2));
-  return sharp(image)
-    .extract({ left, top, width: outputWidthPx, height: outputHeightPx })
-    .flatten({ background: "#ffffff" })
+  const desiredLeft = Math.round((outputWidthPx - scaledWidthPx) / 2 + offsetX * outputWidthPx / 2);
+  const desiredTop = Math.round((outputHeightPx - scaledHeightPx) / 2 + offsetY * outputHeightPx / 2);
+  const sourceLeft = Math.max(0, -desiredLeft);
+  const sourceTop = Math.max(0, -desiredTop);
+  const destinationLeft = Math.max(0, desiredLeft);
+  const destinationTop = Math.max(0, desiredTop);
+  const visibleWidth = Math.min(scaledWidthPx - sourceLeft, outputWidthPx - destinationLeft);
+  const visibleHeight = Math.min(scaledHeightPx - sourceTop, outputHeightPx - destinationTop);
+  const canvas = sharp({ create: { width: outputWidthPx, height: outputHeightPx, channels: 4, background: "#ffffff" } });
+  if (visibleWidth <= 0 || visibleHeight <= 0) return canvas.png({ compressionLevel: 9 }).toBuffer();
+  const visibleImage = await sharp(image)
+    .extract({ left: sourceLeft, top: sourceTop, width: visibleWidth, height: visibleHeight })
     .png({ compressionLevel: 9 })
     .toBuffer();
-}
-
-async function placeReducedArtwork(
-  image: Buffer,
-  outputWidthPx: number,
-  outputHeightPx: number,
-  scaledWidthPx: number,
-  scaledHeightPx: number,
-  offsetX: number,
-  offsetY: number
-) {
-  const left = Math.round((outputWidthPx - scaledWidthPx) * ((offsetX + 1) / 2));
-  const top = Math.round((outputHeightPx - scaledHeightPx) * ((offsetY + 1) / 2));
-  return sharp({ create: { width: outputWidthPx, height: outputHeightPx, channels: 4, background: "#ffffff" } })
-    .composite([{ input: image, left, top }])
+  return canvas
+    .composite([{ input: visibleImage, left: destinationLeft, top: destinationTop }])
     .png({ compressionLevel: 9 })
     .toBuffer();
 }
