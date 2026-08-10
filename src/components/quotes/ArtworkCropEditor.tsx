@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { Loader2, RotateCcw, X } from "lucide-react";
+import { createShapePath, geometryLabel, type PrintGeometry } from "@/domain/artwork/geometry";
 import type { QuoteItemArtworkRow } from "@/repositories/quotes";
 
 export function ArtworkCropEditor({
   artwork,
-  diameterMm,
+  geometry,
   imageUrl,
   itemId,
   quoteId,
@@ -15,7 +16,7 @@ export function ArtworkCropEditor({
   onSaved
 }: {
   artwork: QuoteItemArtworkRow;
-  diameterMm: number;
+  geometry: PrintGeometry;
   imageUrl: string;
   itemId: string;
   quoteId: string;
@@ -36,7 +37,7 @@ export function ArtworkCropEditor({
     const response = await fetch(prepareUrl ?? `/api/quotes/${quoteId}/items/${itemId}/artworks/${artwork.id}/prepare`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ diameterMm, scale, offsetX, offsetY, rotationDegrees: rotation })
+      body: JSON.stringify({ scale, offsetX, offsetY, rotationDegrees: rotation })
     });
     const data = await response.json().catch(() => null);
     setSaving(false);
@@ -52,31 +53,31 @@ export function ArtworkCropEditor({
   }
 
   const positionFactor = (1 - scale) * 50;
+  const viewWidth = 1000;
+  const viewHeight = Math.max(200, 1000 * geometry.heightMm / geometry.widthMm);
+  const cornerRadius = geometry.cornerRadiusMm / geometry.widthMm * viewWidth;
+  const clipPath = createShapePath({ shape: geometry.shape, width: viewWidth, height: viewHeight, cornerRadius, rotationDegrees: geometry.rotationDegrees });
+  const cutPath = createShapePath({ shape: geometry.shape, width: viewWidth, height: viewHeight, cornerRadius, rotationDegrees: geometry.rotationDegrees, inset: Math.min(viewWidth, viewHeight) * 0.041 });
+  const safePath = createShapePath({ shape: geometry.shape, width: viewWidth, height: viewHeight, cornerRadius, rotationDegrees: geometry.rotationDegrees, inset: Math.min(viewWidth, viewHeight) * 0.09 });
+  const imageWidth = viewWidth * scale;
+  const imageHeight = viewHeight * scale;
+  const imageX = (viewWidth - imageWidth) / 2 + offsetX * positionFactor / 100 * viewWidth;
+  const imageY = (viewHeight - imageHeight) / 2 + offsetY * positionFactor / 100 * viewHeight;
 
   return (
     <div className="fixed inset-0 z-[70] grid place-items-center overflow-y-auto bg-black/80 p-3 backdrop-blur-sm sm:p-6">
       <div className="my-auto grid max-h-[94vh] w-full max-w-4xl overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950 shadow-2xl lg:grid-cols-[minmax(320px,1fr)_360px]">
         <div className="grid place-items-center bg-zinc-900 p-5 sm:p-8">
-          <div className="relative aspect-square w-full max-w-[520px] overflow-hidden rounded-full bg-white shadow-[0_0_0_8px_rgba(34,211,238,0.12)]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              alt={artwork.artwork_name ?? artwork.file_name}
-              className="absolute select-none object-cover"
-              draggable={false}
-              src={imageUrl}
-              style={{
-                height: `${scale * 100}%`,
-                left: `${50 + offsetX * positionFactor}%`,
-                top: `${50 + offsetY * positionFactor}%`,
-                transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
-                width: `${scale * 100}%`
-              }}
-            />
-            <div className="pointer-events-none absolute inset-[4.1%] rounded-full border border-dashed border-red-500/90" />
-            <div className="pointer-events-none absolute inset-[9%] rounded-full border border-dashed border-cyan-300/90" />
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,transparent_69%,rgba(0,0,0,0.18)_70%)]" />
+          <div className="w-full max-w-[520px] overflow-hidden bg-zinc-800 shadow-[0_0_0_8px_rgba(34,211,238,0.12)]" style={{ aspectRatio: `${geometry.widthMm} / ${geometry.heightMm}` }}>
+            <svg aria-label={artwork.artwork_name ?? artwork.file_name} className="h-full w-full" viewBox={`0 0 ${viewWidth} ${viewHeight}`}>
+              <defs><clipPath id={`artwork-shape-${artwork.id}`}><path d={clipPath} /></clipPath></defs>
+              <path d={clipPath} fill="white" />
+              <image clipPath={`url(#artwork-shape-${artwork.id})`} height={imageHeight} href={imageUrl} preserveAspectRatio="xMidYMid slice" transform={`rotate(${rotation} ${viewWidth / 2} ${viewHeight / 2})`} width={imageWidth} x={imageX} y={imageY} />
+              <path d={cutPath} fill="none" stroke="rgba(239,68,68,0.9)" strokeDasharray="9 7" strokeWidth="2" />
+              <path d={safePath} fill="none" stroke="rgba(103,232,249,0.9)" strokeDasharray="9 7" strokeWidth="2" />
+            </svg>
           </div>
-          <div className="mt-5 flex flex-wrap justify-center gap-4 text-xs text-zinc-400"><span><i className="mr-1 inline-block h-2 w-4 border-t border-dashed border-red-500" /> corte</span><span><i className="mr-1 inline-block h-2 w-4 border-t border-dashed border-cyan-300" /> área segura</span><span>{diameterMm} mm finais</span></div>
+          <div className="mt-5 flex flex-wrap justify-center gap-4 text-xs text-zinc-400"><span><i className="mr-1 inline-block h-2 w-4 border-t border-dashed border-red-500" /> corte</span><span><i className="mr-1 inline-block h-2 w-4 border-t border-dashed border-cyan-300" /> área segura</span><span>{geometryLabel(geometry)}</span></div>
         </div>
 
         <div className="min-h-0 overflow-y-auto p-5">

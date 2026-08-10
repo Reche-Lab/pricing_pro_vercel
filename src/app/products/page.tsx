@@ -3,6 +3,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { AnchorEditor } from "@/components/products/AnchorEditor";
 import { ProductEditForm } from "@/components/products/ProductEditForm";
 import { ProductForm } from "@/components/products/ProductForm";
+import { geometryLabel, resolvePrintGeometry } from "@/domain/artwork/geometry";
 import { getCurrentSession } from "@/lib/auth/session";
 import { listPlatformRules } from "@/repositories/platforms";
 import { listProductsAdmin } from "@/repositories/products";
@@ -38,7 +39,9 @@ export default async function ProductsPage() {
             {products.length === 0 ? (
               <p className="p-5 text-sm text-zinc-500">Nenhum produto cadastrado.</p>
             ) : (
-              products.map((item) => (
+              products.map((item) => {
+                const printGeometry = resolvePrintGeometry(item);
+                return (
                 <div
                   className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-950/45 p-3 text-sm shadow-sm shadow-black/10 transition-colors hover:border-zinc-700"
                   key={item.variant_id}
@@ -51,6 +54,7 @@ export default async function ProductsPage() {
                       <div className="mt-2 flex flex-wrap gap-2">
                         <span className="rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-400">{item.product_category}</span>
                         {item.sku ? <span className="rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-400">SKU {item.sku}</span> : null}
+                        {printGeometry ? <span className="rounded-md bg-cyan-400/10 px-2 py-1 text-xs text-cyan-200">{geometryLabel(printGeometry)}</span> : null}
                         {item.external_olist_product_id ? (
                           <span className="rounded-md bg-sky-500/10 px-2 py-1 text-xs text-sky-200">Olist {item.external_olist_product_id}</span>
                         ) : null}
@@ -85,6 +89,13 @@ export default async function ProductsPage() {
                       widthCm: item.width_cm,
                       lengthCm: item.length_cm,
                       printDiameterMm: item.print_diameter_mm,
+                      printShape: item.print_shape,
+                      printWidthMm: item.print_width_mm,
+                      printHeightMm: item.print_height_mm,
+                      printCornerStyle: item.print_corner_style,
+                      printCornerRadiusMm: item.print_corner_radius_mm,
+                      printShapeRotationDegrees: item.print_shape_rotation_degrees,
+                      allowPrintRotation: item.allow_print_rotation,
                       variantActive: item.variant_active
                     }}
                   />
@@ -95,7 +106,8 @@ export default async function ProductsPage() {
                     variantId={item.variant_id}
                   />
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         </section>

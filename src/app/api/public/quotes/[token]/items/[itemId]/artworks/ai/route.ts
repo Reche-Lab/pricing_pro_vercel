@@ -22,13 +22,13 @@ export async function POST(request: Request, route: { params: Promise<{ token: s
   if (!params.success || !body.success) return NextResponse.json({ ok: false, error: "Descreva a solicitação em pelo menos 10 caracteres." }, { status: 400 });
   const context = await getPublicArtworkContext(params.data.token, params.data.itemId, body.data.artworkId);
   if (!context) return NextResponse.json({ ok: false, error: "Orçamento ou referência indisponível." }, { status: 409 });
-  if (!context.diameterMm) return NextResponse.json({ ok: false, error: "O produto não possui diâmetro de impressão configurado." }, { status: 422 });
+  if (!context.geometry) return NextResponse.json({ ok: false, error: "O produto não possui formato e medidas de impressão configurados." }, { status: 422 });
   if (body.data.action === "generate" && context.artworkCount >= 10) return NextResponse.json({ ok: false, error: "Este produto já possui o limite de 10 versões." }, { status: 409 });
   let generationAttempt: { reserved: boolean; limit: number; attemptsUsed: number; attemptsRemaining: number } | null = null;
   try {
     const referenceDataUrl = context.artwork ? await loadArtworkDataUrl(context.artwork.data_url, context.artwork.storage_path) : null;
     if (body.data.action === "suggest") {
-      const suggestions = await suggestArtworkDirection({ brief: body.data.brief, product: context.itemDescription, diameterMm: context.diameterMm, referenceDataUrl });
+      const suggestions = await suggestArtworkDirection({ brief: body.data.brief, product: context.itemDescription, geometry: context.geometry, referenceDataUrl });
       return NextResponse.json({ ok: true, suggestions });
     }
     generationAttempt = await reservePublicArtworkAiAttempt(context);
@@ -38,7 +38,7 @@ export async function POST(request: Request, route: { params: Promise<{ token: s
         : `O limite de ${generationAttempt.limit} tentativas de geração para este produto foi atingido.`;
       return NextResponse.json({ ok: false, error, ...generationAttempt }, { status: 429 });
     }
-    const generated = await generateArtworkImage({ prompt: body.data.brief, diameterMm: context.diameterMm, referenceDataUrl });
+    const generated = await generateArtworkImage({ prompt: body.data.brief, geometry: context.geometry, referenceDataUrl });
     const bytes = await optimize(generated.dataUrl);
     const fileName = `arte-assistente-${Date.now()}.webp`;
     const dataUrl = `data:image/webp;base64,${bytes.toString("base64")}`;
@@ -58,10 +58,10 @@ export async function POST(request: Request, route: { params: Promise<{ token: s
 
 async function optimize(dataUrl: string) {
   let quality = 92;
-  let output = await sharp(decodeImageDataUrl(dataUrl)).rotate().resize(1800, 1800, { fit: "cover" }).webp({ quality }).toBuffer();
+  let output = await sharp(decodeImageDataUrl(dataUrl)).rotate().resize(1800, 1800, { fit: "inside", withoutEnlargement: true }).webp({ quality }).toBuffer();
   while (output.length > 3 * 1024 * 1024 && quality > 60) {
     quality -= 10;
-    output = await sharp(decodeImageDataUrl(dataUrl)).rotate().resize(1600, 1600, { fit: "cover" }).webp({ quality }).toBuffer();
+    output = await sharp(decodeImageDataUrl(dataUrl)).rotate().resize(1600, 1600, { fit: "inside", withoutEnlargement: true }).webp({ quality }).toBuffer();
   }
   if (output.length > 3 * 1024 * 1024) throw new Error("A imagem gerada excedeu 3 MB.");
   return output;

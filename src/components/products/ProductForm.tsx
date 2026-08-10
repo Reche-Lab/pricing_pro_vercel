@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { PackagePlus, Plus, Trash2 } from "lucide-react";
 import type { PricingCurveMode, PricingCurvePoint } from "@/domain/pricing/types";
 import { OlistProductLookupButton } from "./OlistProductLookupButton";
+import { PrintGeometryFields } from "./PrintGeometryFields";
 
 const ANCHORS = [1, 10, 50, 100, 500, 1000] as const;
 const initialPoints = ANCHORS.map((quantity) => ({ quantity, unitPrice: 0 }));
@@ -45,6 +46,9 @@ export function ProductForm() {
     setLoading(true);
 
     const form = new FormData(formElement);
+    const printShape = String(form.get("printShape")) as "circle" | "square" | "rectangle" | "triangle" | "hexagon";
+    const printWidthMm = Number(form.get("printWidthMm"));
+    const printHeightMm = printShape === "circle" || printShape === "square" ? printWidthMm : Number(form.get("printHeightMm"));
     const curvePoints = points
       .map((point) => ({
         quantity: Math.max(1, Math.trunc(point.quantity)),
@@ -67,7 +71,14 @@ export function ProductForm() {
         heightCm: Number(form.get("heightCm") || 0) || null,
         widthCm: Number(form.get("widthCm") || 0) || null,
         lengthCm: Number(form.get("lengthCm") || 0) || null,
-        printDiameterMm: Number(form.get("printDiameterMm") || 0) || null,
+        printDiameterMm: printShape === "circle" ? printWidthMm : null,
+        printShape,
+        printWidthMm,
+        printHeightMm,
+        printCornerStyle: form.get("printCornerStyle"),
+        printCornerRadiusMm: Number(form.get("printCornerRadiusMm") || 0),
+        printShapeRotationDegrees: Number(form.get("printShapeRotationDegrees") || 0),
+        allowPrintRotation: form.get("allowPrintRotation") === "on",
         curve: {
           mode: curveMode,
           points: curvePoints
@@ -120,13 +131,7 @@ export function ProductForm() {
         </div>
       </div>
 
-      <div className="mt-4 rounded-lg border border-cyan-900/60 bg-cyan-950/20 p-4">
-        <p className="text-sm font-medium text-cyan-100">Produção da arte</p>
-        <p className="mt-1 text-xs text-zinc-500">Diâmetro final do corte, sem a sangria. Para bottons, use 25, 35, 45 ou 55 mm.</p>
-        <div className="mt-3 max-w-xs">
-          <Input label="Diâmetro de impressão (mm)" min="10" name="printDiameterMm" step="0.1" type="number" />
-        </div>
-      </div>
+      <PrintGeometryFields />
 
       <label className="mt-4 block">
         <span className="mb-1 block text-sm font-medium text-zinc-300">Descricao</span>

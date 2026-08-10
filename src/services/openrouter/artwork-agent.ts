@@ -1,4 +1,5 @@
 import { getServerEnv } from "@/lib/env/server";
+import { geometryLabel, type PrintGeometry } from "@/domain/artwork/geometry";
 
 type CreativeSuggestions = {
   concept: string;
@@ -12,7 +13,8 @@ type CreativeSuggestions = {
 export async function suggestArtworkDirection(input: {
   brief: string;
   product: string;
-  diameterMm: number;
+  geometry?: PrintGeometry;
+  diameterMm?: number;
   referenceDataUrl?: string | null;
 }): Promise<CreativeSuggestions> {
   const env = getServerEnv();
@@ -29,7 +31,7 @@ export async function suggestArtworkDirection(input: {
     model: env.OPENROUTER_TEXT_MODEL,
     temperature: 0.6,
     messages: [
-      { role: "system", content: "Você é um diretor de arte especializado em brindes circulares para impressão. Preserve legibilidade, contraste e área segura." },
+      { role: "system", content: "Você é um diretor de arte especializado em produtos personalizados para impressão e corte. Respeite o formato final, preserve legibilidade, contraste e área segura." },
       { role: "user", content }
     ]
   });
@@ -39,7 +41,8 @@ export async function suggestArtworkDirection(input: {
 
 export async function generateArtworkImage(input: {
   prompt: string;
-  diameterMm: number;
+  geometry?: PrintGeometry;
+  diameterMm?: number;
   referenceDataUrl?: string | null;
 }) {
   const env = getServerEnv();
@@ -49,7 +52,7 @@ export async function generateArtworkImage(input: {
     model: env.OPENROUTER_IMAGE_MODEL,
     prompt: productionPrompt,
     n: 1,
-    aspect_ratio: "1:1",
+    aspect_ratio: imageAspectRatio(input.geometry),
     quality: "high",
     output_format: "png"
   };
@@ -67,24 +70,40 @@ export async function generateArtworkImage(input: {
 export function buildArtworkSuggestionPrompt(input: {
   brief: string;
   product: string;
-  diameterMm: number;
+  geometry?: PrintGeometry;
+  diameterMm?: number;
   referenceDataUrl?: string | null;
 }) {
   const referenceInstruction = input.referenceDataUrl
     ? "Analise a imagem de referência como a versão atual. Proponha melhorias coerentes com o pedido, preserve os elementos que não foram mencionados e descreva claramente o que deve mudar."
     : "Crie a direção a partir do briefing, pois não há imagem de referência.";
-  return `Crie uma direção de arte para um produto circular de ${input.diameterMm} mm (${input.product}). ${referenceInstruction} Briefing ou alterações solicitadas: ${input.brief}. Evite texto pequeno e elementos importantes próximos ao corte. Responda somente JSON válido com concept, composition, palette (array), typography, productionWarnings (array) e generationPrompt.`;
+  return `Crie uma direção de arte para ${formatDescription(input)} (${input.product}). ${referenceInstruction} Briefing ou alterações solicitadas: ${input.brief}. A composição deve considerar o contorno e a orientação do produto. Evite texto pequeno e elementos importantes próximos ao corte. Responda somente JSON válido com concept, composition, palette (array), typography, productionWarnings (array) e generationPrompt.`;
 }
 
 export function buildArtworkGenerationPrompt(input: {
   prompt: string;
-  diameterMm: number;
+  geometry?: PrintGeometry;
+  diameterMm?: number;
   referenceDataUrl?: string | null;
 }) {
   const referenceInstruction = input.referenceDataUrl
     ? "Use a imagem de referência como base da nova versão. Preserve composição, identidade, textos e elementos que não tenham sido explicitamente alterados. Aplique somente as mudanças solicitadas e não redesenhe arbitrariamente a arte."
     : "Crie uma arte original a partir da solicitação, sem depender de uma imagem anterior.";
-  return `${referenceInstruction}\nSolicitação: ${input.prompt}\nArte quadrada para recorte circular de ${input.diameterMm} mm, composição centralizada, fundo preenchendo toda a borda, sem mockup, sem fotografia do produto, sem linha de corte.`;
+  return `${referenceInstruction}\nSolicitação: ${input.prompt}\nCrie a imagem para ${formatDescription(input)}, respeitando a proporção e a orientação do formato final. Mantenha a composição centralizada, o fundo preenchendo toda a área até além do corte e os elementos importantes dentro da margem segura. Sem mockup, sem fotografia do produto e sem linha de corte.`;
+}
+
+function formatDescription(input: { geometry?: PrintGeometry; diameterMm?: number }) {
+  if (input.geometry) return `um produto com ${geometryLabel(input.geometry).toLocaleLowerCase("pt-BR")}`;
+  if (input.diameterMm) return `um produto circular de ${input.diameterMm} mm`;
+  return "o formato de impressão informado";
+}
+
+function imageAspectRatio(geometry?: PrintGeometry) {
+  if (!geometry) return "1:1";
+  const ratio = geometry.widthMm / geometry.heightMm;
+  if (ratio > 1.2) return "3:2";
+  if (ratio < 0.83) return "2:3";
+  return "1:1";
 }
 
 async function openRouterFetch(path: string, body: Record<string, unknown>) {

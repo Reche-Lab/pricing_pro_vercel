@@ -36,6 +36,13 @@ const createProductSchema = z.object({
   widthCm: z.number().min(0).optional().nullable(),
   lengthCm: z.number().min(0).optional().nullable(),
   printDiameterMm: z.number().min(10).max(300).optional().nullable(),
+  printShape: z.enum(["circle", "square", "rectangle", "triangle", "hexagon"]).default("circle"),
+  printWidthMm: z.number().min(5).max(1000),
+  printHeightMm: z.number().min(5).max(1000),
+  printCornerStyle: z.enum(["sharp", "rounded"]).default("sharp"),
+  printCornerRadiusMm: z.number().min(0).max(500).default(0),
+  printShapeRotationDegrees: z.number().min(-180).max(180).default(0),
+  allowPrintRotation: z.boolean().default(true),
   curve: curveSchema.optional(),
   anchors: anchorsSchema.optional()
 }).transform((input, context) => {

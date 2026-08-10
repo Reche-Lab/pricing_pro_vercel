@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Save } from "lucide-react";
 import { OlistProductLookupButton } from "./OlistProductLookupButton";
+import { PrintGeometryFields } from "./PrintGeometryFields";
+import type { PrintCornerStyle, PrintShape } from "@/domain/artwork/geometry";
 
 type ProductEditValues = {
   productName: string;
@@ -20,6 +22,13 @@ type ProductEditValues = {
   widthCm: string | null;
   lengthCm: string | null;
   printDiameterMm: string | null;
+  printShape: PrintShape;
+  printWidthMm: string | null;
+  printHeightMm: string | null;
+  printCornerStyle: PrintCornerStyle;
+  printCornerRadiusMm: string;
+  printShapeRotationDegrees: string;
+  allowPrintRotation: boolean;
   variantActive: boolean;
 };
 
@@ -33,6 +42,9 @@ export function ProductEditForm({ product }: { product: ProductEditValues }) {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const printShape = String(form.get("printShape")) as PrintShape;
+    const printWidthMm = Number(form.get("printWidthMm"));
+    const printHeightMm = printShape === "circle" || printShape === "square" ? printWidthMm : Number(form.get("printHeightMm"));
     setError("");
     setLoading(true);
 
@@ -52,7 +64,14 @@ export function ProductEditForm({ product }: { product: ProductEditValues }) {
         heightCm: optionalNumber(form.get("heightCm")),
         widthCm: optionalNumber(form.get("widthCm")),
         lengthCm: optionalNumber(form.get("lengthCm")),
-        printDiameterMm: optionalNumber(form.get("printDiameterMm")),
+        printDiameterMm: printShape === "circle" ? printWidthMm : null,
+        printShape,
+        printWidthMm,
+        printHeightMm,
+        printCornerStyle: form.get("printCornerStyle"),
+        printCornerRadiusMm: Number(form.get("printCornerRadiusMm") || 0),
+        printShapeRotationDegrees: Number(form.get("printShapeRotationDegrees") || 0),
+        allowPrintRotation: form.get("allowPrintRotation") === "on",
         variantActive: form.get("variantActive") === "on"
       })
     });
@@ -122,13 +141,7 @@ export function ProductEditForm({ product }: { product: ProductEditValues }) {
             </div>
           </div>
 
-          <div className="rounded-lg border border-cyan-900/60 bg-cyan-950/20 p-3">
-            <p className="text-sm font-medium text-cyan-100">Produção da arte</p>
-            <p className="mt-1 text-xs text-zinc-500">Informe o diâmetro final do corte, sem a sangria.</p>
-            <div className="mt-3 max-w-xs">
-              <Input defaultValue={product.printDiameterMm ?? ""} label="Diâmetro de impressão (mm)" name="printDiameterMm" step="0.1" type="number" />
-            </div>
-          </div>
+          <PrintGeometryFields defaults={{ shape: product.printShape, widthMm: product.printWidthMm ?? product.printDiameterMm, heightMm: product.printHeightMm ?? product.printDiameterMm, cornerStyle: product.printCornerStyle, cornerRadiusMm: product.printCornerRadiusMm, rotationDegrees: product.printShapeRotationDegrees, allowPrintRotation: product.allowPrintRotation }} />
 
           <div className="flex flex-wrap gap-3">
             <Checkbox defaultChecked={product.productActive} label="Produto ativo" name="productActive" />

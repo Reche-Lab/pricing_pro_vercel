@@ -80,6 +80,13 @@ export type QuoteItemRow = {
   sku?: string | null;
   external_olist_product_id?: string | null;
   print_diameter_mm?: string | null;
+  print_shape?: string | null;
+  print_width_mm?: string | null;
+  print_height_mm?: string | null;
+  print_corner_style?: string | null;
+  print_corner_radius_mm?: string | null;
+  print_shape_rotation_degrees?: string | null;
+  allow_print_rotation?: boolean | null;
   width_cm?: string | null;
   length_cm?: string | null;
   description: string;
@@ -122,6 +129,13 @@ export type QuoteItemArtworkRow = {
   original_width_px?: number | null;
   original_height_px?: number | null;
   target_diameter_mm?: string | null;
+  target_shape?: string | null;
+  target_width_mm?: string | null;
+  target_height_mm?: string | null;
+  target_corner_style?: string | null;
+  target_corner_radius_mm?: string | null;
+  target_shape_rotation_degrees?: string | null;
+  target_allow_print_rotation?: boolean | null;
   bleed_mm?: string | null;
   safe_margin_mm?: string | null;
   dpi?: number | null;
@@ -342,6 +356,11 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           pv.sku,
           to_jsonb(pv)->>'external_olist_product_id' as external_olist_product_id,
           to_jsonb(pv)->>'print_diameter_mm' as print_diameter_mm,
+          to_jsonb(pv)->>'print_shape' as print_shape, to_jsonb(pv)->>'print_width_mm' as print_width_mm,
+          to_jsonb(pv)->>'print_height_mm' as print_height_mm, to_jsonb(pv)->>'print_corner_style' as print_corner_style,
+          to_jsonb(pv)->>'print_corner_radius_mm' as print_corner_radius_mm,
+          to_jsonb(pv)->>'print_shape_rotation_degrees' as print_shape_rotation_degrees,
+          (to_jsonb(pv)->>'allow_print_rotation')::boolean as allow_print_rotation,
           pv.width_cm,
           pv.length_cm,
           qi.description,
@@ -382,6 +401,8 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           original_width_px,
           original_height_px,
           target_diameter_mm,
+          target_shape, target_width_mm, target_height_mm, target_corner_style,
+          target_corner_radius_mm, target_shape_rotation_degrees, target_allow_print_rotation,
           bleed_mm,
           safe_margin_mm,
           dpi,
@@ -552,6 +573,11 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           qi.reference_quantity,
           qi.base_unit_price::text as base_unit_price,
           to_jsonb(pv)->>'print_diameter_mm' as print_diameter_mm,
+          to_jsonb(pv)->>'print_shape' as print_shape, to_jsonb(pv)->>'print_width_mm' as print_width_mm,
+          to_jsonb(pv)->>'print_height_mm' as print_height_mm, to_jsonb(pv)->>'print_corner_style' as print_corner_style,
+          to_jsonb(pv)->>'print_corner_radius_mm' as print_corner_radius_mm,
+          to_jsonb(pv)->>'print_shape_rotation_degrees' as print_shape_rotation_degrees,
+          (to_jsonb(pv)->>'allow_print_rotation')::boolean as allow_print_rotation,
           pv.width_cm,
           pv.length_cm,
           coalesce((to_jsonb(qi)->>'artwork_ai_attempts')::integer, 0) as artwork_ai_attempts,
@@ -577,6 +603,8 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           prepared_data_url,
           prepared_storage_path,
           target_diameter_mm,
+          target_shape, target_width_mm, target_height_mm, target_corner_style,
+          target_corner_radius_mm, target_shape_rotation_degrees, target_allow_print_rotation,
           dpi,
           quality_status,
           approval_status,

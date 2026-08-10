@@ -6,6 +6,7 @@ import { Check, ChevronDown, ChevronUp, Download, Eye, ImageIcon, Printer, Sciss
 import { ArtworkCropEditor } from "@/components/quotes/ArtworkCropEditor";
 import { ArtworkPdfPreview } from "@/components/quotes/ArtworkPdfPreview";
 import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
+import { geometryLabel, resolvePrintGeometry, type PrintGeometry } from "@/domain/artwork/geometry";
 import type { QuoteItemArtworkRow, QuoteItemRow } from "@/repositories/quotes";
 
 type ArtworkEntry = { item: QuoteItemRow; artwork: QuoteItemArtworkRow };
@@ -100,8 +101,8 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
     const item = aiItem;
     const reference = aiReference;
     if (!item || brief.trim().length < 10) { setMessage("Selecione um item e descreva o pedido em pelo menos 10 caracteres."); return; }
-    const diameterMm = inferDiameter(item, reference?.artwork.target_diameter_mm);
-    const data = await runAction(`ai-${action}`, `/api/quotes/${quoteId}/items/${item.id}/artworks/ai`, { action, brief, artworkId: reference?.artwork.id, diameterMm, product: item.description });
+    const geometry = reference ? inferGeometry(item, reference.artwork) : resolvePrintGeometry(item);
+    const data = await runAction(`ai-${action}`, `/api/quotes/${quoteId}/items/${item.id}/artworks/ai`, { action, brief, artworkId: reference?.artwork.id, geometry, product: item.description });
     if (!data && action === "generate") router.refresh();
     if (data?.suggestions) {
       setSuggestions(data.suggestions);
@@ -163,7 +164,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
             <div className="grid gap-3 p-3">
               {itemArtworks.length === 0 ? <p className="text-sm text-zinc-500">Adicione uma imagem pelo botão Editar ou gere uma nova arte com o assistente.</p> : itemArtworks.map((entry) => <ArtworkRow
                 busy={busy}
-                diameter={inferDiameter(item, entry.artwork.target_diameter_mm)}
+                geometry={inferGeometry(item, entry.artwork)}
                 entry={entry}
                 key={entry.artwork.id}
                 quantity={quantities[entry.artwork.id] || 1}
@@ -211,19 +212,19 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
         <div className="flex flex-wrap items-end justify-between gap-3 border-t border-zinc-800 pt-4"><div><p className="text-xs text-zinc-500">A soma das artes aprovadas deve corresponder à quantidade de cada item.</p><button aria-pressed={drawCutLines} className={`focus-ring mt-3 inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${drawCutLines ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-200" : "border-zinc-700 bg-zinc-950 text-zinc-400 hover:bg-zinc-900"}`} type="button" onClick={() => setDrawCutLines((current) => !current)}><Scissors size={14} /> Linhas de corte <span className={`rounded px-1.5 py-0.5 text-[10px] ${drawCutLines ? "bg-cyan-400 text-cyan-950" : "bg-zinc-800 text-zinc-400"}`}>{drawCutLines ? "Incluídas" : "Removidas"}</span></button></div><div className="flex flex-wrap gap-2"><button className={`focus-ring inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium ${readyToPrint ? "border-zinc-700 text-zinc-200 hover:bg-zinc-900" : "cursor-not-allowed border-zinc-800 text-zinc-600"}`} disabled={!readyToPrint} type="button" onClick={() => setPreviewOpen(true)}><Eye size={16} /> Visualizar folhas</button><button className={`focus-ring inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold ${readyToPrint ? "bg-amber-400 text-zinc-950 hover:bg-amber-300" : "cursor-not-allowed bg-zinc-800 text-zinc-500"}`} disabled={!readyToPrint || Boolean(busy)} type="button" onClick={downloadPdf}><Download size={16} /> {busy === "pdf-download" ? "Gerando..." : "Baixar PDF"}</button></div></div>
       </div> : null}
 
-      {editing ? <ArtworkCropEditor artwork={editing.artwork} diameterMm={inferDiameter(editing.item, editing.artwork.target_diameter_mm) || 0} imageUrl={artworkImageUrl(quoteId, editing, "original")} itemId={editing.item.id} quoteId={quoteId} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setMessage("Arte preparada. Confira a qualidade e aprove a versão."); router.refresh(); }} /> : null}
+      {editing && inferGeometry(editing.item, editing.artwork) ? <ArtworkCropEditor artwork={editing.artwork} geometry={inferGeometry(editing.item, editing.artwork) as PrintGeometry} imageUrl={artworkImageUrl(quoteId, editing, "original")} itemId={editing.item.id} quoteId={quoteId} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setMessage("Arte preparada. Confira a qualidade e aprove a versão."); router.refresh(); }} /> : null}
       {previewOpen ? <ArtworkPdfPreview drawCutLines={drawCutLines} quoteId={quoteId} onClose={() => setPreviewOpen(false)} /> : null}
     </section>
   );
 }
 
-function ArtworkRow({ entry, quoteId, diameter, quantity, busy, readOnly, onQuantity, onEdit, onApprove }: { entry: ArtworkEntry; quoteId: string; diameter: number | null; quantity: number; busy: string; readOnly: boolean; onQuantity: (quantity: number) => void; onEdit: (entry: ArtworkEntry) => void; onApprove: (entry: ArtworkEntry, status: "approved" | "rejected") => void }) {
+function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, onQuantity, onEdit, onApprove }: { entry: ArtworkEntry; quoteId: string; geometry: PrintGeometry | null; quantity: number; busy: string; readOnly: boolean; onQuantity: (quantity: number) => void; onEdit: (entry: ArtworkEntry) => void; onApprove: (entry: ArtworkEntry, status: "approved" | "rejected") => void }) {
   const prepared = Boolean(entry.artwork.prepared_data_url || entry.artwork.prepared_storage_path);
   const approved = entry.artwork.approval_status === "approved";
   return <article className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-900/40">
     <div className="flex min-w-0 items-start gap-3 p-3 sm:gap-4 sm:p-4">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img alt={entry.artwork.artwork_name ?? entry.artwork.file_name} className="h-16 w-16 shrink-0 rounded-full border border-zinc-700 object-cover sm:h-20 sm:w-20" src={artworkImageUrl(quoteId, entry, prepared ? "prepared" : "original")} />
+      <img alt={entry.artwork.artwork_name ?? entry.artwork.file_name} className="h-16 w-16 shrink-0 rounded-md border border-zinc-700 bg-white object-contain sm:h-20 sm:w-20" src={artworkImageUrl(quoteId, entry, prepared ? "prepared" : "original")} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <p className="min-w-0 break-words text-sm font-semibold leading-5 text-white">{entry.artwork.artwork_name || entry.artwork.file_name}</p>
@@ -231,7 +232,7 @@ function ArtworkRow({ entry, quoteId, diameter, quantity, busy, readOnly, onQuan
         </div>
         {entry.artwork.artwork_name ? <p className="mt-1 break-all text-[11px] text-zinc-600">{entry.artwork.file_name}</p> : null}
         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500">
-          <span>{diameter ? `${diameter} mm` : "Diâmetro pendente"}</span>
+          <span>{geometry ? geometryLabel(geometry) : "Geometria pendente"}</span>
           <span>{entry.artwork.source_kind === "openrouter" ? "Gerada por IA" : "Arquivo enviado"}</span>
           {entry.artwork.dpi ? <span>{entry.artwork.dpi} DPI</span> : null}
         </div>
@@ -242,7 +243,7 @@ function ArtworkRow({ entry, quoteId, diameter, quantity, busy, readOnly, onQuan
     <div className="flex flex-wrap items-end justify-between gap-3 border-t border-zinc-800 bg-zinc-950/50 p-3">
       <label className="w-36 shrink-0"><span className="mb-1 block text-xs font-medium text-zinc-400">Cópias desta arte</span><input className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm tabular-nums disabled:opacity-50" disabled={readOnly} min="1" type="number" value={quantity} onChange={(event) => onQuantity(Math.max(1, Number(event.target.value) || 1))} /></label>
       <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-2">
-        <button className="focus-ring inline-flex h-9 flex-1 basis-[130px] items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-900 disabled:opacity-50" disabled={readOnly || !diameter || Boolean(busy)} type="button" onClick={() => onEdit(entry)}><ImageIcon size={14} /> {prepared ? "Reenquadrar" : "Enquadrar"}</button>
+        <button className="focus-ring inline-flex h-9 flex-1 basis-[130px] items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-900 disabled:opacity-50" disabled={readOnly || !geometry || Boolean(busy)} type="button" onClick={() => onEdit(entry)}><ImageIcon size={14} /> {prepared ? "Reenquadrar" : "Enquadrar"}</button>
         {approved ? <>
           <button className="focus-ring inline-flex h-9 flex-1 basis-[110px] items-center justify-center gap-2 rounded-md bg-emerald-400/15 px-3 text-xs font-medium text-emerald-200 disabled:opacity-50" disabled={readOnly || Boolean(busy)} type="button" onClick={() => onApprove(entry, "approved")}><Check size={14} /> Atualizar</button>
           <button className="focus-ring grid h-9 w-9 shrink-0 place-items-center rounded-md border border-zinc-700 text-zinc-400 hover:border-red-900 hover:text-red-300 disabled:opacity-50" disabled={readOnly} title="Remover aprovação" type="button" onClick={() => onApprove(entry, "rejected")}><X size={14} /></button>
@@ -255,7 +256,7 @@ function ArtworkRow({ entry, quoteId, diameter, quantity, busy, readOnly, onQuan
 type Suggestions = { concept: string; composition: string; palette: string[]; typography: string; productionWarnings: string[]; generationPrompt: string };
 type PrintJob = { id: string; status: "generated" | "printed" | "cancelled"; page_count: number; copy_count: number; created_at: string };
 function SuggestionResult({ suggestions }: { suggestions: Suggestions }) { return <div className="grid gap-2 rounded-md bg-zinc-950/80 p-3 text-xs text-zinc-300"><p><strong className="text-white">Conceito:</strong> {suggestions.concept}</p><p><strong className="text-white">Composição:</strong> {suggestions.composition}</p><p><strong className="text-white">Paleta:</strong> {suggestions.palette.join(", ")}</p><p><strong className="text-white">Tipografia:</strong> {suggestions.typography}</p>{suggestions.productionWarnings.length ? <p className="text-amber-200"><strong>Cuidados:</strong> {suggestions.productionWarnings.join(" · ")}</p> : null}</div>; }
-function inferDiameter(item: QuoteItemRow, preparedDiameter?: string | null) { const explicit = Number(preparedDiameter || item.print_diameter_mm || 0); if (explicit > 0) return explicit; const cm = Math.max(Number(item.width_cm || 0), Number(item.length_cm || 0)); return cm > 0 ? cm * 10 : null; }
+function inferGeometry(item: QuoteItemRow, artwork: QuoteItemArtworkRow) { return resolvePrintGeometry({ ...item, ...artwork }); }
 function initialQuantities(items: QuoteItemRow[]) { const result: Record<string, number> = {}; for (const item of items) { const arts = item.artworks ?? []; for (const artwork of arts) result[artwork.id] = artwork.production_quantity ?? (arts.length === 1 ? item.quantity : Math.max(1, Math.floor(item.quantity / arts.length))); } return result; }
 function artworkImageUrl(quoteId: string, entry: ArtworkEntry, kind: "original" | "prepared") { const inline = kind === "prepared" ? entry.artwork.prepared_data_url : entry.artwork.data_url; return inline || `/api/quotes/${quoteId}/items/${entry.item.id}/artworks/${entry.artwork.id}/file?kind=${kind}`; }
 function fileToDataUrl(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Não foi possível ler a imagem.")); reader.onerror = () => reject(new Error("Não foi possível ler a imagem.")); reader.readAsDataURL(file); }); }

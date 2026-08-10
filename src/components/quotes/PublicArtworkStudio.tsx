@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Check, ImageIcon, Loader2, Sparkles, Upload, WandSparkles } from "lucide-react";
 import { ArtworkCropEditor } from "@/components/quotes/ArtworkCropEditor";
 import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
+import { resolvePrintGeometry, type PrintGeometry } from "@/domain/artwork/geometry";
 import { getPublicArtworkReviewProgress } from "@/domain/quotes/public-artwork-review";
 import type { QuoteItemArtworkRow, QuoteItemRow } from "@/repositories/quotes";
 
@@ -102,15 +103,15 @@ export function PublicArtworkStudio({ token, quoteId, items, disabled }: { token
       {itemArtworks.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{itemArtworks.map((artwork) => {
         const prepared = Boolean(artwork.prepared_data_url || artwork.prepared_storage_path);
         const approved = artwork.approval_status === "approved";
-        const diameter = inferDiameter(item, artwork.target_diameter_mm);
+        const geometry = inferGeometry(item, artwork);
         const entry = { item, artwork };
         return <article className={`overflow-hidden rounded-md border ${approved ? "border-emerald-400/60 bg-emerald-400/5" : referenceId === artwork.id ? "border-violet-400/70 bg-violet-400/5" : "border-zinc-800 bg-zinc-950/60"}`} key={artwork.id}>
-          <button className="relative block aspect-square w-full overflow-hidden bg-zinc-900" type="button" onClick={() => setReferenceId(artwork.id)}>
-            <img alt={artwork.artwork_name || artwork.file_name} className="h-full w-full object-cover" src={publicArtworkUrl(token, artwork.id, prepared)} />
+          <button className="relative block aspect-square w-full overflow-hidden bg-white" type="button" onClick={() => setReferenceId(artwork.id)}>
+            <img alt={artwork.artwork_name || artwork.file_name} className="h-full w-full object-contain" src={publicArtworkUrl(token, artwork.id, prepared)} />
             {approved ? <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded bg-emerald-400 px-2 py-1 text-[11px] font-semibold text-emerald-950"><Check size={12} /> Aprovada</span> : null}
           </button>
           <div className="grid gap-3 p-3"><div><p className="truncate text-sm font-medium text-white">{artwork.artwork_name || artwork.file_name}</p><p className="mt-1 text-xs text-zinc-500">{prepared ? "Enquadramento preparado" : "Aguardando reenquadramento"}{artwork.source_kind === "openrouter" ? " · criada por IA" : ""}</p></div>
-            {!disabled ? <div className="grid grid-cols-2 gap-2"><button className="focus-ring inline-flex items-center justify-center gap-1.5 rounded-md border border-zinc-700 px-2 py-2 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-40" disabled={!diameter} title={diameter ? "Ajustar enquadramento" : "Diâmetro de impressão não configurado"} type="button" onClick={() => setEditing(entry)}><ImageIcon size={13} /> Reenquadrar</button><button className="focus-ring inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-400 px-2 py-2 text-xs font-semibold text-emerald-950 disabled:opacity-40" disabled={!prepared || Boolean(busy)} type="button" onClick={() => approve(artwork)}>{busy === `approve-${artwork.id}` ? <Loader2 className="animate-spin" size={13} /> : <Check size={13} />} {approved ? "Aprovada" : "Aprovar"}</button></div> : null}
+            {!disabled ? <div className="grid grid-cols-2 gap-2"><button className="focus-ring inline-flex items-center justify-center gap-1.5 rounded-md border border-zinc-700 px-2 py-2 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-40" disabled={!geometry} title={geometry ? "Ajustar enquadramento" : "Geometria de impressão não configurada"} type="button" onClick={() => setEditing(entry)}><ImageIcon size={13} /> Reenquadrar</button><button className="focus-ring inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-400 px-2 py-2 text-xs font-semibold text-emerald-950 disabled:opacity-40" disabled={!prepared || Boolean(busy)} type="button" onClick={() => approve(artwork)}>{busy === `approve-${artwork.id}` ? <Loader2 className="animate-spin" size={13} /> : <Check size={13} />} {approved ? "Aprovada" : "Aprovar"}</button></div> : null}
           </div>
         </article>;
       })}</div> : <div className="rounded-md border border-dashed border-zinc-700 p-6 text-center text-sm text-zinc-500">Ainda não há uma arte para este produto. Envie uma referência ou peça uma criação ao assistente.</div>}
@@ -128,10 +129,10 @@ export function PublicArtworkStudio({ token, quoteId, items, disabled }: { token
       {message ? <p className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-300">{message}</p> : null}
     </div>
 
-    {editing ? <ArtworkCropEditor artwork={editing.artwork} diameterMm={inferDiameter(editing.item, editing.artwork.target_diameter_mm) || 0} imageUrl={publicArtworkUrl(token, editing.artwork.id, false)} itemId={editing.item.id} quoteId={quoteId} prepareUrl={`/api/public/quotes/${token}/items/${editing.item.id}/artworks/${editing.artwork.id}/prepare`} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setMessage("Enquadramento salvo. Agora você pode aprovar esta versão."); router.refresh(); }} /> : null}
+    {editing && inferGeometry(editing.item, editing.artwork) ? <ArtworkCropEditor artwork={editing.artwork} geometry={inferGeometry(editing.item, editing.artwork) as PrintGeometry} imageUrl={publicArtworkUrl(token, editing.artwork.id, false)} itemId={editing.item.id} quoteId={quoteId} prepareUrl={`/api/public/quotes/${token}/items/${editing.item.id}/artworks/${editing.artwork.id}/prepare`} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setMessage("Enquadramento salvo. Agora você pode aprovar esta versão."); router.refresh(); }} /> : null}
   </section>;
 }
 
 function publicArtworkUrl(token: string, artworkId: string, prepared: boolean) { return `/api/public/quotes/${token}/artworks/${artworkId}${prepared ? "?kind=prepared" : ""}`; }
-function inferDiameter(item: QuoteItemRow, prepared?: string | null) { const explicit = Number(prepared || item.print_diameter_mm || 0); if (explicit > 0) return explicit; const cm = Math.max(Number(item.width_cm || 0), Number(item.length_cm || 0)); return cm > 0 ? cm * 10 : null; }
+function inferGeometry(item: QuoteItemRow, artwork: QuoteItemArtworkRow) { return resolvePrintGeometry({ ...item, ...artwork }); }
 function fileToDataUrl(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Não foi possível ler a imagem.")); reader.onerror = () => reject(new Error("Não foi possível ler a imagem.")); reader.readAsDataURL(file); }); }

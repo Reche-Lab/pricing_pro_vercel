@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { createShapeSvg, type PrintGeometry } from "@/domain/artwork/geometry";
 
 export type ArtworkProductionProfile = {
   pageWidthMm: number;
@@ -58,37 +59,62 @@ export async function prepareCircularArtwork(input: {
   offsetY?: number;
   rotationDegrees?: number;
 }): Promise<PreparedArtwork> {
+  return prepareArtwork({
+    ...input,
+    geometry: { shape: "circle", widthMm: input.diameterMm, heightMm: input.diameterMm, cornerStyle: "sharp", cornerRadiusMm: 0, rotationDegrees: 0, allowPrintRotation: true }
+  });
+}
+
+export async function prepareArtwork(input: {
+  dataUrl: string;
+  geometry: PrintGeometry;
+  bleedMm: number;
+  dpi: number;
+  scale?: number;
+  offsetX?: number;
+  offsetY?: number;
+  rotationDegrees?: number;
+}): Promise<PreparedArtwork> {
   const source = decodeImageDataUrl(input.dataUrl);
   const orientedSource = await sharp(source, { failOn: "error" }).rotate().png().toBuffer();
   const image = sharp(orientedSource, { failOn: "error" });
   const metadata = await image.metadata();
   if (!metadata.width || !metadata.height) throw new Error("Não foi possível identificar as dimensões da arte.");
 
-  const outputDiameterMm = input.diameterMm + input.bleedMm * 2;
-  const outputPx = mmToPixels(outputDiameterMm, input.dpi);
-  const requiredFinishedPx = mmToPixels(input.diameterMm, input.dpi);
-  const availableFinishedPx = Math.min(metadata.width, metadata.height) * (input.diameterMm / outputDiameterMm);
+  const outputWidthMm = input.geometry.widthMm + input.bleedMm * 2;
+  const outputHeightMm = input.geometry.heightMm + input.bleedMm * 2;
+  const outputWidthPx = mmToPixels(outputWidthMm, input.dpi);
+  const outputHeightPx = mmToPixels(outputHeightMm, input.dpi);
+  const requiredFinishedPx = Math.max(mmToPixels(input.geometry.widthMm, input.dpi), mmToPixels(input.geometry.heightMm, input.dpi));
+  const availableFinishedPx = Math.min(metadata.width, metadata.height);
   const qualityStatus = availableFinishedPx + 1 >= requiredFinishedPx ? "ready" : "warning";
   const scale = clamp(input.scale ?? 1, 0.1, 5);
   const offsetX = clamp(input.offsetX ?? 0, -1, 1);
   const offsetY = clamp(input.offsetY ?? 0, -1, 1);
   const rotationDegrees = clamp(input.rotationDegrees ?? 0, -180, 180);
-  const scaledPx = Math.max(1, Math.ceil(outputPx * scale));
+  const scaledWidthPx = Math.max(1, Math.ceil(outputWidthPx * scale));
+  const scaledHeightPx = Math.max(1, Math.ceil(outputHeightPx * scale));
 
-  const circleMask = Buffer.from(
-    `<svg width="${outputPx}" height="${outputPx}"><circle cx="${outputPx / 2}" cy="${outputPx / 2}" r="${outputPx / 2}" fill="white"/></svg>`
-  );
+  const pxPerMm = input.dpi / 25.4;
+  const shapeMask = Buffer.from(createShapeSvg({
+    shape: input.geometry.shape,
+    width: outputWidthPx,
+    height: outputHeightPx,
+    cornerRadius: (input.geometry.cornerRadiusMm + input.bleedMm) * pxPerMm,
+    rotationDegrees: input.geometry.rotationDegrees,
+    fill: "white"
+  }));
   const transformed = await image
     .rotate(rotationDegrees, { background: { r: 255, g: 255, b: 255, alpha: 0 } })
-    .resize(scaledPx, scaledPx, { fit: "cover", position: "centre" })
+    .resize(scaledWidthPx, scaledHeightPx, { fit: "cover", position: "centre" })
     .png({ compressionLevel: 9 })
     .toBuffer();
   const framed = scale >= 1
-    ? await cropOversizedArtwork(transformed, outputPx, scaledPx, offsetX, offsetY)
-    : await placeReducedArtwork(transformed, outputPx, scaledPx, offsetX, offsetY);
+    ? await cropOversizedArtwork(transformed, outputWidthPx, outputHeightPx, scaledWidthPx, scaledHeightPx, offsetX, offsetY)
+    : await placeReducedArtwork(transformed, outputWidthPx, outputHeightPx, scaledWidthPx, scaledHeightPx, offsetX, offsetY);
   const output = await sharp(framed)
     .ensureAlpha()
-    .composite([{ input: circleMask, blend: "dest-in" }])
+    .composite([{ input: shapeMask, blend: "dest-in" }])
     .png({ compressionLevel: 9 })
     .toBuffer();
 
@@ -99,8 +125,8 @@ export async function prepareCircularArtwork(input: {
 
   return {
     dataUrl: `data:image/png;base64,${output.toString("base64")}`,
-    widthPx: outputPx,
-    heightPx: outputPx,
+    widthPx: outputWidthPx,
+    heightPx: outputHeightPx,
     originalWidthPx: metadata.width,
     originalHeightPx: metadata.height,
     qualityStatus,
@@ -110,16 +136,19 @@ export async function prepareCircularArtwork(input: {
 
 async function cropOversizedArtwork(
   image: Buffer,
-  outputPx: number,
-  scaledPx: number,
+  outputWidthPx: number,
+  outputHeightPx: number,
+  scaledWidthPx: number,
+  scaledHeightPx: number,
   offsetX: number,
   offsetY: number
 ) {
-  const overflowPx = Math.max(0, scaledPx - outputPx);
-  const left = Math.round(overflowPx * ((offsetX + 1) / 2));
-  const top = Math.round(overflowPx * ((offsetY + 1) / 2));
+  const overflowX = Math.max(0, scaledWidthPx - outputWidthPx);
+  const overflowY = Math.max(0, scaledHeightPx - outputHeightPx);
+  const left = Math.round(overflowX * ((offsetX + 1) / 2));
+  const top = Math.round(overflowY * ((offsetY + 1) / 2));
   return sharp(image)
-    .extract({ left, top, width: outputPx, height: outputPx })
+    .extract({ left, top, width: outputWidthPx, height: outputHeightPx })
     .flatten({ background: "#ffffff" })
     .png({ compressionLevel: 9 })
     .toBuffer();
@@ -127,15 +156,16 @@ async function cropOversizedArtwork(
 
 async function placeReducedArtwork(
   image: Buffer,
-  outputPx: number,
-  scaledPx: number,
+  outputWidthPx: number,
+  outputHeightPx: number,
+  scaledWidthPx: number,
+  scaledHeightPx: number,
   offsetX: number,
   offsetY: number
 ) {
-  const availablePx = outputPx - scaledPx;
-  const left = Math.round(availablePx * ((offsetX + 1) / 2));
-  const top = Math.round(availablePx * ((offsetY + 1) / 2));
-  return sharp({ create: { width: outputPx, height: outputPx, channels: 4, background: "#ffffff" } })
+  const left = Math.round((outputWidthPx - scaledWidthPx) * ((offsetX + 1) / 2));
+  const top = Math.round((outputHeightPx - scaledHeightPx) * ((offsetY + 1) / 2));
+  return sharp({ create: { width: outputWidthPx, height: outputHeightPx, channels: 4, background: "#ffffff" } })
     .composite([{ input: image, left, top }])
     .png({ compressionLevel: 9 })
     .toBuffer();

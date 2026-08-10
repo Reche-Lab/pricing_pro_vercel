@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
+import { resolvePrintGeometry, type PrintGeometry } from "@/domain/artwork/geometry";
 import { getPool } from "@/lib/db/client";
 import { DEFAULT_ARTWORK_PROFILE, type ArtworkProductionProfile, type PreparedArtwork } from "@/services/artwork/production";
 
@@ -11,6 +12,7 @@ export type PublicArtworkContext = {
   itemDescription: string;
   itemQuantity: number;
   diameterMm: number | null;
+  geometry: PrintGeometry | null;
   artworkCount: number;
   aiAttempts: number;
   aiGenerationLimit: number;
@@ -20,6 +22,9 @@ export type PublicArtworkContext = {
     data_url: string | null;
     storage_path: string | null;
     target_diameter_mm: string | null;
+    target_shape: string | null; target_width_mm: string | null; target_height_mm: string | null;
+    target_corner_style: string | null; target_corner_radius_mm: string | null;
+    target_shape_rotation_degrees: string | null; target_allow_print_rotation: boolean | null;
   } | null;
 };
 
@@ -28,10 +33,17 @@ export async function getPublicArtworkContext(token: string, itemId: string, art
   try {
     const result = await client.query<{
       quote_id: string; tenant_id: string; item_id: string; description: string; quantity: number;
-      print_diameter_mm: string | null; width_cm: string | null; length_cm: string | null; artwork_count: number; artwork_ai_attempts: number; artwork_ai_generation_limit: number;
+      print_diameter_mm: string | null; print_shape: string | null; print_width_mm: string | null; print_height_mm: string | null;
+      print_corner_style: string | null; print_corner_radius_mm: string | null; print_shape_rotation_degrees: string | null;
+      allow_print_rotation: boolean | null; width_cm: string | null; length_cm: string | null; artwork_count: number; artwork_ai_attempts: number; artwork_ai_generation_limit: number;
     }>(
       `select q.id as quote_id, q.tenant_id, qi.id as item_id, qi.description, qi.quantity,
-              to_jsonb(pv)->>'print_diameter_mm' as print_diameter_mm, pv.width_cm, pv.length_cm,
+              to_jsonb(pv)->>'print_diameter_mm' as print_diameter_mm,
+              to_jsonb(pv)->>'print_shape' as print_shape, to_jsonb(pv)->>'print_width_mm' as print_width_mm,
+              to_jsonb(pv)->>'print_height_mm' as print_height_mm, to_jsonb(pv)->>'print_corner_style' as print_corner_style,
+              to_jsonb(pv)->>'print_corner_radius_mm' as print_corner_radius_mm,
+              to_jsonb(pv)->>'print_shape_rotation_degrees' as print_shape_rotation_degrees,
+              (to_jsonb(pv)->>'allow_print_rotation')::boolean as allow_print_rotation, pv.width_cm, pv.length_cm,
               (select count(*)::int from quote_item_artworks count_art
                where count_art.quote_id = q.id and count_art.quote_item_id = qi.id) as artwork_count,
               coalesce((to_jsonb(qi)->>'artwork_ai_attempts')::integer, 0) as artwork_ai_attempts,
@@ -54,8 +66,10 @@ export async function getPublicArtworkContext(token: string, itemId: string, art
         layout_mode: ArtworkProductionProfile["layoutMode"]; draw_cut_lines: boolean;
       }>("select * from artwork_production_profiles where tenant_id = $1 limit 1", [row.tenant_id]),
       artworkId
-        ? client.query<{ id: string; data_url: string | null; storage_path: string | null; target_diameter_mm: string | null }>(
-            `select id, data_url, storage_path, target_diameter_mm
+        ? client.query<PublicArtworkContext["artwork"] & { id: string }>(
+            `select id, data_url, storage_path, target_diameter_mm, target_shape, target_width_mm,
+                    target_height_mm, target_corner_style, target_corner_radius_mm,
+                    target_shape_rotation_degrees, target_allow_print_rotation
              from quote_item_artworks
              where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4 limit 1`,
             [row.tenant_id, row.quote_id, row.item_id, artworkId]
@@ -65,6 +79,7 @@ export async function getPublicArtworkContext(token: string, itemId: string, art
     if (artworkId && !artworkResult.rows[0]) return null;
     const explicitDiameter = Number(artworkResult.rows[0]?.target_diameter_mm || row.print_diameter_mm || 0);
     const packageDiameter = Math.max(Number(row.width_cm || 0), Number(row.length_cm || 0)) * 10;
+    const geometry = resolvePrintGeometry({ ...row, ...artworkResult.rows[0] });
     return {
       quoteId: row.quote_id,
       tenantId: row.tenant_id,
@@ -72,7 +87,8 @@ export async function getPublicArtworkContext(token: string, itemId: string, art
       itemId: row.item_id,
       itemDescription: row.description,
       itemQuantity: row.quantity,
-      diameterMm: explicitDiameter > 0 ? explicitDiameter : packageDiameter > 0 ? packageDiameter : null,
+      diameterMm: geometry ? Math.max(geometry.widthMm, geometry.heightMm) : explicitDiameter > 0 ? explicitDiameter : packageDiameter > 0 ? packageDiameter : null,
+      geometry,
       artworkCount: row.artwork_count,
       aiAttempts: row.artwork_ai_attempts,
       aiGenerationLimit: normalizeArtworkAiGenerationLimit(row.artwork_ai_generation_limit),
@@ -151,7 +167,7 @@ export async function addPublicArtwork(input: {
 export async function savePublicPreparedArtwork(input: {
   context: PublicArtworkContext;
   artworkId: string;
-  diameterMm: number;
+  geometry: PrintGeometry;
   prepared: PreparedArtwork;
   preparedDataUrl: string | null;
   preparedStoragePath: string | null;
@@ -168,23 +184,28 @@ export async function savePublicPreparedArtwork(input: {
            prepared_width_px = $13, prepared_height_px = $14, quality_status = $15,
            approval_status = 'pending', preparation_notes = $16, crop_scale = $17,
            crop_offset_x = $18, crop_offset_y = $19, rotation_degrees = $20,
+           target_shape = $21, target_width_mm = $22, target_height_mm = $23,
+           target_corner_style = $24, target_corner_radius_mm = $25,
+           target_shape_rotation_degrees = $26, target_allow_print_rotation = $27,
            prepared_at = now(), approved_at = null, approved_by = null, version = version + 1
        where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4
          and exists (
            select 1 from quotes q where q.id = $2 and q.tenant_id = $1
-             and q.public_token_hash = $21 and q.public_token_expires_at > now()
+             and q.public_token_hash = $28 and q.public_token_expires_at > now()
              and q.status in ('draft', 'sent')
          )
        returning id`,
       [input.context.tenantId, input.context.quoteId, input.context.itemId, input.artworkId,
-        input.prepared.originalWidthPx, input.prepared.originalHeightPx, input.diameterMm,
+        input.prepared.originalWidthPx, input.prepared.originalHeightPx, input.geometry.shape === "circle" ? input.geometry.widthMm : null,
         input.context.profile.bleedMm, input.context.profile.safeMarginMm, input.context.profile.dpi,
         input.preparedDataUrl, input.preparedStoragePath, input.prepared.widthPx, input.prepared.heightPx,
         input.prepared.qualityStatus, input.prepared.notes, input.crop.scale, input.crop.offsetX,
-        input.crop.offsetY, input.crop.rotationDegrees, input.context.tokenHash]
+        input.crop.offsetY, input.crop.rotationDegrees, input.geometry.shape, input.geometry.widthMm,
+        input.geometry.heightMm, input.geometry.cornerStyle, input.geometry.cornerRadiusMm,
+        input.geometry.rotationDegrees, input.geometry.allowPrintRotation, input.context.tokenHash]
     );
     if (!result.rows[0]) throw new Error("Arte não encontrada.");
-    await recordPublicEvent(client, input.context, "artworks.public_prepare", input.artworkId, { diameterMm: input.diameterMm, qualityStatus: input.prepared.qualityStatus });
+    await recordPublicEvent(client, input.context, "artworks.public_prepare", input.artworkId, { geometry: input.geometry, qualityStatus: input.prepared.qualityStatus });
     return result.rows[0];
   } finally {
     client.release();

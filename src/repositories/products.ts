@@ -1,6 +1,7 @@
 import { createProductSlug } from "@/domain/products/products";
 import { normalizePricingCurvePoints } from "@/domain/pricing/pricing";
 import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
+import type { PrintCornerStyle, PrintShape } from "@/domain/artwork/geometry";
 import { withTenantContext } from "@/lib/db/client";
 
 export type ProductVariantRow = {
@@ -20,6 +21,13 @@ export type ProductVariantRow = {
   width_cm: string | null;
   length_cm: string | null;
   print_diameter_mm: string | null;
+  print_shape: PrintShape;
+  print_width_mm: string | null;
+  print_height_mm: string | null;
+  print_corner_style: PrintCornerStyle;
+  print_corner_radius_mm: string;
+  print_shape_rotation_degrees: string;
+  allow_print_rotation: boolean;
   curve_mode: PricingCurveMode | null;
   anchors: Record<string, number> | null;
   platform_curves?: Record<string, { mode: PricingCurveMode; anchors: Record<string, number> | null }> | null;
@@ -45,6 +53,13 @@ export type CreateProductWithVariantInput = {
   widthCm?: number | null;
   lengthCm?: number | null;
   printDiameterMm?: number | null;
+  printShape: PrintShape;
+  printWidthMm: number;
+  printHeightMm: number;
+  printCornerStyle: PrintCornerStyle;
+  printCornerRadiusMm: number;
+  printShapeRotationDegrees: number;
+  allowPrintRotation: boolean;
   curve: PricingCurve;
 };
 
@@ -66,6 +81,13 @@ export type UpdateProductVariantInput = {
   widthCm?: number | null;
   lengthCm?: number | null;
   printDiameterMm?: number | null;
+  printShape: PrintShape;
+  printWidthMm: number;
+  printHeightMm: number;
+  printCornerStyle: PrintCornerStyle;
+  printCornerRadiusMm: number;
+  printShapeRotationDegrees: number;
+  allowPrintRotation: boolean;
   variantActive: boolean;
 };
 
@@ -90,6 +112,13 @@ export async function listProductVariants(userId: string, tenantId: string): Pro
           v.width_cm,
           v.length_cm,
           to_jsonb(v)->>'print_diameter_mm' as print_diameter_mm,
+          coalesce(to_jsonb(v)->>'print_shape', 'circle') as print_shape,
+          coalesce(to_jsonb(v)->>'print_width_mm', to_jsonb(v)->>'print_diameter_mm') as print_width_mm,
+          coalesce(to_jsonb(v)->>'print_height_mm', to_jsonb(v)->>'print_diameter_mm') as print_height_mm,
+          coalesce(to_jsonb(v)->>'print_corner_style', 'sharp') as print_corner_style,
+          coalesce(to_jsonb(v)->>'print_corner_radius_mm', '0') as print_corner_radius_mm,
+          coalesce(to_jsonb(v)->>'print_shape_rotation_degrees', '0') as print_shape_rotation_degrees,
+          coalesce((to_jsonb(v)->>'allow_print_rotation')::boolean, true) as allow_print_rotation,
           pc.mode as curve_mode,
           (
             select jsonb_object_agg(pa.quantity::text, pa.unit_price order by pa.quantity)
@@ -164,6 +193,13 @@ export async function listProductsAdmin(userId: string, tenantId: string): Promi
           v.width_cm,
           v.length_cm,
           to_jsonb(v)->>'print_diameter_mm' as print_diameter_mm,
+          coalesce(to_jsonb(v)->>'print_shape', 'circle') as print_shape,
+          coalesce(to_jsonb(v)->>'print_width_mm', to_jsonb(v)->>'print_diameter_mm') as print_width_mm,
+          coalesce(to_jsonb(v)->>'print_height_mm', to_jsonb(v)->>'print_diameter_mm') as print_height_mm,
+          coalesce(to_jsonb(v)->>'print_corner_style', 'sharp') as print_corner_style,
+          coalesce(to_jsonb(v)->>'print_corner_radius_mm', '0') as print_corner_radius_mm,
+          coalesce(to_jsonb(v)->>'print_shape_rotation_degrees', '0') as print_shape_rotation_degrees,
+          coalesce((to_jsonb(v)->>'allow_print_rotation')::boolean, true) as allow_print_rotation,
           v.active as variant_active,
           pc.id as curve_id,
           pc.version as curve_version,
@@ -229,9 +265,16 @@ export async function createProductWithVariant(
           width_cm,
           length_cm,
           print_diameter_mm,
+          print_shape,
+          print_width_mm,
+          print_height_mm,
+          print_corner_style,
+          print_corner_radius_mm,
+          print_shape_rotation_degrees,
+          allow_print_rotation,
           active
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, true)
         returning id
       `,
       [
@@ -246,7 +289,14 @@ export async function createProductWithVariant(
         input.heightCm ?? null,
         input.widthCm ?? null,
         input.lengthCm ?? null,
-        input.printDiameterMm ?? null
+        input.printShape === "circle" ? input.printWidthMm : input.printDiameterMm ?? null,
+        input.printShape,
+        input.printWidthMm,
+        input.printShape === "square" || input.printShape === "circle" ? input.printWidthMm : input.printHeightMm,
+        input.printCornerStyle,
+        input.printCornerStyle === "rounded" ? input.printCornerRadiusMm : 0,
+        input.printShapeRotationDegrees,
+        input.allowPrintRotation
       ]
     );
     const variantId = variantResult.rows[0].id;
@@ -353,7 +403,14 @@ export async function updateProductVariant(
             width_cm = $10,
             length_cm = $11,
             print_diameter_mm = $12,
-            active = $13,
+            print_shape = $13,
+            print_width_mm = $14,
+            print_height_mm = $15,
+            print_corner_style = $16,
+            print_corner_radius_mm = $17,
+            print_shape_rotation_degrees = $18,
+            allow_print_rotation = $19,
+            active = $20,
             updated_at = now()
         where tenant_id = $1 and id = $2
       `,
@@ -369,7 +426,14 @@ export async function updateProductVariant(
         input.heightCm ?? null,
         input.widthCm ?? null,
         input.lengthCm ?? null,
-        input.printDiameterMm ?? null,
+        input.printShape === "circle" ? input.printWidthMm : input.printDiameterMm ?? null,
+        input.printShape,
+        input.printWidthMm,
+        input.printShape === "square" || input.printShape === "circle" ? input.printWidthMm : input.printHeightMm,
+        input.printCornerStyle,
+        input.printCornerStyle === "rounded" ? input.printCornerRadiusMm : 0,
+        input.printShapeRotationDegrees,
+        input.allowPrintRotation,
         input.variantActive
       ]
     );

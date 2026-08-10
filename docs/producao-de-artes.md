@@ -6,7 +6,7 @@ O módulo transforma as imagens vinculadas aos itens de um orçamento em arquivo
 
 ## Fluxo do usuário
 
-1. Cadastre em `Produtos` o diâmetro final de impressão da variante em milímetros.
+1. Cadastre em `Produtos` o formato e as dimensões finais de impressão da variante em milímetros.
 2. Anexe uma imagem ao item do orçamento, envie uma referência diretamente pelo assistente ou crie uma arte do zero.
 3. Abra `Itens > Produção de artes` no orçamento.
 4. Clique em `Enquadrar` e ajuste zoom, posição e rotação com as áreas de corte e segurança visíveis. O zoom pode ficar abaixo de `1x`; nesse caso, a região do corte sem imagem recebe fundo branco.
@@ -26,13 +26,25 @@ No `Estúdio de aprovação das artes`, o cliente pode:
 - comparar as versões de cada produto;
 - enviar uma imagem PNG, JPEG ou WebP como referência;
 - criar uma arte do zero ou solicitar alterações sobre uma versão existente;
-- reenquadrar a imagem para o corte circular e conferir a área segura;
+- reenquadrar a imagem no formato de corte do produto e conferir a área segura;
 - selecionar e aprovar uma única versão por produto;
 - aceitar ou recusar o orçamento após concluir a revisão.
 
 A arte original nunca é sobrescrita. A aprovação de uma versão desmarca as demais versões do mesmo produto. Para itens personalizados, o aceite final do orçamento é bloqueado enquanto não houver uma arte preparada e aprovada. Todas as ações públicas são auditadas sem expor uma sessão interna do tenant.
 
-O PDF mantém escala física, quantidade de cada item, margens, espaçamento, sangria e linhas de corte. Para artes do mesmo diâmetro, o modo automático compara a grade com a distribuição alternada. Para diâmetros mistos, utiliza organização por linhas com os maiores itens primeiro.
+O PDF mantém escala física, quantidade de cada item, margens, espaçamento, sangria e o contorno exato das linhas de corte. Círculos iguais podem usar distribuição alternada. Os demais formatos usam organização por linhas, com rotação de 90° somente quando ela estiver habilitada no produto e melhorar o aproveitamento da folha.
+
+## Formatos de produto
+
+Cada variante pode ter sua própria geometria de impressão. O cadastro e a edição de produtos permitem definir:
+
+- circular, quadrado, retangular, triangular ou hexagonal;
+- largura e altura finais, sem sangria;
+- cantos retos ou arredondados e o raio do arredondamento;
+- orientação de triângulos e hexágonos;
+- permissão para girar a peça em 90° durante a montagem A4.
+
+Esses dados pertencem à variante e, portanto, ficam isolados por tenant. A geometria usada na preparação é gravada como snapshot da arte, preservando o orçamento mesmo que o cadastro do produto seja alterado depois. Produtos antigos que possuem somente `print_diameter_mm` continuam sendo interpretados como circulares.
 
 ## Configuração
 
@@ -86,6 +98,7 @@ Nunca exponha a chave `service_role` com prefixo `NEXT_PUBLIC_`. Originais, arte
 - Repreparar uma arte remove sua aprovação anterior.
 - Todas as preparações e aprovações geram eventos em `audit_logs`.
 - Uma imagem abaixo da resolução necessária recebe alerta, mas pode ser aprovada conscientemente.
+- O assistente criativo recebe o formato e a proporção física do produto; ele não presume mais que toda arte seja circular.
 
 ## Endpoints internos
 

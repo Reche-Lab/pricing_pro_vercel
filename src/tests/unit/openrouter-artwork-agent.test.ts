@@ -24,4 +24,13 @@ describe("OpenRouter artwork prompts", () => {
     expect(prompt).toContain("não há imagem de referência");
     expect(prompt).toContain("Botton 4,5 cm");
   });
+
+  it("describes non-circular formats and their physical proportions", () => {
+    const prompt = buildArtworkGenerationPrompt({
+      prompt: "Crie uma placa de identificação.",
+      geometry: { shape: "rectangle", widthMm: 80, heightMm: 50, cornerStyle: "rounded", cornerRadiusMm: 5, rotationDegrees: 0, allowPrintRotation: true }
+    });
+    expect(prompt).toContain("retangular 80 × 50 mm");
+    expect(prompt).toContain("respeitando a proporção");
+  });
 });

@@ -18,6 +18,13 @@ const updateProductSchema = z.object({
   widthCm: z.number().min(0).optional().nullable(),
   lengthCm: z.number().min(0).optional().nullable(),
   printDiameterMm: z.number().min(10).max(300).optional().nullable(),
+  printShape: z.enum(["circle", "square", "rectangle", "triangle", "hexagon"]),
+  printWidthMm: z.number().min(5).max(1000),
+  printHeightMm: z.number().min(5).max(1000),
+  printCornerStyle: z.enum(["sharp", "rounded"]),
+  printCornerRadiusMm: z.number().min(0).max(500),
+  printShapeRotationDegrees: z.number().min(-180).max(180),
+  allowPrintRotation: z.boolean(),
   variantActive: z.boolean()
 });
 

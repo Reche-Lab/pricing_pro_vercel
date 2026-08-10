@@ -124,20 +124,23 @@ Status atualizado durante a refatoracao inicial.
 
 ### Produção de artes
 
-- [x] Cadastrar diâmetro final de impressão por variante.
-- [x] Preservar a imagem original e preparar uma versão circular em PNG.
+- [x] Cadastrar formato, dimensões, cantos e orientação de impressão por variante.
+- [x] Manter compatibilidade com produtos circulares antigos que possuem somente diâmetro.
+- [x] Preservar a imagem original e preparar uma versão recortada no formato do produto em PNG.
 - [x] Calcular pixels, sangria e alerta de qualidade pela resolução configurada.
 - [x] Aprovar uma única versão de arte por item com auditoria.
 - [x] Gerar PDF A4 na escala física e na quantidade do orçamento.
-- [x] Distribuir automaticamente artes iguais e mistas na folha.
+- [x] Distribuir automaticamente artes iguais e mistas na folha, incluindo rotação opcional de formatos retangulares.
 - [x] Configurar folha, margem, sangria, área segura, intervalo, DPI e linhas de corte por tenant.
 - [x] Gerar direção criativa textual e novas imagens via OpenRouter.
 - [x] Limitar a geração por IA por item do orçamento, com padrão 3, configuração por tenant no Superadmin e aplicação no acesso público.
 - [x] Manter aprovação humana obrigatória para imagens geradas por IA.
 - [x] Adicionar testes unitários de preparação, quantidade e PDF.
 - [x] Armazenar novos originais, preparados e PDFs em Supabase Storage privado, com fallback legado.
-- [x] Adicionar editor visual de enquadramento, zoom e rotação.
-- [x] Permitir zoom out no enquadramento e preencher em branco a área circular sem imagem.
+- [x] Adicionar editor visual de enquadramento, zoom e rotação com contorno específico por formato.
+- [x] Permitir zoom out no enquadramento e preencher em branco a área sem imagem.
+- [x] Gerar linhas de corte para círculo, quadrado, retângulo, triângulo e hexágono, com cantos retos ou arredondados.
+- [x] Instruir o assistente criativo com a geometria e a proporção reais do produto.
 - [x] Distribuir a quantidade de um item entre várias artes aprovadas.
 - [x] Pré-visualizar as folhas A4 antes do download.
 - [x] Registrar lotes de produção e permitir marcá-los como impressos.
@@ -156,7 +159,7 @@ Resultado:
 
 - lint passou;
 - typecheck passou;
-- testes passaram: 35 testes em 14 arquivos;
+- testes passaram: 89 testes em 22 arquivos;
 - build Next passou.
 
 ## Acoes Manuais Pendentes

@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
 import { requireWritableBilling } from "@/lib/billing/guard";
-import { getArtworkPreparationSource, getArtworkProductionData, resolveArtworkDiameterMm, savePreparedArtwork } from "@/repositories/artwork-production";
-import { prepareCircularArtwork } from "@/services/artwork/production";
+import { getArtworkPreparationSource, getArtworkProductionData, resolveArtworkGeometry, savePreparedArtwork } from "@/repositories/artwork-production";
+import { prepareArtwork } from "@/services/artwork/production";
 import { decodeDataUrl, loadArtworkDataUrl, uploadArtworkObject } from "@/services/storage/artwork-storage";
 
 const paramsSchema = z.object({ quoteId: z.string().uuid(), itemId: z.string().uuid(), artworkId: z.string().uuid() });
@@ -30,12 +30,12 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
       getArtworkProductionData(session.userId, session.tenantId, params.data.quoteId)
     ]);
     if (!source || !production) return NextResponse.json({ ok: false, error: "Arte não encontrada." }, { status: 404 });
-    const diameterMm = body.data.diameterMm ?? resolveArtworkDiameterMm(source);
-    if (!diameterMm) throw new Error("Defina o diâmetro de impressão deste produto antes de preparar a arte.");
+    const geometry = resolveArtworkGeometry(source);
+    if (!geometry) throw new Error("Defina a geometria de impressão deste produto antes de preparar a arte.");
     const sourceDataUrl = await loadArtworkDataUrl(source.data_url, source.storage_path);
-    const prepared = await prepareCircularArtwork({
+    const prepared = await prepareArtwork({
       dataUrl: sourceDataUrl,
-      diameterMm,
+      geometry,
       bleedMm: production.profile.bleedMm,
       dpi: production.profile.dpi,
       scale: body.data.scale,
@@ -51,7 +51,7 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     });
     const artwork = await savePreparedArtwork({
       userId: session.userId, tenantId: session.tenantId, quoteId: params.data.quoteId,
-      itemId: params.data.itemId, artworkId: params.data.artworkId, diameterMm,
+      itemId: params.data.itemId, artworkId: params.data.artworkId, geometry,
       profile: production.profile,
       prepared,
       preparedDataUrl: preparedStoragePath ? null : prepared.dataUrl,

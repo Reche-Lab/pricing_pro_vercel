@@ -4,7 +4,8 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
 import { requireWritableBilling } from "@/lib/billing/guard";
 import { addQuoteItemArtwork, assertQuoteCanBeEdited } from "@/repositories/quotes";
-import { getArtworkPreparationSource, markArtworkAsGenerated, reserveArtworkAiGenerationAttempt, resolveArtworkDiameterMm } from "@/repositories/artwork-production";
+import { getArtworkPreparationSource, markArtworkAsGenerated, reserveArtworkAiGenerationAttempt, resolveArtworkGeometry } from "@/repositories/artwork-production";
+import { resolvePrintGeometry } from "@/domain/artwork/geometry";
 import { decodeImageDataUrl } from "@/services/artwork/production";
 import { generateArtworkImage, suggestArtworkDirection } from "@/services/openrouter/artwork-agent";
 import { loadArtworkDataUrl, uploadArtworkObject } from "@/services/storage/artwork-storage";
@@ -18,7 +19,16 @@ const bodySchema = z.object({
   brief: z.string().trim().min(10).max(3000),
   artworkId: z.string().uuid().optional().nullable(),
   diameterMm: z.number().min(10).max(300).optional(),
-  product: z.string().trim().max(200).default("produto circular")
+  product: z.string().trim().max(200).default("produto personalizado"),
+  geometry: z.object({
+    shape: z.enum(["circle", "square", "rectangle", "triangle", "hexagon"]),
+    widthMm: z.number().min(5).max(1000),
+    heightMm: z.number().min(5).max(1000),
+    cornerStyle: z.enum(["sharp", "rounded"]),
+    cornerRadiusMm: z.number().min(0).max(500),
+    rotationDegrees: z.number().min(-360).max(360),
+    allowPrintRotation: z.boolean()
+  }).optional()
 });
 
 export async function POST(request: Request, context: { params: Promise<{ quoteId: string; itemId: string }> }) {
@@ -36,11 +46,13 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     const reference = body.data.artworkId
       ? await getArtworkPreparationSource(session.userId, session.tenantId, params.data.quoteId, params.data.itemId, body.data.artworkId)
       : null;
-    const diameterMm = body.data.diameterMm ?? (reference ? resolveArtworkDiameterMm(reference) : null);
-    if (!diameterMm) throw new Error("Informe o diâmetro da arte ou configure-o no produto.");
+    const geometry = body.data.geometry
+      ?? (reference ? resolveArtworkGeometry(reference) : null)
+      ?? resolvePrintGeometry({ print_diameter_mm: body.data.diameterMm });
+    if (!geometry) throw new Error("Configure o formato e as medidas de impressão do produto.");
     const referenceDataUrl = reference ? await loadArtworkDataUrl(reference.data_url, reference.storage_path) : null;
     if (body.data.action === "suggest") {
-      const suggestions = await suggestArtworkDirection({ brief: body.data.brief, product: body.data.product, diameterMm, referenceDataUrl });
+      const suggestions = await suggestArtworkDirection({ brief: body.data.brief, product: body.data.product, geometry, referenceDataUrl });
       return NextResponse.json({ ok: true, suggestions });
     }
 
@@ -52,7 +64,7 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
       return NextResponse.json({ ok: false, error, ...generationAttempt }, { status: 429 });
     }
 
-    const generated = await generateArtworkImage({ prompt: body.data.brief, diameterMm, referenceDataUrl });
+    const generated = await generateArtworkImage({ prompt: body.data.brief, geometry, referenceDataUrl });
     const optimized = await optimizeGeneratedImage(generated.dataUrl);
     const fileName = `arte-openrouter-${Date.now()}.webp`;
     const storagePath = await uploadArtworkObject({
@@ -81,10 +93,10 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
 
 async function optimizeGeneratedImage(dataUrl: string) {
   let quality = 92;
-  let output = await sharp(decodeImageDataUrl(dataUrl)).rotate().resize(1800, 1800, { fit: "cover" }).webp({ quality }).toBuffer();
+  let output = await sharp(decodeImageDataUrl(dataUrl)).rotate().resize(1800, 1800, { fit: "inside", withoutEnlargement: true }).webp({ quality }).toBuffer();
   while (output.length > 3 * 1024 * 1024 && quality > 60) {
     quality -= 10;
-    output = await sharp(decodeImageDataUrl(dataUrl)).rotate().resize(1600, 1600, { fit: "cover" }).webp({ quality }).toBuffer();
+    output = await sharp(decodeImageDataUrl(dataUrl)).rotate().resize(1600, 1600, { fit: "inside", withoutEnlargement: true }).webp({ quality }).toBuffer();
   }
   if (output.length > 3 * 1024 * 1024) throw new Error("A imagem gerada ficou maior que o limite de 3 MB.");
   return output;
