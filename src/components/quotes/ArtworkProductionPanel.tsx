@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, ChevronDown, ChevronUp, Download, Eye, ImageIcon, Printer, Scissors, Upload, WandSparkles, X } from "lucide-react";
 import { ArtworkCropEditor } from "@/components/quotes/ArtworkCropEditor";
 import { ArtworkPdfPreview } from "@/components/quotes/ArtworkPdfPreview";
+import { ARTWORK_AI_GENERATION_LIMIT, getArtworkAiAttemptsRemaining } from "@/domain/artwork/ai-generation-limit";
 import type { QuoteItemArtworkRow, QuoteItemRow } from "@/repositories/quotes";
 
 type ArtworkEntry = { item: QuoteItemRow; artwork: QuoteItemArtworkRow };
@@ -27,6 +28,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
   const aiItem = items.find((item) => item.id === aiItemId) ?? items[0];
   const aiItemArtworks = artworks.filter((entry) => entry.item.id === aiItem?.id);
   const aiReference = aiItemArtworks.find((entry) => entry.artwork.id === aiReferenceArtworkId) ?? null;
+  const aiAttemptsRemaining = getArtworkAiAttemptsRemaining(aiItem?.artwork_ai_attempts);
   const [quantities, setQuantities] = useState<Record<string, number>>(() => initialQuantities(items));
 
   useEffect(() => setQuantities(initialQuantities(items)), [items]);
@@ -99,6 +101,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
     if (!item || brief.trim().length < 10) { setMessage("Selecione um item e descreva o pedido em pelo menos 10 caracteres."); return; }
     const diameterMm = inferDiameter(item, reference?.artwork.target_diameter_mm);
     const data = await runAction(`ai-${action}`, `/api/quotes/${quoteId}/items/${item.id}/artworks/ai`, { action, brief, artworkId: reference?.artwork.id, diameterMm, product: item.description });
+    if (!data && action === "generate") router.refresh();
     if (data?.suggestions) {
       setSuggestions(data.suggestions);
       setMessage(reference ? "Sugestões criadas com base na arte selecionada." : "Sugestões criadas a partir do briefing.");
@@ -181,6 +184,8 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
               <label><span className="mb-1 block text-xs font-medium text-zinc-400">2. Arte usada como base</span><select className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white" value={aiReferenceArtworkId} onChange={(event) => { setAiReferenceArtworkId(event.target.value); setSuggestions(null); }}><option value="">Criar do zero, sem imagem de referência</option>{aiItemArtworks.map(({ artwork }) => <option key={artwork.id} value={artwork.id}>{artwork.artwork_name || artwork.file_name}{artwork.source_kind === "openrouter" ? " · versão criada por IA" : ""}</option>)}</select></label>
             </div>
 
+            <div className={`rounded-md border px-3 py-2 text-xs ${aiAttemptsRemaining ? "border-violet-900/60 bg-violet-950/30 text-violet-200" : "border-amber-900/60 bg-amber-950/30 text-amber-200"}`}><div className="flex flex-wrap items-center justify-between gap-2"><span>Limite de geração deste produto</span><strong>{aiAttemptsRemaining} de {ARTWORK_AI_GENERATION_LIMIT} gerações restantes</strong></div><p className="mt-1 text-[11px] opacity-75">Sugestões, uploads e reenquadramentos não consomem tentativas.</p></div>
+
             <div className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-950/70 p-3 sm:grid-cols-[96px_minmax(0,1fr)]">
               {aiReference ? <>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -195,7 +200,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
             </div>
 
             <label><span className="mb-1 block text-xs font-medium text-zinc-400">3. O que você deseja criar ou alterar?</span><textarea className="focus-ring min-h-28 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm leading-6 text-white" maxLength={3000} placeholder={aiReference ? "Ex.: mantenha o logotipo e a composição; troque o fundo por azul, aumente o título e remova o telefone..." : "Descreva tema, texto, cores, público e referências do cliente..."} value={brief} onChange={(event) => setBrief(event.target.value)} /></label>
-            <div className="flex flex-wrap gap-2"><button className="focus-ring rounded-md border border-violet-700 px-3 py-2 text-xs font-medium text-violet-200 hover:bg-violet-950 disabled:opacity-50" disabled={Boolean(busy)} type="button" onClick={() => requestAi("suggest")}>{busy === "ai-suggest" ? "Analisando..." : aiReference ? "Sugerir melhorias" : "Sugerir direção"}</button><button className="focus-ring rounded-md bg-violet-400 px-3 py-2 text-xs font-semibold text-violet-950 hover:bg-violet-300 disabled:opacity-50" disabled={Boolean(busy)} type="button" onClick={() => requestAi("generate")}>{busy === "ai-generate" ? "Gerando..." : aiReference ? "Gerar alteração como nova versão" : "Gerar nova arte"}</button></div>
+            <div className="flex flex-wrap gap-2"><button className="focus-ring rounded-md border border-violet-700 px-3 py-2 text-xs font-medium text-violet-200 hover:bg-violet-950 disabled:opacity-50" disabled={Boolean(busy)} type="button" onClick={() => requestAi("suggest")}>{busy === "ai-suggest" ? "Analisando..." : aiReference ? "Sugerir melhorias" : "Sugerir direção"}</button><button className="focus-ring rounded-md bg-violet-400 px-3 py-2 text-xs font-semibold text-violet-950 hover:bg-violet-300 disabled:opacity-50" disabled={Boolean(busy) || aiAttemptsRemaining === 0} type="button" onClick={() => requestAi("generate")}>{busy === "ai-generate" ? "Gerando..." : aiAttemptsRemaining === 0 ? "Limite de gerações atingido" : aiReference ? "Gerar alteração como nova versão" : "Gerar nova arte"}</button></div>
             {suggestions ? <SuggestionResult suggestions={suggestions} /> : null}
           </div>
         </details> : null}

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { z } from "zod";
+import { ARTWORK_AI_GENERATION_LIMIT } from "@/domain/artwork/ai-generation-limit";
 import { getCurrentSession } from "@/lib/auth/session";
 import { requireWritableBilling } from "@/lib/billing/guard";
 import { addQuoteItemArtwork, assertQuoteCanBeEdited } from "@/repositories/quotes";
-import { getArtworkPreparationSource, markArtworkAsGenerated, resolveArtworkDiameterMm } from "@/repositories/artwork-production";
+import { getArtworkPreparationSource, markArtworkAsGenerated, reserveArtworkAiGenerationAttempt, resolveArtworkDiameterMm } from "@/repositories/artwork-production";
 import { decodeImageDataUrl } from "@/services/artwork/production";
 import { generateArtworkImage, suggestArtworkDirection } from "@/services/openrouter/artwork-agent";
 import { loadArtworkDataUrl, uploadArtworkObject } from "@/services/storage/artwork-storage";
@@ -30,6 +31,7 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
   const body = bodySchema.safeParse(await request.json().catch(() => null));
   if (!params.success || !body.success) return NextResponse.json({ ok: false, error: "Informe um briefing com pelo menos 10 caracteres." }, { status: 400 });
 
+  let generationAttempt: { attemptsUsed: number; attemptsRemaining: number } | null = null;
   try {
     await assertQuoteCanBeEdited(session.userId, session.tenantId, params.data.quoteId);
     const reference = body.data.artworkId
@@ -41,6 +43,11 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     if (body.data.action === "suggest") {
       const suggestions = await suggestArtworkDirection({ brief: body.data.brief, product: body.data.product, diameterMm, referenceDataUrl });
       return NextResponse.json({ ok: true, suggestions });
+    }
+
+    generationAttempt = await reserveArtworkAiGenerationAttempt({ userId: session.userId, tenantId: session.tenantId, quoteId: params.data.quoteId, itemId: params.data.itemId });
+    if (!generationAttempt) {
+      return NextResponse.json({ ok: false, error: `O limite de ${ARTWORK_AI_GENERATION_LIMIT} tentativas de geração para este produto foi atingido.`, attemptsUsed: ARTWORK_AI_GENERATION_LIMIT, attemptsRemaining: 0 }, { status: 429 });
     }
 
     const generated = await generateArtworkImage({ prompt: body.data.brief, diameterMm, referenceDataUrl });
@@ -63,10 +70,10 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
       referenceArtworkId: reference?.id ?? null,
       prompt: generated.prompt
     });
-    return NextResponse.json({ ok: true, artwork }, { status: 201 });
+    return NextResponse.json({ ok: true, artwork, ...generationAttempt }, { status: 201 });
   } catch (error) {
     console.error("OpenRouter artwork action failed.", { ...params.data, action: body.data.action, message: error instanceof Error ? error.message : "Erro desconhecido" });
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Não foi possível executar o assistente criativo." }, { status: 502 });
+    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Não foi possível executar o assistente criativo.", ...(generationAttempt ?? {}) }, { status: 502 });
   }
 }
 

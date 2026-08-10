@@ -5,6 +5,7 @@ import { useMemo, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ImageIcon, Loader2, Sparkles, Upload, WandSparkles } from "lucide-react";
 import { ArtworkCropEditor } from "@/components/quotes/ArtworkCropEditor";
+import { ARTWORK_AI_GENERATION_LIMIT, getArtworkAiAttemptsRemaining } from "@/domain/artwork/ai-generation-limit";
 import { getPublicArtworkReviewProgress } from "@/domain/quotes/public-artwork-review";
 import type { QuoteItemArtworkRow, QuoteItemRow } from "@/repositories/quotes";
 
@@ -23,6 +24,7 @@ export function PublicArtworkStudio({ token, quoteId, items, disabled }: { token
   const item = items.find((candidate) => candidate.id === itemId) ?? items[0];
   const itemArtworks = item?.artworks ?? [];
   const reference = itemArtworks.find((artwork) => artwork.id === referenceId) ?? null;
+  const attemptsRemaining = getArtworkAiAttemptsRemaining(item?.artwork_ai_attempts);
   const progress = useMemo(() => getPublicArtworkReviewProgress(items.map((candidate) => ({
     artworkName: candidate.artwork_name,
     artworks: candidate.artworks?.map((artwork) => ({ approvalStatus: artwork.approval_status }))
@@ -66,7 +68,7 @@ export function PublicArtworkStudio({ token, quoteId, items, disabled }: { token
         setMessage("Nova versão criada. Reenquadre e aprove quando estiver satisfeito.");
         router.refresh();
       }
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Não foi possível executar o assistente."); }
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Não foi possível executar o assistente."); if (action === "generate") router.refresh(); }
     finally { setBusy(""); }
   }
 
@@ -116,8 +118,9 @@ export function PublicArtworkStudio({ token, quoteId, items, disabled }: { token
         <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-violet-100"><span className="inline-flex items-center gap-2"><WandSparkles size={15} /> Criar ou solicitar alterações</span></summary>
         <div className="grid gap-4 border-t border-violet-900/40 p-4">
           <div className="grid gap-3 sm:grid-cols-2"><label><span className="mb-1 block text-xs text-zinc-400">Arte usada como base</span><select className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white" value={referenceId} onChange={(event) => setReferenceId(event.target.value)}><option value="">Criar do zero</option>{itemArtworks.map((artwork) => <option key={artwork.id} value={artwork.id}>{artwork.artwork_name || artwork.file_name}</option>)}</select></label><div><span className="mb-1 block text-xs text-zinc-400">Enviar uma referência</span><label className="focus-ring inline-flex cursor-pointer items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"><Upload size={14} /> {busy === "upload" ? "Enviando..." : "Escolher imagem"}<input accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={Boolean(busy)} type="file" onChange={upload} /></label></div></div>
+          <div className={`rounded-md border px-3 py-2 text-xs ${attemptsRemaining ? "border-violet-900/60 bg-violet-950/30 text-violet-200" : "border-amber-900/60 bg-amber-950/30 text-amber-200"}`}><div className="flex flex-wrap items-center justify-between gap-2"><span>Gerações disponíveis para este produto</span><strong>{attemptsRemaining} de {ARTWORK_AI_GENERATION_LIMIT} restantes</strong></div><p className="mt-1 text-[11px] opacity-75">Sugestões, uploads e reenquadramentos continuam disponíveis sem consumir tentativas.</p></div>
           <label><span className="mb-1 block text-xs text-zinc-400">Descreva a criação ou as mudanças desejadas</span><textarea className="focus-ring min-h-28 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm leading-6 text-white" maxLength={3000} placeholder={reference ? "Ex.: mantenha os textos e troque somente o fundo por azul..." : "Ex.: crie uma arte alegre para aniversário com o nome Marina..."} value={brief} onChange={(event) => setBrief(event.target.value)} /></label>
-          <div className="flex flex-wrap gap-2"><button className="focus-ring rounded-md border border-violet-700 px-3 py-2 text-xs font-medium text-violet-200 disabled:opacity-50" disabled={Boolean(busy)} type="button" onClick={() => runAssistant("suggest")}>{busy === "suggest" ? "Analisando..." : reference ? "Sugerir melhorias" : "Sugerir direção"}</button><button className="focus-ring inline-flex items-center gap-2 rounded-md bg-violet-400 px-3 py-2 text-xs font-semibold text-violet-950 disabled:opacity-50" disabled={Boolean(busy)} type="button" onClick={() => runAssistant("generate")}>{busy === "generate" ? <Loader2 className="animate-spin" size={13} /> : <WandSparkles size={13} />}{reference ? "Gerar alteração" : "Criar nova arte"}</button></div>
+          <div className="flex flex-wrap gap-2"><button className="focus-ring rounded-md border border-violet-700 px-3 py-2 text-xs font-medium text-violet-200 disabled:opacity-50" disabled={Boolean(busy)} type="button" onClick={() => runAssistant("suggest")}>{busy === "suggest" ? "Analisando..." : reference ? "Sugerir melhorias" : "Sugerir direção"}</button><button className="focus-ring inline-flex items-center gap-2 rounded-md bg-violet-400 px-3 py-2 text-xs font-semibold text-violet-950 disabled:opacity-50" disabled={Boolean(busy) || attemptsRemaining === 0} type="button" onClick={() => runAssistant("generate")}>{busy === "generate" ? <Loader2 className="animate-spin" size={13} /> : <WandSparkles size={13} />}{attemptsRemaining === 0 ? "Limite de gerações atingido" : reference ? "Gerar alteração" : "Criar nova arte"}</button></div>
           {suggestions ? <div className="grid gap-2 rounded-md bg-zinc-950/80 p-3 text-xs leading-5 text-zinc-300"><p><strong className="text-white">Conceito:</strong> {suggestions.concept}</p><p><strong className="text-white">Composição:</strong> {suggestions.composition}</p><p><strong className="text-white">Paleta:</strong> {suggestions.palette.join(", ")}</p><p><strong className="text-white">Tipografia:</strong> {suggestions.typography}</p>{suggestions.productionWarnings.length ? <p className="text-amber-200"><strong>Cuidados:</strong> {suggestions.productionWarnings.join(" · ")}</p> : null}</div> : null}
         </div>
       </details> : null}

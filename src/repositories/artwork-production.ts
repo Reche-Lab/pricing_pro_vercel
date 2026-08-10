@@ -1,4 +1,5 @@
 import { withTenantContext } from "@/lib/db/client";
+import { ARTWORK_AI_GENERATION_LIMIT } from "@/domain/artwork/ai-generation-limit";
 import {
   DEFAULT_ARTWORK_PROFILE,
   type ArtworkProductionProfile,
@@ -407,6 +408,33 @@ export async function markArtworkAsGenerated(input: {
         promptLength: input.prompt.length
       })]
     );
+  });
+}
+
+export async function reserveArtworkAiGenerationAttempt(input: {
+  userId: string;
+  tenantId: string;
+  quoteId: string;
+  itemId: string;
+}) {
+  return withTenantContext(input.userId, input.tenantId, async (client) => {
+    await assertInternalArtworkEditingAllowed(client, input.tenantId, input.quoteId, input.itemId);
+    const result = await client.query<{ artwork_ai_attempts: number }>(
+      `update quote_items
+       set artwork_ai_attempts = artwork_ai_attempts + 1
+       where tenant_id = $1 and quote_id = $2 and id = $3 and artwork_ai_attempts < $4
+       returning artwork_ai_attempts`,
+      [input.tenantId, input.quoteId, input.itemId, ARTWORK_AI_GENERATION_LIMIT]
+    );
+    const attemptsUsed = result.rows[0]?.artwork_ai_attempts;
+    if (!attemptsUsed) return null;
+    const attemptsRemaining = ARTWORK_AI_GENERATION_LIMIT - attemptsUsed;
+    await client.query(
+      `insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+       values ($1, $2, 'artworks.ai_attempt_reserved', 'quote_item', $3, $4)`,
+      [input.tenantId, input.userId, input.itemId, JSON.stringify({ quoteId: input.quoteId, attemptsUsed, attemptsRemaining })]
+    );
+    return { attemptsUsed, attemptsRemaining };
   });
 }
 

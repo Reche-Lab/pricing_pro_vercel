@@ -62,6 +62,8 @@ OPENROUTER_IMAGE_MODEL="openai/gpt-image-1"
 
 `Sugerir direção` usa o modelo de texto para devolver conceito, composição, paleta, tipografia e cuidados de produção. O usuário pode escolher qualquer arte do item como base ou enviar uma imagem PNG, JPEG ou WebP de até 3 MB diretamente pelo assistente. Ao gerar com uma referência, a instrução pede que o modelo preserve tudo o que não foi explicitamente alterado.
 
+Cada item de orçamento permite até 3 solicitações de geração de imagem por IA. O contador é compartilhado entre a área interna e o link público e é persistido no banco, portanto recarregar a página não reinicia o limite. Pedir sugestões textuais, enviar arquivos e reenquadrar artes não consome tentativas. Uma tentativa é consumida quando a solicitação de geração é reservada e enviada ao provedor, inclusive se o provedor falhar depois desse ponto, pois a chamada pode ter gerado custo.
+
 Cada geração é salva como uma nova arte pendente e nunca sobrescreve a original. A versão criada fica selecionada como referência para a próxima solicitação, permitindo ajustes sucessivos até a aprovação. O modelo configurado deve aceitar geração e edição de imagem com entrada de referência.
 
 ## Supabase Storage
