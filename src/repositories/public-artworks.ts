@@ -143,6 +143,7 @@ export async function addPublicArtwork(input: {
   storagePath: string | null;
   sourceKind?: "upload" | "retouch";
   parentArtworkId?: string | null;
+  productionQuantity?: number | null;
 }) {
   const client = await getPool().connect();
   try {
@@ -177,12 +178,13 @@ export async function addPublicArtwork(input: {
     const result = await client.query<{ id: string }>(
       `insert into quote_item_artworks (
          tenant_id, quote_id, quote_item_id, artwork_name, file_name, mime_type,
-         file_size, data_url, storage_path, created_by, source_kind, parent_artwork_id
-       ) select $1, $2, $3, $4, $5, $6, $7, $8, $9, null, $10, $11
+         file_size, data_url, storage_path, created_by, source_kind, parent_artwork_id, production_quantity
+       ) select $1, $2, $3, $4, $5, $6, $7, $8, $9, null, $10, $11,
+                coalesce($12, (select production_quantity from quote_item_artworks where id = $11))
        returning id`,
       [input.context.tenantId, input.context.quoteId, input.context.itemId, input.artworkName,
         input.fileName, input.mimeType, input.fileSize, input.storagePath ? null : input.dataUrl,
-        input.storagePath, input.sourceKind ?? "upload", input.parentArtworkId ?? null]
+        input.storagePath, input.sourceKind ?? "upload", input.parentArtworkId ?? null, input.productionQuantity ?? null]
     );
     if (input.sourceKind === "retouch" && input.parentArtworkId) {
       await client.query(`update quote_item_artworks set is_active = false where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4`, [input.context.tenantId, input.context.quoteId, input.context.itemId, input.parentArtworkId]);

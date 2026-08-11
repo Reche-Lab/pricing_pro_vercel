@@ -15,6 +15,7 @@ const artworkSchema = z.object({
   artworkName: z.string().trim().max(120).optional().nullable(),
   sourceKind: z.literal("retouch").optional(),
   parentArtworkId: z.string().uuid().optional().nullable(),
+  productionQuantity: z.number().int().min(1).max(100000).optional().nullable(),
   artworkFile: z.object({
     fileName: z.string().trim().min(1).max(180),
     mimeType: z.enum(["image/png", "image/jpeg", "image/jpg", "image/webp"]),

@@ -10,6 +10,7 @@ import { ArtworkRetouchEditor, type RetouchedArtworkFile } from "@/components/qu
 import { PdfArtworkImportModal } from "@/components/quotes/PdfArtworkImportModal";
 import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
 import { geometryLabel, resolvePrintGeometry, type PrintGeometry } from "@/domain/artwork/geometry";
+import { sortActiveArtworkVersions } from "@/domain/artwork/versions";
 import type { QuoteItemArtworkRow, QuoteItemRow } from "@/repositories/quotes";
 
 type ArtworkEntry = { item: QuoteItemRow; artwork: QuoteItemArtworkRow };
@@ -32,7 +33,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
   const [drawCutLines, setDrawCutLines] = useState(true);
   const printProfileLoaded = useRef(false);
   const allArtworks = useMemo(() => items.flatMap((item) => (item.artworks ?? []).map((artwork) => ({ item, artwork }))), [items]);
-  const artworks = useMemo(() => allArtworks.filter((entry) => entry.artwork.is_active !== false), [allArtworks]);
+  const artworks = useMemo(() => sortActiveArtworkEntries(allArtworks), [allArtworks]);
   const aiItem = items.find((item) => item.id === aiItemId) ?? items[0];
   const aiItemArtworks = artworks.filter((entry) => entry.item.id === aiItem?.id);
   const aiReference = aiItemArtworks.find((entry) => entry.artwork.id === aiReferenceArtworkId) ?? null;
@@ -164,6 +165,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
         artworkName: `${retouching.artwork.artwork_name || retouching.artwork.file_name} · retoque`,
         sourceKind: "retouch",
         parentArtworkId: retouching.artwork.id,
+        productionQuantity: quantities[retouching.artwork.id] || retouching.artwork.production_quantity || retouching.item.quantity,
         artworkFile: file
       })
     });
@@ -320,4 +322,8 @@ function SuggestionResult({ suggestions }: { suggestions: Suggestions }) { retur
 function inferGeometry(item: QuoteItemRow, artwork: QuoteItemArtworkRow) { return resolvePrintGeometry({ ...item, ...artwork }); }
 function initialQuantities(items: QuoteItemRow[]) { const result: Record<string, number> = {}; for (const item of items) { const arts = (item.artworks ?? []).filter((artwork) => artwork.is_active !== false); for (const artwork of arts) result[artwork.id] = artwork.production_quantity ?? (arts.length === 1 ? item.quantity : Math.max(1, Math.floor(item.quantity / arts.length))); } return result; }
 function artworkImageUrl(quoteId: string, entry: ArtworkEntry, kind: "original" | "prepared") { const inline = kind === "prepared" ? entry.artwork.prepared_data_url : entry.artwork.data_url; return inline || `/api/quotes/${quoteId}/items/${entry.item.id}/artworks/${entry.artwork.id}/file?kind=${kind}`; }
+function sortActiveArtworkEntries(all: ArtworkEntry[]) {
+  const entries = new Map(all.map((entry) => [entry.artwork.id, entry]));
+  return sortActiveArtworkVersions(all.map((entry) => entry.artwork)).map((artwork) => entries.get(artwork.id) as ArtworkEntry);
+}
 function fileToDataUrl(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Não foi possível ler a imagem.")); reader.onerror = () => reject(new Error("Não foi possível ler a imagem.")); reader.readAsDataURL(file); }); }

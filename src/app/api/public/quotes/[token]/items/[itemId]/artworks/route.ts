@@ -11,6 +11,7 @@ const bodySchema = z.object({
   artworkName: z.string().trim().max(120).optional().nullable(),
   sourceKind: z.literal("retouch").optional(),
   parentArtworkId: z.string().uuid().optional().nullable(),
+  productionQuantity: z.number().int().min(1).max(100000).optional().nullable(),
   artworkFile: z.object({
     fileName: z.string().trim().min(1).max(180),
     mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
@@ -54,7 +55,8 @@ export async function POST(request: Request, route: { params: Promise<{ token: s
       dataUrl: normalized.dataUrl,
       storagePath,
       sourceKind: body.data.sourceKind ?? "upload",
-      parentArtworkId: body.data.parentArtworkId ?? null
+      parentArtworkId: body.data.parentArtworkId ?? null,
+      productionQuantity: body.data.productionQuantity ?? null
     });
     return NextResponse.json({ ok: true, artwork }, { status: 201 });
   } catch (error) {

@@ -1684,6 +1684,7 @@ export async function addQuoteItemArtwork(
     storagePath?: string | null;
     sourceKind?: "upload" | "retouch";
     parentArtworkId?: string | null;
+    productionQuantity?: number | null;
   }
 ): Promise<QuoteItemArtworkRow> {
   return withTenantContext(userId, tenantId, async (client) => {
@@ -1733,11 +1734,13 @@ export async function addQuoteItemArtwork(
           storage_path,
           created_by,
           source_kind,
-          parent_artwork_id
+          parent_artwork_id,
+          production_quantity
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+          coalesce($13, (select production_quantity from quote_item_artworks where id = $12)))
         returning id, quote_item_id, artwork_name, file_name, mime_type, file_size,
-                  data_url, storage_path, source_kind, parent_artwork_id
+                  data_url, storage_path, source_kind, parent_artwork_id, production_quantity
       `,
       [
         tenantId,
@@ -1751,7 +1754,8 @@ export async function addQuoteItemArtwork(
         input.storagePath ?? `quotes/${quoteId}/items/${quoteItemId}/${artworkFile.fileName}`,
         userId,
         input.sourceKind ?? "upload",
-        input.parentArtworkId ?? null
+        input.parentArtworkId ?? null,
+        input.productionQuantity ?? null
       ]
     );
     const artwork = result.rows[0];

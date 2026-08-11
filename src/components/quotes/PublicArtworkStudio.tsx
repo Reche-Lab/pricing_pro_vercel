@@ -9,6 +9,7 @@ import { ArtworkRetouchEditor, type RetouchedArtworkFile } from "@/components/qu
 import { PdfArtworkImportModal } from "@/components/quotes/PdfArtworkImportModal";
 import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
 import { resolvePrintGeometry, type PrintGeometry } from "@/domain/artwork/geometry";
+import { sortActiveArtworkVersions } from "@/domain/artwork/versions";
 import { getPublicArtworkReviewProgress } from "@/domain/quotes/public-artwork-review";
 import type { QuoteItemArtworkRow, QuoteItemRow } from "@/repositories/quotes";
 
@@ -29,7 +30,7 @@ export function PublicArtworkStudio({ token, quoteId, items, disabled }: { token
   const [versionPreview, setVersionPreview] = useState<{ active: QuoteItemArtworkRow; previous: QuoteItemArtworkRow } | null>(null);
   const item = items.find((candidate) => candidate.id === itemId) ?? items[0];
   const allItemArtworks = item?.artworks ?? [];
-  const itemArtworks = allItemArtworks.filter((artwork) => artwork.is_active !== false);
+  const itemArtworks = sortActiveArtworkVersions(allItemArtworks);
   const reference = itemArtworks.find((artwork) => artwork.id === referenceId) ?? null;
   const aiGenerationLimit = normalizeArtworkAiGenerationLimit(item?.artwork_ai_generation_limit);
   const attemptsRemaining = getArtworkAiAttemptsRemaining(item?.artwork_ai_attempts, aiGenerationLimit);
@@ -115,6 +116,7 @@ export function PublicArtworkStudio({ token, quoteId, items, disabled }: { token
         artworkName: `${retouching.artwork.artwork_name || retouching.artwork.file_name} · retoque`,
         sourceKind: "retouch",
         parentArtworkId: retouching.artwork.id,
+        productionQuantity: retouching.artwork.production_quantity || retouching.item.quantity,
         artworkFile: file
       })
     });
