@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import sharp from "sharp";
+import { quoteDiscountLabel } from "@/domain/quotes/discount";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 import { loadArtworkDataUrl } from "@/services/storage/artwork-storage";
 
@@ -237,10 +238,15 @@ export async function generateQuotePdf(input: {
   const summaryRows = [
     ["Subtotal", brl.format(Number(input.quote.subtotal))],
     ["Frete", brl.format(Number(input.quote.shipping_total))],
-    ["Desconto", brl.format(Number(input.quote.discount_total))],
+    [quoteDiscountLabel(input.quote.discount_type, Number(input.quote.discount_value ?? input.quote.discount_total), Number(input.quote.discount_total)), brl.format(Number(input.quote.discount_total))],
     ["TOTAL GERAL", brl.format(Number(input.quote.grand_total))]
   ];
   drawTable(["Item", "Valor"], summaryRows, [330, 168], summaryRows.length - 1);
+
+  if (Number(input.quote.discount_total) > 0 && input.quote.discount_reason) {
+    drawText(`Motivo do desconto: ${input.quote.discount_reason}`, { size: 8, color: rgb(0.35, 0.35, 0.38) });
+    y -= 4;
+  }
 
   if (input.quote.notes) {
     drawSectionTitle("Observacoes");

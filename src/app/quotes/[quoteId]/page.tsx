@@ -16,6 +16,7 @@ import { QuoteWhatsAppButton } from "@/components/quotes/QuoteWhatsAppButton";
 import { PublicQuoteLinkButton } from "@/components/quotes/PublicQuoteLinkButton";
 import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
 import { isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
+import { quoteDiscountLabel } from "@/domain/quotes/discount";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getQuoteDetail, listQuoteEditLogs } from "@/repositories/quotes";
 import { getQuotePaymentTerm, listOlistPaymentOptions } from "@/repositories/olist-payment-options";
@@ -123,7 +124,8 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
             <dl className="grid gap-2 text-sm">
               <Detail label="Subtotal" value={brl.format(Number(detail.quote.subtotal))} />
               <Detail label="Frete" value={brl.format(Number(detail.quote.shipping_total))} />
-              <Detail label="Desconto" value={brl.format(Number(detail.quote.discount_total))} />
+              <Detail label={quoteDiscountLabel(detail.quote.discount_type, Number(detail.quote.discount_value ?? detail.quote.discount_total), Number(detail.quote.discount_total))} value={brl.format(Number(detail.quote.discount_total))} />
+              {detail.quote.discount_reason ? <Detail label="Motivo" value={detail.quote.discount_reason} /> : null}
               <Detail label="Margem" value={`${Number(detail.quote.margin_percent).toFixed(1)}%`} />
               <Detail label="Validade" value={formatDate(detail.quote.valid_until)} />
             </dl>

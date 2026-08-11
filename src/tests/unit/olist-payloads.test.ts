@@ -43,7 +43,14 @@ describe("olist payloads", () => {
 
   it("builds sales order payload with Olist product id and quote price", () => {
     const payload = buildOlistSalesOrderPayload({
-      quote: { ...quote(), delivery_attention_to: "Marina - Marketing" },
+      quote: {
+        ...quote(),
+        delivery_attention_to: "Marina - Marketing",
+        discount_type: "percent",
+        discount_value: "10",
+        discount_total: "25",
+        discount_reason: "Condição comercial"
+      },
       items: [item()]
     });
 
@@ -54,6 +61,8 @@ describe("olist payloads", () => {
     });
     expect(payload.itens[0].infoAdicional).toContain("Arte azul");
     expect(payload.valorFrete).toBe(20);
+    expect(payload.valorDesconto).toBe(25);
+    expect(payload.observacoes).toContain("Desconto: 25.00 - Condição comercial");
     expect(payload.enderecoEntrega).toMatchObject({ complemento: "A/C: Marina - Marketing" });
   });
 

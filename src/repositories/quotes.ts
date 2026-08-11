@@ -7,6 +7,7 @@ import {
   type CompositeQuoteInputItem
 } from "@/domain/quotes/composite-pricing";
 import { canTransitionQuoteStatus, createQuoteCalculationSnapshot, isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
+import { calculateQuoteDiscount, type QuoteDiscountType } from "@/domain/quotes/discount";
 import {
   hashPublicQuoteOtp,
   maskPublicEmail,
@@ -38,6 +39,9 @@ export type QuoteDetail = {
   subtotal: string;
   shipping_total: string;
   discount_total: string;
+  discount_type?: QuoteDiscountType;
+  discount_value?: string;
+  discount_reason?: string | null;
   grand_total: string;
   margin_amount: string;
   margin_percent: string;
@@ -224,6 +228,9 @@ export type CreateQuoteInput = {
 export type UpdateQuoteInput = {
   validUntil?: string | null;
   shippingTotal: number;
+  discountType: QuoteDiscountType;
+  discountValue: number;
+  discountReason?: string | null;
   notes?: string | null;
   reason?: string | null;
   items: Array<{
@@ -302,6 +309,9 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           q.subtotal,
           q.shipping_total,
           q.discount_total,
+          q.discount_type,
+          q.discount_value,
+          q.discount_reason,
           q.grand_total,
           q.margin_amount,
           q.margin_percent,
@@ -617,6 +627,9 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           q.subtotal::text as subtotal,
           q.shipping_total::text as shipping_total,
           q.discount_total::text as discount_total,
+          q.discount_type,
+          q.discount_value::text as discount_value,
+          q.discount_reason,
           q.grand_total::text as grand_total,
           q.margin_amount::text as margin_amount,
           q.margin_percent::text as margin_percent,
@@ -1387,6 +1400,9 @@ export async function updateQuoteEditable(
             q.subtotal::text as subtotal,
             q.shipping_total::text as shipping_total,
             q.discount_total::text as discount_total,
+            q.discount_type,
+            q.discount_value::text as discount_value,
+            q.discount_reason,
             q.grand_total::text as grand_total,
             q.margin_amount::text as margin_amount,
             q.margin_percent::text as margin_percent,
@@ -1540,10 +1556,17 @@ export async function updateQuoteEditable(
       }
 
       const shippingTotal = clampNumber(input.shippingTotal, 0, 100000, Number(quote.shipping_total));
-      const discountTotal = Number(quote.discount_total);
+      const discount = calculateQuoteDiscount(subtotal, input.discountType, input.discountValue);
+      const discountTotal = discount.total;
+      const discountChanged = Math.abs(discountTotal - Number(quote.discount_total)) >= 0.01
+        || discount.type !== (quote.discount_type ?? (Number(quote.discount_total) > 0 ? "fixed" : "none"));
+      const discountReason = discountTotal > 0 ? clean(input.discountReason) : null;
+      if (discountTotal > 0 && !discountReason) throw new Error("Informe o motivo do desconto.");
+      const editLogReason = reason ?? (discountChanged ? discountReason : null);
       const grandTotal = subtotal + shippingTotal - discountTotal;
-      const marginAmount = subtotal - totalCost;
-      const marginPercent = subtotal > 0 ? (marginAmount / subtotal) * 100 : 0;
+      const netProductRevenue = subtotal - discountTotal;
+      const marginAmount = netProductRevenue - totalCost;
+      const marginPercent = netProductRevenue > 0 ? (marginAmount / netProductRevenue) * 100 : 0;
       const validUntil = clean(input.validUntil);
 
       const updatedQuoteResult = await client.query<{ id: string }>(
@@ -1552,10 +1575,14 @@ export async function updateQuoteEditable(
           set valid_until = coalesce($3::date, valid_until),
               subtotal = $4,
               shipping_total = $5,
-              grand_total = $6,
-              margin_amount = $7,
-              margin_percent = $8,
-              notes = $9,
+              discount_type = $6,
+              discount_value = $7,
+              discount_total = $8,
+              discount_reason = $9,
+              grand_total = $10,
+              margin_amount = $11,
+              margin_percent = $12,
+              notes = $13,
               updated_at = now()
           where tenant_id = $1 and id = $2
           returning id
@@ -1566,6 +1593,10 @@ export async function updateQuoteEditable(
           validUntil,
           subtotal,
           shippingTotal,
+          discount.type,
+          discount.value,
+          discountTotal,
+          discountReason,
           grandTotal,
           marginAmount,
           marginPercent,
@@ -1581,6 +1612,9 @@ export async function updateQuoteEditable(
           subtotal,
           shippingTotal,
           discountTotal,
+          discountType: discount.type,
+          discountValue: discount.value,
+          discountReason,
           grandTotal,
           marginAmount,
           marginPercent,
@@ -1588,6 +1622,8 @@ export async function updateQuoteEditable(
         },
         items: updatedItems
       };
+
+      await rebalanceQuotePaymentInstallments(client, tenantId, quoteId, grandTotal);
 
       await client.query(
         `
@@ -1606,7 +1642,7 @@ export async function updateQuoteEditable(
           tenantId,
           quoteId,
           userId,
-          reason,
+          editLogReason,
           input.syncedOlistOrderId ?? null,
           JSON.stringify(beforeSnapshot),
           JSON.stringify(afterSnapshot)
@@ -1618,10 +1654,10 @@ export async function updateQuoteEditable(
           insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
           values ($1, $2, 'quotes.edit', 'quote', $3, $4)
         `,
-        [tenantId, userId, quoteId, JSON.stringify({ reason, changedUnitPrice, syncedOlistOrderId: input.syncedOlistOrderId ?? null })]
+        [tenantId, userId, quoteId, JSON.stringify({ reason: editLogReason, changedUnitPrice, discountChanged, discountTotal, syncedOlistOrderId: input.syncedOlistOrderId ?? null })]
       );
 
-      return { id: quoteId, subtotal, shippingTotal, grandTotal };
+      return { id: quoteId, subtotal, shippingTotal, discountTotal, grandTotal };
   });
 }
 
@@ -2780,6 +2816,39 @@ function clean(value: string | null | undefined): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+async function rebalanceQuotePaymentInstallments(
+  client: pg.PoolClient,
+  tenantId: string,
+  quoteId: string,
+  grandTotal: number
+) {
+  const result = await client.query<{ id: string; amount: string }>(
+    `select qpi.id, qpi.amount::text
+     from quote_payment_installments qpi
+     join quote_payment_terms qpt on qpt.id = qpi.quote_payment_term_id and qpt.tenant_id = qpi.tenant_id
+     where qpi.tenant_id = $1 and qpt.quote_id = $2
+     order by qpi.installment_number
+     for update of qpi`,
+    [tenantId, quoteId]
+  );
+  if (result.rows.length === 0) return;
+  const currentTotal = result.rows.reduce((sum, row) => sum + Number(row.amount), 0);
+  let allocated = 0;
+  for (const [index, row] of result.rows.entries()) {
+    const last = index === result.rows.length - 1;
+    const amount = last
+      ? roundMoney(grandTotal - allocated)
+      : roundMoney(currentTotal > 0
+        ? grandTotal * Number(row.amount) / currentTotal
+        : grandTotal / result.rows.length);
+    allocated = roundMoney(allocated + amount);
+    await client.query(
+      "update quote_payment_installments set amount = $3 where tenant_id = $1 and id = $2",
+      [tenantId, row.id, Math.max(0, amount)]
+    );
+  }
 }
 
 function hashPublicToken(token: string) {

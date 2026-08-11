@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, Edit3, History, ImagePlus, Lock, Save, Trash2, Upload } from "lucide-react";
 import { calculateQuote, roundMoney } from "@/domain/pricing/pricing";
 import { isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
+import { calculateQuoteDiscount, quoteDiscountLabel, type QuoteDiscountType } from "@/domain/quotes/discount";
 import type { PricingCurve } from "@/domain/pricing/types";
 import type { QuoteDetail, QuoteEditLogRow, QuoteItemRow } from "@/repositories/quotes";
 
@@ -63,16 +64,25 @@ export function QuoteEditPanel({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [validUntil, setValidUntil] = useState(formatDateInput(quote.valid_until));
   const [shippingTotal, setShippingTotal] = useState(Number(quote.shipping_total));
+  const [discountType, setDiscountType] = useState<QuoteDiscountType>(quote.discount_type ?? (Number(quote.discount_total) > 0 ? "fixed" : "none"));
+  const [discountValue, setDiscountValue] = useState(Number(quote.discount_value ?? quote.discount_total));
+  const [discountReason, setDiscountReason] = useState(quote.discount_reason ?? "");
   const [notes, setNotes] = useState(quote.notes ?? "");
   const [state, setState] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
 
   const blockedReason = editBlockedReason(quote);
   const subtotal = items.reduce((sum, item) => sum + Number(item.total_price), 0);
-  const total = subtotal + shippingTotal - Number(quote.discount_total);
+  const discount = calculateQuoteDiscount(subtotal, discountType, discountValue);
+  const total = subtotal + shippingTotal - discount.total;
 
   async function saveEdit() {
     if (blockedReason || state === "saving") return;
+    if (discount.total > 0 && !discountReason.trim()) {
+      setState("error");
+      setMessage("Informe o motivo do desconto.");
+      return;
+    }
     setState("saving");
     setMessage("");
 
@@ -82,6 +92,9 @@ export function QuoteEditPanel({
       body: JSON.stringify({
         validUntil,
         shippingTotal,
+        discountType,
+        discountValue,
+        discountReason,
         notes,
         reason: null,
         items: items.map(toEditableItem)
@@ -110,7 +123,7 @@ export function QuoteEditPanel({
             <Edit3 className="text-amber-300" size={15} />
             Editar condições
           </p>
-          <p className="mt-1 text-xs text-zinc-500">Validade, frete e observações do orçamento.</p>
+          <p className="mt-1 text-xs text-zinc-500">Validade, frete, desconto e observações do orçamento.</p>
         </div>
         <button
           className="focus-ring inline-flex h-9 w-fit items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-60"
@@ -157,6 +170,53 @@ export function QuoteEditPanel({
               <p className="text-xs uppercase tracking-wide text-zinc-500">Total estimado</p>
               <p className="mt-1 text-lg font-semibold text-white">{brl.format(total)}</p>
             </div>
+          </div>
+          <div className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-900/45 p-3 md:grid-cols-[180px_160px_1fr]">
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-zinc-400">Tipo de desconto</span>
+              <select
+                className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+                disabled={Boolean(quote.external_olist_order_id)}
+                onChange={(event) => {
+                  const type = event.currentTarget.value as QuoteDiscountType;
+                  setDiscountType(type);
+                  if (type === "none") setDiscountValue(0);
+                  resetMessage();
+                }}
+                value={discountType}
+              >
+                <option value="none">Sem desconto</option>
+                <option value="percent">Percentual (%)</option>
+                <option value="fixed">Valor fixo (R$)</option>
+              </select>
+            </label>
+            <NumberField
+              disabled={discountType === "none" || Boolean(quote.external_olist_order_id)}
+              label={discountType === "percent" ? "Percentual (%)" : "Valor do desconto"}
+              min={0}
+              step={0.01}
+              value={discountValue}
+              onChange={(value) => {
+                setDiscountValue(discountType === "percent" ? Math.min(100, value) : value);
+                resetMessage();
+              }}
+            />
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-zinc-400">Motivo do desconto</span>
+              <input
+                className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white disabled:opacity-50"
+                disabled={discountType === "none" || Boolean(quote.external_olist_order_id)}
+                maxLength={300}
+                onChange={(event) => { setDiscountReason(event.currentTarget.value); resetMessage(); }}
+                placeholder="Ex.: condição comercial negociada"
+                value={discountReason}
+              />
+            </label>
+            <div className="md:col-span-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="text-zinc-500">{quoteDiscountLabel(discount.type, discount.value, discount.total)} sobre os produtos</span>
+              <strong className="text-emerald-200">-{brl.format(discount.total)}</strong>
+            </div>
+            {quote.external_olist_order_id ? <p className="md:col-span-3 text-xs text-amber-200">O desconto está bloqueado porque o pedido Olist já foi criado.</p> : null}
           </div>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-zinc-400">Observações</span>
@@ -247,6 +307,9 @@ export function QuoteItemEditPanel({
       body: JSON.stringify({
         validUntil: formatDateInput(quote.valid_until),
         shippingTotal: Number(quote.shipping_total),
+        discountType: quote.discount_type ?? (Number(quote.discount_total) > 0 ? "fixed" : "none"),
+        discountValue: Number(quote.discount_value ?? quote.discount_total),
+        discountReason: quote.discount_reason ?? null,
         notes: quote.notes ?? "",
         reason: effectiveReason,
         items: payloadItems
@@ -674,19 +737,22 @@ function NumberField({
   min,
   step,
   value,
-  onChange
+  onChange,
+  disabled = false
 }: {
   label: string;
   min: number;
   step: number;
   value: number;
   onChange: (value: number) => void;
+  disabled?: boolean;
 }) {
   return (
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-zinc-400">{label}</span>
       <input
-        className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+        className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={disabled}
         min={min}
         step={step}
         type="number"

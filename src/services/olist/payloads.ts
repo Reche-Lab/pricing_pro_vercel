@@ -282,6 +282,7 @@ function buildOlistNotes(input: {
     paymentNote(input.paymentTerm),
     `Orçamento Pricing Pro: ${input.quote.id}`,
     `Frete: ${money(input.quote.shipping_total).toFixed(2)}`,
+    money(input.quote.discount_total) > 0 ? `Desconto: ${money(input.quote.discount_total).toFixed(2)}${input.quote.discount_reason ? ` - ${input.quote.discount_reason}` : ""}` : null,
     buildPackageLine(input.shipment),
     `Total final: ${money(input.quote.grand_total).toFixed(2)}`,
     itemLines.join("\n")

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
 import { requireWritableBilling } from "@/lib/billing/guard";
 import { isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
+import { calculateQuoteDiscount } from "@/domain/quotes/discount";
 import { getQuoteDetail, updateQuoteEditable, type QuoteItemRow } from "@/repositories/quotes";
 import { listProductVariants } from "@/repositories/products";
 import { OLIST_DEFAULT_PATHS } from "@/services/olist/defaults";
@@ -15,6 +16,9 @@ import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOpera
 const editSchema = z.object({
   validUntil: z.string().trim().optional().nullable(),
   shippingTotal: z.number().min(0).max(100000),
+  discountType: z.enum(["none", "fixed", "percent"]),
+  discountValue: z.number().min(0).max(100000),
+  discountReason: z.string().trim().max(300).optional().nullable(),
   notes: z.string().trim().max(4000).optional().nullable(),
   reason: z.string().trim().max(500).optional().nullable(),
   items: z.array(
@@ -59,6 +63,30 @@ export async function PATCH(request: Request, context: { params: Promise<{ quote
     return NextResponse.json(
       { ok: false, error: "Informe o motivo da alteração manual de preço." },
       { status: 400 }
+    );
+  }
+  const requestedSubtotal = parsed.data.items.reduce(
+    (sum, item) => sum + item.quantity * item.unitPrice,
+    0
+  );
+  const requestedDiscount = calculateQuoteDiscount(
+    requestedSubtotal,
+    parsed.data.discountType,
+    parsed.data.discountValue
+  );
+  if (requestedDiscount.total > 0 && !parsed.data.discountReason?.trim()) {
+    return NextResponse.json({ ok: false, error: "Informe o motivo do desconto." }, { status: 400 });
+  }
+  if (
+    detail.quote.external_olist_order_id
+    && Math.abs(requestedDiscount.total - Number(detail.quote.discount_total)) >= 0.01
+  ) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "O desconto não pode ser alterado depois que o pedido de venda foi criado. A API v3 do Olist não permite atualizar valorDesconto em um pedido existente."
+      },
+      { status: 409 }
     );
   }
 

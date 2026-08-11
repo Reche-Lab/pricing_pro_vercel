@@ -4,6 +4,7 @@ import { PublicArtworkStudio } from "@/components/quotes/PublicArtworkStudio";
 import { PublicArtworkShortcut } from "@/components/quotes/PublicArtworkShortcut";
 import { PublicQuoteExpiryCountdown } from "@/components/quotes/PublicQuoteExpiryCountdown";
 import { getPublicArtworkReviewProgress } from "@/domain/quotes/public-artwork-review";
+import { quoteDiscountLabel } from "@/domain/quotes/discount";
 import { getPublicQuoteByToken } from "@/repositories/quotes";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -144,7 +145,8 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
               <dl className="mt-4 grid gap-2 text-sm">
                 <Detail label="Subtotal" value={brl.format(Number(detail.quote.subtotal))} />
                 <Detail label="Frete" value={brl.format(Number(detail.quote.shipping_total))} />
-                <Detail label="Desconto" value={brl.format(Number(detail.quote.discount_total))} />
+                <Detail label={quoteDiscountLabel(detail.quote.discount_type, Number(detail.quote.discount_value ?? detail.quote.discount_total), Number(detail.quote.discount_total))} value={brl.format(Number(detail.quote.discount_total))} />
+                {detail.quote.discount_reason ? <Detail label="Motivo" value={detail.quote.discount_reason} /> : null}
                 <Detail label="Validade" value={detail.quote.valid_until ? formatDate(detail.quote.valid_until) : "-"} />
               </dl>
             </section>

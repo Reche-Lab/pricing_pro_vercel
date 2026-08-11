@@ -1,4 +1,5 @@
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
+import { quoteDiscountLabel } from "@/domain/quotes/discount";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -22,6 +23,10 @@ export function buildQuoteWhatsAppText(input: { quote: QuoteDetail; items: Quote
     "",
     `*Subtotal:* ${brl.format(Number(quote.subtotal))}`,
     Number(quote.shipping_total) > 0 ? `*Frete:* ${brl.format(Number(quote.shipping_total))}` : null,
+    Number(quote.discount_total) > 0
+      ? `*${quoteDiscountLabel(quote.discount_type, Number(quote.discount_value ?? quote.discount_total), Number(quote.discount_total))}:* -${brl.format(Number(quote.discount_total))}`
+      : null,
+    Number(quote.discount_total) > 0 && quote.discount_reason ? `*Motivo do desconto:* ${quote.discount_reason}` : null,
     `*Total:* ${brl.format(Number(quote.grand_total))}`,
     quote.valid_until ? `*Validade:* ${formatDate(quote.valid_until)}` : null,
     "",
