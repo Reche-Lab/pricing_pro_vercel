@@ -2,12 +2,13 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { AnchorEditor } from "@/components/products/AnchorEditor";
 import { ProductEditForm } from "@/components/products/ProductEditForm";
+import { ProductDeleteButton } from "@/components/products/ProductDeleteButton";
 import { ProductForm } from "@/components/products/ProductForm";
 import { geometryLabel, resolvePrintGeometry } from "@/domain/artwork/geometry";
 import { getCurrentSession } from "@/lib/auth/session";
 import { listPlatformRules } from "@/repositories/platforms";
 import { listProductsAdmin } from "@/repositories/products";
-import { getSessionProfile } from "@/repositories/users";
+import { getSessionProfile, userHasPermission } from "@/repositories/users";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -15,10 +16,11 @@ export default async function ProductsPage() {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
 
-  const [profile, products, platforms] = await Promise.all([
+  const [profile, products, platforms, canWriteProducts] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
     listProductsAdmin(session.userId, session.tenantId),
-    listPlatformRules(session.userId, session.tenantId)
+    listPlatformRules(session.userId, session.tenantId),
+    userHasPermission(session.userId, session.tenantId, "products:write")
   ]);
   if (!profile) redirect("/login");
 
@@ -73,8 +75,9 @@ export default async function ProductsPage() {
                       </p>
                     </div>
                   </div>
-                  <ProductEditForm
-                    product={{
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                    <ProductEditForm
+                      product={{
                       productName: item.product_name,
                       category: item.product_category,
                       description: item.variant_description ?? item.product_description,
@@ -97,8 +100,10 @@ export default async function ProductsPage() {
                       printShapeRotationDegrees: item.print_shape_rotation_degrees,
                       allowPrintRotation: item.allow_print_rotation,
                       variantActive: item.variant_active
-                    }}
-                  />
+                      }}
+                    />
+                    {canWriteProducts ? <ProductDeleteButton productName={item.product_name} variantId={item.variant_id} variantName={item.variant_name} /> : null}
+                  </div>
                   <AnchorEditor
                     anchors={item.anchors}
                     mode={item.curve_mode}

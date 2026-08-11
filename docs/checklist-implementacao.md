@@ -45,6 +45,7 @@ Status atualizado durante a refatoracao inicial.
 - [x] Conectar precificador autenticado aos canais do tenant.
 - [x] Adicionar dominio testado de snapshots/transicoes de orcamento.
 - [x] Criar CRUD inicial de produtos.
+- [x] Criar exclusão segura de produto com confirmação digitada, auditoria e preservação dos orçamentos históricos.
 - [x] Criar cadastro inicial de variantes.
 - [x] Criar cadastro inicial de curvas por ancoragem.
 - [x] Criar edicao inicial de ancoragens/curvas.
@@ -160,7 +161,7 @@ Resultado:
 
 - lint passou;
 - typecheck passou;
-- testes passaram: 90 testes em 22 arquivos;
+- testes passaram: 91 testes em 22 arquivos;
 - build Next passou.
 
 ## Acoes Manuais Pendentes

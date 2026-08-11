@@ -7,3 +7,7 @@ export function createProductSlug(value: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
+
+export function isProductDeletionConfirmation(value: unknown): value is string {
+  return typeof value === "string" && value.trim().toLocaleLowerCase("pt-BR") === "excluir";
+}

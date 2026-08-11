@@ -162,6 +162,8 @@ export async function listProductVariants(userId: string, tenantId: string): Pro
         where p.tenant_id = $1
           and p.active = true
           and v.active = true
+          and p.deleted_at is null
+          and v.deleted_at is null
         order by p.name, v.name
       `,
       [tenantId]
@@ -218,6 +220,8 @@ export async function listProductsAdmin(userId: string, tenantId: string): Promi
           and pc.active = true
           and pc.platform_rule_id is null
         where p.tenant_id = $1
+          and p.deleted_at is null
+          and v.deleted_at is null
         order by p.name, v.name
       `,
       [tenantId]
@@ -243,6 +247,8 @@ export async function createProductWithVariant(
               category = excluded.category,
               description = excluded.description,
               active = true,
+              deleted_at = null,
+              deleted_by = null,
               updated_at = now()
         returning id
       `,
@@ -275,6 +281,27 @@ export async function createProductWithVariant(
           active
         )
         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, true)
+        on conflict (tenant_id, product_id, name) do update
+          set description = excluded.description,
+              sku = excluded.sku,
+              external_olist_product_id = excluded.external_olist_product_id,
+              unit_cost = excluded.unit_cost,
+              unit_weight_kg = excluded.unit_weight_kg,
+              height_cm = excluded.height_cm,
+              width_cm = excluded.width_cm,
+              length_cm = excluded.length_cm,
+              print_diameter_mm = excluded.print_diameter_mm,
+              print_shape = excluded.print_shape,
+              print_width_mm = excluded.print_width_mm,
+              print_height_mm = excluded.print_height_mm,
+              print_corner_style = excluded.print_corner_style,
+              print_corner_radius_mm = excluded.print_corner_radius_mm,
+              print_shape_rotation_degrees = excluded.print_shape_rotation_degrees,
+              allow_print_rotation = excluded.allow_print_rotation,
+              active = true,
+              deleted_at = null,
+              deleted_by = null,
+              updated_at = now()
         returning id
       `,
       [
@@ -313,7 +340,16 @@ export async function createProductWithVariant(
           mode,
           created_by
         )
-        values ($1, $2, 'Curva inicial', 'anchors', 1, true, $3, $4)
+        values (
+          $1,
+          $2,
+          'Curva inicial',
+          'anchors',
+          coalesce((select max(version) + 1 from pricing_curves where tenant_id = $1 and product_variant_id = $2), 1),
+          true,
+          $3,
+          $4
+        )
         returning id
       `,
       [tenantId, variantId, input.curve.mode, userId]
@@ -361,7 +397,7 @@ export async function updateProductVariant(
       `
         select product_id
         from product_variants
-        where tenant_id = $1 and id = $2
+        where tenant_id = $1 and id = $2 and deleted_at is null
         limit 1
       `,
       [tenantId, variantId]
@@ -447,6 +483,75 @@ export async function updateProductVariant(
     );
 
     return { productId: current.product_id, variantId };
+  });
+}
+
+export async function archiveProductByVariant(userId: string, tenantId: string, variantId: string) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const productResult = await client.query<{ id: string; name: string }>(
+      `
+        select p.id, p.name
+        from products p
+        join product_variants v on v.product_id = p.id and v.tenant_id = p.tenant_id
+        where p.tenant_id = $1
+          and v.id = $2
+          and p.deleted_at is null
+          and v.deleted_at is null
+        limit 1
+        for update of p, v
+      `,
+      [tenantId, variantId]
+    );
+    const product = productResult.rows[0];
+    if (!product) return null;
+
+    const variantsResult = await client.query<{ id: string }>(
+      `
+        update product_variants
+        set active = false,
+            deleted_at = now(),
+            deleted_by = $3,
+            updated_at = now()
+        where tenant_id = $1
+          and product_id = $2
+          and deleted_at is null
+        returning id
+      `,
+      [tenantId, product.id, userId]
+    );
+
+    await client.query(
+      `
+        update products
+        set active = false,
+            deleted_at = now(),
+            deleted_by = $3,
+            updated_at = now()
+        where tenant_id = $1 and id = $2
+      `,
+      [tenantId, product.id, userId]
+    );
+
+    await client.query(
+      `
+        update pricing_curves pc
+        set active = false,
+            updated_at = now()
+        where pc.tenant_id = $1
+          and pc.product_variant_id = any($2::uuid[])
+      `,
+      [tenantId, variantsResult.rows.map((variant) => variant.id)]
+    );
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'products.archive', 'product', $3, $4)
+      `,
+      [tenantId, userId, product.id, JSON.stringify({ productName: product.name, variantIds: variantsResult.rows.map((variant) => variant.id), requestedFromVariantId: variantId })]
+    );
+
+    return { productId: product.id, productName: product.name, archivedVariants: variantsResult.rowCount ?? variantsResult.rows.length };
   });
 }
 
