@@ -9,12 +9,18 @@ import { deleteArtworkObject, uploadArtworkObject } from "@/services/storage/art
 const paramsSchema = z.object({ token: z.string().min(20).max(200), itemId: z.string().uuid() });
 const bodySchema = z.object({
   artworkName: z.string().trim().max(120).optional().nullable(),
+  sourceKind: z.literal("retouch").optional(),
+  parentArtworkId: z.string().uuid().optional().nullable(),
   artworkFile: z.object({
     fileName: z.string().trim().min(1).max(180),
     mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
     fileSize: z.number().int().min(1).max(3 * 1024 * 1024),
     dataUrl: z.string().startsWith("data:image/").max(4_300_000)
   })
+}).superRefine((value, context) => {
+  if (value.sourceKind === "retouch" && !value.parentArtworkId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["parentArtworkId"], message: "Informe a arte original do retoque." });
+  }
 });
 
 export async function POST(request: Request, route: { params: Promise<{ token: string; itemId: string }> }) {
@@ -46,7 +52,9 @@ export async function POST(request: Request, route: { params: Promise<{ token: s
       mimeType: normalized.contentType,
       fileSize: normalized.fileSize,
       dataUrl: normalized.dataUrl,
-      storagePath
+      storagePath,
+      sourceKind: body.data.sourceKind ?? "upload",
+      parentArtworkId: body.data.parentArtworkId ?? null
     });
     return NextResponse.json({ ok: true, artwork }, { status: 201 });
   } catch (error) {

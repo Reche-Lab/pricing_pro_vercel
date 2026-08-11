@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, ChevronUp, Download, Eye, ImageIcon, Printer, Scissors, Upload, WandSparkles, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Download, Eye, ImageIcon, Paintbrush, Printer, Scissors, Upload, WandSparkles, X } from "lucide-react";
 import { ArtworkCropEditor } from "@/components/quotes/ArtworkCropEditor";
 import { ArtworkPdfPreview } from "@/components/quotes/ArtworkPdfPreview";
+import { ArtworkRetouchEditor, type RetouchedArtworkFile } from "@/components/quotes/ArtworkRetouchEditor";
 import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
 import { geometryLabel, resolvePrintGeometry, type PrintGeometry } from "@/domain/artwork/geometry";
 import type { QuoteItemArtworkRow, QuoteItemRow } from "@/repositories/quotes";
@@ -21,6 +22,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
   const [aiReferenceArtworkId, setAiReferenceArtworkId] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestions | null>(null);
   const [editing, setEditing] = useState<ArtworkEntry | null>(null);
+  const [retouching, setRetouching] = useState<ArtworkEntry | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [printJobs, setPrintJobs] = useState<PrintJob[]>([]);
   const [drawCutLines, setDrawCutLines] = useState(true);
@@ -148,6 +150,25 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
     }
   }
 
+  async function saveRetouchedArtwork(file: RetouchedArtworkFile) {
+    if (!retouching) return;
+    const response = await fetch(`/api/quotes/${quoteId}/items/${retouching.item.id}/artworks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        artworkName: `${retouching.artwork.artwork_name || retouching.artwork.file_name} · retoque`,
+        sourceKind: "retouch",
+        parentArtworkId: retouching.artwork.id,
+        artworkFile: file
+      })
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(data?.error ?? "Não foi possível salvar a versão retocada.");
+    setRetouching(null);
+    setMessage("Retoque salvo como nova versão. Enquadre e aprove quando estiver satisfeito.");
+    router.refresh();
+  }
+
   return (
     <section className="border-t border-zinc-800 bg-zinc-950/30">
       <button className="focus-ring flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-zinc-900/60" type="button" onClick={() => { const next = !open; setOpen(next); if (next) void loadProduction(); }}>
@@ -171,6 +192,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
                 quoteId={quoteId}
                 onApprove={approve}
                 onEdit={setEditing}
+                onRetouch={setRetouching}
                 onQuantity={(quantity) => setQuantities((current) => ({ ...current, [entry.artwork.id]: quantity }))}
                 readOnly={readOnly}
               />)}
@@ -213,12 +235,13 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
       </div> : null}
 
       {editing && inferGeometry(editing.item, editing.artwork) ? <ArtworkCropEditor artwork={editing.artwork} geometry={inferGeometry(editing.item, editing.artwork) as PrintGeometry} imageUrl={artworkImageUrl(quoteId, editing, "original")} itemId={editing.item.id} quoteId={quoteId} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setMessage("Arte preparada. Confira a qualidade e aprove a versão."); router.refresh(); }} /> : null}
+      {retouching ? <ArtworkRetouchEditor artworkName={retouching.artwork.artwork_name || retouching.artwork.file_name} fileName={retouching.artwork.file_name} imageUrl={artworkImageUrl(quoteId, retouching, "original")} onClose={() => setRetouching(null)} onSave={saveRetouchedArtwork} /> : null}
       {previewOpen ? <ArtworkPdfPreview drawCutLines={drawCutLines} quoteId={quoteId} onClose={() => setPreviewOpen(false)} /> : null}
     </section>
   );
 }
 
-function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, onQuantity, onEdit, onApprove }: { entry: ArtworkEntry; quoteId: string; geometry: PrintGeometry | null; quantity: number; busy: string; readOnly: boolean; onQuantity: (quantity: number) => void; onEdit: (entry: ArtworkEntry) => void; onApprove: (entry: ArtworkEntry, status: "approved" | "rejected") => void }) {
+function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, onQuantity, onEdit, onRetouch, onApprove }: { entry: ArtworkEntry; quoteId: string; geometry: PrintGeometry | null; quantity: number; busy: string; readOnly: boolean; onQuantity: (quantity: number) => void; onEdit: (entry: ArtworkEntry) => void; onRetouch: (entry: ArtworkEntry) => void; onApprove: (entry: ArtworkEntry, status: "approved" | "rejected") => void }) {
   const prepared = Boolean(entry.artwork.prepared_data_url || entry.artwork.prepared_storage_path);
   const approved = entry.artwork.approval_status === "approved";
   return <article className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-900/40">
@@ -233,7 +256,7 @@ function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, onQuan
         {entry.artwork.artwork_name ? <p className="mt-1 break-all text-[11px] text-zinc-600">{entry.artwork.file_name}</p> : null}
         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500">
           <span>{geometry ? geometryLabel(geometry) : "Geometria pendente"}</span>
-          <span>{entry.artwork.source_kind === "openrouter" ? "Gerada por IA" : "Arquivo enviado"}</span>
+          <span>{entry.artwork.source_kind === "openrouter" ? "Gerada por IA" : entry.artwork.source_kind === "retouch" ? "Retoque manual" : "Arquivo enviado"}</span>
           {entry.artwork.dpi ? <span>{entry.artwork.dpi} DPI</span> : null}
         </div>
         <p className={`mt-2 break-words text-xs leading-5 ${entry.artwork.quality_status === "warning" ? "text-amber-300" : prepared ? "text-emerald-300" : "text-zinc-500"}`}>{entry.artwork.preparation_notes || "Aguardando enquadramento e preparação técnica."}</p>
@@ -243,6 +266,7 @@ function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, onQuan
     <div className="flex flex-wrap items-end justify-between gap-3 border-t border-zinc-800 bg-zinc-950/50 p-3">
       <label className="w-36 shrink-0"><span className="mb-1 block text-xs font-medium text-zinc-400">Cópias desta arte</span><input className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm tabular-nums disabled:opacity-50" disabled={readOnly} min="1" type="number" value={quantity} onChange={(event) => onQuantity(Math.max(1, Number(event.target.value) || 1))} /></label>
       <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-2">
+        <button className="focus-ring inline-flex h-9 flex-1 basis-[110px] items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-900 disabled:opacity-50" disabled={readOnly || Boolean(busy)} type="button" onClick={() => onRetouch(entry)}><Paintbrush size={14} /> Retocar</button>
         <button className="focus-ring inline-flex h-9 flex-1 basis-[130px] items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-900 disabled:opacity-50" disabled={readOnly || !geometry || Boolean(busy)} type="button" onClick={() => onEdit(entry)}><ImageIcon size={14} /> {prepared ? "Reenquadrar" : "Enquadrar"}</button>
         {approved ? <>
           <button className="focus-ring inline-flex h-9 flex-1 basis-[110px] items-center justify-center gap-2 rounded-md bg-emerald-400/15 px-3 text-xs font-medium text-emerald-200 disabled:opacity-50" disabled={readOnly || Boolean(busy)} type="button" onClick={() => onApprove(entry, "approved")}><Check size={14} /> Atualizar</button>

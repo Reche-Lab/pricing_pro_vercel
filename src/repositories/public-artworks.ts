@@ -140,6 +140,8 @@ export async function addPublicArtwork(input: {
   fileSize: number;
   dataUrl: string;
   storagePath: string | null;
+  sourceKind?: "upload" | "retouch";
+  parentArtworkId?: string | null;
 }) {
   const client = await getPool().connect();
   try {
@@ -161,16 +163,26 @@ export async function addPublicArtwork(input: {
       [input.context.tenantId, input.context.quoteId, input.context.itemId]
     );
     if ((count.rows[0]?.count ?? 0) >= 10) throw new Error("Cada item pode ter no máximo 10 versões de arte.");
+    if (input.parentArtworkId) {
+      const parent = await client.query(
+        `select id from quote_item_artworks
+         where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4
+         limit 1`,
+        [input.context.tenantId, input.context.quoteId, input.context.itemId, input.parentArtworkId]
+      );
+      if (!parent.rows[0]) throw new Error("A arte original do retoque não foi encontrada.");
+    }
     const result = await client.query<{ id: string }>(
       `insert into quote_item_artworks (
          tenant_id, quote_id, quote_item_id, artwork_name, file_name, mime_type,
-         file_size, data_url, storage_path, created_by
-       ) select $1, $2, $3, $4, $5, $6, $7, $8, $9, null
+         file_size, data_url, storage_path, created_by, source_kind, parent_artwork_id
+       ) select $1, $2, $3, $4, $5, $6, $7, $8, $9, null, $10, $11
        returning id`,
       [input.context.tenantId, input.context.quoteId, input.context.itemId, input.artworkName,
-        input.fileName, input.mimeType, input.fileSize, input.storagePath ? null : input.dataUrl, input.storagePath]
+        input.fileName, input.mimeType, input.fileSize, input.storagePath ? null : input.dataUrl,
+        input.storagePath, input.sourceKind ?? "upload", input.parentArtworkId ?? null]
     );
-    await recordPublicEvent(client, input.context, "artworks.public_upload", result.rows[0].id, { mimeType: input.mimeType, fileSize: input.fileSize });
+    await recordPublicEvent(client, input.context, input.sourceKind === "retouch" ? "artworks.public_retouch" : "artworks.public_upload", result.rows[0].id, { mimeType: input.mimeType, fileSize: input.fileSize, parentArtworkId: input.parentArtworkId ?? null });
     await client.query("commit");
     return result.rows[0];
   } catch (error) {

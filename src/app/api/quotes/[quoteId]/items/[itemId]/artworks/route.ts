@@ -13,12 +13,18 @@ const paramsSchema = z.object({
 
 const artworkSchema = z.object({
   artworkName: z.string().trim().max(120).optional().nullable(),
+  sourceKind: z.literal("retouch").optional(),
+  parentArtworkId: z.string().uuid().optional().nullable(),
   artworkFile: z.object({
     fileName: z.string().trim().min(1).max(180),
     mimeType: z.enum(["image/png", "image/jpeg", "image/jpg", "image/webp"]),
     fileSize: z.number().int().min(1).max(3 * 1024 * 1024),
     dataUrl: z.string().startsWith("data:image/").max(4_300_000)
   })
+}).superRefine((value, context) => {
+  if (value.sourceKind === "retouch" && !value.parentArtworkId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["parentArtworkId"], message: "Informe a arte original do retoque." });
+  }
 });
 
 export async function POST(request: Request, context: { params: Promise<{ quoteId: string; itemId: string }> }) {

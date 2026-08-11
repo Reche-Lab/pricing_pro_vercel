@@ -160,7 +160,8 @@ export type QuoteItemArtworkRow = {
   quality_status?: "pending" | "warning" | "ready";
   approval_status?: "pending" | "approved" | "rejected";
   preparation_notes?: string | null;
-  source_kind?: "upload" | "openrouter";
+  source_kind?: "upload" | "openrouter" | "retouch";
+  parent_artwork_id?: string | null;
   ai_prompt?: string | null;
   approved_at?: string | null;
   prepared_at?: string | null;
@@ -1666,7 +1667,13 @@ export async function addQuoteItemArtwork(
   tenantId: string,
   quoteId: string,
   quoteItemId: string,
-  input: { artworkName?: string | null; artworkFile: QuoteArtworkFileInput; storagePath?: string | null }
+  input: {
+    artworkName?: string | null;
+    artworkFile: QuoteArtworkFileInput;
+    storagePath?: string | null;
+    sourceKind?: "upload" | "retouch";
+    parentArtworkId?: string | null;
+  }
 ): Promise<QuoteItemArtworkRow> {
   return withTenantContext(userId, tenantId, async (client) => {
     await assertQuoteArtworkEditable(client, tenantId, quoteId, quoteItemId);
@@ -1690,6 +1697,15 @@ export async function addQuoteItemArtwork(
     if (currentResult.rowCount !== null && currentResult.rowCount >= 10) {
       throw new Error("Cada item pode ter no máximo 10 imagens de arte.");
     }
+    if (input.parentArtworkId) {
+      const parent = await client.query(
+        `select id from quote_item_artworks
+         where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4
+         limit 1`,
+        [tenantId, quoteId, quoteItemId, input.parentArtworkId]
+      );
+      if (!parent.rows[0]) throw new Error("A arte original do retoque não foi encontrada.");
+    }
 
     const result = await client.query<QuoteItemArtworkRow>(
       `
@@ -1703,10 +1719,13 @@ export async function addQuoteItemArtwork(
           file_size,
           data_url,
           storage_path,
-          created_by
+          created_by,
+          source_kind,
+          parent_artwork_id
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        returning id, quote_item_id, artwork_name, file_name, mime_type, file_size, data_url, storage_path
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        returning id, quote_item_id, artwork_name, file_name, mime_type, file_size,
+                  data_url, storage_path, source_kind, parent_artwork_id
       `,
       [
         tenantId,
@@ -1718,7 +1737,9 @@ export async function addQuoteItemArtwork(
         artworkFile.fileSize,
         input.storagePath ? null : artworkFile.dataUrl,
         input.storagePath ?? `quotes/${quoteId}/items/${quoteItemId}/${artworkFile.fileName}`,
-        userId
+        userId,
+        input.sourceKind ?? "upload",
+        input.parentArtworkId ?? null
       ]
     );
     const artwork = result.rows[0];
@@ -1729,7 +1750,7 @@ export async function addQuoteItemArtwork(
       quoteId,
       quoteItemId,
       action: "quotes.artwork.add",
-      reason: "Imagem de arte adicionada ao item.",
+      reason: input.sourceKind === "retouch" ? "Retoque salvo como nova versão da arte." : "Imagem de arte adicionada ao item.",
       before: currentResult.rows,
       after: [...currentResult.rows, artworkMetadata(artwork)]
     });
