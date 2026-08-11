@@ -276,10 +276,10 @@ POST /quotes/:quoteId/public-link
 Payload:
 
 ```json
-{
-  "validDays": 15
-}
+{}
 ```
+
+O link público tem validade fixa de 3 dias por segurança. O campo legado `validDays` não altera mais esse prazo.
 
 Use para gerar link de visualização/aceite do orçamento.
 

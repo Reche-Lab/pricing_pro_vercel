@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { decidePublicQuote } from "@/repositories/quotes";
+import { enforcePublicRateLimit } from "@/lib/security/public-rate-limit";
 
 const decisionSchema = z.object({
   decision: z.enum(["accepted", "rejected"]),
   note: z.string().trim().max(1000).optional().nullable(),
-  acceptArtworkAsIs: z.boolean().optional().default(false)
+  acceptArtworkAsIs: z.boolean().optional().default(false),
+  otpCode: z.string().trim().regex(/^\d{6}$/).optional().nullable()
 });
 
 export async function POST(request: Request, context: { params: Promise<{ token: string }> }) {
@@ -13,6 +15,8 @@ export async function POST(request: Request, context: { params: Promise<{ token:
   if (!token || token.length < 20) {
     return NextResponse.json({ ok: false, error: "Link inválido." }, { status: 400 });
   }
+  const limited = await enforcePublicRateLimit(request, token, { action: "quote-decision", limit: 10, windowSeconds: 3600 });
+  if (limited) return limited;
 
   const body = await request.json().catch(() => null);
   const parsed = decisionSchema.safeParse(body);
@@ -22,7 +26,8 @@ export async function POST(request: Request, context: { params: Promise<{ token:
 
   try {
     const result = await decidePublicQuote(token, parsed.data.decision, parsed.data.note, {
-      acceptArtworkAsIs: parsed.data.acceptArtworkAsIs
+      acceptArtworkAsIs: parsed.data.acceptArtworkAsIs,
+      otpCode: parsed.data.otpCode
     });
     if (!result) {
       return NextResponse.json(

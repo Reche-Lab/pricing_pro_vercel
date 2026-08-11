@@ -15,6 +15,14 @@ export type PasswordResetEmailInput = {
   temporaryPassword: string;
 };
 
+export type PublicQuoteOtpEmailInput = {
+  to: string;
+  name: string;
+  tenantName: string;
+  code: string;
+  expiresMinutes: number;
+};
+
 export type InviteEmailResult = {
   sent: boolean;
   provider: "none" | "smtp";
@@ -36,6 +44,30 @@ export async function sendPasswordResetEmail(input: PasswordResetEmailInput): Pr
     subject: "Nova senha de acesso",
     html: renderPasswordResetHtml(input),
     text: renderPasswordResetText(input)
+  });
+}
+
+export async function sendPublicQuoteOtpEmail(input: PublicQuoteOtpEmailInput): Promise<InviteEmailResult> {
+  const text = [
+    `Olá, ${input.name}.`,
+    "",
+    `Seu código para confirmar o orçamento de ${input.tenantName} é: ${input.code}`,
+    `O código expira em ${input.expiresMinutes} minutos.`,
+    "",
+    "Se você não solicitou este código, ignore esta mensagem."
+  ].join("\n");
+  return sendEmail({
+    to: input.to,
+    subject: `Código de acesso ao orçamento - ${input.tenantName}`,
+    text,
+    html: `
+      <div style="font-family: Arial, sans-serif; color: #18181b; line-height: 1.5;">
+        <h1 style="font-size: 20px;">Confirmação do orçamento</h1>
+        <p>Olá, ${escapeHtml(input.name)}.</p>
+        <p>Use o código abaixo para confirmar o orçamento de ${escapeHtml(input.tenantName)}:</p>
+        <p style="font-size: 28px; font-weight: 700; letter-spacing: 6px; background: #f4f4f5; padding: 14px; border-radius: 8px; text-align: center;">${escapeHtml(input.code)}</p>
+        <p style="font-size: 13px; color: #71717a;">O código expira em ${input.expiresMinutes} minutos. Se você não solicitou este código, ignore esta mensagem.</p>
+      </div>`
   });
 }
 

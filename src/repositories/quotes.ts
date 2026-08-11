@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "crypto";
+import { createHash, randomBytes, randomInt } from "crypto";
 import { calculatePlatformCosts, calculateQuote, normalizePricingCurvePoints, roundMoney } from "@/domain/pricing/pricing";
 import {
   calculateCompositeQuote,
@@ -7,6 +7,14 @@ import {
   type CompositeQuoteInputItem
 } from "@/domain/quotes/composite-pricing";
 import { canTransitionQuoteStatus, createQuoteCalculationSnapshot, isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
+import {
+  hashPublicQuoteOtp,
+  maskPublicEmail,
+  maskPublicPhone,
+  PUBLIC_QUOTE_LINK_VALID_DAYS,
+  PUBLIC_QUOTE_OTP_VALID_MINUTES,
+  verifyPublicQuoteOtp
+} from "@/domain/quotes/public-security";
 import type { QuoteStatus } from "@/domain/quotes/types";
 import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
 import { getPool, withTenantContext } from "@/lib/db/client";
@@ -63,6 +71,7 @@ export type QuoteDetail = {
   external_olist_fulfillment_response?: Record<string, unknown> | null;
   created_by_name: string | null;
   public_token_expires_at?: string | null;
+  public_require_otp?: boolean;
   public_viewed_at?: string | null;
   public_accepted_at?: string | null;
   public_rejected_at?: string | null;
@@ -458,18 +467,34 @@ export async function createPublicQuoteLink(
   userId: string,
   tenantId: string,
   quoteId: string,
-  validDays = 15
-): Promise<{ token: string; expiresAt: string }> {
+  options?: { requireOtp?: boolean }
+): Promise<{ token: string; expiresAt: string; otpCode: string | null; recipient: { email: string; name: string; tenantName: string } | null }> {
   return withTenantContext(userId, tenantId, async (client) => {
     const token = randomBytes(32).toString("base64url");
     const tokenHash = hashPublicToken(token);
-    const days = Math.max(1, Math.min(90, validDays));
+    const requireOtp = Boolean(options?.requireOtp);
+    const otpCode = requireOtp ? String(randomInt(100000, 1000000)) : null;
+    const recipientResult = await client.query<{ email: string | null; name: string | null; tenant_name: string }>(
+      `select c.email::text as email, c.name, t.name as tenant_name
+       from quotes q
+       join tenants t on t.id = q.tenant_id
+       left join customers c on c.id = q.customer_id and c.tenant_id = q.tenant_id
+       where q.tenant_id = $1 and q.id = $2 limit 1`,
+      [tenantId, quoteId]
+    );
+    const recipientRow = recipientResult.rows[0];
+    if (requireOtp && !recipientRow?.email) throw new Error("Cadastre o e-mail do cliente antes de exigir código de acesso.");
 
     const result = await client.query<{ expires_at: string }>(
       `
         update quotes
         set public_token_hash = $3,
             public_token_expires_at = now() + ($4::int || ' days')::interval,
+            public_link_revoked_at = null,
+            public_require_otp = $5,
+            public_otp_hash = $6,
+            public_otp_expires_at = case when $5 then now() + ($7::int || ' minutes')::interval else null end,
+            public_otp_attempts = 0,
             status = case when status = 'draft' then 'sent' else status end,
             updated_at = now()
         where tenant_id = $1
@@ -477,7 +502,7 @@ export async function createPublicQuoteLink(
           and status not in ('cancelled', 'expired')
         returning public_token_expires_at::text as expires_at
       `,
-      [tenantId, quoteId, tokenHash, days]
+      [tenantId, quoteId, tokenHash, PUBLIC_QUOTE_LINK_VALID_DAYS, requireOtp, otpCode ? hashPublicQuoteOtp(token, otpCode) : null, PUBLIC_QUOTE_OTP_VALID_MINUTES]
     );
 
     if (!result.rows[0]) throw new Error("Quote not found or unavailable for public sharing.");
@@ -487,11 +512,65 @@ export async function createPublicQuoteLink(
         insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
         values ($1, $2, 'quotes.public_link_create', 'quote', $3, $4)
       `,
-      [tenantId, userId, quoteId, JSON.stringify({ validDays: days })]
+      [tenantId, userId, quoteId, JSON.stringify({ validDays: PUBLIC_QUOTE_LINK_VALID_DAYS, requireOtp })]
     );
 
-    return { token, expiresAt: result.rows[0].expires_at };
+    return {
+      token,
+      expiresAt: result.rows[0].expires_at,
+      otpCode,
+      recipient: recipientRow?.email ? { email: recipientRow.email, name: recipientRow.name ?? "Cliente", tenantName: recipientRow.tenant_name } : null
+    };
   });
+}
+
+export async function revokePublicQuoteLink(userId: string, tenantId: string, quoteId: string) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const result = await client.query(
+      `update quotes set public_token_hash = null, public_token_expires_at = null,
+         public_link_revoked_at = now(), public_require_otp = false, public_otp_hash = null,
+         public_otp_expires_at = null, public_otp_attempts = 0, updated_at = now()
+       where tenant_id = $1 and id = $2 and public_token_hash is not null returning id`,
+      [tenantId, quoteId]
+    );
+    if (!result.rows[0]) return false;
+    await client.query(
+      `insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+       values ($1, $2, 'quotes.public_link_revoke', 'quote', $3, '{}'::jsonb)`,
+      [tenantId, userId, quoteId]
+    );
+    return true;
+  });
+}
+
+export async function renewPublicQuoteOtp(token: string) {
+  const tokenHash = hashPublicToken(token);
+  const code = String(randomInt(100000, 1000000));
+  const client = await getPool().connect();
+  try {
+    const result = await client.query<{ id: string; tenant_id: string; email: string; customer_name: string; tenant_name: string }>(
+      `update quotes q set public_otp_hash = $2,
+          public_otp_expires_at = now() + ($3::int || ' minutes')::interval,
+          public_otp_attempts = 0, updated_at = now()
+       from customers c, tenants t
+       where q.public_token_hash = $1 and q.public_token_expires_at > now()
+         and q.public_link_revoked_at is null and q.public_require_otp = true
+         and q.status in ('draft', 'sent') and c.id = q.customer_id
+         and c.tenant_id = q.tenant_id and c.email is not null and t.id = q.tenant_id
+       returning q.id, q.tenant_id, c.email::text as email, c.name as customer_name, t.name as tenant_name`,
+      [tokenHash, hashPublicQuoteOtp(token, code), PUBLIC_QUOTE_OTP_VALID_MINUTES]
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    await client.query(
+      `insert into audit_logs (tenant_id, action, entity_type, entity_id, metadata)
+       values ($1, 'quotes.public_otp_renew', 'quote', $2, $3)`,
+      [row.tenant_id, row.id, JSON.stringify({ publicLink: true })]
+    );
+    return { code, email: row.email, name: row.customer_name, tenantName: row.tenant_name };
+  } finally {
+    client.release();
+  }
 }
 
 export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteDetail | null> {
@@ -529,6 +608,7 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           q.external_crm_id,
           u.name as created_by_name,
           q.public_token_expires_at::text as public_token_expires_at,
+          q.public_require_otp,
           q.public_viewed_at::text as public_viewed_at,
           q.public_accepted_at::text as public_accepted_at,
           q.public_rejected_at::text as public_rejected_at,
@@ -544,6 +624,7 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
         left join app_users u on u.id = q.created_by
         where q.public_token_hash = $1
           and q.public_token_expires_at > now()
+          and q.public_link_revoked_at is null
           and q.status not in ('cancelled', 'expired')
         limit 1
       `,
@@ -552,6 +633,21 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
 
     const quote = quoteResult.rows[0];
     if (!quote) return null;
+    const publicQuote: QuoteDetail = {
+      ...quote,
+      customer_document: null,
+      customer_email: maskPublicEmail(quote.customer_email),
+      customer_phone: maskPublicPhone(quote.customer_phone),
+      customer_postal_code: null,
+      customer_address_line: null,
+      customer_address_number: null,
+      customer_address_complement: null,
+      customer_district: null,
+      customer_city: null,
+      customer_state: null,
+      customer_external_olist_id: null,
+      external_crm_id: null
+    };
 
     await client.query(
       "update quotes set public_viewed_at = coalesce(public_viewed_at, now()) where id = $1",
@@ -625,7 +721,7 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
     const artworksByItem = groupArtworksByItem(artworks.rows);
 
     return {
-      quote,
+      quote: publicQuote,
       items: itemsResult.rows.map((item) => ({
         ...item,
         artworks: artworksByItem.get(item.id) ?? []
@@ -647,12 +743,40 @@ export async function decidePublicQuote(
   token: string,
   decision: "accepted" | "rejected",
   note?: string | null,
-  options?: { acceptArtworkAsIs?: boolean }
+  options?: { acceptArtworkAsIs?: boolean; otpCode?: string | null }
 ): Promise<{ id: string; status: QuoteStatus } | null> {
   const tokenHash = hashPublicToken(token);
   const client = await getPool().connect();
   let acceptedArtworkAsIs = false;
   try {
+    await client.query("begin");
+    const access = await client.query<{
+      id: string; public_require_otp: boolean; public_otp_hash: string | null;
+      public_otp_expires_at: string | null; public_otp_attempts: number;
+    }>(
+      `select id, public_require_otp, public_otp_hash, public_otp_expires_at::text, public_otp_attempts
+       from quotes where public_token_hash = $1 and public_token_expires_at > now()
+         and public_link_revoked_at is null and status in ('draft', 'sent') for update`,
+      [tokenHash]
+    );
+    const accessRow = access.rows[0];
+    if (!accessRow) {
+      await client.query("rollback");
+      return null;
+    }
+    if (accessRow.public_require_otp) {
+      const valid = Boolean(
+        options?.otpCode && accessRow.public_otp_hash && accessRow.public_otp_expires_at
+        && new Date(accessRow.public_otp_expires_at).getTime() > Date.now()
+        && accessRow.public_otp_attempts < 5
+        && verifyPublicQuoteOtp(token, options.otpCode, accessRow.public_otp_hash)
+      );
+      if (!valid) {
+        await client.query("update quotes set public_otp_attempts = public_otp_attempts + 1 where id = $1", [accessRow.id]);
+        await client.query("commit");
+        throw new Error("Código de acesso inválido ou expirado. Solicite um novo código e tente novamente.");
+      }
+    }
     if (decision === "accepted") {
       const pendingArtwork = await client.query<{ description: string }>(
         `select qi.description
@@ -687,6 +811,7 @@ export async function decidePublicQuote(
             updated_at = now()
         where public_token_hash = $1
           and public_token_expires_at > now()
+          and public_link_revoked_at is null
           and status in ('draft', 'sent')
         returning id, tenant_id, status
       `,
@@ -694,7 +819,10 @@ export async function decidePublicQuote(
     );
 
     const row = result.rows[0];
-    if (!row) return null;
+    if (!row) {
+      await client.query("rollback");
+      return null;
+    }
 
     await client.query(
       `
@@ -708,7 +836,13 @@ export async function decidePublicQuote(
       })]
     );
 
+    await client.query("commit");
     return { id: row.id, status: row.status };
+  } catch (error) {
+    if (!(error instanceof Error && error.message.startsWith("Código de acesso inválido"))) {
+      await client.query("rollback").catch(() => null);
+    }
+    throw error;
   } finally {
     client.release();
   }

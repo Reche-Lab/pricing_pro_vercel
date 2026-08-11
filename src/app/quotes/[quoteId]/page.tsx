@@ -255,7 +255,11 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                   Baixar PDF
                 </Link>
                 <QuoteWhatsAppButton quoteId={quoteId} />
-                <PublicQuoteLinkButton quoteId={quoteId} />
+                <PublicQuoteLinkButton
+                  activeUntil={detail.quote.public_token_expires_at}
+                  customerEmail={detail.quote.customer_email}
+                  quoteId={quoteId}
+                />
                 {canDeleteQuotes ? (
                   <DeleteQuoteButton
                     customerName={detail.quote.customer_name}

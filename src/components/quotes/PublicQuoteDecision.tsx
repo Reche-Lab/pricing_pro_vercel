@@ -7,11 +7,15 @@ import { AlertTriangle, CheckCircle2, ImageIcon, X, XCircle } from "lucide-react
 export function PublicQuoteDecision({
   token,
   disabled,
-  artworkReviewPending
+  artworkReviewPending,
+  requiresOtp,
+  maskedEmail
 }: {
   token: string;
   disabled: boolean;
   artworkReviewPending: boolean;
+  requiresOtp: boolean;
+  maskedEmail?: string | null;
 }) {
   const router = useRouter();
   const [note, setNote] = useState("");
@@ -19,6 +23,8 @@ export function PublicQuoteDecision({
   const [message, setMessage] = useState("");
   const [done, setDone] = useState(false);
   const [confirmArtwork, setConfirmArtwork] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
 
   async function decide(decision: "accepted" | "rejected", acceptArtworkAsIs = false) {
     setLoading(decision);
@@ -26,7 +32,7 @@ export function PublicQuoteDecision({
     const response = await fetch(`/api/public/quotes/${token}/decision`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ decision, note, acceptArtworkAsIs })
+      body: JSON.stringify({ decision, note, acceptArtworkAsIs, otpCode: requiresOtp ? otpCode : undefined })
     });
     setLoading("");
 
@@ -77,10 +83,39 @@ export function PublicQuoteDecision({
         placeholder="Observação opcional"
         value={note}
       />
+      {requiresOtp ? (
+        <div className="mt-4 rounded-md border border-cyan-400/20 bg-cyan-400/5 p-3">
+          <label className="text-xs font-medium text-cyan-100" htmlFor="public-quote-otp">Código de acesso enviado para {maskedEmail ?? "o e-mail cadastrado"}</label>
+          <div className="mt-2 flex gap-2">
+            <input
+              className="focus-ring min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-center text-base tracking-[0.3em] text-white"
+              id="public-quote-otp"
+              inputMode="numeric"
+              maxLength={6}
+              onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="000000"
+              value={otpCode}
+            />
+            <button
+              className="rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-900 disabled:opacity-60"
+              disabled={otpLoading}
+              onClick={async () => {
+                setOtpLoading(true);
+                setMessage("");
+                const response = await fetch(`/api/public/quotes/${token}/otp`, { method: "POST" });
+                const data = await response.json().catch(() => null);
+                setOtpLoading(false);
+                setMessage(response.ok ? `Novo código enviado para ${data?.email ?? maskedEmail ?? "o e-mail cadastrado"}.` : data?.error ?? "Não foi possível reenviar o código.");
+              }}
+              type="button"
+            >{otpLoading ? "Enviando..." : "Reenviar"}</button>
+          </div>
+        </div>
+      ) : null}
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         <button
           className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-emerald-950 transition-colors hover:bg-emerald-300 disabled:opacity-60"
-          disabled={Boolean(loading)}
+          disabled={Boolean(loading) || (requiresOtp && otpCode.length !== 6)}
           onClick={requestAcceptance}
           type="button"
         >
@@ -89,7 +124,7 @@ export function PublicQuoteDecision({
         </button>
         <button
           className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg border border-rose-400/30 bg-rose-400/10 px-4 py-2 text-sm font-semibold text-rose-100 transition-colors hover:bg-rose-400/20 disabled:opacity-60"
-          disabled={Boolean(loading)}
+          disabled={Boolean(loading) || (requiresOtp && otpCode.length !== 6)}
           onClick={() => void decide("rejected")}
           type="button"
         >

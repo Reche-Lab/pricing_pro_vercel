@@ -4,9 +4,7 @@ import { createPublicQuoteLink } from "@/repositories/quotes";
 import { logAgentAudit } from "@/repositories/agent";
 import { withAgentAuth } from "../../../_shared";
 
-const schema = z.object({
-  validDays: z.number().int().min(1).max(90).default(15)
-});
+const schema = z.object({});
 
 export async function POST(request: Request, context: { params: Promise<{ quoteId: string }> }) {
   const { quoteId } = await context.params;
@@ -20,13 +18,13 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     "quotes:public_link",
     (body) => {
       const parsed = schema.safeParse(body ?? {});
-      if (!parsed.success) return { validDays: 15 };
+      if (!parsed.success) return {};
       return parsed.data;
     },
-    async ({ context: agentContext, body }) => {
-      const result = await createPublicQuoteLink(agentContext.actorUserId, agentContext.tenantId, quoteId, body.validDays);
+    async ({ context: agentContext }) => {
+      const result = await createPublicQuoteLink(agentContext.actorUserId, agentContext.tenantId, quoteId);
       const url = `${getServerEnv().APP_URL.replace(/\/$/, "")}/q/${result.token}`;
-      await logAgentAudit(agentContext, "agent.quotes.public_link", { quoteId, validDays: body.validDays });
+      await logAgentAudit(agentContext, "agent.quotes.public_link", { quoteId, validDays: 3 });
       return {
         body: {
           ok: true,

@@ -19,7 +19,9 @@ Antes de visualizar ou baixar as folhas, o controle `Linhas de corte` permite in
 
 ## Aprovação pelo link público
 
-O cliente que recebe o link público do orçamento também pode revisar as artes sem possuir usuário interno. O acesso fica limitado ao orçamento associado ao token e permanece disponível somente enquanto o link estiver válido e o orçamento estiver aguardando decisão.
+O cliente que recebe o link público do orçamento também pode revisar as artes sem possuir usuário interno. O acesso fica limitado ao orçamento associado ao token, expira automaticamente em 3 dias e permanece disponível somente enquanto o orçamento estiver aguardando decisão. O usuário interno pode revogar o link imediatamente e, quando houver e-mail do cliente, exigir um código de acesso de seis dígitos para aceitar ou recusar o orçamento.
+
+Os endpoints públicos possuem limite de requisições por token e origem. Imagens enviadas são validadas pelo conteúdo real e normalizadas para WebP antes de serem armazenadas; SVG, arquivos animados, conteúdo incompatível com a extensão e dimensões excessivas são recusados. Dados de contato são mascarados na página pública, as respostas não são armazenadas em cache e o link não deve ser indexado por buscadores.
 
 No `Estúdio de aprovação das artes`, o cliente pode:
 

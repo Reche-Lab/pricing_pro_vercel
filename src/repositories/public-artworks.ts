@@ -53,6 +53,7 @@ export async function getPublicArtworkContext(token: string, itemId: string, art
        join tenants t on t.id = q.tenant_id
        left join product_variants pv on pv.id = qi.product_variant_id and pv.tenant_id = q.tenant_id
        where q.public_token_hash = $1 and q.public_token_expires_at > now()
+         and q.public_link_revoked_at is null
          and q.status in ('draft', 'sent') and qi.id = $2
        limit 1`,
       [hashToken(token), itemId]
@@ -112,6 +113,7 @@ export async function reservePublicArtworkAiAttempt(context: PublicArtworkContex
          and qi.artwork_ai_attempts < $5
          and q.id = qi.quote_id and q.tenant_id = qi.tenant_id
          and q.public_token_hash = $4 and q.public_token_expires_at > now()
+         and q.public_link_revoked_at is null
          and q.status in ('draft', 'sent')
        returning qi.artwork_ai_attempts`,
       [context.tenantId, context.quoteId, context.itemId, context.tokenHash, limit]
@@ -139,26 +141,41 @@ export async function addPublicArtwork(input: {
   dataUrl: string;
   storagePath: string | null;
 }) {
-  if (input.context.artworkCount >= 10) throw new Error("Cada item pode ter no máximo 10 versões de arte.");
   const client = await getPool().connect();
   try {
+    await client.query("begin");
+    const available = await client.query(
+      `select qi.id
+       from quote_items qi
+       join quotes q on q.id = qi.quote_id and q.tenant_id = qi.tenant_id
+       where qi.tenant_id = $1 and qi.quote_id = $2 and qi.id = $3
+         and q.public_token_hash = $4 and q.public_token_expires_at > now()
+         and q.public_link_revoked_at is null and q.status in ('draft', 'sent')
+       for update of qi`,
+      [input.context.tenantId, input.context.quoteId, input.context.itemId, input.context.tokenHash]
+    );
+    if (!available.rows[0]) throw new Error("Este orçamento não está mais disponível para alterações.");
+    const count = await client.query<{ count: number }>(
+      `select count(*)::int as count from quote_item_artworks
+       where tenant_id = $1 and quote_id = $2 and quote_item_id = $3`,
+      [input.context.tenantId, input.context.quoteId, input.context.itemId]
+    );
+    if ((count.rows[0]?.count ?? 0) >= 10) throw new Error("Cada item pode ter no máximo 10 versões de arte.");
     const result = await client.query<{ id: string }>(
       `insert into quote_item_artworks (
          tenant_id, quote_id, quote_item_id, artwork_name, file_name, mime_type,
          file_size, data_url, storage_path, created_by
        ) select $1, $2, $3, $4, $5, $6, $7, $8, $9, null
-       where exists (
-         select 1 from quotes q where q.id = $2 and q.tenant_id = $1
-           and q.public_token_hash = $10 and q.public_token_expires_at > now()
-           and q.status in ('draft', 'sent')
-       )
        returning id`,
       [input.context.tenantId, input.context.quoteId, input.context.itemId, input.artworkName,
-        input.fileName, input.mimeType, input.fileSize, input.storagePath ? null : input.dataUrl, input.storagePath, input.context.tokenHash]
+        input.fileName, input.mimeType, input.fileSize, input.storagePath ? null : input.dataUrl, input.storagePath]
     );
-    if (!result.rows[0]) throw new Error("Este orçamento não está mais disponível para alterações.");
     await recordPublicEvent(client, input.context, "artworks.public_upload", result.rows[0].id, { mimeType: input.mimeType, fileSize: input.fileSize });
+    await client.query("commit");
     return result.rows[0];
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
   } finally {
     client.release();
   }
@@ -192,6 +209,7 @@ export async function savePublicPreparedArtwork(input: {
          and exists (
            select 1 from quotes q where q.id = $2 and q.tenant_id = $1
              and q.public_token_hash = $28 and q.public_token_expires_at > now()
+             and q.public_link_revoked_at is null
              and q.status in ('draft', 'sent')
          )
        returning id`,
@@ -218,7 +236,8 @@ export async function selectPublicArtwork(context: PublicArtworkContext, artwork
     await client.query("begin");
     const available = await client.query(
       `select id from quotes where id = $1 and tenant_id = $2 and public_token_hash = $3
-       and public_token_expires_at > now() and status in ('draft', 'sent') for update`,
+       and public_token_expires_at > now() and public_link_revoked_at is null
+       and status in ('draft', 'sent') for update`,
       [context.quoteId, context.tenantId, context.tokenHash]
     );
     if (!available.rows[0]) throw new Error("Este orçamento não está mais disponível para alterações.");

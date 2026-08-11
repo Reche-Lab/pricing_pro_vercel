@@ -56,6 +56,10 @@ Status atualizado durante a refatoracao inicial.
 - [x] Criar migration de API keys/idempotência para agentes.
 - [x] Criar autenticação Bearer token para `/api/agent/v1`.
 - [x] Criar endpoints agent para produtos, cálculo, frete, orçamento composto, PDF, WhatsApp e link público.
+- [x] Proteger links públicos com expiração fixa de 3 dias, revogação manual e OTP opcional por e-mail.
+- [x] Aplicar rate limit nos endpoints públicos de decisão, PDF, artes e assistente criativo.
+- [x] Validar o conteúdo real dos uploads públicos e normalizar PNG/JPEG/WebP para WebP seguro.
+- [x] Mascarar dados de contato, impedir cache/indexação e adicionar headers de segurança na área pública.
 - [x] Criar script para gerar API key de agente por tenant.
 - [x] Criar UI em Configurações para listar, criar e revogar chaves de agente.
 - [x] Criar prompt de desenvolvimento para o módulo Lia Flow consumir a API do Pricing Pro.

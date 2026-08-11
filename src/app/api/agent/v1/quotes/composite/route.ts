@@ -134,7 +134,7 @@ export async function POST(request: Request) {
       let publicUrl: string | null = null;
       let publicPdfUrl: string | null = null;
       if (output.publicLink) {
-        const publicLink = await createPublicQuoteLink(context.actorUserId, context.tenantId, quote.id, 15);
+        const publicLink = await createPublicQuoteLink(context.actorUserId, context.tenantId, quote.id);
         const publicBaseUrl = `${getServerEnv().APP_URL.replace(/\/$/, "")}/q/${publicLink.token}`;
         publicUrl = publicBaseUrl;
         publicPdfUrl = output.pdf ? `${publicBaseUrl}/pdf` : null;

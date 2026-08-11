@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { PublicQuoteDecision } from "@/components/quotes/PublicQuoteDecision";
 import { PublicArtworkStudio } from "@/components/quotes/PublicArtworkStudio";
 import { PublicArtworkShortcut } from "@/components/quotes/PublicArtworkShortcut";
+import { PublicQuoteExpiryCountdown } from "@/components/quotes/PublicQuoteExpiryCountdown";
 import { getPublicArtworkReviewProgress } from "@/domain/quotes/public-artwork-review";
 import { getPublicQuoteByToken } from "@/repositories/quotes";
 
@@ -60,6 +61,9 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-4 py-3 sm:text-right">
               <p className="text-sm text-zinc-500">Status</p>
               <p className="text-lg font-semibold text-white">{statusLabels[detail.quote.status] ?? detail.quote.status}</p>
+              {detail.quote.public_token_expires_at ? (
+                <PublicQuoteExpiryCountdown expiresAt={detail.quote.public_token_expires_at} />
+              ) : null}
             </div>
           </div>
         </header>
@@ -145,7 +149,13 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
               </dl>
             </section>
 
-            <PublicQuoteDecision artworkReviewPending={artworkReviewPending} disabled={decisionLocked} token={token} />
+            <PublicQuoteDecision
+              artworkReviewPending={artworkReviewPending}
+              disabled={decisionLocked}
+              maskedEmail={detail.quote.customer_email}
+              requiresOtp={Boolean(detail.quote.public_require_otp)}
+              token={token}
+            />
 
             <p className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4 text-xs leading-5 text-zinc-500">
               Os valores estão sujeitos à confirmação final de disponibilidade, pagamento e produção. Ao aceitar,
