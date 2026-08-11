@@ -5,6 +5,7 @@ export type ArtworkProductionProfile = {
   pageWidthMm: number;
   pageHeightMm: number;
   marginMm: number;
+  bottomMarginMm: number;
   bleedMm: number;
   safeMarginMm: number;
   gapMm: number;
@@ -17,9 +18,10 @@ export const DEFAULT_ARTWORK_PROFILE: ArtworkProductionProfile = {
   pageWidthMm: 210,
   pageHeightMm: 297,
   marginMm: 7,
+  bottomMarginMm: 15,
   bleedMm: 2,
   safeMarginMm: 2,
-  gapMm: 2,
+  gapMm: 3,
   dpi: 300,
   layoutMode: "auto",
   drawCutLines: true

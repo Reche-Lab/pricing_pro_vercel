@@ -62,7 +62,7 @@ export async function getPublicArtworkContext(token: string, itemId: string, art
     if (!row) return null;
     const [profileResult, artworkResult] = await Promise.all([
       client.query<{
-        page_width_mm: string; page_height_mm: string; margin_mm: string; bleed_mm: string;
+        page_width_mm: string; page_height_mm: string; margin_mm: string; bottom_margin_mm: string; bleed_mm: string;
         safe_margin_mm: string; gap_mm: string; dpi: number;
         layout_mode: ArtworkProductionProfile["layoutMode"]; draw_cut_lines: boolean;
       }>("select * from artwork_production_profiles where tenant_id = $1 limit 1", [row.tenant_id]),
@@ -344,14 +344,14 @@ function hashToken(token: string) {
 }
 
 function mapProfile(row: {
-  page_width_mm: string; page_height_mm: string; margin_mm: string; bleed_mm: string;
+  page_width_mm: string; page_height_mm: string; margin_mm: string; bottom_margin_mm: string; bleed_mm: string;
   safe_margin_mm: string; gap_mm: string; dpi: number;
   layout_mode: ArtworkProductionProfile["layoutMode"]; draw_cut_lines: boolean;
 } | undefined): ArtworkProductionProfile {
   if (!row) return DEFAULT_ARTWORK_PROFILE;
   return {
     pageWidthMm: Number(row.page_width_mm), pageHeightMm: Number(row.page_height_mm),
-    marginMm: Number(row.margin_mm), bleedMm: Number(row.bleed_mm), safeMarginMm: Number(row.safe_margin_mm),
+    marginMm: Number(row.margin_mm), bottomMarginMm: Number(row.bottom_margin_mm || 15), bleedMm: Number(row.bleed_mm), safeMarginMm: Number(row.safe_margin_mm),
     gapMm: Number(row.gap_mm), dpi: row.dpi, layoutMode: row.layout_mode, drawCutLines: row.draw_cut_lines
   };
 }

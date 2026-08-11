@@ -56,7 +56,7 @@ export type ArtworkProductionRow = {
 export async function getArtworkProductionProfile(userId: string, tenantId: string) {
   return withTenantContext(userId, tenantId, async (client) => {
     const result = await client.query<{
-      page_width_mm: string; page_height_mm: string; margin_mm: string; bleed_mm: string;
+      page_width_mm: string; page_height_mm: string; margin_mm: string; bottom_margin_mm: string; bleed_mm: string;
       safe_margin_mm: string; gap_mm: string; dpi: number;
       layout_mode: ArtworkProductionProfile["layoutMode"]; draw_cut_lines: boolean;
     }>("select * from artwork_production_profiles where tenant_id = $1 limit 1", [tenantId]);
@@ -73,13 +73,14 @@ export async function saveArtworkProductionProfile(
     await client.query(
       `
         insert into artwork_production_profiles (
-          tenant_id, page_width_mm, page_height_mm, margin_mm, bleed_mm,
-          safe_margin_mm, gap_mm, dpi, layout_mode, draw_cut_lines
-        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          tenant_id, page_width_mm, page_height_mm, margin_mm, bottom_margin_mm,
+          bleed_mm, safe_margin_mm, gap_mm, dpi, layout_mode, draw_cut_lines
+        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         on conflict (tenant_id) do update set
           page_width_mm = excluded.page_width_mm,
           page_height_mm = excluded.page_height_mm,
           margin_mm = excluded.margin_mm,
+          bottom_margin_mm = excluded.bottom_margin_mm,
           bleed_mm = excluded.bleed_mm,
           safe_margin_mm = excluded.safe_margin_mm,
           gap_mm = excluded.gap_mm,
@@ -88,7 +89,7 @@ export async function saveArtworkProductionProfile(
           draw_cut_lines = excluded.draw_cut_lines,
           updated_at = now()
       `,
-      [tenantId, profile.pageWidthMm, profile.pageHeightMm, profile.marginMm, profile.bleedMm, profile.safeMarginMm, profile.gapMm, profile.dpi, profile.layoutMode, profile.drawCutLines]
+      [tenantId, profile.pageWidthMm, profile.pageHeightMm, profile.marginMm, profile.bottomMarginMm, profile.bleedMm, profile.safeMarginMm, profile.gapMm, profile.dpi, profile.layoutMode, profile.drawCutLines]
     );
     await client.query(
       `insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
@@ -116,6 +117,7 @@ export async function getArtworkProductionData(userId: string, tenantId: string,
       page_width_mm: string;
       page_height_mm: string;
       margin_mm: string;
+      bottom_margin_mm: string;
       bleed_mm: string;
       safe_margin_mm: string;
       gap_mm: string;
@@ -534,6 +536,7 @@ function mapProfile(row: {
   page_width_mm: string;
   page_height_mm: string;
   margin_mm: string;
+  bottom_margin_mm: string;
   bleed_mm: string;
   safe_margin_mm: string;
   gap_mm: string;
@@ -546,6 +549,7 @@ function mapProfile(row: {
     pageWidthMm: Number(row.page_width_mm),
     pageHeightMm: Number(row.page_height_mm),
     marginMm: Number(row.margin_mm),
+    bottomMarginMm: Number(row.bottom_margin_mm || 15),
     bleedMm: Number(row.bleed_mm),
     safeMarginMm: Number(row.safe_margin_mm),
     gapMm: Number(row.gap_mm),

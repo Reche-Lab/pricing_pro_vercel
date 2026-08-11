@@ -75,6 +75,43 @@ describe("artwork production", () => {
     expect(plan.pageCount).toBeGreaterThan(1);
   });
 
+  it("starts every page at the top and enforces spacing and a protected bottom edge", () => {
+    const square40 = { shape: "square" as const, widthMm: 40, heightMm: 40, cornerStyle: "sharp" as const, cornerRadiusMm: 0, rotationDegrees: 0, allowPrintRotation: true };
+    const profile = { ...DEFAULT_ARTWORK_PROFILE, layoutMode: "grid" as const, marginMm: 5, bottomMarginMm: 20, gapMm: 0, bleedMm: 0 };
+    const plan = createImpositionPlan([{ id: "square", label: "Quadrado", quantity: 40, geometry: square40, preparedDataUrl: "unused" }], profile);
+    for (let page = 0; page < plan.pageCount; page += 1) {
+      const placements = plan.placements.filter((placement) => placement.pageIndex === page);
+      expect(Math.min(...placements.map((placement) => placement.yMm))).toBe(profile.marginMm);
+      expect(placements.every((placement) => placement.yMm + 40 <= profile.pageHeightMm - profile.bottomMarginMm + 0.001)).toBe(true);
+      for (let leftIndex = 0; leftIndex < placements.length; leftIndex += 1) {
+        for (let rightIndex = leftIndex + 1; rightIndex < placements.length; rightIndex += 1) {
+          const left = placements[leftIndex]; const right = placements[rightIndex];
+          const horizontalGap = Math.max(right.xMm - (left.xMm + 40), left.xMm - (right.xMm + 40));
+          const verticalGap = Math.max(right.yMm - (left.yMm + 40), left.yMm - (right.yMm + 40));
+          expect(Math.max(horizontalGap, verticalGap)).toBeGreaterThanOrEqual(3 - 0.001);
+        }
+      }
+    }
+  });
+
+  it("keeps the same minimum spacing and bottom protection in the alternating circular layout", () => {
+    const profile = { ...DEFAULT_ARTWORK_PROFILE, layoutMode: "hex" as const, marginMm: 5, bottomMarginMm: 20, gapMm: 0 };
+    const outerDiameter = circle55.widthMm + profile.bleedMm * 2;
+    const plan = createImpositionPlan([{ id: "circle", label: "Circular", quantity: 40, geometry: circle55, preparedDataUrl: "unused" }], profile);
+    for (let page = 0; page < plan.pageCount; page += 1) {
+      const placements = plan.placements.filter((placement) => placement.pageIndex === page);
+      expect(Math.min(...placements.map((placement) => placement.yMm))).toBe(profile.marginMm);
+      expect(placements.every((placement) => placement.yMm + outerDiameter <= profile.pageHeightMm - profile.bottomMarginMm + 0.001)).toBe(true);
+      for (let leftIndex = 0; leftIndex < placements.length; leftIndex += 1) {
+        for (let rightIndex = leftIndex + 1; rightIndex < placements.length; rightIndex += 1) {
+          const left = placements[leftIndex]; const right = placements[rightIndex];
+          const centerDistance = Math.hypot(right.xMm - left.xMm, right.yMm - left.yMm);
+          expect(centerDistance - outerDiameter).toBeGreaterThanOrEqual(3 - 0.001);
+        }
+      }
+    }
+  });
+
   it("writes a valid multipage PDF using physical A4 dimensions", async () => {
     const source = await sharp({ create: { width: 700, height: 700, channels: 4, background: "#0891b2" } }).png().toBuffer();
     const prepared = await prepareCircularArtwork({ dataUrl: `data:image/png;base64,${source.toString("base64")}`, diameterMm: 55, bleedMm: 2, dpi: 300 });

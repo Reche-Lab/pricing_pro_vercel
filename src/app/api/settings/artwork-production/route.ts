@@ -8,12 +8,17 @@ const schema = z.object({
   pageWidthMm: z.number().min(100).max(1000),
   pageHeightMm: z.number().min(100).max(1000),
   marginMm: z.number().min(0).max(50),
+  bottomMarginMm: z.number().min(10).max(80),
   bleedMm: z.number().min(0).max(20),
   safeMarginMm: z.number().min(0).max(20),
-  gapMm: z.number().min(0).max(30),
+  gapMm: z.number().min(3).max(30),
   dpi: z.number().int().min(150).max(1200),
   layoutMode: z.enum(["auto", "grid", "hex"]),
   drawCutLines: z.boolean()
+}).superRefine((profile, context) => {
+  if (profile.marginMm + profile.bottomMarginMm >= profile.pageHeightMm) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["bottomMarginMm"], message: "As margens verticais precisam deixar área útil na folha." });
+  }
 });
 
 export async function PUT(request: Request) {

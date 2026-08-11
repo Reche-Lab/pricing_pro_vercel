@@ -138,6 +138,7 @@ Status atualizado durante a refatoracao inicial.
 - [x] Aprovar uma única versão de arte por item com auditoria.
 - [x] Gerar PDF A4 na escala física e na quantidade do orçamento.
 - [x] Distribuir automaticamente artes iguais e mistas na folha, incluindo rotação opcional de formatos retangulares.
+- [x] Iniciar a imposição pelo topo, reservar margem inferior de segurança e manter no mínimo 3 mm entre artes.
 - [x] Configurar folha, margem, sangria, área segura, intervalo, DPI e linhas de corte por tenant.
 - [x] Gerar direção criativa textual e novas imagens via OpenRouter.
 - [x] Limitar a geração por IA por item do orçamento, com padrão 3, configuração por tenant no Superadmin e aplicação no acesso público.
