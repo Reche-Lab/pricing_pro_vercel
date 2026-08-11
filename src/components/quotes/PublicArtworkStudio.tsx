@@ -172,7 +172,17 @@ export function PublicArtworkStudio({ token, quoteId, items, disabled }: { token
     </div>
 
     {editing && inferGeometry(editing.item, editing.artwork) ? <ArtworkCropEditor artwork={editing.artwork} geometry={inferGeometry(editing.item, editing.artwork) as PrintGeometry} imageUrl={publicArtworkUrl(token, editing.artwork.id, false)} itemId={editing.item.id} quoteId={quoteId} prepareUrl={`/api/public/quotes/${token}/items/${editing.item.id}/artworks/${editing.artwork.id}/prepare`} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setMessage("Enquadramento salvo. Agora você pode aprovar esta versão."); router.refresh(); }} /> : null}
-    {retouching ? <ArtworkRetouchEditor artworkName={retouching.artwork.artwork_name || retouching.artwork.file_name} fileName={retouching.artwork.file_name} imageUrl={publicArtworkUrl(token, retouching.artwork.id, false)} onClose={() => setRetouching(null)} onSave={saveRetouchedArtwork} /> : null}
+    {retouching ? <ArtworkRetouchEditor
+      artworkName={retouching.artwork.artwork_name || retouching.artwork.file_name}
+      bleedMm={Number(retouching.artwork.bleed_mm || 2)}
+      draftUrl={`/api/public/quotes/${token}/items/${retouching.item.id}/artworks/${retouching.artwork.id}/retouch-draft`}
+      fileName={retouching.artwork.file_name}
+      geometry={inferGeometry(retouching.item, retouching.artwork)}
+      imageUrl={publicArtworkUrl(token, retouching.artwork.id, false)}
+      safeMarginMm={Number(retouching.artwork.safe_margin_mm || 2)}
+      onClose={() => setRetouching(null)}
+      onSave={saveRetouchedArtwork}
+    /> : null}
   </section>;
 }
 

@@ -296,6 +296,41 @@ export async function markPublicArtworkAsGenerated(context: PublicArtworkContext
   }
 }
 
+export async function getPublicArtworkRetouchDraft(context: PublicArtworkContext, artworkId: string) {
+  const client = await getPool().connect();
+  try {
+    const result = await client.query<{ retouch_draft: unknown; retouch_draft_updated_at: string | null }>(
+      `select a.retouch_draft, a.retouch_draft_updated_at
+       from quote_item_artworks a
+       join quotes q on q.id = a.quote_id and q.tenant_id = a.tenant_id
+       where a.tenant_id = $1 and a.quote_id = $2 and a.quote_item_id = $3 and a.id = $4
+         and q.public_token_hash = $5 and q.public_token_expires_at > now()
+         and q.public_link_revoked_at is null and q.status in ('draft', 'sent') limit 1`,
+      [context.tenantId, context.quoteId, context.itemId, artworkId, context.tokenHash]
+    );
+    return result.rows[0] ?? null;
+  } finally { client.release(); }
+}
+
+export async function savePublicArtworkRetouchDraft(context: PublicArtworkContext, artworkId: string, draft: unknown | null) {
+  const client = await getPool().connect();
+  try {
+    const result = await client.query<{ id: string; retouch_draft_updated_at: string | null }>(
+      `update quote_item_artworks a
+       set retouch_draft = $6::jsonb,
+           retouch_draft_updated_at = case when $6::jsonb is null then null else now() end
+       where a.tenant_id = $1 and a.quote_id = $2 and a.quote_item_id = $3 and a.id = $4
+         and exists (select 1 from quotes q where q.id = $2 and q.tenant_id = $1
+           and q.public_token_hash = $5 and q.public_token_expires_at > now()
+           and q.public_link_revoked_at is null and q.status in ('draft', 'sent'))
+       returning id, retouch_draft_updated_at`,
+      [context.tenantId, context.quoteId, context.itemId, artworkId, context.tokenHash, draft ? JSON.stringify(draft) : null]
+    );
+    if (!result.rows[0]) throw new Error("Este orçamento não está mais disponível para alterações.");
+    return result.rows[0];
+  } finally { client.release(); }
+}
+
 async function recordPublicEvent(client: import("pg").PoolClient, context: PublicArtworkContext, action: string, artworkId: string, metadata: Record<string, unknown>) {
   await client.query(
     `insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)

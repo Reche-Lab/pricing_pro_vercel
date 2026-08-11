@@ -30,7 +30,7 @@ export type ArtworkProductionRow = {
   quality_status: "pending" | "warning" | "ready";
   approval_status: "pending" | "approved" | "rejected";
   preparation_notes: string | null;
-  source_kind: "upload" | "openrouter";
+  source_kind: "upload" | "openrouter" | "retouch";
   ai_prompt: string | null;
   approved_at: string | null;
   prepared_at: string | null;
@@ -489,6 +489,35 @@ export async function reserveArtworkAiGenerationAttempt(input: {
       [input.tenantId, input.userId, input.itemId, JSON.stringify({ quoteId: input.quoteId, limit, attemptsUsed, attemptsRemaining })]
     );
     return { reserved: true, limit, attemptsUsed, attemptsRemaining };
+  });
+}
+
+export async function getArtworkRetouchDraft(userId: string, tenantId: string, quoteId: string, itemId: string, artworkId: string) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const result = await client.query<{ retouch_draft: unknown; retouch_draft_updated_at: string | null }>(
+      `select retouch_draft, retouch_draft_updated_at
+       from quote_item_artworks
+       where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4 limit 1`,
+      [tenantId, quoteId, itemId, artworkId]
+    );
+    return result.rows[0] ?? null;
+  });
+}
+
+export async function saveArtworkRetouchDraft(input: {
+  userId: string; tenantId: string; quoteId: string; itemId: string; artworkId: string; draft: unknown | null;
+}) {
+  return withTenantContext(input.userId, input.tenantId, async (client) => {
+    const result = await client.query<{ id: string; retouch_draft_updated_at: string | null }>(
+      `update quote_item_artworks
+       set retouch_draft = $5::jsonb,
+           retouch_draft_updated_at = case when $5::jsonb is null then null else now() end
+       where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4
+       returning id, retouch_draft_updated_at`,
+      [input.tenantId, input.quoteId, input.itemId, input.artworkId, input.draft ? JSON.stringify(input.draft) : null]
+    );
+    if (!result.rows[0]) throw new Error("Arte não encontrada.");
+    return result.rows[0];
   });
 }
 

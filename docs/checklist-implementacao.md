@@ -152,6 +152,7 @@ Status atualizado durante a refatoracao inicial.
 - [x] Distribuir a quantidade de um item entre várias artes aprovadas.
 - [x] Pré-visualizar as folhas A4 antes do download.
 - [x] Permitir envio público de arte pronta pelo item do orçamento e pelo estúdio, sem depender do assistente criativo.
+- [x] Editar artes de forma não destrutiva com pincel, conta-gotas, borracha, preenchimento por tolerância, seleção, ajustes, comparação, sangria externa e autosave.
 - [x] Registrar lotes de produção e permitir marcá-los como impressos.
 - [ ] Migrar em lote os arquivos legados que ainda estão em `data_url`.
 

@@ -235,7 +235,17 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
       </div> : null}
 
       {editing && inferGeometry(editing.item, editing.artwork) ? <ArtworkCropEditor artwork={editing.artwork} geometry={inferGeometry(editing.item, editing.artwork) as PrintGeometry} imageUrl={artworkImageUrl(quoteId, editing, "original")} itemId={editing.item.id} quoteId={quoteId} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setMessage("Arte preparada. Confira a qualidade e aprove a versão."); router.refresh(); }} /> : null}
-      {retouching ? <ArtworkRetouchEditor artworkName={retouching.artwork.artwork_name || retouching.artwork.file_name} fileName={retouching.artwork.file_name} imageUrl={artworkImageUrl(quoteId, retouching, "original")} onClose={() => setRetouching(null)} onSave={saveRetouchedArtwork} /> : null}
+      {retouching ? <ArtworkRetouchEditor
+        artworkName={retouching.artwork.artwork_name || retouching.artwork.file_name}
+        bleedMm={Number(retouching.artwork.bleed_mm || 2)}
+        draftUrl={`/api/quotes/${quoteId}/items/${retouching.item.id}/artworks/${retouching.artwork.id}/retouch-draft`}
+        fileName={retouching.artwork.file_name}
+        geometry={inferGeometry(retouching.item, retouching.artwork)}
+        imageUrl={artworkImageUrl(quoteId, retouching, "original")}
+        safeMarginMm={Number(retouching.artwork.safe_margin_mm || 2)}
+        onClose={() => setRetouching(null)}
+        onSave={saveRetouchedArtwork}
+      /> : null}
       {previewOpen ? <ArtworkPdfPreview drawCutLines={drawCutLines} quoteId={quoteId} onClose={() => setPreviewOpen(false)} /> : null}
     </section>
   );
