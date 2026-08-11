@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { PublicQuoteDecision } from "@/components/quotes/PublicQuoteDecision";
 import { PublicArtworkStudio } from "@/components/quotes/PublicArtworkStudio";
+import { PublicArtworkShortcut } from "@/components/quotes/PublicArtworkShortcut";
 import { getPublicArtworkReviewProgress } from "@/domain/quotes/public-artwork-review";
 import { getPublicQuoteByToken } from "@/repositories/quotes";
 
@@ -113,7 +114,10 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
                         </div>
                       ) : null}
                     </div>
-                    <p className="font-semibold text-white">{brl.format(Number(item.total_price))}</p>
+                    <div className="flex items-start justify-between gap-3 sm:grid sm:justify-items-end">
+                      <p className="font-semibold text-white">{brl.format(Number(item.total_price))}</p>
+                      <PublicArtworkShortcut disabled={decisionLocked} hasArtwork={Boolean(item.artworks?.length)} itemId={item.id} />
+                    </div>
                   </div>
                 ))}
               </div>

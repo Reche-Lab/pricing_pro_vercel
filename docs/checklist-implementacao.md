@@ -145,6 +145,7 @@ Status atualizado durante a refatoracao inicial.
 - [x] Instruir o assistente criativo com a geometria e a proporção reais do produto.
 - [x] Distribuir a quantidade de um item entre várias artes aprovadas.
 - [x] Pré-visualizar as folhas A4 antes do download.
+- [x] Permitir envio público de arte pronta pelo item do orçamento e pelo estúdio, sem depender do assistente criativo.
 - [x] Registrar lotes de produção e permitir marcá-los como impressos.
 - [ ] Migrar em lote os arquivos legados que ainda estão em `data_url`.
 

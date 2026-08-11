@@ -24,13 +24,15 @@ O cliente que recebe o link público do orçamento também pode revisar as artes
 No `Estúdio de aprovação das artes`, o cliente pode:
 
 - comparar as versões de cada produto;
+- enviar diretamente uma arte pronta, sem utilizar o assistente nem consumir tentativas de IA;
+- acessar o envio da arte pelo atalho existente em cada item do orçamento;
 - enviar uma imagem PNG, JPEG ou WebP como referência;
 - criar uma arte do zero ou solicitar alterações sobre uma versão existente;
 - reenquadrar a imagem no formato de corte do produto e conferir a área segura;
 - selecionar e aprovar uma única versão por produto;
 - aceitar ou recusar o orçamento após concluir a revisão.
 
-A arte original nunca é sobrescrita. A aprovação de uma versão desmarca as demais versões do mesmo produto. Para itens personalizados, o aceite final do orçamento é bloqueado enquanto não houver uma arte preparada e aprovada. Todas as ações públicas são auditadas sem expor uma sessão interna do tenant.
+A arte original nunca é sobrescrita. Ao enviar uma substituição, a versão atual permanece válida até que a nova seja reenquadrada e aprovada; a aprovação de uma versão desmarca as demais versões do mesmo produto. Para itens personalizados, o aceite final do orçamento é bloqueado enquanto não houver uma arte preparada e aprovada. Todas as ações públicas são auditadas sem expor uma sessão interna do tenant.
 
 O PDF mantém escala física, quantidade de cada item, margens, espaçamento, sangria e o contorno exato das linhas de corte. Círculos iguais podem usar distribuição alternada. Os demais formatos usam organização por linhas, com rotação de 90° somente quando ela estiver habilitada no produto e melhorar o aproveitamento da folha.
 
