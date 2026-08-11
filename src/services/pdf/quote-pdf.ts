@@ -133,7 +133,7 @@ export async function generateQuotePdf(input: {
   );
 
   const attachedArtworks = input.items.flatMap((item) =>
-    (item.artworks ?? []).map((artwork) => ({
+    (item.artworks ?? []).filter((artwork) => artwork.is_active !== false).map((artwork) => ({
       item,
       artwork
     }))

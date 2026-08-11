@@ -175,9 +175,9 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                       {item.quantity} x {brl.format(Number(item.unit_price))}
                     </p>
                     {item.artwork_name ? <p className="text-zinc-500">Arte: {item.artwork_name}</p> : null}
-                    {item.artworks?.length ? (
+                    {item.artworks?.some((artwork) => artwork.is_active !== false) ? (
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {item.artworks.map((artwork) => (
+                        {item.artworks.filter((artwork) => artwork.is_active !== false).map((artwork) => (
                           <div
                             className="flex max-w-full items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 px-2 py-1.5"
                             key={artwork.id}

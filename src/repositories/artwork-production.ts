@@ -31,6 +31,8 @@ export type ArtworkProductionRow = {
   approval_status: "pending" | "approved" | "rejected";
   preparation_notes: string | null;
   source_kind: "upload" | "openrouter" | "retouch" | "pdf_page";
+  parent_artwork_id: string | null;
+  is_active: boolean;
   ai_prompt: string | null;
   approved_at: string | null;
   prepared_at: string | null;
@@ -147,6 +149,8 @@ export async function getArtworkProductionData(userId: string, tenantId: string,
           a.approval_status,
           a.preparation_notes,
           a.source_kind,
+          a.parent_artwork_id,
+          a.is_active,
           a.ai_prompt,
           a.approved_at::text,
           a.prepared_at::text,
@@ -170,7 +174,7 @@ export async function getArtworkProductionData(userId: string, tenantId: string,
         from quote_item_artworks a
         join quote_items qi on qi.id = a.quote_item_id and qi.tenant_id = a.tenant_id
         left join product_variants pv on pv.id = qi.product_variant_id and pv.tenant_id = qi.tenant_id
-        where a.tenant_id = $1 and a.quote_id = $2
+        where a.tenant_id = $1 and a.quote_id = $2 and a.is_active = true
         order by qi.created_at, a.created_at
       `,
       [tenantId, quoteId]
@@ -269,7 +273,7 @@ export async function savePreparedArtwork(input: {
             approved_at = null,
             approved_by = null,
             version = version + 1
-        where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4
+        where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4 and is_active = true
         returning *
       `,
       [
@@ -331,6 +335,7 @@ export async function setArtworkApproval(input: {
             approved_by = case when $6 = 'approved' then $5::uuid else null end,
             approved_at = case when $6 = 'approved' then now() else null end
         where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4
+          and is_active = true
           and (prepared_data_url is not null or prepared_storage_path is not null)
         returning id
       `,
@@ -416,7 +421,7 @@ export async function listInlineQuoteArtworks(userId: string, tenantId: string, 
     const result = await client.query<{ id: string; quote_item_id: string; file_name: string; mime_type: string; data_url: string }>(
       `select id, quote_item_id, file_name, mime_type, data_url
        from quote_item_artworks
-       where tenant_id = $1 and quote_id = $2 and data_url is not null`,
+       where tenant_id = $1 and quote_id = $2 and data_url is not null and is_active = true`,
       [tenantId, quoteId]
     );
     return result.rows;
@@ -514,7 +519,7 @@ export async function saveArtworkRetouchDraft(input: {
       `update quote_item_artworks
        set retouch_draft = $5::jsonb,
            retouch_draft_updated_at = case when $5::jsonb is null then null else now() end
-       where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4
+        where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4 and is_active = true
        returning id, retouch_draft_updated_at`,
       [input.tenantId, input.quoteId, input.itemId, input.artworkId, input.draft ? JSON.stringify(input.draft) : null]
     );

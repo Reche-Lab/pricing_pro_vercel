@@ -29,7 +29,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
   const decisionLocked = detail.quote.status === "accepted" || detail.quote.status === "rejected";
   const artworkProgress = getPublicArtworkReviewProgress(detail.items.map((item) => ({
     artworkName: item.artwork_name,
-    artworks: item.artworks?.map((artwork) => ({ approvalStatus: artwork.approval_status }))
+    artworks: item.artworks?.filter((artwork) => artwork.is_active !== false).map((artwork) => ({ approvalStatus: artwork.approval_status }))
   })));
   const artworkReviewPending = artworkProgress.approved < artworkProgress.required;
 
@@ -94,9 +94,9 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
                         {item.quantity} x {brl.format(Number(item.unit_price))}
                       </p>
                       {item.artwork_name ? <p className="mt-1 text-zinc-500">Arte: {item.artwork_name}</p> : null}
-                      {item.artworks?.length ? (
+                      {item.artworks?.some((artwork) => artwork.is_active !== false) ? (
                         <div className="mt-2 flex flex-wrap gap-2">
-                          {item.artworks.map((artwork) => (
+                          {item.artworks.filter((artwork) => artwork.is_active !== false).map((artwork) => (
                             <div
                               className="flex max-w-full items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 px-2 py-1.5"
                               key={artwork.id}
@@ -121,7 +121,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
                     </div>
                     <div className="flex items-start justify-between gap-3 sm:grid sm:justify-items-end">
                       <p className="font-semibold text-white">{brl.format(Number(item.total_price))}</p>
-                      <PublicArtworkShortcut disabled={decisionLocked} hasArtwork={Boolean(item.artworks?.length)} itemId={item.id} />
+                      <PublicArtworkShortcut disabled={decisionLocked} hasArtwork={Boolean(item.artworks?.some((artwork) => artwork.is_active !== false))} itemId={item.id} />
                     </div>
                   </div>
                 ))}

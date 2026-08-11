@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -25,11 +26,13 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
   const [editing, setEditing] = useState<ArtworkEntry | null>(null);
   const [retouching, setRetouching] = useState<ArtworkEntry | null>(null);
   const [pdfImportItem, setPdfImportItem] = useState<QuoteItemRow | null>(null);
+  const [versionPreview, setVersionPreview] = useState<{ active: ArtworkEntry; previous: ArtworkEntry } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [printJobs, setPrintJobs] = useState<PrintJob[]>([]);
   const [drawCutLines, setDrawCutLines] = useState(true);
   const printProfileLoaded = useRef(false);
-  const artworks = useMemo(() => items.flatMap((item) => (item.artworks ?? []).map((artwork) => ({ item, artwork }))), [items]);
+  const allArtworks = useMemo(() => items.flatMap((item) => (item.artworks ?? []).map((artwork) => ({ item, artwork }))), [items]);
+  const artworks = useMemo(() => allArtworks.filter((entry) => entry.artwork.is_active !== false), [allArtworks]);
   const aiItem = items.find((item) => item.id === aiItemId) ?? items[0];
   const aiItemArtworks = artworks.filter((entry) => entry.item.id === aiItem?.id);
   const aiReference = aiItemArtworks.find((entry) => entry.artwork.id === aiReferenceArtworkId) ?? null;
@@ -167,8 +170,17 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
     const data = await response.json().catch(() => null);
     if (!response.ok) throw new Error(data?.error ?? "Não foi possível salvar a versão retocada.");
     setRetouching(null);
-    setMessage("Retoque salvo como nova versão. Enquadre e aprove quando estiver satisfeito.");
+    setMessage("Retoque salvo como versão ativa. A original permanece disponível no histórico para consulta ou restauração.");
     router.refresh();
+  }
+
+  async function restorePreviousVersion() {
+    if (!versionPreview) return;
+    setBusy(`restore-${versionPreview.active.artwork.id}`); setMessage("");
+    const response = await fetch(`/api/quotes/${quoteId}/items/${versionPreview.active.item.id}/artworks/${versionPreview.active.artwork.id}/restore`, { method: "POST" });
+    const data = await response.json().catch(() => null); setBusy("");
+    if (!response.ok) { setMessage(data?.error ?? "Não foi possível restaurar a arte original."); return; }
+    setVersionPreview(null); setMessage("Arte original restaurada. A versão retocada foi descartada."); router.refresh();
   }
 
   return (
@@ -195,6 +207,8 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
                 onApprove={approve}
                 onEdit={setEditing}
                 onRetouch={setRetouching}
+                previous={entry.artwork.parent_artwork_id ? allArtworks.find((candidate) => candidate.artwork.id === entry.artwork.parent_artwork_id) ?? null : null}
+                onVersionPreview={(previous) => setVersionPreview({ active: entry, previous })}
                 onQuantity={(quantity) => setQuantities((current) => ({ ...current, [entry.artwork.id]: quantity }))}
                 readOnly={readOnly}
               />)}
@@ -250,11 +264,12 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
       /> : null}
       {previewOpen ? <ArtworkPdfPreview drawCutLines={drawCutLines} quoteId={quoteId} onClose={() => setPreviewOpen(false)} /> : null}
       {pdfImportItem ? <PdfArtworkImportModal importBaseUrl={`/api/quotes/${quoteId}/items/${pdfImportItem.id}/artworks/pdf-imports`} itemDescription={pdfImportItem.description} itemQuantity={pdfImportItem.quantity} onClose={() => setPdfImportItem(null)} onImported={(count) => { setPdfImportItem(null); setMessage(`${count} arte(s) importada(s) do PDF. Agora você pode reenquadrar e aprovar cada versão.`); router.refresh(); }} /> : null}
+      {versionPreview ? <ArtworkVersionModal active={versionPreview.active} previous={versionPreview.previous} busy={busy === `restore-${versionPreview.active.artwork.id}`} quoteId={quoteId} readOnly={readOnly} onClose={() => setVersionPreview(null)} onRestore={restorePreviousVersion} /> : null}
     </section>
   );
 }
 
-function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, onQuantity, onEdit, onRetouch, onApprove }: { entry: ArtworkEntry; quoteId: string; geometry: PrintGeometry | null; quantity: number; busy: string; readOnly: boolean; onQuantity: (quantity: number) => void; onEdit: (entry: ArtworkEntry) => void; onRetouch: (entry: ArtworkEntry) => void; onApprove: (entry: ArtworkEntry, status: "approved" | "rejected") => void }) {
+function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, previous, onQuantity, onEdit, onRetouch, onVersionPreview, onApprove }: { entry: ArtworkEntry; quoteId: string; geometry: PrintGeometry | null; quantity: number; busy: string; readOnly: boolean; previous: ArtworkEntry | null; onQuantity: (quantity: number) => void; onEdit: (entry: ArtworkEntry) => void; onRetouch: (entry: ArtworkEntry) => void; onVersionPreview: (previous: ArtworkEntry) => void; onApprove: (entry: ArtworkEntry, status: "approved" | "rejected") => void }) {
   const prepared = Boolean(entry.artwork.prepared_data_url || entry.artwork.prepared_storage_path);
   const approved = entry.artwork.approval_status === "approved";
   return <article className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-900/40">
@@ -279,6 +294,7 @@ function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, onQuan
     <div className="flex flex-wrap items-end justify-between gap-3 border-t border-zinc-800 bg-zinc-950/50 p-3">
       <label className="w-36 shrink-0"><span className="mb-1 block text-xs font-medium text-zinc-400">Cópias desta arte</span><input className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm tabular-nums disabled:opacity-50" disabled={readOnly} min="1" type="number" value={quantity} onChange={(event) => onQuantity(Math.max(1, Number(event.target.value) || 1))} /></label>
       <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-2">
+        {previous ? <button className="focus-ring inline-flex h-9 flex-1 basis-[130px] items-center justify-center gap-2 rounded-md border border-violet-800/70 px-3 text-xs text-violet-200 hover:bg-violet-950/50" type="button" onClick={() => onVersionPreview(previous)}><Eye size={14} /> Ver original</button> : null}
         <button className="focus-ring inline-flex h-9 flex-1 basis-[110px] items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-900 disabled:opacity-50" disabled={readOnly || Boolean(busy)} type="button" onClick={() => onRetouch(entry)}><Paintbrush size={14} /> Retocar</button>
         <button className="focus-ring inline-flex h-9 flex-1 basis-[130px] items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-900 disabled:opacity-50" disabled={readOnly || !geometry || Boolean(busy)} type="button" onClick={() => onEdit(entry)}><ImageIcon size={14} /> {prepared ? "Reenquadrar" : "Enquadrar"}</button>
         {approved ? <>
@@ -290,10 +306,18 @@ function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, onQuan
   </article>;
 }
 
+function ArtworkVersionModal({ active, previous, quoteId, busy, readOnly, onClose, onRestore }: { active: ArtworkEntry; previous: ArtworkEntry; quoteId: string; busy: boolean; readOnly: boolean; onClose: () => void; onRestore: () => void }) {
+  return <div className="fixed inset-0 z-[110] grid place-items-center bg-black/80 p-3 backdrop-blur-sm" role="dialog" aria-modal="true"><div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-violet-400/25 bg-zinc-950 shadow-2xl"><header className="flex items-start justify-between gap-4 border-b border-zinc-800 px-5 py-4"><div><p className="text-base font-semibold text-white">Histórico da arte</p><p className="mt-1 text-xs text-zinc-400">A versão retocada está ativa. A original está guardada somente para consulta e restauração.</p></div><button className="focus-ring grid h-9 w-9 place-items-center rounded-md text-zinc-400 hover:bg-zinc-800" type="button" onClick={onClose}><X size={18} /></button></header><div className="grid gap-4 p-5 md:grid-cols-2"><VersionImage entry={active} label="Versão ativa" quoteId={quoteId} /><VersionImage entry={previous} label="Versão original" quoteId={quoteId} /></div><footer className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 bg-zinc-900/40 px-5 py-4"><p className="max-w-xl text-xs leading-5 text-zinc-500">Restaurar excluirá a versão retocada e reativará esta versão original, incluindo seu enquadramento e aprovação anteriores.</p><div className="flex gap-2"><button className="focus-ring rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800" type="button" onClick={onClose}>Manter retoque</button><button className="focus-ring rounded-md bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-40" disabled={readOnly || busy} type="button" onClick={onRestore}>{busy ? "Restaurando..." : "Descartar retoque e restaurar"}</button></div></footer></div></div>;
+}
+
+function VersionImage({ entry, label, quoteId }: { entry: ArtworkEntry; label: string; quoteId: string }) {
+  return <article className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-900/50"><div className="flex items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2"><span className="text-xs font-semibold text-zinc-200">{label}</span>{entry.artwork.is_active !== false ? <span className="rounded bg-emerald-400/10 px-2 py-1 text-[10px] font-medium text-emerald-300">Em uso</span> : <span className="rounded bg-zinc-800 px-2 py-1 text-[10px] text-zinc-400">Histórico</span>}</div><div className="aspect-square bg-white p-2">{/* eslint-disable-next-line @next/next/no-img-element */}<img alt={entry.artwork.artwork_name || entry.artwork.file_name} className="h-full w-full object-contain" src={artworkImageUrl(quoteId, entry, "original")} /></div><div className="p-3"><p className="break-words text-sm font-medium text-white">{entry.artwork.artwork_name || entry.artwork.file_name}</p><p className="mt-1 break-all text-[11px] text-zinc-500">{entry.artwork.file_name}</p></div></article>;
+}
+
 type Suggestions = { concept: string; composition: string; palette: string[]; typography: string; productionWarnings: string[]; generationPrompt: string };
 type PrintJob = { id: string; status: "generated" | "printed" | "cancelled"; page_count: number; copy_count: number; created_at: string };
 function SuggestionResult({ suggestions }: { suggestions: Suggestions }) { return <div className="grid gap-2 rounded-md bg-zinc-950/80 p-3 text-xs text-zinc-300"><p><strong className="text-white">Conceito:</strong> {suggestions.concept}</p><p><strong className="text-white">Composição:</strong> {suggestions.composition}</p><p><strong className="text-white">Paleta:</strong> {suggestions.palette.join(", ")}</p><p><strong className="text-white">Tipografia:</strong> {suggestions.typography}</p>{suggestions.productionWarnings.length ? <p className="text-amber-200"><strong>Cuidados:</strong> {suggestions.productionWarnings.join(" · ")}</p> : null}</div>; }
 function inferGeometry(item: QuoteItemRow, artwork: QuoteItemArtworkRow) { return resolvePrintGeometry({ ...item, ...artwork }); }
-function initialQuantities(items: QuoteItemRow[]) { const result: Record<string, number> = {}; for (const item of items) { const arts = item.artworks ?? []; for (const artwork of arts) result[artwork.id] = artwork.production_quantity ?? (arts.length === 1 ? item.quantity : Math.max(1, Math.floor(item.quantity / arts.length))); } return result; }
+function initialQuantities(items: QuoteItemRow[]) { const result: Record<string, number> = {}; for (const item of items) { const arts = (item.artworks ?? []).filter((artwork) => artwork.is_active !== false); for (const artwork of arts) result[artwork.id] = artwork.production_quantity ?? (arts.length === 1 ? item.quantity : Math.max(1, Math.floor(item.quantity / arts.length))); } return result; }
 function artworkImageUrl(quoteId: string, entry: ArtworkEntry, kind: "original" | "prepared") { const inline = kind === "prepared" ? entry.artwork.prepared_data_url : entry.artwork.data_url; return inline || `/api/quotes/${quoteId}/items/${entry.item.id}/artworks/${entry.artwork.id}/file?kind=${kind}`; }
 function fileToDataUrl(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Não foi possível ler a imagem.")); reader.onerror = () => reject(new Error("Não foi possível ler a imagem.")); reader.readAsDataURL(file); }); }

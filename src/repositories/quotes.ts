@@ -164,6 +164,7 @@ export type QuoteItemArtworkRow = {
   source_pdf_import_id?: string | null;
   source_pdf_page?: number | null;
   parent_artwork_id?: string | null;
+  is_active?: boolean;
   ai_prompt?: string | null;
   approved_at?: string | null;
   prepared_at?: string | null;
@@ -439,6 +440,8 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           source_kind,
           source_pdf_import_id,
           source_pdf_page,
+          parent_artwork_id,
+          is_active,
           ai_prompt,
           approved_at,
           prepared_at,
@@ -757,6 +760,8 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           source_kind,
           source_pdf_import_id,
           source_pdf_page,
+          parent_artwork_id,
+          is_active,
           crop_scale,
           crop_offset_x,
           crop_offset_y,
@@ -837,12 +842,12 @@ export async function decidePublicQuote(
            and q.status in ('draft', 'sent')
            and (qi.artwork_name is not null or exists (
              select 1 from quote_item_artworks existing
-             where existing.quote_id = q.id and existing.quote_item_id = qi.id
+             where existing.quote_id = q.id and existing.quote_item_id = qi.id and existing.is_active = true
            ))
            and not exists (
              select 1 from quote_item_artworks approved
              where approved.quote_id = q.id and approved.quote_item_id = qi.id
-               and approved.approval_status = 'approved'
+               and approved.approval_status = 'approved' and approved.is_active = true
            )
          limit 1`,
         [tokenHash]
@@ -1707,7 +1712,7 @@ export async function addQuoteItemArtwork(
     if (input.parentArtworkId) {
       const parent = await client.query(
         `select id from quote_item_artworks
-         where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4
+         where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4 and is_active = true
          limit 1`,
         [tenantId, quoteId, quoteItemId, input.parentArtworkId]
       );
@@ -1750,6 +1755,13 @@ export async function addQuoteItemArtwork(
       ]
     );
     const artwork = result.rows[0];
+    if (input.sourceKind === "retouch" && input.parentArtworkId) {
+      await client.query(
+        `update quote_item_artworks set is_active = false
+         where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4`,
+        [tenantId, quoteId, quoteItemId, input.parentArtworkId]
+      );
+    }
 
     await recordQuoteArtworkEdit(client, {
       tenantId,
@@ -1766,6 +1778,32 @@ export async function addQuoteItemArtwork(
   });
 }
 
+export async function restoreQuoteItemArtworkVersion(userId: string, tenantId: string, quoteId: string, quoteItemId: string, artworkId: string) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    await assertQuoteArtworkEditable(client, tenantId, quoteId, quoteItemId);
+    const current = await client.query<{
+      id: string; parent_artwork_id: string | null; source_kind: string; is_active: boolean;
+      storage_path: string | null; prepared_storage_path: string | null;
+    }>(
+      `select id, parent_artwork_id, source_kind, is_active, storage_path, prepared_storage_path
+       from quote_item_artworks
+       where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4
+       for update`, [tenantId, quoteId, quoteItemId, artworkId]
+    );
+    const artwork = current.rows[0];
+    if (!artwork || !artwork.is_active || artwork.source_kind !== "retouch" || !artwork.parent_artwork_id) throw new Error("Esta arte não possui uma versão anterior que possa ser restaurada.");
+    const restored = await client.query<{ id: string }>(
+      `update quote_item_artworks set is_active = true
+       where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4
+       returning id`, [tenantId, quoteId, quoteItemId, artwork.parent_artwork_id]
+    );
+    if (!restored.rows[0]) throw new Error("A versão original não foi encontrada.");
+    await client.query(`delete from quote_item_artworks where tenant_id = $1 and id = $2`, [tenantId, artwork.id]);
+    await recordQuoteArtworkEdit(client, { tenantId, userId, quoteId, quoteItemId, action: "quotes.artwork.restore", reason: "Versão retocada descartada e arte anterior restaurada.", before: [{ id: artwork.id, parent_artwork_id: artwork.parent_artwork_id }], after: [{ id: artwork.parent_artwork_id, is_active: true }] });
+    return { id: artwork.id, restoredArtworkId: artwork.parent_artwork_id, storagePath: artwork.storage_path, preparedStoragePath: artwork.prepared_storage_path };
+  });
+}
+
 export async function deleteQuoteItemArtwork(
   userId: string,
   tenantId: string,
@@ -1775,9 +1813,9 @@ export async function deleteQuoteItemArtwork(
 ): Promise<Pick<QuoteItemArtworkRow, "id" | "file_name" | "mime_type" | "file_size" | "storage_path" | "prepared_storage_path"> | null> {
   return withTenantContext(userId, tenantId, async (client) => {
     await assertQuoteArtworkEditable(client, tenantId, quoteId, quoteItemId);
-    const currentResult = await client.query<Pick<QuoteItemArtworkRow, "id" | "file_name" | "mime_type" | "file_size" | "storage_path" | "prepared_storage_path">>(
+    const currentResult = await client.query<Pick<QuoteItemArtworkRow, "id" | "file_name" | "mime_type" | "file_size" | "storage_path" | "prepared_storage_path" | "parent_artwork_id" | "is_active">>(
       `
-        select id, file_name, mime_type, file_size, storage_path, prepared_storage_path
+        select id, file_name, mime_type, file_size, storage_path, prepared_storage_path, parent_artwork_id, is_active
         from quote_item_artworks
         where tenant_id = $1 and quote_id = $2 and quote_item_id = $3
         order by created_at asc
@@ -1787,6 +1825,14 @@ export async function deleteQuoteItemArtwork(
     );
     const artwork = currentResult.rows.find((item) => item.id === artworkId);
     if (!artwork) return null;
+
+    if (artwork.is_active && artwork.parent_artwork_id) {
+      await client.query(
+        `update quote_item_artworks set is_active = true
+         where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4`,
+        [tenantId, quoteId, quoteItemId, artwork.parent_artwork_id]
+      );
+    }
 
     await client.query(
       `
@@ -1920,7 +1966,7 @@ async function recordQuoteArtworkEdit(
     userId: string;
     quoteId: string;
     quoteItemId: string;
-    action: "quotes.artwork.add" | "quotes.artwork.delete";
+    action: "quotes.artwork.add" | "quotes.artwork.delete" | "quotes.artwork.restore";
     reason: string;
     before: unknown;
     after: unknown;

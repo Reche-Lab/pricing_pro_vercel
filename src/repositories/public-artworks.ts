@@ -168,7 +168,7 @@ export async function addPublicArtwork(input: {
     if (input.parentArtworkId) {
       const parent = await client.query(
         `select id from quote_item_artworks
-         where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4
+         where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4 and is_active = true
          limit 1`,
         [input.context.tenantId, input.context.quoteId, input.context.itemId, input.parentArtworkId]
       );
@@ -184,6 +184,9 @@ export async function addPublicArtwork(input: {
         input.fileName, input.mimeType, input.fileSize, input.storagePath ? null : input.dataUrl,
         input.storagePath, input.sourceKind ?? "upload", input.parentArtworkId ?? null]
     );
+    if (input.sourceKind === "retouch" && input.parentArtworkId) {
+      await client.query(`update quote_item_artworks set is_active = false where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4`, [input.context.tenantId, input.context.quoteId, input.context.itemId, input.parentArtworkId]);
+    }
     await recordPublicEvent(client, input.context, input.sourceKind === "retouch" ? "artworks.public_retouch" : "artworks.public_upload", result.rows[0].id, { mimeType: input.mimeType, fileSize: input.fileSize, parentArtworkId: input.parentArtworkId ?? null });
     await client.query("commit");
     return result.rows[0];
@@ -219,7 +222,7 @@ export async function savePublicPreparedArtwork(input: {
            target_corner_style = $24, target_corner_radius_mm = $25,
            target_shape_rotation_degrees = $26, target_allow_print_rotation = $27,
            prepared_at = now(), approved_at = null, approved_by = null, version = version + 1
-       where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4
+       where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4 and is_active = true
          and exists (
            select 1 from quotes q where q.id = $2 and q.tenant_id = $1
              and q.public_token_hash = $28 and q.public_token_expires_at > now()
@@ -257,14 +260,14 @@ export async function selectPublicArtwork(context: PublicArtworkContext, artwork
     if (!available.rows[0]) throw new Error("Este orçamento não está mais disponível para alterações.");
     await client.query(
       `update quote_item_artworks set approval_status = 'rejected', approved_at = null, approved_by = null
-       where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id <> $4`,
+       where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id <> $4 and is_active = true`,
       [context.tenantId, context.quoteId, context.itemId, artworkId]
     );
     const result = await client.query<{ id: string }>(
       `update quote_item_artworks
        set approval_status = 'approved', approved_at = now(), approved_by = null, production_quantity = $5
        where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4
-         and (prepared_data_url is not null or prepared_storage_path is not null)
+         and is_active = true and (prepared_data_url is not null or prepared_storage_path is not null)
        returning id`,
       [context.tenantId, context.quoteId, context.itemId, artworkId, context.itemQuantity]
     );
@@ -278,6 +281,39 @@ export async function selectPublicArtwork(context: PublicArtworkContext, artwork
   } finally {
     client.release();
   }
+}
+
+export async function restorePublicArtworkVersion(context: PublicArtworkContext, artworkId: string) {
+  const client = await getPool().connect();
+  try {
+    await client.query("begin");
+    const available = await client.query(
+      `select id from quotes where id = $1 and tenant_id = $2 and public_token_hash = $3
+       and public_token_expires_at > now() and public_link_revoked_at is null
+       and status in ('draft', 'sent') for update`, [context.quoteId, context.tenantId, context.tokenHash]
+    );
+    if (!available.rows[0]) throw new Error("Este orçamento não está mais disponível para alterações.");
+    const current = await client.query<{
+      id: string; parent_artwork_id: string | null; source_kind: string; is_active: boolean;
+      storage_path: string | null; prepared_storage_path: string | null;
+    }>(
+      `select id, parent_artwork_id, source_kind, is_active, storage_path, prepared_storage_path
+       from quote_item_artworks where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4 for update`,
+      [context.tenantId, context.quoteId, context.itemId, artworkId]
+    );
+    const artwork = current.rows[0];
+    if (!artwork || !artwork.is_active || artwork.source_kind !== "retouch" || !artwork.parent_artwork_id) throw new Error("Esta arte não possui uma versão anterior que possa ser restaurada.");
+    const restored = await client.query<{ id: string }>(
+      `update quote_item_artworks set is_active = true where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4 returning id`,
+      [context.tenantId, context.quoteId, context.itemId, artwork.parent_artwork_id]
+    );
+    if (!restored.rows[0]) throw new Error("A versão original não foi encontrada.");
+    await client.query(`delete from quote_item_artworks where tenant_id = $1 and id = $2`, [context.tenantId, artwork.id]);
+    await recordPublicEvent(client, context, "artworks.public_restore", artwork.parent_artwork_id, { discardedArtworkId: artwork.id });
+    await client.query("commit");
+    return { id: artwork.id, restoredArtworkId: artwork.parent_artwork_id, storagePath: artwork.storage_path, preparedStoragePath: artwork.prepared_storage_path };
+  } catch (error) { await client.query("rollback"); throw error; }
+  finally { client.release(); }
 }
 
 export async function markPublicArtworkAsGenerated(context: PublicArtworkContext, artworkId: string, prompt: string, referenceArtworkId?: string | null) {
@@ -305,7 +341,7 @@ export async function getPublicArtworkRetouchDraft(context: PublicArtworkContext
       `select a.retouch_draft, a.retouch_draft_updated_at
        from quote_item_artworks a
        join quotes q on q.id = a.quote_id and q.tenant_id = a.tenant_id
-       where a.tenant_id = $1 and a.quote_id = $2 and a.quote_item_id = $3 and a.id = $4
+       where a.tenant_id = $1 and a.quote_id = $2 and a.quote_item_id = $3 and a.id = $4 and a.is_active = true
          and q.public_token_hash = $5 and q.public_token_expires_at > now()
          and q.public_link_revoked_at is null and q.status in ('draft', 'sent') limit 1`,
       [context.tenantId, context.quoteId, context.itemId, artworkId, context.tokenHash]
@@ -321,7 +357,7 @@ export async function savePublicArtworkRetouchDraft(context: PublicArtworkContex
       `update quote_item_artworks a
        set retouch_draft = $6::jsonb,
            retouch_draft_updated_at = case when $6::jsonb is null then null else now() end
-       where a.tenant_id = $1 and a.quote_id = $2 and a.quote_item_id = $3 and a.id = $4
+       where a.tenant_id = $1 and a.quote_id = $2 and a.quote_item_id = $3 and a.id = $4 and a.is_active = true
          and exists (select 1 from quotes q where q.id = $2 and q.tenant_id = $1
            and q.public_token_hash = $5 and q.public_token_expires_at > now()
            and q.public_link_revoked_at is null and q.status in ('draft', 'sent'))
