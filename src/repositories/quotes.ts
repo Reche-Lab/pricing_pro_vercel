@@ -18,6 +18,7 @@ import {
 import type { QuoteStatus } from "@/domain/quotes/types";
 import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
 import { getPool, withTenantContext } from "@/lib/db/client";
+import { decryptTenantSecret, encryptTenantSecret } from "@/lib/crypto/secrets";
 import type { QuotePaymentTermInput } from "@/repositories/olist-payment-options";
 import type pg from "pg";
 
@@ -489,6 +490,7 @@ export async function createPublicQuoteLink(
       `
         update quotes
         set public_token_hash = $3,
+            public_token_encrypted = $8,
             public_token_expires_at = now() + ($4::int || ' days')::interval,
             public_link_revoked_at = null,
             public_require_otp = $5,
@@ -502,7 +504,7 @@ export async function createPublicQuoteLink(
           and status not in ('cancelled', 'expired')
         returning public_token_expires_at::text as expires_at
       `,
-      [tenantId, quoteId, tokenHash, PUBLIC_QUOTE_LINK_VALID_DAYS, requireOtp, otpCode ? hashPublicQuoteOtp(token, otpCode) : null, PUBLIC_QUOTE_OTP_VALID_MINUTES]
+      [tenantId, quoteId, tokenHash, PUBLIC_QUOTE_LINK_VALID_DAYS, requireOtp, otpCode ? hashPublicQuoteOtp(token, otpCode) : null, PUBLIC_QUOTE_OTP_VALID_MINUTES, encryptTenantSecret({ token })]
     );
 
     if (!result.rows[0]) throw new Error("Quote not found or unavailable for public sharing.");
@@ -524,10 +526,39 @@ export async function createPublicQuoteLink(
   });
 }
 
+export async function getActivePublicQuoteLink(userId: string, tenantId: string, quoteId: string) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const result = await client.query<{
+      public_token_encrypted: string | null;
+      expires_at: string;
+      require_otp: boolean;
+    }>(
+      `select public_token_encrypted, public_token_expires_at::text as expires_at,
+              public_require_otp as require_otp
+       from quotes
+       where tenant_id = $1 and id = $2 and public_token_hash is not null
+         and public_token_expires_at > now() and public_link_revoked_at is null
+       limit 1`,
+      [tenantId, quoteId]
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    if (!row.public_token_encrypted) {
+      return { token: null, expiresAt: row.expires_at, requireOtp: row.require_otp };
+    }
+    try {
+      const decrypted = decryptTenantSecret<{ token: string }>(row.public_token_encrypted);
+      return { token: decrypted.token, expiresAt: row.expires_at, requireOtp: row.require_otp };
+    } catch {
+      return { token: null, expiresAt: row.expires_at, requireOtp: row.require_otp };
+    }
+  });
+}
+
 export async function revokePublicQuoteLink(userId: string, tenantId: string, quoteId: string) {
   return withTenantContext(userId, tenantId, async (client) => {
     const result = await client.query(
-      `update quotes set public_token_hash = null, public_token_expires_at = null,
+      `update quotes set public_token_hash = null, public_token_encrypted = null, public_token_expires_at = null,
          public_link_revoked_at = now(), public_require_otp = false, public_otp_hash = null,
          public_otp_expires_at = null, public_otp_attempts = 0, updated_at = now()
        where tenant_id = $1 and id = $2 and public_token_hash is not null returning id`,

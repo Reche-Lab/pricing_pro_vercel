@@ -4,12 +4,23 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { requireWritableBilling } from "@/lib/billing/guard";
 import { getServerEnv } from "@/lib/env/server";
 import { PUBLIC_QUOTE_OTP_VALID_MINUTES } from "@/domain/quotes/public-security";
-import { createPublicQuoteLink, revokePublicQuoteLink } from "@/repositories/quotes";
+import { createPublicQuoteLink, getActivePublicQuoteLink, revokePublicQuoteLink } from "@/repositories/quotes";
 import { sendPublicQuoteOtpEmail } from "@/services/email/invite-email";
 
 const publicLinkSchema = z.object({
   requireOtp: z.boolean().optional().default(false)
 });
+
+export async function GET(_request: Request, context: { params: Promise<{ quoteId: string }> }) {
+  const session = await getCurrentSession();
+  if (!session) return NextResponse.json({ ok: false }, { status: 401 });
+  const { quoteId } = await context.params;
+  if (!z.string().uuid().safeParse(quoteId).success) return NextResponse.json({ ok: false, error: "Invalid quote id." }, { status: 400 });
+  const result = await getActivePublicQuoteLink(session.userId, session.tenantId, quoteId);
+  if (!result) return NextResponse.json({ ok: true, active: false });
+  const url = result.token ? `${getServerEnv().APP_URL.replace(/\/$/, "")}/q/${result.token}` : null;
+  return NextResponse.json({ ok: true, active: true, url, expiresAt: result.expiresAt, requireOtp: result.requireOtp });
+}
 
 export async function POST(request: Request, context: { params: Promise<{ quoteId: string }> }) {
   const session = await getCurrentSession();
