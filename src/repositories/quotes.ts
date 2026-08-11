@@ -160,7 +160,9 @@ export type QuoteItemArtworkRow = {
   quality_status?: "pending" | "warning" | "ready";
   approval_status?: "pending" | "approved" | "rejected";
   preparation_notes?: string | null;
-  source_kind?: "upload" | "openrouter" | "retouch";
+  source_kind?: "upload" | "openrouter" | "retouch" | "pdf_page";
+  source_pdf_import_id?: string | null;
+  source_pdf_page?: number | null;
   parent_artwork_id?: string | null;
   ai_prompt?: string | null;
   approved_at?: string | null;
@@ -435,6 +437,8 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           approval_status,
           preparation_notes,
           source_kind,
+          source_pdf_import_id,
+          source_pdf_page,
           ai_prompt,
           approved_at,
           prepared_at,
@@ -751,6 +755,8 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           approval_status,
           preparation_notes,
           source_kind,
+          source_pdf_import_id,
+          source_pdf_page,
           crop_scale,
           crop_offset_x,
           crop_offset_y,
@@ -1685,18 +1691,19 @@ export async function addQuoteItemArtwork(
       throw new Error("A imagem deve ter no máximo 3 MB.");
     }
 
-    const currentResult = await client.query<Pick<QuoteItemArtworkRow, "id" | "file_name" | "mime_type" | "file_size">>(
+    const currentResult = await client.query<Pick<QuoteItemArtworkRow, "id" | "file_name" | "mime_type" | "file_size" | "source_kind">>(
       `
-        select id, file_name, mime_type, file_size
+        select id, file_name, mime_type, file_size, source_kind
         from quote_item_artworks
         where tenant_id = $1 and quote_id = $2 and quote_item_id = $3
         order by created_at asc
       `,
       [tenantId, quoteId, quoteItemId]
     );
-    if (currentResult.rowCount !== null && currentResult.rowCount >= 10) {
+    if (currentResult.rows.filter((artwork) => artwork.source_kind !== "pdf_page").length >= 10) {
       throw new Error("Cada item pode ter no máximo 10 imagens de arte.");
     }
+    if (currentResult.rows.length >= 100) throw new Error("Cada item pode ter no máximo 100 artes no total.");
     if (input.parentArtworkId) {
       const parent = await client.query(
         `select id from quote_item_artworks

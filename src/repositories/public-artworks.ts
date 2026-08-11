@@ -45,7 +45,8 @@ export async function getPublicArtworkContext(token: string, itemId: string, art
               to_jsonb(pv)->>'print_shape_rotation_degrees' as print_shape_rotation_degrees,
               (to_jsonb(pv)->>'allow_print_rotation')::boolean as allow_print_rotation, pv.width_cm, pv.length_cm,
               (select count(*)::int from quote_item_artworks count_art
-               where count_art.quote_id = q.id and count_art.quote_item_id = qi.id) as artwork_count,
+               where count_art.quote_id = q.id and count_art.quote_item_id = qi.id
+                 and count_art.source_kind <> 'pdf_page') as artwork_count,
               coalesce((to_jsonb(qi)->>'artwork_ai_attempts')::integer, 0) as artwork_ai_attempts,
               coalesce((to_jsonb(t)->>'artwork_ai_generation_limit')::integer, 3) as artwork_ai_generation_limit
        from quotes q
@@ -157,12 +158,13 @@ export async function addPublicArtwork(input: {
       [input.context.tenantId, input.context.quoteId, input.context.itemId, input.context.tokenHash]
     );
     if (!available.rows[0]) throw new Error("Este orçamento não está mais disponível para alterações.");
-    const count = await client.query<{ count: number }>(
-      `select count(*)::int as count from quote_item_artworks
+    const count = await client.query<{ count: number; total: number }>(
+      `select count(*) filter (where source_kind <> 'pdf_page')::int as count, count(*)::int as total from quote_item_artworks
        where tenant_id = $1 and quote_id = $2 and quote_item_id = $3`,
       [input.context.tenantId, input.context.quoteId, input.context.itemId]
     );
     if ((count.rows[0]?.count ?? 0) >= 10) throw new Error("Cada item pode ter no máximo 10 versões de arte.");
+    if ((count.rows[0]?.total ?? 0) >= 100) throw new Error("Cada item pode ter no máximo 100 artes no total.");
     if (input.parentArtworkId) {
       const parent = await client.query(
         `select id from quote_item_artworks

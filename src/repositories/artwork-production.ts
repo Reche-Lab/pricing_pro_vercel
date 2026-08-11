@@ -30,7 +30,7 @@ export type ArtworkProductionRow = {
   quality_status: "pending" | "warning" | "ready";
   approval_status: "pending" | "approved" | "rejected";
   preparation_notes: string | null;
-  source_kind: "upload" | "openrouter" | "retouch";
+  source_kind: "upload" | "openrouter" | "retouch" | "pdf_page";
   ai_prompt: string | null;
   approved_at: string | null;
   prepared_at: string | null;

@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, ChevronUp, Download, Eye, ImageIcon, Paintbrush, Printer, Scissors, Upload, WandSparkles, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Download, Eye, FileText, ImageIcon, Paintbrush, Printer, Scissors, Upload, WandSparkles, X } from "lucide-react";
 import { ArtworkCropEditor } from "@/components/quotes/ArtworkCropEditor";
 import { ArtworkPdfPreview } from "@/components/quotes/ArtworkPdfPreview";
 import { ArtworkRetouchEditor, type RetouchedArtworkFile } from "@/components/quotes/ArtworkRetouchEditor";
+import { PdfArtworkImportModal } from "@/components/quotes/PdfArtworkImportModal";
 import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
 import { geometryLabel, resolvePrintGeometry, type PrintGeometry } from "@/domain/artwork/geometry";
 import type { QuoteItemArtworkRow, QuoteItemRow } from "@/repositories/quotes";
@@ -23,6 +24,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
   const [suggestions, setSuggestions] = useState<Suggestions | null>(null);
   const [editing, setEditing] = useState<ArtworkEntry | null>(null);
   const [retouching, setRetouching] = useState<ArtworkEntry | null>(null);
+  const [pdfImportItem, setPdfImportItem] = useState<QuoteItemRow | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [printJobs, setPrintJobs] = useState<PrintJob[]>([]);
   const [drawCutLines, setDrawCutLines] = useState(true);
@@ -181,7 +183,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
           const itemArtworks = artworks.filter((entry) => entry.item.id === item.id);
           const itemAllocation = allocation.find((entry) => entry.itemId === item.id);
           return <section className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-950/70" key={item.id}>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2"><div><p className="text-sm font-medium text-white">{item.description}</p><p className="text-xs text-zinc-500">Pedido: {item.quantity} unidades</p></div><span className={`rounded px-2 py-1 text-xs ${itemAllocation?.allocated === item.quantity && itemAllocation.approved ? "bg-emerald-400/10 text-emerald-300" : "bg-amber-400/10 text-amber-300"}`}>{itemAllocation?.allocated ?? 0} de {item.quantity} distribuídas</span></div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2"><div><p className="text-sm font-medium text-white">{item.description}</p><p className="text-xs text-zinc-500">Pedido: {item.quantity} unidades</p></div><div className="flex flex-wrap items-center gap-2">{!readOnly ? <button className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-md border border-cyan-700/70 px-2.5 text-xs font-medium text-cyan-200 hover:bg-cyan-950/50" type="button" onClick={() => setPdfImportItem(item)}><FileText size={13} /> Importar PDF</button> : null}<span className={`rounded px-2 py-1 text-xs ${itemAllocation?.allocated === item.quantity && itemAllocation.approved ? "bg-emerald-400/10 text-emerald-300" : "bg-amber-400/10 text-amber-300"}`}>{itemAllocation?.allocated ?? 0} de {item.quantity} distribuídas</span></div></div>
             <div className="grid gap-3 p-3">
               {itemArtworks.length === 0 ? <p className="text-sm text-zinc-500">Adicione uma imagem pelo botão Editar ou gere uma nova arte com o assistente.</p> : itemArtworks.map((entry) => <ArtworkRow
                 busy={busy}
@@ -247,6 +249,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
         onSave={saveRetouchedArtwork}
       /> : null}
       {previewOpen ? <ArtworkPdfPreview drawCutLines={drawCutLines} quoteId={quoteId} onClose={() => setPreviewOpen(false)} /> : null}
+      {pdfImportItem ? <PdfArtworkImportModal importBaseUrl={`/api/quotes/${quoteId}/items/${pdfImportItem.id}/artworks/pdf-imports`} itemDescription={pdfImportItem.description} itemQuantity={pdfImportItem.quantity} onClose={() => setPdfImportItem(null)} onImported={(count) => { setPdfImportItem(null); setMessage(`${count} arte(s) importada(s) do PDF. Agora você pode reenquadrar e aprovar cada versão.`); router.refresh(); }} /> : null}
     </section>
   );
 }
@@ -266,7 +269,7 @@ function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, onQuan
         {entry.artwork.artwork_name ? <p className="mt-1 break-all text-[11px] text-zinc-600">{entry.artwork.file_name}</p> : null}
         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500">
           <span>{geometry ? geometryLabel(geometry) : "Geometria pendente"}</span>
-          <span>{entry.artwork.source_kind === "openrouter" ? "Gerada por IA" : entry.artwork.source_kind === "retouch" ? "Retoque manual" : "Arquivo enviado"}</span>
+          <span>{entry.artwork.source_kind === "openrouter" ? "Gerada por IA" : entry.artwork.source_kind === "retouch" ? "Retoque manual" : entry.artwork.source_kind === "pdf_page" ? `Página ${entry.artwork.source_pdf_page ?? "-"} do PDF` : "Arquivo enviado"}</span>
           {entry.artwork.dpi ? <span>{entry.artwork.dpi} DPI</span> : null}
         </div>
         <p className={`mt-2 break-words text-xs leading-5 ${entry.artwork.quality_status === "warning" ? "text-amber-300" : prepared ? "text-emerald-300" : "text-zinc-500"}`}>{entry.artwork.preparation_notes || "Aguardando enquadramento e preparação técnica."}</p>
