@@ -8,6 +8,8 @@ import type { QuoteItemArtworkRow } from "@/repositories/quotes";
 export function ArtworkCropEditor({
   artwork,
   geometry,
+  bleedMm,
+  safeMarginMm,
   imageUrl,
   itemId,
   quoteId,
@@ -17,6 +19,8 @@ export function ArtworkCropEditor({
 }: {
   artwork: QuoteItemArtworkRow;
   geometry: PrintGeometry;
+  bleedMm: number;
+  safeMarginMm: number;
   imageUrl: string;
   itemId: string;
   quoteId: string;
@@ -52,12 +56,16 @@ export function ArtworkCropEditor({
     setScale(1); setOffsetX(0); setOffsetY(0); setRotation(0);
   }
 
+  const outputWidthMm = geometry.widthMm + bleedMm * 2;
+  const outputHeightMm = geometry.heightMm + bleedMm * 2;
   const viewWidth = 1000;
-  const viewHeight = Math.max(200, 1000 * geometry.heightMm / geometry.widthMm);
-  const cornerRadius = geometry.cornerRadiusMm / geometry.widthMm * viewWidth;
-  const clipPath = createShapePath({ shape: geometry.shape, width: viewWidth, height: viewHeight, cornerRadius, rotationDegrees: geometry.rotationDegrees });
-  const cutPath = createShapePath({ shape: geometry.shape, width: viewWidth, height: viewHeight, cornerRadius, rotationDegrees: geometry.rotationDegrees, inset: Math.min(viewWidth, viewHeight) * 0.041 });
-  const safePath = createShapePath({ shape: geometry.shape, width: viewWidth, height: viewHeight, cornerRadius, rotationDegrees: geometry.rotationDegrees, inset: Math.min(viewWidth, viewHeight) * 0.09 });
+  const viewHeight = Math.max(200, viewWidth * outputHeightMm / outputWidthMm);
+  const unitsPerMm = viewWidth / outputWidthMm;
+  const bleedInset = bleedMm * unitsPerMm;
+  const safeInset = (bleedMm + safeMarginMm) * unitsPerMm;
+  const clipPath = createShapePath({ shape: geometry.shape, width: viewWidth, height: viewHeight, cornerRadius: (geometry.cornerRadiusMm + bleedMm) * unitsPerMm, rotationDegrees: geometry.rotationDegrees });
+  const cutPath = createShapePath({ shape: geometry.shape, width: viewWidth, height: viewHeight, cornerRadius: geometry.cornerRadiusMm * unitsPerMm, rotationDegrees: geometry.rotationDegrees, inset: bleedInset });
+  const safePath = createShapePath({ shape: geometry.shape, width: viewWidth, height: viewHeight, cornerRadius: Math.max(0, geometry.cornerRadiusMm - safeMarginMm) * unitsPerMm, rotationDegrees: geometry.rotationDegrees, inset: safeInset });
   const imageWidth = viewWidth * scale;
   const imageHeight = viewHeight * scale;
   const imageX = (viewWidth - imageWidth) / 2 + offsetX * viewWidth / 2;
@@ -67,7 +75,7 @@ export function ArtworkCropEditor({
     <div className="fixed inset-0 z-[70] grid place-items-center overflow-y-auto bg-black/80 p-3 backdrop-blur-sm sm:p-6">
       <div className="my-auto grid max-h-[94vh] w-full max-w-4xl overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950 shadow-2xl lg:grid-cols-[minmax(320px,1fr)_360px]">
         <div className="grid place-items-center bg-zinc-900 p-5 sm:p-8">
-          <div className="w-full max-w-[520px] overflow-hidden bg-zinc-800 shadow-[0_0_0_8px_rgba(34,211,238,0.12)]" style={{ aspectRatio: `${geometry.widthMm} / ${geometry.heightMm}` }}>
+          <div className="w-full max-w-[520px] overflow-hidden bg-zinc-800 shadow-[0_0_0_8px_rgba(34,211,238,0.12)]" style={{ aspectRatio: `${outputWidthMm} / ${outputHeightMm}` }}>
             <svg aria-label={artwork.artwork_name ?? artwork.file_name} className="h-full w-full" viewBox={`0 0 ${viewWidth} ${viewHeight}`}>
               <defs><clipPath id={`artwork-shape-${artwork.id}`}><path d={clipPath} /></clipPath></defs>
               <path d={clipPath} fill="white" />
@@ -76,12 +84,12 @@ export function ArtworkCropEditor({
               <path d={safePath} fill="none" stroke="rgba(103,232,249,0.9)" strokeDasharray="9 7" strokeWidth="2" />
             </svg>
           </div>
-          <div className="mt-5 flex flex-wrap justify-center gap-4 text-xs text-zinc-400"><span><i className="mr-1 inline-block h-2 w-4 border-t border-dashed border-red-500" /> corte</span><span><i className="mr-1 inline-block h-2 w-4 border-t border-dashed border-cyan-300" /> área segura</span><span>{geometryLabel(geometry)}</span></div>
+          <div className="mt-5 flex flex-wrap justify-center gap-4 text-xs text-zinc-400"><span className="text-amber-300">Área externa · sangria {formatMm(bleedMm)}</span><span><i className="mr-1 inline-block h-2 w-4 border-t border-dashed border-red-500" /> corte {geometryLabel(geometry)}</span><span><i className="mr-1 inline-block h-2 w-4 border-t border-dashed border-cyan-300" /> segurança {formatMm(safeMarginMm)}</span></div>
         </div>
 
         <div className="min-h-0 overflow-y-auto p-5">
           <div className="flex items-start justify-between gap-4">
-            <div><h3 className="font-semibold text-white">Enquadrar arte</h3><p className="mt-1 text-sm text-zinc-500">Posicione textos e elementos importantes dentro da área segura.</p></div>
+            <div><h3 className="font-semibold text-white">Enquadrar arte</h3><p className="mt-1 text-sm text-zinc-500">As guias usam as medidas do produto. Preencha toda a sangria e mantenha textos dentro da área segura.</p></div>
             <button className="focus-ring rounded-md p-2 text-zinc-500 hover:bg-zinc-900 hover:text-white" type="button" onClick={onClose}><X size={18} /></button>
           </div>
           <div className="mt-5 grid gap-5">
@@ -109,3 +117,5 @@ export function ArtworkCropEditor({
 function Slider({ label, min, max, step, value, display, onChange }: { label: string; min: number; max: number; step: number; value: number; display: string; onChange: (value: number) => void }) {
   return <label><span className="mb-2 flex justify-between gap-3 text-xs font-medium text-zinc-300"><span>{label}</span><span className="tabular-nums text-cyan-300">{display}</span></span><input className="w-full accent-cyan-400" max={max} min={min} step={step} type="range" value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>;
 }
+
+function formatMm(value: number) { return `${Number(value.toFixed(2)).toLocaleString("pt-BR")} mm`; }

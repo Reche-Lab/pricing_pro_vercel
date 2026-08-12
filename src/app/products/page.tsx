@@ -57,6 +57,8 @@ export default async function ProductsPage() {
                         <span className="rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-400">{item.product_category}</span>
                         {item.sku ? <span className="rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-400">SKU {item.sku}</span> : null}
                         {printGeometry ? <span className="rounded-md bg-cyan-400/10 px-2 py-1 text-xs text-cyan-200">{geometryLabel(printGeometry)}</span> : null}
+                        <span className="rounded-md bg-amber-400/10 px-2 py-1 text-xs text-amber-200">Sangria {formatMm(item.print_bleed_mm)}</span>
+                        <span className="rounded-md bg-cyan-400/10 px-2 py-1 text-xs text-cyan-200">Segurança {formatMm(item.print_safe_margin_mm)}</span>
                         {item.external_olist_product_id ? (
                           <span className="rounded-md bg-sky-500/10 px-2 py-1 text-xs text-sky-200">Olist {item.external_olist_product_id}</span>
                         ) : null}
@@ -98,6 +100,8 @@ export default async function ProductsPage() {
                       printCornerStyle: item.print_corner_style,
                       printCornerRadiusMm: item.print_corner_radius_mm,
                       printShapeRotationDegrees: item.print_shape_rotation_degrees,
+                      printBleedMm: item.print_bleed_mm,
+                      printSafeMarginMm: item.print_safe_margin_mm,
                       allowPrintRotation: item.allow_print_rotation,
                       variantActive: item.variant_active
                       }}
@@ -120,3 +124,5 @@ export default async function ProductsPage() {
     </AppShell>
   );
 }
+
+function formatMm(value: string | number | null) { return `${Number(value || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} mm`; }

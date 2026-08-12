@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
-import { getArtworkProductionData, recordArtworkPrintJob, resolveArtworkGeometry } from "@/repositories/artwork-production";
+import { getArtworkProductionData, recordArtworkPrintJob, resolveArtworkGeometry, resolveArtworkMargins } from "@/repositories/artwork-production";
 import { generatePrintPdf, resolveArtworkProductionQuantities } from "@/services/artwork/imposition";
 import { resolveDrawCutLines } from "@/services/artwork/production";
 import { loadArtworkDataUrl, uploadArtworkObject } from "@/services/storage/artwork-storage";
@@ -25,11 +25,14 @@ export async function GET(request: Request, context: { params: Promise<{ quoteId
     const printArtworks = await Promise.all(approved.map(async (artwork) => {
       const geometry = resolveArtworkGeometry(artwork);
       if (!geometry) throw new Error(`Defina a geometria de impressão de ${artwork.item_description}.`);
+      const margins = resolveArtworkMargins(artwork, production.profile);
       return {
         id: artwork.id,
         label: artwork.artwork_name || artwork.file_name,
         quantity: quantities.get(artwork.id) ?? 0,
         geometry,
+        bleedMm: margins.bleedMm,
+        safeMarginMm: margins.safeMarginMm,
         preparedDataUrl: await loadArtworkDataUrl(artwork.prepared_data_url, artwork.prepared_storage_path)
       };
     }));
@@ -53,7 +56,7 @@ export async function GET(request: Request, context: { params: Promise<{ quoteId
         pageCount: plan.pageCount,
         copyCount: plan.copyCount,
         profile: effectiveProfile,
-        artworks: printArtworks.map((artwork) => ({ id: artwork.id, quantity: artwork.quantity, geometry: artwork.geometry })),
+        artworks: printArtworks.map((artwork) => ({ id: artwork.id, quantity: artwork.quantity, geometry: artwork.geometry, bleedMm: artwork.bleedMm, safeMarginMm: artwork.safeMarginMm })),
         storagePath
       });
     }

@@ -28,6 +28,8 @@ export type ProductVariantRow = {
   print_corner_radius_mm: string;
   print_shape_rotation_degrees: string;
   allow_print_rotation: boolean;
+  print_bleed_mm: string;
+  print_safe_margin_mm: string;
   curve_mode: PricingCurveMode | null;
   anchors: Record<string, number> | null;
   platform_curves?: Record<string, { mode: PricingCurveMode; anchors: Record<string, number> | null }> | null;
@@ -60,6 +62,8 @@ export type CreateProductWithVariantInput = {
   printCornerRadiusMm: number;
   printShapeRotationDegrees: number;
   allowPrintRotation: boolean;
+  printBleedMm: number;
+  printSafeMarginMm: number;
   curve: PricingCurve;
 };
 
@@ -88,6 +92,8 @@ export type UpdateProductVariantInput = {
   printCornerRadiusMm: number;
   printShapeRotationDegrees: number;
   allowPrintRotation: boolean;
+  printBleedMm: number;
+  printSafeMarginMm: number;
   variantActive: boolean;
 };
 
@@ -119,6 +125,8 @@ export async function listProductVariants(userId: string, tenantId: string): Pro
           coalesce(to_jsonb(v)->>'print_corner_radius_mm', '0') as print_corner_radius_mm,
           coalesce(to_jsonb(v)->>'print_shape_rotation_degrees', '0') as print_shape_rotation_degrees,
           coalesce((to_jsonb(v)->>'allow_print_rotation')::boolean, true) as allow_print_rotation,
+          coalesce(to_jsonb(v)->>'print_bleed_mm', '2') as print_bleed_mm,
+          coalesce(to_jsonb(v)->>'print_safe_margin_mm', '2') as print_safe_margin_mm,
           pc.mode as curve_mode,
           (
             select jsonb_object_agg(pa.quantity::text, pa.unit_price order by pa.quantity)
@@ -202,6 +210,8 @@ export async function listProductsAdmin(userId: string, tenantId: string): Promi
           coalesce(to_jsonb(v)->>'print_corner_radius_mm', '0') as print_corner_radius_mm,
           coalesce(to_jsonb(v)->>'print_shape_rotation_degrees', '0') as print_shape_rotation_degrees,
           coalesce((to_jsonb(v)->>'allow_print_rotation')::boolean, true) as allow_print_rotation,
+          coalesce(to_jsonb(v)->>'print_bleed_mm', '2') as print_bleed_mm,
+          coalesce(to_jsonb(v)->>'print_safe_margin_mm', '2') as print_safe_margin_mm,
           v.active as variant_active,
           pc.id as curve_id,
           pc.version as curve_version,
@@ -278,9 +288,11 @@ export async function createProductWithVariant(
           print_corner_radius_mm,
           print_shape_rotation_degrees,
           allow_print_rotation,
+          print_bleed_mm,
+          print_safe_margin_mm,
           active
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, true)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, true)
         on conflict (tenant_id, product_id, name) do update
           set description = excluded.description,
               sku = excluded.sku,
@@ -298,6 +310,8 @@ export async function createProductWithVariant(
               print_corner_radius_mm = excluded.print_corner_radius_mm,
               print_shape_rotation_degrees = excluded.print_shape_rotation_degrees,
               allow_print_rotation = excluded.allow_print_rotation,
+              print_bleed_mm = excluded.print_bleed_mm,
+              print_safe_margin_mm = excluded.print_safe_margin_mm,
               active = true,
               deleted_at = null,
               deleted_by = null,
@@ -323,7 +337,9 @@ export async function createProductWithVariant(
         input.printCornerStyle,
         input.printCornerStyle === "rounded" ? input.printCornerRadiusMm : 0,
         input.printShapeRotationDegrees,
-        input.allowPrintRotation
+        input.allowPrintRotation,
+        input.printBleedMm,
+        input.printSafeMarginMm
       ]
     );
     const variantId = variantResult.rows[0].id;
@@ -446,7 +462,9 @@ export async function updateProductVariant(
             print_corner_radius_mm = $17,
             print_shape_rotation_degrees = $18,
             allow_print_rotation = $19,
-            active = $20,
+            print_bleed_mm = $20,
+            print_safe_margin_mm = $21,
+            active = $22,
             updated_at = now()
         where tenant_id = $1 and id = $2
       `,
@@ -470,6 +488,8 @@ export async function updateProductVariant(
         input.printCornerStyle === "rounded" ? input.printCornerRadiusMm : 0,
         input.printShapeRotationDegrees,
         input.allowPrintRotation,
+        input.printBleedMm,
+        input.printSafeMarginMm,
         input.variantActive
       ]
     );

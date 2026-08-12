@@ -8,7 +8,7 @@ import { ArtworkCropEditor } from "@/components/quotes/ArtworkCropEditor";
 import { ArtworkRetouchEditor, type RetouchedArtworkFile } from "@/components/quotes/ArtworkRetouchEditor";
 import { PdfArtworkImportModal } from "@/components/quotes/PdfArtworkImportModal";
 import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
-import { resolvePrintGeometry, type PrintGeometry } from "@/domain/artwork/geometry";
+import { resolvePrintGeometry, resolvePrintMargins, type PrintGeometry } from "@/domain/artwork/geometry";
 import { sortActiveArtworkVersions } from "@/domain/artwork/versions";
 import { getPublicArtworkReviewProgress } from "@/domain/quotes/public-artwork-review";
 import type { QuoteItemArtworkRow, QuoteItemRow } from "@/repositories/quotes";
@@ -187,15 +187,15 @@ export function PublicArtworkStudio({ token, quoteId, items, disabled }: { token
       {message ? <p className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-300">{message}</p> : null}
     </div>
 
-    {editing && inferGeometry(editing.item, editing.artwork) ? <ArtworkCropEditor artwork={editing.artwork} geometry={inferGeometry(editing.item, editing.artwork) as PrintGeometry} imageUrl={publicArtworkUrl(token, editing.artwork.id, false)} itemId={editing.item.id} quoteId={quoteId} prepareUrl={`/api/public/quotes/${token}/items/${editing.item.id}/artworks/${editing.artwork.id}/prepare`} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setMessage("Enquadramento salvo. Agora você pode aprovar esta versão."); router.refresh(); }} /> : null}
+    {editing && inferGeometry(editing.item, editing.artwork) ? <ArtworkCropEditor artwork={editing.artwork} geometry={inferGeometry(editing.item, editing.artwork) as PrintGeometry} {...inferMargins(editing.item, editing.artwork)} imageUrl={publicArtworkUrl(token, editing.artwork.id, false)} itemId={editing.item.id} quoteId={quoteId} prepareUrl={`/api/public/quotes/${token}/items/${editing.item.id}/artworks/${editing.artwork.id}/prepare`} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setMessage("Enquadramento salvo. Agora você pode aprovar esta versão."); router.refresh(); }} /> : null}
     {retouching ? <ArtworkRetouchEditor
       artworkName={retouching.artwork.artwork_name || retouching.artwork.file_name}
-      bleedMm={Number(retouching.artwork.bleed_mm || 2)}
+      bleedMm={inferMargins(retouching.item, retouching.artwork).bleedMm}
       draftUrl={`/api/public/quotes/${token}/items/${retouching.item.id}/artworks/${retouching.artwork.id}/retouch-draft`}
       fileName={retouching.artwork.file_name}
       geometry={inferGeometry(retouching.item, retouching.artwork)}
       imageUrl={publicArtworkUrl(token, retouching.artwork.id, false)}
-      safeMarginMm={Number(retouching.artwork.safe_margin_mm || 2)}
+      safeMarginMm={inferMargins(retouching.item, retouching.artwork).safeMarginMm}
       onClose={() => setRetouching(null)}
       onSave={saveRetouchedArtwork}
     /> : null}
@@ -207,4 +207,5 @@ export function PublicArtworkStudio({ token, quoteId, items, disabled }: { token
 function publicArtworkUrl(token: string, artworkId: string, prepared: boolean) { return `/api/public/quotes/${token}/artworks/${artworkId}${prepared ? "?kind=prepared" : ""}`; }
 function PublicVersionImage({ artwork, label, token }: { artwork: QuoteItemArtworkRow; label: string; token: string }) { return <article className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-900/50"><div className="border-b border-zinc-800 px-3 py-2 text-xs font-semibold text-zinc-200">{label}</div><div className="aspect-square bg-white p-2"><img alt={artwork.artwork_name || artwork.file_name} className="h-full w-full object-contain" src={publicArtworkUrl(token, artwork.id, false)} /></div><p className="break-words p-3 text-sm text-white">{artwork.artwork_name || artwork.file_name}</p></article>; }
 function inferGeometry(item: QuoteItemRow, artwork: QuoteItemArtworkRow) { return resolvePrintGeometry({ ...item, ...artwork }); }
+function inferMargins(item: QuoteItemRow, artwork: QuoteItemArtworkRow) { return resolvePrintMargins({ ...item, ...artwork }); }
 function fileToDataUrl(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Não foi possível ler a imagem.")); reader.onerror = () => reject(new Error("Não foi possível ler a imagem.")); reader.readAsDataURL(file); }); }

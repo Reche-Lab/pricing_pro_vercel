@@ -78,6 +78,8 @@ export function ProductForm() {
         printCornerStyle: form.get("printCornerStyle"),
         printCornerRadiusMm: Number(form.get("printCornerRadiusMm") || 0),
         printShapeRotationDegrees: Number(form.get("printShapeRotationDegrees") || 0),
+        printBleedMm: Number(form.get("printBleedMm") || 0),
+        printSafeMarginMm: Number(form.get("printSafeMarginMm") || 0),
         allowPrintRotation: form.get("allowPrintRotation") === "on",
         curve: {
           mode: curveMode,

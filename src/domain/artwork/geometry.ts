@@ -12,6 +12,11 @@ export type PrintGeometry = {
   allowPrintRotation: boolean;
 };
 
+export type PrintMargins = {
+  bleedMm: number;
+  safeMarginMm: number;
+};
+
 type GeometrySource = {
   target_shape?: string | null;
   target_width_mm?: string | number | null;
@@ -29,9 +34,29 @@ type GeometrySource = {
   print_shape_rotation_degrees?: string | number | null;
   allow_print_rotation?: boolean | null;
   print_diameter_mm?: string | number | null;
+  print_bleed_mm?: string | number | null;
+  print_safe_margin_mm?: string | number | null;
+  bleed_mm?: string | number | null;
+  safe_margin_mm?: string | number | null;
   width_cm?: string | number | null;
   length_cm?: string | number | null;
 };
+
+export function resolvePrintMargins(source: GeometrySource, fallback: PrintMargins = { bleedMm: 2, safeMarginMm: 2 }): PrintMargins {
+  return {
+    bleedMm: nonNegative(source.bleed_mm) ?? nonNegative(source.print_bleed_mm) ?? fallback.bleedMm,
+    safeMarginMm: nonNegative(source.safe_margin_mm) ?? nonNegative(source.print_safe_margin_mm) ?? fallback.safeMarginMm
+  };
+}
+
+export function validatePrintMargins(geometry: PrintGeometry, margins: PrintMargins) {
+  if (margins.bleedMm < 0 || margins.bleedMm > 50) return "A sangria deve estar entre 0 e 50 mm.";
+  if (margins.safeMarginMm < 0 || margins.safeMarginMm > 50) return "A margem de segurança deve estar entre 0 e 50 mm.";
+  if (margins.safeMarginMm * 2 >= Math.min(geometry.widthMm, geometry.heightMm)) {
+    return "A margem de segurança precisa deixar uma área útil no interior do corte.";
+  }
+  return null;
+}
 
 export function resolvePrintGeometry(source: GeometrySource): PrintGeometry | null {
   const legacyDiameter = positive(source.target_diameter_mm) || positive(source.print_diameter_mm);
@@ -147,5 +172,6 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }) { re
 function move(point: { x: number; y: number }) { return `M ${n(point.x)} ${n(point.y)}`; }
 function n(value: number) { return Number(value.toFixed(3)); }
 function positive(value: unknown) { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : 0; }
+function nonNegative(value: unknown) { if (value === null || value === undefined || value === "") return null; const number = Number(value); return Number.isFinite(number) && number >= 0 ? number : null; }
 function clamp(value: number, min: number, max: number) { return Math.min(max, Math.max(min, Number.isFinite(value) ? value : 0)); }
 function formatMm(value: number) { return Number(value.toFixed(2)).toLocaleString("pt-BR"); }

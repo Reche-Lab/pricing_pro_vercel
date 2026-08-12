@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
-import { resolvePrintGeometry, type PrintGeometry } from "@/domain/artwork/geometry";
+import { resolvePrintGeometry, resolvePrintMargins, type PrintGeometry, type PrintMargins } from "@/domain/artwork/geometry";
 import { getPool } from "@/lib/db/client";
 import { DEFAULT_ARTWORK_PROFILE, type ArtworkProductionProfile, type PreparedArtwork } from "@/services/artwork/production";
 
@@ -13,6 +13,7 @@ export type PublicArtworkContext = {
   itemQuantity: number;
   diameterMm: number | null;
   geometry: PrintGeometry | null;
+  margins: PrintMargins;
   artworkCount: number;
   aiAttempts: number;
   aiGenerationLimit: number;
@@ -25,6 +26,7 @@ export type PublicArtworkContext = {
     target_shape: string | null; target_width_mm: string | null; target_height_mm: string | null;
     target_corner_style: string | null; target_corner_radius_mm: string | null;
     target_shape_rotation_degrees: string | null; target_allow_print_rotation: boolean | null;
+    bleed_mm: string | null; safe_margin_mm: string | null;
   } | null;
 };
 
@@ -36,6 +38,7 @@ export async function getPublicArtworkContext(token: string, itemId: string, art
       print_diameter_mm: string | null; print_shape: string | null; print_width_mm: string | null; print_height_mm: string | null;
       print_corner_style: string | null; print_corner_radius_mm: string | null; print_shape_rotation_degrees: string | null;
       allow_print_rotation: boolean | null; width_cm: string | null; length_cm: string | null; artwork_count: number; artwork_ai_attempts: number; artwork_ai_generation_limit: number;
+      print_bleed_mm: string | null; print_safe_margin_mm: string | null;
     }>(
       `select q.id as quote_id, q.tenant_id, qi.id as item_id, qi.description, qi.quantity,
               to_jsonb(pv)->>'print_diameter_mm' as print_diameter_mm,
@@ -44,6 +47,8 @@ export async function getPublicArtworkContext(token: string, itemId: string, art
               to_jsonb(pv)->>'print_corner_radius_mm' as print_corner_radius_mm,
               to_jsonb(pv)->>'print_shape_rotation_degrees' as print_shape_rotation_degrees,
               (to_jsonb(pv)->>'allow_print_rotation')::boolean as allow_print_rotation, pv.width_cm, pv.length_cm,
+              to_jsonb(pv)->>'print_bleed_mm' as print_bleed_mm,
+              to_jsonb(pv)->>'print_safe_margin_mm' as print_safe_margin_mm,
               (select count(*)::int from quote_item_artworks count_art
                where count_art.quote_id = q.id and count_art.quote_item_id = qi.id
                  and count_art.source_kind <> 'pdf_page') as artwork_count,
@@ -72,6 +77,7 @@ export async function getPublicArtworkContext(token: string, itemId: string, art
             `select id, data_url, storage_path, target_diameter_mm, target_shape, target_width_mm,
                     target_height_mm, target_corner_style, target_corner_radius_mm,
                     target_shape_rotation_degrees, target_allow_print_rotation
+                    , bleed_mm, safe_margin_mm
              from quote_item_artworks
              where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4 limit 1`,
             [row.tenant_id, row.quote_id, row.item_id, artworkId]
@@ -82,6 +88,7 @@ export async function getPublicArtworkContext(token: string, itemId: string, art
     const explicitDiameter = Number(artworkResult.rows[0]?.target_diameter_mm || row.print_diameter_mm || 0);
     const packageDiameter = Math.max(Number(row.width_cm || 0), Number(row.length_cm || 0)) * 10;
     const geometry = resolvePrintGeometry({ ...row, ...artworkResult.rows[0] });
+    const profile = mapProfile(profileResult.rows[0]);
     return {
       quoteId: row.quote_id,
       tenantId: row.tenant_id,
@@ -91,10 +98,11 @@ export async function getPublicArtworkContext(token: string, itemId: string, art
       itemQuantity: row.quantity,
       diameterMm: geometry ? Math.max(geometry.widthMm, geometry.heightMm) : explicitDiameter > 0 ? explicitDiameter : packageDiameter > 0 ? packageDiameter : null,
       geometry,
+      margins: resolvePrintMargins({ ...row, ...artworkResult.rows[0] }, profile),
       artworkCount: row.artwork_count,
       aiAttempts: row.artwork_ai_attempts,
       aiGenerationLimit: normalizeArtworkAiGenerationLimit(row.artwork_ai_generation_limit),
-      profile: mapProfile(profileResult.rows[0]),
+      profile,
       artwork: artworkResult.rows[0] ?? null
     } satisfies PublicArtworkContext;
   } finally {
@@ -204,6 +212,7 @@ export async function savePublicPreparedArtwork(input: {
   context: PublicArtworkContext;
   artworkId: string;
   geometry: PrintGeometry;
+  margins: PrintMargins;
   prepared: PreparedArtwork;
   preparedDataUrl: string | null;
   preparedStoragePath: string | null;
@@ -234,7 +243,7 @@ export async function savePublicPreparedArtwork(input: {
        returning id`,
       [input.context.tenantId, input.context.quoteId, input.context.itemId, input.artworkId,
         input.prepared.originalWidthPx, input.prepared.originalHeightPx, input.geometry.shape === "circle" ? input.geometry.widthMm : null,
-        input.context.profile.bleedMm, input.context.profile.safeMarginMm, input.context.profile.dpi,
+        input.margins.bleedMm, input.margins.safeMarginMm, input.context.profile.dpi,
         input.preparedDataUrl, input.preparedStoragePath, input.prepared.widthPx, input.prepared.heightPx,
         input.prepared.qualityStatus, input.prepared.notes, input.crop.scale, input.crop.offsetX,
         input.crop.offsetY, input.crop.rotationDegrees, input.geometry.shape, input.geometry.widthMm,

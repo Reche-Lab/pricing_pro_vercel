@@ -9,7 +9,7 @@ import { ArtworkPdfPreview } from "@/components/quotes/ArtworkPdfPreview";
 import { ArtworkRetouchEditor, type RetouchedArtworkFile } from "@/components/quotes/ArtworkRetouchEditor";
 import { PdfArtworkImportModal } from "@/components/quotes/PdfArtworkImportModal";
 import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
-import { geometryLabel, resolvePrintGeometry, type PrintGeometry } from "@/domain/artwork/geometry";
+import { geometryLabel, resolvePrintGeometry, resolvePrintMargins, type PrintGeometry } from "@/domain/artwork/geometry";
 import { sortActiveArtworkVersions } from "@/domain/artwork/versions";
 import type { QuoteItemArtworkRow, QuoteItemRow } from "@/repositories/quotes";
 
@@ -252,15 +252,15 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
         <div className="flex flex-wrap items-end justify-between gap-3 border-t border-zinc-800 pt-4"><div><p className="text-xs text-zinc-500">A soma das artes aprovadas deve corresponder à quantidade de cada item.</p><button aria-pressed={drawCutLines} className={`focus-ring mt-3 inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${drawCutLines ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-200" : "border-zinc-700 bg-zinc-950 text-zinc-400 hover:bg-zinc-900"}`} type="button" onClick={() => setDrawCutLines((current) => !current)}><Scissors size={14} /> Linhas de corte <span className={`rounded px-1.5 py-0.5 text-[10px] ${drawCutLines ? "bg-cyan-400 text-cyan-950" : "bg-zinc-800 text-zinc-400"}`}>{drawCutLines ? "Incluídas" : "Removidas"}</span></button></div><div className="flex flex-wrap gap-2"><button className={`focus-ring inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium ${readyToPrint ? "border-zinc-700 text-zinc-200 hover:bg-zinc-900" : "cursor-not-allowed border-zinc-800 text-zinc-600"}`} disabled={!readyToPrint} type="button" onClick={() => setPreviewOpen(true)}><Eye size={16} /> Visualizar folhas</button><button className={`focus-ring inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold ${readyToPrint ? "bg-amber-400 text-zinc-950 hover:bg-amber-300" : "cursor-not-allowed bg-zinc-800 text-zinc-500"}`} disabled={!readyToPrint || Boolean(busy)} type="button" onClick={downloadPdf}><Download size={16} /> {busy === "pdf-download" ? "Gerando..." : "Baixar PDF"}</button></div></div>
       </div> : null}
 
-      {editing && inferGeometry(editing.item, editing.artwork) ? <ArtworkCropEditor artwork={editing.artwork} geometry={inferGeometry(editing.item, editing.artwork) as PrintGeometry} imageUrl={artworkImageUrl(quoteId, editing, "original")} itemId={editing.item.id} quoteId={quoteId} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setMessage("Arte preparada. Confira a qualidade e aprove a versão."); router.refresh(); }} /> : null}
+      {editing && inferGeometry(editing.item, editing.artwork) ? <ArtworkCropEditor artwork={editing.artwork} geometry={inferGeometry(editing.item, editing.artwork) as PrintGeometry} {...inferMargins(editing.item, editing.artwork)} imageUrl={artworkImageUrl(quoteId, editing, "original")} itemId={editing.item.id} quoteId={quoteId} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setMessage("Arte preparada. Confira a qualidade e aprove a versão."); router.refresh(); }} /> : null}
       {retouching ? <ArtworkRetouchEditor
         artworkName={retouching.artwork.artwork_name || retouching.artwork.file_name}
-        bleedMm={Number(retouching.artwork.bleed_mm || 2)}
+        bleedMm={inferMargins(retouching.item, retouching.artwork).bleedMm}
         draftUrl={`/api/quotes/${quoteId}/items/${retouching.item.id}/artworks/${retouching.artwork.id}/retouch-draft`}
         fileName={retouching.artwork.file_name}
         geometry={inferGeometry(retouching.item, retouching.artwork)}
         imageUrl={artworkImageUrl(quoteId, retouching, "original")}
-        safeMarginMm={Number(retouching.artwork.safe_margin_mm || 2)}
+        safeMarginMm={inferMargins(retouching.item, retouching.artwork).safeMarginMm}
         onClose={() => setRetouching(null)}
         onSave={saveRetouchedArtwork}
       /> : null}
@@ -274,6 +274,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
 function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, previous, onQuantity, onEdit, onRetouch, onVersionPreview, onApprove }: { entry: ArtworkEntry; quoteId: string; geometry: PrintGeometry | null; quantity: number; busy: string; readOnly: boolean; previous: ArtworkEntry | null; onQuantity: (quantity: number) => void; onEdit: (entry: ArtworkEntry) => void; onRetouch: (entry: ArtworkEntry) => void; onVersionPreview: (previous: ArtworkEntry) => void; onApprove: (entry: ArtworkEntry, status: "approved" | "rejected") => void }) {
   const prepared = Boolean(entry.artwork.prepared_data_url || entry.artwork.prepared_storage_path);
   const approved = entry.artwork.approval_status === "approved";
+  const margins = inferMargins(entry.item, entry.artwork);
   return <article className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-900/40">
     <div className="flex min-w-0 items-start gap-3 p-3 sm:gap-4 sm:p-4">
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -286,6 +287,7 @@ function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, previo
         {entry.artwork.artwork_name ? <p className="mt-1 break-all text-[11px] text-zinc-600">{entry.artwork.file_name}</p> : null}
         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500">
           <span>{geometry ? geometryLabel(geometry) : "Geometria pendente"}</span>
+          <span>Sangria {formatMm(margins.bleedMm)} · segurança {formatMm(margins.safeMarginMm)}</span>
           <span>{entry.artwork.source_kind === "openrouter" ? "Gerada por IA" : entry.artwork.source_kind === "retouch" ? "Retoque manual" : entry.artwork.source_kind === "pdf_page" ? `Página ${entry.artwork.source_pdf_page ?? "-"} do PDF` : "Arquivo enviado"}</span>
           {entry.artwork.dpi ? <span>{entry.artwork.dpi} DPI</span> : null}
         </div>
@@ -320,6 +322,8 @@ type Suggestions = { concept: string; composition: string; palette: string[]; ty
 type PrintJob = { id: string; status: "generated" | "printed" | "cancelled"; page_count: number; copy_count: number; created_at: string };
 function SuggestionResult({ suggestions }: { suggestions: Suggestions }) { return <div className="grid gap-2 rounded-md bg-zinc-950/80 p-3 text-xs text-zinc-300"><p><strong className="text-white">Conceito:</strong> {suggestions.concept}</p><p><strong className="text-white">Composição:</strong> {suggestions.composition}</p><p><strong className="text-white">Paleta:</strong> {suggestions.palette.join(", ")}</p><p><strong className="text-white">Tipografia:</strong> {suggestions.typography}</p>{suggestions.productionWarnings.length ? <p className="text-amber-200"><strong>Cuidados:</strong> {suggestions.productionWarnings.join(" · ")}</p> : null}</div>; }
 function inferGeometry(item: QuoteItemRow, artwork: QuoteItemArtworkRow) { return resolvePrintGeometry({ ...item, ...artwork }); }
+function inferMargins(item: QuoteItemRow, artwork: QuoteItemArtworkRow) { return resolvePrintMargins({ ...item, ...artwork }); }
+function formatMm(value: number) { return `${Number(value.toFixed(2)).toLocaleString("pt-BR")} mm`; }
 function initialQuantities(items: QuoteItemRow[]) { const result: Record<string, number> = {}; for (const item of items) { const arts = (item.artworks ?? []).filter((artwork) => artwork.is_active !== false); for (const artwork of arts) result[artwork.id] = artwork.production_quantity ?? (arts.length === 1 ? item.quantity : Math.max(1, Math.floor(item.quantity / arts.length))); } return result; }
 function artworkImageUrl(quoteId: string, entry: ArtworkEntry, kind: "original" | "prepared") { const inline = kind === "prepared" ? entry.artwork.prepared_data_url : entry.artwork.data_url; return inline || `/api/quotes/${quoteId}/items/${entry.item.id}/artworks/${entry.artwork.id}/file?kind=${kind}`; }
 function sortActiveArtworkEntries(all: ArtworkEntry[]) {

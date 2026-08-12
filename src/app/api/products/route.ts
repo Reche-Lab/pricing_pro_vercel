@@ -42,9 +42,15 @@ const createProductSchema = z.object({
   printCornerStyle: z.enum(["sharp", "rounded"]).default("sharp"),
   printCornerRadiusMm: z.number().min(0).max(500).default(0),
   printShapeRotationDegrees: z.number().min(-180).max(180).default(0),
+  printBleedMm: z.number().min(0).max(50).default(2),
+  printSafeMarginMm: z.number().min(0).max(50).default(2),
   allowPrintRotation: z.boolean().default(true),
   curve: curveSchema.optional(),
   anchors: anchorsSchema.optional()
+}).superRefine((input, context) => {
+  if (input.printSafeMarginMm * 2 >= Math.min(input.printWidthMm, input.printHeightMm)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "A margem de segurança não deixa área útil dentro do corte.", path: ["printSafeMarginMm"] });
+  }
 }).transform((input, context) => {
   if (input.curve) return { ...input, curve: input.curve };
   if (input.anchors) {

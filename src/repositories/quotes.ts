@@ -101,6 +101,8 @@ export type QuoteItemRow = {
   print_corner_radius_mm?: string | null;
   print_shape_rotation_degrees?: string | null;
   allow_print_rotation?: boolean | null;
+  print_bleed_mm?: string | null;
+  print_safe_margin_mm?: string | null;
   width_cm?: string | null;
   length_cm?: string | null;
   description: string;
@@ -385,6 +387,8 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           to_jsonb(pv)->>'print_corner_radius_mm' as print_corner_radius_mm,
           to_jsonb(pv)->>'print_shape_rotation_degrees' as print_shape_rotation_degrees,
           (to_jsonb(pv)->>'allow_print_rotation')::boolean as allow_print_rotation,
+          to_jsonb(pv)->>'print_bleed_mm' as print_bleed_mm,
+          to_jsonb(pv)->>'print_safe_margin_mm' as print_safe_margin_mm,
           pv.width_cm,
           pv.length_cm,
           qi.description,
@@ -726,6 +730,8 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           to_jsonb(pv)->>'print_corner_radius_mm' as print_corner_radius_mm,
           to_jsonb(pv)->>'print_shape_rotation_degrees' as print_shape_rotation_degrees,
           (to_jsonb(pv)->>'allow_print_rotation')::boolean as allow_print_rotation,
+          to_jsonb(pv)->>'print_bleed_mm' as print_bleed_mm,
+          to_jsonb(pv)->>'print_safe_margin_mm' as print_safe_margin_mm,
           pv.width_cm,
           pv.length_cm,
           coalesce((to_jsonb(qi)->>'artwork_ai_attempts')::integer, 0) as artwork_ai_attempts,

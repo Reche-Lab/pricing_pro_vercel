@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { createShapePath, resolvePrintGeometry } from "@/domain/artwork/geometry";
+import { createShapePath, resolvePrintGeometry, resolvePrintMargins, validatePrintMargins } from "@/domain/artwork/geometry";
 import { prepareArtwork } from "@/services/artwork/production";
 
 describe("artwork print geometry", () => {
@@ -16,6 +16,18 @@ describe("artwork print geometry", () => {
     for (const shape of ["circle", "square", "rectangle", "triangle", "hexagon"] as const) {
       expect(createShapePath({ shape, width: 500, height: 350, cornerRadius: 18 })).toMatch(/^M /);
     }
+  });
+
+  it("resolves product print margins and preserves the prepared artwork snapshot", () => {
+    expect(resolvePrintMargins({ print_bleed_mm: 3, print_safe_margin_mm: 2.5 })).toEqual({ bleedMm: 3, safeMarginMm: 2.5 });
+    expect(resolvePrintMargins({ print_bleed_mm: 3, print_safe_margin_mm: 2.5, bleed_mm: 1.5, safe_margin_mm: 1 })).toEqual({ bleedMm: 1.5, safeMarginMm: 1 });
+    expect(resolvePrintMargins({ print_bleed_mm: 0, print_safe_margin_mm: 0 })).toEqual({ bleedMm: 0, safeMarginMm: 0 });
+  });
+
+  it("rejects a safe margin that consumes the finished cut area", () => {
+    const geometry = resolvePrintGeometry({ print_shape: "circle", print_width_mm: 25, print_height_mm: 25 });
+    expect(geometry && validatePrintMargins(geometry, { bleedMm: 2, safeMarginMm: 13 })).toContain("área útil");
+    expect(geometry && validatePrintMargins(geometry, { bleedMm: 2, safeMarginMm: 2 })).toBeNull();
   });
 
   it("prepares a rectangular rounded artwork at physical dimensions", async () => {

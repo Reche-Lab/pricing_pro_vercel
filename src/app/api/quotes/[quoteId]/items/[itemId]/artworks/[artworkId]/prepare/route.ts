@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
 import { requireWritableBilling } from "@/lib/billing/guard";
-import { getArtworkPreparationSource, getArtworkProductionData, resolveArtworkGeometry, savePreparedArtwork } from "@/repositories/artwork-production";
+import { getArtworkPreparationSource, getArtworkProductionData, resolveArtworkGeometry, resolveArtworkMargins, savePreparedArtwork } from "@/repositories/artwork-production";
 import { prepareArtwork } from "@/services/artwork/production";
 import { decodeDataUrl, loadArtworkDataUrl, uploadArtworkObject } from "@/services/storage/artwork-storage";
 
@@ -32,11 +32,12 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     if (!source || !production) return NextResponse.json({ ok: false, error: "Arte não encontrada." }, { status: 404 });
     const geometry = resolveArtworkGeometry(source);
     if (!geometry) throw new Error("Defina a geometria de impressão deste produto antes de preparar a arte.");
+    const margins = resolveArtworkMargins(source, production.profile);
     const sourceDataUrl = await loadArtworkDataUrl(source.data_url, source.storage_path);
     const prepared = await prepareArtwork({
       dataUrl: sourceDataUrl,
       geometry,
-      bleedMm: production.profile.bleedMm,
+      bleedMm: margins.bleedMm,
       dpi: production.profile.dpi,
       scale: body.data.scale,
       offsetX: body.data.offsetX,
@@ -52,6 +53,7 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     const artwork = await savePreparedArtwork({
       userId: session.userId, tenantId: session.tenantId, quoteId: params.data.quoteId,
       itemId: params.data.itemId, artworkId: params.data.artworkId, geometry,
+      margins,
       profile: production.profile,
       prepared,
       preparedDataUrl: preparedStoragePath ? null : prepared.dataUrl,

@@ -29,6 +29,8 @@ type ProductEditValues = {
   printCornerRadiusMm: string;
   printShapeRotationDegrees: string;
   allowPrintRotation: boolean;
+  printBleedMm: string;
+  printSafeMarginMm: string;
   variantActive: boolean;
 };
 
@@ -71,6 +73,8 @@ export function ProductEditForm({ product }: { product: ProductEditValues }) {
         printCornerStyle: form.get("printCornerStyle"),
         printCornerRadiusMm: Number(form.get("printCornerRadiusMm") || 0),
         printShapeRotationDegrees: Number(form.get("printShapeRotationDegrees") || 0),
+        printBleedMm: Number(form.get("printBleedMm") || 0),
+        printSafeMarginMm: Number(form.get("printSafeMarginMm") || 0),
         allowPrintRotation: form.get("allowPrintRotation") === "on",
         variantActive: form.get("variantActive") === "on"
       })
@@ -141,7 +145,7 @@ export function ProductEditForm({ product }: { product: ProductEditValues }) {
             </div>
           </div>
 
-          <PrintGeometryFields defaults={{ shape: product.printShape, widthMm: product.printWidthMm ?? product.printDiameterMm, heightMm: product.printHeightMm ?? product.printDiameterMm, cornerStyle: product.printCornerStyle, cornerRadiusMm: product.printCornerRadiusMm, rotationDegrees: product.printShapeRotationDegrees, allowPrintRotation: product.allowPrintRotation }} />
+          <PrintGeometryFields defaults={{ shape: product.printShape, widthMm: product.printWidthMm ?? product.printDiameterMm, heightMm: product.printHeightMm ?? product.printDiameterMm, cornerStyle: product.printCornerStyle, cornerRadiusMm: product.printCornerRadiusMm, rotationDegrees: product.printShapeRotationDegrees, allowPrintRotation: product.allowPrintRotation, bleedMm: product.printBleedMm, safeMarginMm: product.printSafeMarginMm }} />
 
           <div className="flex flex-wrap gap-3">
             <Checkbox defaultChecked={product.productActive} label="Produto ativo" name="productActive" />

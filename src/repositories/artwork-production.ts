@@ -1,6 +1,6 @@
 import { withTenantContext } from "@/lib/db/client";
 import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
-import { resolvePrintGeometry, type PrintGeometry } from "@/domain/artwork/geometry";
+import { resolvePrintGeometry, resolvePrintMargins, type PrintGeometry, type PrintMargins } from "@/domain/artwork/geometry";
 import {
   DEFAULT_ARTWORK_PROFILE,
   type ArtworkProductionProfile,
@@ -51,6 +51,8 @@ export type ArtworkProductionRow = {
   print_corner_radius_mm: string | null;
   print_shape_rotation_degrees: string | null;
   allow_print_rotation: boolean | null;
+  print_bleed_mm: string | null;
+  print_safe_margin_mm: string | null;
   width_cm: string | null;
   length_cm: string | null;
 };
@@ -169,6 +171,8 @@ export async function getArtworkProductionData(userId: string, tenantId: string,
           to_jsonb(pv)->>'print_corner_radius_mm' as print_corner_radius_mm,
           to_jsonb(pv)->>'print_shape_rotation_degrees' as print_shape_rotation_degrees,
           (to_jsonb(pv)->>'allow_print_rotation')::boolean as allow_print_rotation,
+          to_jsonb(pv)->>'print_bleed_mm' as print_bleed_mm,
+          to_jsonb(pv)->>'print_safe_margin_mm' as print_safe_margin_mm,
           pv.width_cm,
           pv.length_cm
         from quote_item_artworks a
@@ -212,6 +216,8 @@ export async function getArtworkPreparationSource(
           to_jsonb(pv)->>'print_corner_radius_mm' as print_corner_radius_mm,
           to_jsonb(pv)->>'print_shape_rotation_degrees' as print_shape_rotation_degrees,
           (to_jsonb(pv)->>'allow_print_rotation')::boolean as allow_print_rotation,
+          to_jsonb(pv)->>'print_bleed_mm' as print_bleed_mm,
+          to_jsonb(pv)->>'print_safe_margin_mm' as print_safe_margin_mm,
           pv.width_cm, pv.length_cm
         from quote_item_artworks a
         join quote_items qi on qi.id = a.quote_item_id and qi.tenant_id = a.tenant_id
@@ -233,6 +239,7 @@ export async function savePreparedArtwork(input: {
   itemId: string;
   artworkId: string;
   geometry: PrintGeometry;
+  margins: PrintMargins;
   profile: ArtworkProductionProfile;
   prepared: PreparedArtwork;
   preparedDataUrl: string | null;
@@ -284,8 +291,8 @@ export async function savePreparedArtwork(input: {
         input.prepared.originalWidthPx,
         input.prepared.originalHeightPx,
         input.geometry.shape === "circle" ? input.geometry.widthMm : null,
-        input.profile.bleedMm,
-        input.profile.safeMarginMm,
+        input.margins.bleedMm,
+        input.margins.safeMarginMm,
         input.profile.dpi,
         input.preparedDataUrl,
         input.preparedStoragePath,
@@ -378,7 +385,7 @@ export async function recordArtworkPrintJob(input: {
   pageCount: number;
   copyCount: number;
   profile: ArtworkProductionProfile;
-  artworks: Array<{ id: string; quantity: number; geometry: PrintGeometry }>;
+  artworks: Array<{ id: string; quantity: number; geometry: PrintGeometry; bleedMm: number; safeMarginMm: number }>;
   storagePath: string | null;
 }) {
   return withTenantContext(input.userId, input.tenantId, async (client) => {
@@ -535,6 +542,10 @@ export function resolveArtworkDiameterMm(row: ArtworkProductionRow) {
 
 export function resolveArtworkGeometry(row: ArtworkProductionRow) {
   return resolvePrintGeometry({ ...row, print_diameter_mm: row.variant_print_diameter_mm });
+}
+
+export function resolveArtworkMargins(row: ArtworkProductionRow, fallback: PrintMargins) {
+  return resolvePrintMargins(row, fallback);
 }
 
 function mapProfile(row: {

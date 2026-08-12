@@ -8,6 +8,8 @@ export type PrintArtwork = {
   label: string;
   quantity: number;
   geometry: PrintGeometry;
+  bleedMm?: number;
+  safeMarginMm?: number;
   preparedDataUrl: string;
 };
 
@@ -65,7 +67,7 @@ export function createImpositionPlan(artworks: PrintArtwork[], profile: ArtworkP
   if (!copies.length) return { pageCount: 0, copyCount: 0, placements: [] };
 
   const grid = createShelfPlan(copies, effectiveProfile);
-  const circular = copies.every((copy) => copy.geometry.shape === "circle" && copy.geometry.widthMm === copies[0].geometry.widthMm);
+  const circular = copies.every((copy) => copy.geometry.shape === "circle" && copy.geometry.widthMm === copies[0].geometry.widthMm && artworkBleedMm(copy, effectiveProfile) === artworkBleedMm(copies[0], effectiveProfile));
   if (!circular || effectiveProfile.layoutMode === "grid") return grid;
   const hex = createHexPlan(copies, effectiveProfile);
   if (effectiveProfile.layoutMode === "hex") return hex;
@@ -85,7 +87,8 @@ function createShelfPlan(copies: PrintArtwork[], profile: ArtworkProductionProfi
   const availableHeight = maxY - profile.marginMm;
 
   for (const artwork of copies) {
-    const original = { width: artwork.geometry.widthMm + profile.bleedMm * 2, height: artwork.geometry.heightMm + profile.bleedMm * 2, rotated: false };
+    const bleedMm = artworkBleedMm(artwork, profile);
+    const original = { width: artwork.geometry.widthMm + bleedMm * 2, height: artwork.geometry.heightMm + bleedMm * 2, rotated: false };
     const rotated = { width: original.height, height: original.width, rotated: true };
     const candidates = artwork.geometry.allowPrintRotation && original.width !== original.height ? [original, rotated] : [original];
     if (!candidates.some((candidate) => candidate.width <= availableWidth + 0.001 && candidate.height <= availableHeight + 0.001)) {
@@ -115,7 +118,7 @@ function createShelfPlan(copies: PrintArtwork[], profile: ArtworkProductionProfi
       xMm: x,
       yMm: y,
       geometry: artwork.geometry,
-      bleedMm: profile.bleedMm,
+      bleedMm,
       rotated: selected.rotated
     });
     x += selected.width + profile.gapMm;
@@ -126,7 +129,8 @@ function createShelfPlan(copies: PrintArtwork[], profile: ArtworkProductionProfi
 }
 
 function createHexPlan(copies: PrintArtwork[], profile: ArtworkProductionProfile): ImpositionPlan {
-  const outer = copies[0].geometry.widthMm + profile.bleedMm * 2;
+  const bleedMm = artworkBleedMm(copies[0], profile);
+  const outer = copies[0].geometry.widthMm + bleedMm * 2;
   const horizontalStep = outer + profile.gapMm;
   const verticalStep = outer * Math.sqrt(3) / 2 + profile.gapMm;
   const availableWidth = profile.pageWidthMm - profile.marginMm * 2;
@@ -152,7 +156,7 @@ function createHexPlan(copies: PrintArtwork[], profile: ArtworkProductionProfile
       xMm: profile.marginMm + (row % 2 ? horizontalStep / 2 : 0) + offset * horizontalStep,
       yMm: profile.marginMm + row * verticalStep,
       geometry: artwork.geometry,
-      bleedMm: profile.bleedMm,
+      bleedMm: artworkBleedMm(artwork, profile),
       rotated: false
     });
   });
@@ -176,10 +180,11 @@ export async function generatePrintPdf(
     const imageBytes = decodeImageDataUrl(artwork.preparedDataUrl);
     imageById.set(artwork.id, await pdf.embedPng(new Uint8Array(imageBytes)));
     if (profile.drawCutLines) {
+      const bleedMm = artworkBleedMm(artwork, profile);
       const scale = 8;
-      const width = Math.round((artwork.geometry.widthMm + profile.bleedMm * 2) * scale);
-      const height = Math.round((artwork.geometry.heightMm + profile.bleedMm * 2) * scale);
-      const inset = profile.bleedMm * scale;
+      const width = Math.round((artwork.geometry.widthMm + bleedMm * 2) * scale);
+      const height = Math.round((artwork.geometry.heightMm + bleedMm * 2) * scale);
+      const inset = bleedMm * scale;
       const svg = createShapeSvg({
         shape: artwork.geometry.shape, width, height, inset,
         cornerRadius: artwork.geometry.cornerRadiusMm * scale,
@@ -210,4 +215,8 @@ export async function generatePrintPdf(
 
   const bytes = await pdf.save({ useObjectStreams: false });
   return { bytes, plan };
+}
+
+function artworkBleedMm(artwork: PrintArtwork, profile: ArtworkProductionProfile) {
+  return Number.isFinite(artwork.bleedMm) && (artwork.bleedMm as number) >= 0 ? artwork.bleedMm as number : profile.bleedMm;
 }

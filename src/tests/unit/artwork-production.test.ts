@@ -94,6 +94,19 @@ describe("artwork production", () => {
     }
   });
 
+  it("uses the exact bleed configured for each product in a mixed A4 layout", () => {
+    const square40 = { shape: "square" as const, widthMm: 40, heightMm: 40, cornerStyle: "sharp" as const, cornerRadiusMm: 0, rotationDegrees: 0, allowPrintRotation: true };
+    const plan = createImpositionPlan([
+      { id: "bleed-zero", label: "Sem sangria", quantity: 1, geometry: square40, bleedMm: 0, preparedDataUrl: "unused" },
+      { id: "bleed-five", label: "Sangria 5 mm", quantity: 1, geometry: square40, bleedMm: 5, preparedDataUrl: "unused" }
+    ], { ...DEFAULT_ARTWORK_PROFILE, layoutMode: "grid" });
+    const first = plan.placements.find((placement) => placement.artworkId === "bleed-zero");
+    const second = plan.placements.find((placement) => placement.artworkId === "bleed-five");
+    expect(first?.bleedMm).toBe(0);
+    expect(second?.bleedMm).toBe(5);
+    expect(first && second && Math.abs(first.xMm - second.xMm)).toBeGreaterThanOrEqual(43);
+  });
+
   it("keeps the same minimum spacing and bottom protection in the alternating circular layout", () => {
     const profile = { ...DEFAULT_ARTWORK_PROFILE, layoutMode: "hex" as const, marginMm: 5, bottomMarginMm: 20, gapMm: 0 };
     const outerDiameter = circle55.widthMm + profile.bleedMm * 2;
