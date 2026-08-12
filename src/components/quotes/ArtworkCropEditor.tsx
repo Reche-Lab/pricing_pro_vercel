@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, RotateCcw, X } from "lucide-react";
-import { createShapePath, geometryLabel, type PrintGeometry } from "@/domain/artwork/geometry";
+import { createPrintGuideLayout, geometryLabel, type PrintGeometry } from "@/domain/artwork/geometry";
 import type { QuoteItemArtworkRow } from "@/repositories/quotes";
 
 export function ArtworkCropEditor({
@@ -60,12 +60,10 @@ export function ArtworkCropEditor({
   const outputHeightMm = geometry.heightMm + bleedMm * 2;
   const viewWidth = 1000;
   const viewHeight = Math.max(200, viewWidth * outputHeightMm / outputWidthMm);
-  const unitsPerMm = viewWidth / outputWidthMm;
-  const bleedInset = bleedMm * unitsPerMm;
-  const safeInset = (bleedMm + safeMarginMm) * unitsPerMm;
-  const clipPath = createShapePath({ shape: geometry.shape, width: viewWidth, height: viewHeight, cornerRadius: (geometry.cornerRadiusMm + bleedMm) * unitsPerMm, rotationDegrees: geometry.rotationDegrees });
-  const cutPath = createShapePath({ shape: geometry.shape, width: viewWidth, height: viewHeight, cornerRadius: geometry.cornerRadiusMm * unitsPerMm, rotationDegrees: geometry.rotationDegrees, inset: bleedInset });
-  const safePath = createShapePath({ shape: geometry.shape, width: viewWidth, height: viewHeight, cornerRadius: Math.max(0, geometry.cornerRadiusMm - safeMarginMm) * unitsPerMm, rotationDegrees: geometry.rotationDegrees, inset: safeInset });
+  const guides = createPrintGuideLayout({ geometry, margins: { bleedMm, safeMarginMm }, viewportWidth: viewWidth, viewportHeight: viewHeight });
+  const clipPath = guides.outer.path;
+  const cutPath = guides.cut.path;
+  const safePath = guides.safe.path;
   const imageWidth = viewWidth * scale;
   const imageHeight = viewHeight * scale;
   const imageX = (viewWidth - imageWidth) / 2 + offsetX * viewWidth / 2;

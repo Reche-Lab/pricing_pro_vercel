@@ -6,7 +6,7 @@ import {
   RectangleHorizontal, Redo2, RotateCcw, Save, Shapes, SlidersHorizontal, Square, Trash2, Triangle,
   Undo2, X, ZoomIn, ZoomOut
 } from "lucide-react";
-import { createShapePath, geometryLabel, type PrintGeometry } from "@/domain/artwork/geometry";
+import { createPrintGuideLayout, geometryLabel, type PrintGeometry } from "@/domain/artwork/geometry";
 import {
   calculateCenteredLayerBounds,
   createRetouchedArtworkFileName,
@@ -360,7 +360,17 @@ export function ArtworkRetouchEditor({
     } catch (saveError) { setError(saveError instanceof Error ? saveError.message : "Não foi possível salvar o retoque."); setSaving(false); }
   }
 
-  const guides = useMemo(() => createGuideLayout(workspace, geometry, bleedMm, safeMarginMm), [bleedMm, geometry, safeMarginMm, workspace]);
+  const guides = useMemo(() => {
+    if (!workspace || !geometry) return null;
+    const layout = createPrintGuideLayout({
+      geometry,
+      margins: { bleedMm, safeMarginMm },
+      viewportWidth: workspace.width,
+      viewportHeight: workspace.height,
+      paddingRatio: 0.04
+    });
+    return { ...layout, bleed: layout.outer };
+  }, [bleedMm, geometry, safeMarginMm, workspace]);
   const foregroundBounds = useMemo(() => workspace ? calculateCenteredLayerBounds({
     canvasWidth: workspace.width,
     canvasHeight: workspace.height,
@@ -373,8 +383,9 @@ export function ArtworkRetouchEditor({
 
   return <div className="fixed inset-0 z-[80] grid place-items-center overflow-hidden bg-black/85 p-2 backdrop-blur-sm sm:p-5">
     {cursor ? <span className="pointer-events-none fixed z-[100] rounded-full border border-white shadow-[0_0_0_1px_rgba(0,0,0,.75)]" style={{ left: cursor.x, top: cursor.y, width: cursor.size, height: cursor.size, transform: "translate(-50%,-50%)", background: tool === "brush" ? `${color}33` : "transparent" }} /> : null}
-    <div className="grid h-[96vh] w-full max-w-7xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950 shadow-2xl">
+    <div className="grid h-[96vh] w-full max-w-7xl grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950 shadow-2xl">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-zinc-800 px-4 py-3 sm:px-5"><div className="min-w-0"><h2 className="text-base font-semibold text-white">Retocar imagem</h2><p className="mt-0.5 truncate text-xs text-zinc-500">{artworkName} · original preservado · área externa disponível para sangria</p></div><div className="flex items-center gap-3"><DraftStatus status={draftStatus} /><button aria-label="Fechar editor" className="focus-ring grid h-9 w-9 place-items-center rounded-md border border-transparent text-zinc-400 transition hover:border-zinc-700 hover:bg-zinc-800 hover:text-white" disabled={saving} title="Fechar editor" type="button" onClick={onClose}><X size={18} /></button></div></header>
+      {geometry && guides ? <PrintGuideMeasurements geometry={geometry} bleedMm={bleedMm} guides={guides} safeMarginMm={safeMarginMm} /> : <div className="border-b border-zinc-800 bg-amber-950/20 px-4 py-2 text-xs text-amber-200">Configure as medidas de impressão do produto para visualizar as linhas de produção.</div>}
       <div className="grid min-h-0 lg:grid-cols-[272px_minmax(0,1fr)]">
         <aside className="order-2 overflow-y-auto border-t border-zinc-800 p-3 lg:order-1 lg:border-r lg:border-t-0 lg:p-4">
           <div className="rounded-md border border-zinc-800 bg-zinc-900/45 p-2.5 shadow-inner shadow-black/20"><div className="mb-2 flex items-center justify-between px-0.5"><p className="text-[11px] font-semibold uppercase text-zinc-400">Ferramentas</p><span className="text-[10px] text-zinc-600">Escolha uma ação</span></div><div className="grid grid-cols-4 gap-1.5"><ToolButton active={tool === "brush"} description="Pintar livremente sobre a imagem" icon={<Brush size={18} strokeWidth={1.8} />} label="Pincel" shortcut="B" onClick={() => chooseTool("brush")} /><ToolButton active={tool === "eyedropper"} description="Capturar uma cor da imagem" icon={<Pipette size={18} strokeWidth={1.8} />} label="Cor" shortcut="I" onClick={activateEyedropper} /><ToolButton active={tool === "eraser"} description="Apagar partes do retoque" icon={<Eraser size={18} strokeWidth={1.8} />} label="Apagar" shortcut="E" onClick={() => chooseTool("eraser")} /><ToolButton active={tool === "fill"} description="Preencher uma área de cor contínua" icon={<PaintBucket size={18} strokeWidth={1.8} />} label="Preencher" shortcut="G" onClick={() => chooseTool("fill")} /><ToolButton active={tool === "shape"} description="Inserir e editar formatos vazados" icon={<Shapes size={18} strokeWidth={1.8} />} label="Formato" shortcut="S" onClick={() => chooseTool("shape")} /><ToolButton active={tool === "select"} description="Limitar os retoques a uma área" icon={<MousePointer2 size={18} strokeWidth={1.8} />} label="Selecionar" shortcut="R" onClick={() => chooseTool("select")} /><ToolButton active={tool === "compose"} description="Redimensionar a arte e estender seu fundo" icon={<Layers3 size={18} strokeWidth={1.8} />} label="Expandir" shortcut="T" onClick={() => chooseTool("compose")} /><ToolButton active={tool === "pan"} description="Mover a área de trabalho" icon={<Grab size={18} strokeWidth={1.8} />} label="Navegar" shortcut="Espaço" onClick={() => chooseTool("pan")} /></div></div>
@@ -421,6 +432,13 @@ function ShapeSelectionOverlay({ shape, workspace }: { shape: RetouchShape; work
 }
 function Adjustment({ label, min, max, value, onChange }: { label: string; min: number; max: number; value: number; onChange: (value: number) => void }) { return <label><span className="mb-1 flex justify-between text-[11px] text-zinc-400"><span>{label}</span><span>{value}%</span></span><input className="w-full accent-violet-400" max={max} min={min} type="range" value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>; }
 function RangeControl({ label, min, max, step, suffix, value, onChange }: { label: string; min: number; max: number; step: number; suffix: string; value: number; onChange: (value: number) => void }) { return <label><span className="mb-1.5 flex items-center justify-between gap-2 text-[11px] text-zinc-400"><span>{label}</span><span className="tabular-nums text-cyan-300">{value}{suffix}</span></span><input className="w-full accent-cyan-400" max={max} min={min} step={step} type="range" value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>; }
+function PrintGuideMeasurements({ geometry, bleedMm, safeMarginMm, guides }: { geometry: PrintGeometry; bleedMm: number; safeMarginMm: number; guides: { outputWidthMm: number; outputHeightMm: number; safeWidthMm: number; safeHeightMm: number } }) {
+  return <div className="grid gap-2 border-b border-zinc-800 bg-zinc-950/95 px-3 py-2 sm:grid-cols-3 sm:px-5"><GuideMeasurement color="amber" label="Limite da sangria" measure={`${formatMeasurement(guides.outputWidthMm)} × ${formatMeasurement(guides.outputHeightMm)}`} detail={`${formatMeasurement(bleedMm)} além do corte`} /><GuideMeasurement color="red" label="Linha de corte" measure={`${formatMeasurement(geometry.widthMm)} × ${formatMeasurement(geometry.heightMm)}`} detail={geometryLabel(geometry).replace(/\s[\d,.]+\s×.*$/, "")} /><GuideMeasurement color="cyan" label="Área segura" measure={`${formatMeasurement(guides.safeWidthMm)} × ${formatMeasurement(guides.safeHeightMm)}`} detail={`${formatMeasurement(safeMarginMm)} para dentro do corte`} /></div>;
+}
+function GuideMeasurement({ color, label, measure, detail }: { color: "amber" | "red" | "cyan"; label: string; measure: string; detail: string }) {
+  const styles = { amber: "border-amber-400 text-amber-300", red: "border-red-500 text-red-300", cyan: "border-cyan-300 text-cyan-200" }[color];
+  return <div className="flex min-w-0 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/55 px-2.5 py-2"><span className={`h-7 shrink-0 border-l-2 ${styles}`} /><span className="min-w-0"><span className="block text-[10px] uppercase text-zinc-500">{label}</span><strong className={`block text-xs tabular-nums ${styles.split(" ")[1]}`}>{measure} mm</strong><span className="block truncate text-[10px] text-zinc-600">{detail}</span></span></div>;
+}
 function DraftStatus({ status }: { status: "loading" | "saved" | "saving" | "error" | "idle" }) { if (status === "idle") return null; return <span className={`text-[11px] ${status === "error" ? "text-red-300" : "text-zinc-500"}`}>{status === "loading" ? "Carregando rascunho..." : status === "saving" ? "Salvando rascunho..." : status === "saved" ? "Rascunho salvo" : "Falha no autosave"}</span>; }
 
 function replaceOperation(operations: RetouchOperation[], index: number, operation: RetouchOperation) {
@@ -542,12 +560,6 @@ function drawOutlineShape(context: CanvasRenderingContext2D, shape: RetouchShape
   context.stroke(); context.restore();
 }
 function clipSelection(context: CanvasRenderingContext2D, selection?: RetouchSelection | null) { if (!selection) return; const normalized = normalizeSelection(selection); context.beginPath(); context.rect(normalized.x, normalized.y, normalized.width, normalized.height); context.clip(); }
-function createGuideLayout(workspace: Workspace | null, geometry: PrintGeometry | null | undefined, bleedMm: number, safeMarginMm: number) {
-  if (!workspace || !geometry) return null; const ratio = geometry.widthMm / geometry.heightMm; let width = workspace.sourceWidth; let height = width / ratio; if (height > workspace.sourceHeight) { height = workspace.sourceHeight; width = height * ratio; }
-  const x = workspace.offsetX + (workspace.sourceWidth - width) / 2; const y = workspace.offsetY + (workspace.sourceHeight - height) / 2; const bleed = Math.max(0, width * bleedMm / geometry.widthMm); const safe = Math.max(0, width * safeMarginMm / geometry.widthMm); const radius = geometry.cornerRadiusMm / geometry.widthMm * width;
-  const shape = (boxWidth: number, boxHeight: number, cornerRadius: number, inset = 0) => createShapePath({ shape: geometry.shape, width: boxWidth, height: boxHeight, cornerRadius, rotationDegrees: geometry.rotationDegrees, inset });
-  return { bleed: { x: x - bleed, y: y - bleed, path: shape(width + bleed * 2, height + bleed * 2, radius + bleed) }, cut: { x, y, path: shape(width, height, radius) }, safe: { x, y, path: shape(width, height, radius, safe) } };
-}
 function millimetersToWorkspacePixels(workspace: Workspace, geometry: PrintGeometry | null | undefined, millimeters: number) {
   if (!geometry || geometry.widthMm <= 0 || geometry.heightMm <= 0) return workspace.sourceWidth / 50 * millimeters;
   const fittedWidth = Math.min(workspace.sourceWidth, workspace.sourceHeight * geometry.widthMm / geometry.heightMm);
@@ -559,4 +571,5 @@ function blobToDataUrl(blob: Blob) { return new Promise<string>((resolve, reject
 function hexToRgb(value: string) { const normalized = value.replace("#", ""); return [Number.parseInt(normalized.slice(0, 2), 16), Number.parseInt(normalized.slice(2, 4), 16), Number.parseInt(normalized.slice(4, 6), 16)]; }
 function sameAdjustments(left: RetouchAdjustments, right: RetouchAdjustments) { return left.brightness === right.brightness && left.contrast === right.contrast && left.saturation === right.saturation && left.sharpness === right.sharpness; }
 function sameComposition(left: RetouchComposition, right: RetouchComposition) { return left.foregroundScalePercent === right.foregroundScalePercent && left.backgroundEnabled === right.backgroundEnabled && left.backgroundExpansionMm === right.backgroundExpansionMm && left.backgroundScalePercent === right.backgroundScalePercent && left.backgroundBlurPx === right.backgroundBlurPx; }
+function formatMeasurement(value: number) { return Number(value.toFixed(2)).toLocaleString("pt-BR"); }
 function clamp(value: number, minimum: number, maximum: number) { return Math.min(maximum, Math.max(minimum, value)); }

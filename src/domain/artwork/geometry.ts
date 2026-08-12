@@ -17,6 +17,17 @@ export type PrintMargins = {
   safeMarginMm: number;
 };
 
+export type PrintGuideLayout = {
+  outer: { x: number; y: number; width: number; height: number; path: string };
+  cut: { x: number; y: number; width: number; height: number; path: string };
+  safe: { x: number; y: number; width: number; height: number; path: string };
+  unitsPerMm: number;
+  outputWidthMm: number;
+  outputHeightMm: number;
+  safeWidthMm: number;
+  safeHeightMm: number;
+};
+
 type GeometrySource = {
   target_shape?: string | null;
   target_width_mm?: string | number | null;
@@ -110,6 +121,46 @@ export function createShapePath(input: {
   const count = input.shape === "triangle" ? 3 : 6;
   const points = regularPolygonPoints(count, x + width / 2, y + height / 2, width / 2, height / 2, input.rotationDegrees ?? 0);
   return roundedPolygonPath(points, radius);
+}
+
+export function createPrintGuideLayout(input: {
+  geometry: PrintGeometry;
+  margins: PrintMargins;
+  viewportWidth: number;
+  viewportHeight: number;
+  paddingRatio?: number;
+}): PrintGuideLayout {
+  const { geometry, margins } = input;
+  const outputWidthMm = geometry.widthMm + margins.bleedMm * 2;
+  const outputHeightMm = geometry.heightMm + margins.bleedMm * 2;
+  const padding = clamp(input.paddingRatio ?? 0, 0, 0.4);
+  const availableWidth = input.viewportWidth * (1 - padding * 2);
+  const availableHeight = input.viewportHeight * (1 - padding * 2);
+  const unitsPerMm = Math.min(availableWidth / outputWidthMm, availableHeight / outputHeightMm);
+  const outerWidth = outputWidthMm * unitsPerMm;
+  const outerHeight = outputHeightMm * unitsPerMm;
+  const x = (input.viewportWidth - outerWidth) / 2;
+  const y = (input.viewportHeight - outerHeight) / 2;
+  const bleedInset = margins.bleedMm * unitsPerMm;
+  const safeInset = (margins.bleedMm + margins.safeMarginMm) * unitsPerMm;
+  const shapePath = (inset: number, cornerRadiusMm: number) => createShapePath({
+    shape: geometry.shape,
+    width: outerWidth,
+    height: outerHeight,
+    cornerRadius: Math.max(0, cornerRadiusMm) * unitsPerMm,
+    rotationDegrees: geometry.rotationDegrees,
+    inset
+  });
+  return {
+    outer: { x, y, width: outerWidth, height: outerHeight, path: shapePath(0, geometry.cornerRadiusMm + margins.bleedMm) },
+    cut: { x, y, width: outerWidth, height: outerHeight, path: shapePath(bleedInset, geometry.cornerRadiusMm) },
+    safe: { x, y, width: outerWidth, height: outerHeight, path: shapePath(safeInset, geometry.cornerRadiusMm - margins.safeMarginMm) },
+    unitsPerMm,
+    outputWidthMm,
+    outputHeightMm,
+    safeWidthMm: Math.max(0, geometry.widthMm - margins.safeMarginMm * 2),
+    safeHeightMm: Math.max(0, geometry.heightMm - margins.safeMarginMm * 2)
+  };
 }
 
 export function createShapeSvg(input: {

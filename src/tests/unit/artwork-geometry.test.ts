@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { createShapePath, resolvePrintGeometry, resolvePrintMargins, validatePrintMargins } from "@/domain/artwork/geometry";
+import { createPrintGuideLayout, createShapePath, resolvePrintGeometry, resolvePrintMargins, validatePrintMargins } from "@/domain/artwork/geometry";
 import { prepareArtwork } from "@/services/artwork/production";
 
 describe("artwork print geometry", () => {
@@ -28,6 +28,18 @@ describe("artwork print geometry", () => {
     const geometry = resolvePrintGeometry({ print_shape: "circle", print_width_mm: 25, print_height_mm: 25 });
     expect(geometry && validatePrintMargins(geometry, { bleedMm: 2, safeMarginMm: 13 })).toContain("área útil");
     expect(geometry && validatePrintMargins(geometry, { bleedMm: 2, safeMarginMm: 2 })).toBeNull();
+  });
+
+  it("uses the same physical dimensions for retouch, framing and print guides", () => {
+    const geometry = { shape: "rectangle", widthMm: 80, heightMm: 50, cornerStyle: "rounded", cornerRadiusMm: 4, rotationDegrees: 0, allowPrintRotation: true } as const;
+    const guides = createPrintGuideLayout({ geometry, margins: { bleedMm: 3, safeMarginMm: 2 }, viewportWidth: 1200, viewportHeight: 900, paddingRatio: 0.05 });
+    expect(guides.outputWidthMm).toBe(86);
+    expect(guides.outputHeightMm).toBe(56);
+    expect(guides.safeWidthMm).toBe(76);
+    expect(guides.safeHeightMm).toBe(46);
+    expect(guides.cut.width).toBe(guides.outer.width);
+    expect(guides.cut.path).not.toBe(guides.outer.path);
+    expect(guides.safe.path).not.toBe(guides.cut.path);
   });
 
   it("prepares a rectangular rounded artwork at physical dimensions", async () => {
