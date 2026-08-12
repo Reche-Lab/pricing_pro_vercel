@@ -34,6 +34,7 @@ export type RetouchFill = {
   selection?: RetouchSelection | null;
 };
 export type RetouchShapeType = "circle" | "square" | "rectangle" | "triangle";
+export type RetouchShapeHandle = "nw" | "ne" | "se" | "sw";
 export type RetouchShape = {
   kind: "shape";
   shapeType: RetouchShapeType;
@@ -131,6 +132,22 @@ export function createRetouchShape(input: {
     };
   }
   return { kind: "shape", shapeType: input.shapeType, color: input.color, width: input.width, selection: input.selection, bounds: normalizeSelection({ x: input.start.x, y: input.start.y, width, height }) };
+}
+
+export function moveRetouchShape(shape: RetouchShape, deltaX: number, deltaY: number): RetouchShape {
+  return { ...shape, bounds: { ...shape.bounds, x: shape.bounds.x + deltaX, y: shape.bounds.y + deltaY } };
+}
+
+export function resizeRetouchShape(shape: RetouchShape, handle: RetouchShapeHandle, point: RetouchPoint): RetouchShape {
+  const bounds = normalizeSelection(shape.bounds);
+  const opposite = {
+    nw: { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
+    ne: { x: bounds.x, y: bounds.y + bounds.height },
+    se: { x: bounds.x, y: bounds.y },
+    sw: { x: bounds.x + bounds.width, y: bounds.y }
+  }[handle];
+  const resized = createRetouchShape({ shapeType: shape.shapeType, start: opposite, end: point, color: shape.color, width: shape.width, selection: shape.selection });
+  return { ...resized, bounds: { ...resized.bounds, width: Math.max(2, resized.bounds.width), height: Math.max(2, resized.bounds.height) } };
 }
 
 function colorWithinTolerance(pixels: Uint8ClampedArray, offset: number, target: number[], tolerance: number) {

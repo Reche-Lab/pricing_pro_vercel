@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRetouchedArtworkFileName, createRetouchShape, findContiguousColorRegion, normalizeSelection, sampledRgbToHex } from "@/domain/artwork/retouch";
+import { createRetouchedArtworkFileName, createRetouchShape, findContiguousColorRegion, moveRetouchShape, normalizeSelection, resizeRetouchShape, sampledRgbToHex } from "@/domain/artwork/retouch";
 import { retouchDraftSchema } from "@/services/artwork/retouch-draft";
 
 describe("artwork retouch", () => {
@@ -52,5 +52,16 @@ describe("artwork retouch", () => {
     const shape = createRetouchShape({ shapeType: "triangle", start: { x: 10, y: 20 }, end: { x: 110, y: 90 }, color: "#abcdef", width: 16 });
     const draft = { version: 1, operations: [shape], adjustments: { brightness: 100, contrast: 100, saturation: 100, sharpness: 0 } };
     expect(retouchDraftSchema.safeParse(draft).success).toBe(true);
+  });
+
+  it("moves and resizes an editable shape without rasterizing it", () => {
+    const shape = createRetouchShape({ shapeType: "rectangle", start: { x: 10, y: 20 }, end: { x: 110, y: 80 }, color: "#ffffff", width: 10 });
+    expect(moveRetouchShape(shape, 15, -5).bounds).toEqual({ x: 25, y: 15, width: 100, height: 60 });
+    expect(resizeRetouchShape(shape, "se", { x: 160, y: 120 }).bounds).toEqual({ x: 10, y: 20, width: 150, height: 100 });
+  });
+
+  it("preserves proportions while resizing circles", () => {
+    const circle = createRetouchShape({ shapeType: "circle", start: { x: 20, y: 20 }, end: { x: 80, y: 80 }, color: "#ffffff", width: 6 });
+    expect(resizeRetouchShape(circle, "se", { x: 120, y: 70 }).bounds).toEqual({ x: 20, y: 20, width: 100, height: 100 });
   });
 });
