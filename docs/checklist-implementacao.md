@@ -155,6 +155,7 @@ Status atualizado durante a refatoracao inicial.
 - [x] Pré-visualizar as folhas A4 antes do download.
 - [x] Permitir envio público de arte pronta pelo item do orçamento e pelo estúdio, sem depender do assistente criativo.
 - [x] Editar artes de forma não destrutiva com pincel, conta-gotas, borracha, preenchimento por tolerância, seleção, ajustes, comparação, sangria externa e autosave.
+- [x] Redimensionar a arte principal e estender fundos com uma camada duplicada ajustável em escala, milímetros e suavização.
 - [x] Registrar lotes de produção e permitir marcá-los como impressos.
 - [ ] Migrar em lote os arquivos legados que ainda estão em `data_url`.
 
@@ -171,7 +172,7 @@ Resultado:
 
 - lint passou;
 - typecheck passou;
-- testes passaram: 124 testes em 30 arquivos;
+- testes passaram: 126 testes em 30 arquivos;
 - build Next passou.
 
 ## Acoes Manuais Pendentes

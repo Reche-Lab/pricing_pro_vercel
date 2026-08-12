@@ -45,10 +45,18 @@ export type RetouchShape = {
 };
 export type RetouchOperation = RetouchStroke | RetouchFill | RetouchShape;
 export type RetouchAdjustments = { brightness: number; contrast: number; saturation: number; sharpness: number };
+export type RetouchComposition = {
+  foregroundScalePercent: number;
+  backgroundEnabled: boolean;
+  backgroundExpansionMm: number;
+  backgroundScalePercent: number;
+  backgroundBlurPx: number;
+};
 export type RetouchDraft = {
   version: 1;
   operations: RetouchOperation[];
   adjustments: RetouchAdjustments;
+  composition?: RetouchComposition;
 };
 
 export const DEFAULT_RETOUCH_ADJUSTMENTS: RetouchAdjustments = {
@@ -57,6 +65,29 @@ export const DEFAULT_RETOUCH_ADJUSTMENTS: RetouchAdjustments = {
   saturation: 100,
   sharpness: 0
 };
+
+export const DEFAULT_RETOUCH_COMPOSITION: RetouchComposition = {
+  foregroundScalePercent: 100,
+  backgroundEnabled: false,
+  backgroundExpansionMm: 3,
+  backgroundScalePercent: 100,
+  backgroundBlurPx: 0
+};
+
+export function calculateCenteredLayerBounds(input: {
+  canvasWidth: number;
+  canvasHeight: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  scalePercent: number;
+  expansionPx?: number;
+}) {
+  const scale = Math.max(0.1, input.scalePercent / 100);
+  const expansion = Math.max(0, input.expansionPx ?? 0);
+  const width = input.sourceWidth * scale + expansion * 2;
+  const height = input.sourceHeight * scale + expansion * 2;
+  return { x: (input.canvasWidth - width) / 2, y: (input.canvasHeight - height) / 2, width, height };
+}
 
 export function findContiguousColorRegion(input: {
   pixels: Uint8ClampedArray;

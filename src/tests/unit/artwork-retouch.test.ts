@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRetouchedArtworkFileName, createRetouchShape, findContiguousColorRegion, moveRetouchShape, normalizeSelection, resizeRetouchShape, sampledRgbToHex } from "@/domain/artwork/retouch";
+import { calculateCenteredLayerBounds, createRetouchedArtworkFileName, createRetouchShape, findContiguousColorRegion, moveRetouchShape, normalizeSelection, resizeRetouchShape, sampledRgbToHex } from "@/domain/artwork/retouch";
 import { retouchDraftSchema } from "@/services/artwork/retouch-draft";
 
 describe("artwork retouch", () => {
@@ -63,5 +63,23 @@ describe("artwork retouch", () => {
   it("preserves proportions while resizing circles", () => {
     const circle = createRetouchShape({ shapeType: "circle", start: { x: 20, y: 20 }, end: { x: 80, y: 80 }, color: "#ffffff", width: 6 });
     expect(resizeRetouchShape(circle, "se", { x: 120, y: 70 }).bounds).toEqual({ x: 20, y: 20, width: 100, height: 100 });
+  });
+
+  it("centers and expands a duplicated background independently from the main artwork", () => {
+    expect(calculateCenteredLayerBounds({ canvasWidth: 1400, canvasHeight: 1000, sourceWidth: 1000, sourceHeight: 600, scalePercent: 110, expansionPx: 30 }))
+      .toEqual({ x: 120, y: 140, width: 1160, height: 720 });
+    expect(calculateCenteredLayerBounds({ canvasWidth: 1400, canvasHeight: 1000, sourceWidth: 1000, sourceHeight: 600, scalePercent: 80 }))
+      .toEqual({ x: 300, y: 260, width: 800, height: 480 });
+  });
+
+  it("accepts persisted image composition and rejects unsafe scales", () => {
+    const draft = {
+      version: 1,
+      operations: [],
+      adjustments: { brightness: 100, contrast: 100, saturation: 100, sharpness: 0 },
+      composition: { foregroundScalePercent: 90, backgroundEnabled: true, backgroundExpansionMm: 4, backgroundScalePercent: 115, backgroundBlurPx: 8 }
+    };
+    expect(retouchDraftSchema.safeParse(draft).success).toBe(true);
+    expect(retouchDraftSchema.safeParse({ ...draft, composition: { ...draft.composition, foregroundScalePercent: 500 } }).success).toBe(false);
   });
 });

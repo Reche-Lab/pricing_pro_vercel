@@ -22,7 +22,14 @@ export const retouchDraftSchema = z.object({
   adjustments: z.object({
     brightness: z.number().int().min(50).max(150), contrast: z.number().int().min(50).max(150),
     saturation: z.number().int().min(0).max(200), sharpness: z.number().int().min(0).max(100)
-  })
+  }),
+  composition: z.object({
+    foregroundScalePercent: z.number().int().min(25).max(250),
+    backgroundEnabled: z.boolean(),
+    backgroundExpansionMm: z.number().finite().min(0).max(50),
+    backgroundScalePercent: z.number().int().min(50).max(250),
+    backgroundBlurPx: z.number().int().min(0).max(80)
+  }).optional()
 });
 
 export const retouchDraftBodySchema = z.object({ draft: retouchDraftSchema });
