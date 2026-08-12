@@ -223,7 +223,7 @@ export function MelhorEnvioQuoteLabelActions({
   }
 
   return (
-    <div className="grid gap-4 rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
+    <div className="grid min-w-0 gap-4 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 sm:p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="flex items-center gap-2 text-sm font-semibold text-white">

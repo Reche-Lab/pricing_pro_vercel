@@ -89,8 +89,8 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
         reopenedAt={detail.quote.edit_reopened_at}
         reopenedBy={detail.quote.edit_reopened_by_name}
       />
-      <div className="grid gap-6 xl:grid-cols-[minmax(320px,0.8fr)_minmax(560px,1.2fr)] 2xl:grid-cols-[minmax(360px,0.75fr)_minmax(720px,1.25fr)]">
-        <section className="grid h-fit gap-4">
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] 2xl:grid-cols-[minmax(0,3fr)_minmax(0,5fr)]">
+        <section className="grid min-w-0 h-fit gap-4">
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
             <div className="grid gap-4">
               <div>
@@ -239,17 +239,17 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
           <MelhorEnvioPayloadPreview quoteId={quoteId} />
         </section>
 
-        <aside className="grid h-fit gap-4">
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5">
-            <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-              <div>
+        <aside className="grid min-w-0 h-fit gap-4">
+          <div className="min-w-0 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/70 p-4 sm:p-5">
+            <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-end md:justify-between">
+              <div className="min-w-0">
                 <h2 className="font-semibold">Ações</h2>
-                <p className="text-sm text-zinc-500">Gere documentos, compartilhe e envie o orçamento para integrações.</p>
+                <p className="break-words text-sm text-zinc-500">Gere documentos, compartilhe e envie o orçamento para integrações.</p>
               </div>
               <p className="text-lg font-semibold text-white">{brl.format(Number(detail.quote.grand_total))}</p>
             </div>
             <div className="mt-5 grid gap-5">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
                 <Link
                   className="focus-ring inline-flex min-h-10 items-center justify-center rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-950/60"
                   href={`/api/quotes/${quoteId}/pdf`}

@@ -478,7 +478,7 @@ export function OlistQuoteActions({
   }
 
   return (
-    <div className="grid gap-4 rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
+    <div className="grid min-w-0 gap-4 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 sm:p-4">
       <div>
         <p className="text-sm font-semibold text-white">Fluxo Olist</p>
         <p className="mt-1 flex items-start gap-2 text-xs text-zinc-500">
@@ -719,7 +719,7 @@ function OlistConnectionBanner({
               : "Este tenant tem Olist configurado, mas precisa renovar o OAuth antes de continuar.")}
           </p>
           {connection?.clientId || connection?.apiBaseUrl ? (
-            <p className="mt-1 text-[11px] leading-5 opacity-70">
+            <p className="mt-1 break-all text-[11px] leading-5 opacity-70">
               {[connection.clientId ? `Client ID: ${connection.clientId}` : null, connection.apiBaseUrl].filter(Boolean).join(" | ")}
             </p>
           ) : null}
