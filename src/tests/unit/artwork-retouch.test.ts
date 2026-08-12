@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRetouchedArtworkFileName, findContiguousColorRegion, normalizeSelection, sampledRgbToHex } from "@/domain/artwork/retouch";
+import { createRetouchedArtworkFileName, createRetouchShape, findContiguousColorRegion, normalizeSelection, sampledRgbToHex } from "@/domain/artwork/retouch";
 import { retouchDraftSchema } from "@/services/artwork/retouch-draft";
 
 describe("artwork retouch", () => {
@@ -39,5 +39,18 @@ describe("artwork retouch", () => {
     };
     expect(retouchDraftSchema.safeParse(draft).success).toBe(true);
     expect(retouchDraftSchema.safeParse({ ...draft, adjustments: { ...draft.adjustments, sharpness: 999 } }).success).toBe(false);
+  });
+
+  it("creates proportional hollow circles and squares in every drag direction", () => {
+    expect(createRetouchShape({ shapeType: "circle", start: { x: 100, y: 80 }, end: { x: 40, y: 30 }, color: "#ffffff", width: 12 }).bounds)
+      .toEqual({ x: 40, y: 20, width: 60, height: 60 });
+    expect(createRetouchShape({ shapeType: "square", start: { x: 10, y: 10 }, end: { x: 40, y: 70 }, color: "#ffffff", width: 8 }).bounds)
+      .toEqual({ x: 10, y: 10, width: 60, height: 60 });
+  });
+
+  it("validates hollow geometric shapes in persisted drafts", () => {
+    const shape = createRetouchShape({ shapeType: "triangle", start: { x: 10, y: 20 }, end: { x: 110, y: 90 }, color: "#abcdef", width: 16 });
+    const draft = { version: 1, operations: [shape], adjustments: { brightness: 100, contrast: 100, saturation: 100, sharpness: 0 } };
+    expect(retouchDraftSchema.safeParse(draft).success).toBe(true);
   });
 });

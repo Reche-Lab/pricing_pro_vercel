@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
-  Brush, Check, Eraser, Eye, Grab, Loader2, PaintBucket, Pipette, Redo2,
-  RotateCcw, Scan, SlidersHorizontal, Undo2, X, ZoomIn, ZoomOut
+  Brush, Check, Circle, Eraser, Eye, Grab, Loader2, PaintBucket, Pipette, RectangleHorizontal, Redo2,
+  RotateCcw, Scan, Shapes, SlidersHorizontal, Square, Triangle, Undo2, X, ZoomIn, ZoomOut
 } from "lucide-react";
 import { createShapePath, geometryLabel, type PrintGeometry } from "@/domain/artwork/geometry";
 import {
   createRetouchedArtworkFileName,
+  createRetouchShape,
   DEFAULT_RETOUCH_ADJUSTMENTS,
   findContiguousColorRegion,
   normalizeSelection,
@@ -18,10 +19,12 @@ import {
   type RetouchOperation,
   type RetouchPoint,
   type RetouchSelection,
+  type RetouchShape,
+  type RetouchShapeType,
   type RetouchStroke
 } from "@/domain/artwork/retouch";
 
-type Tool = "brush" | "eyedropper" | "eraser" | "fill" | "select" | "pan";
+type Tool = "brush" | "eyedropper" | "eraser" | "fill" | "shape" | "select" | "pan";
 type Workspace = { width: number; height: number; sourceWidth: number; sourceHeight: number; offsetX: number; offsetY: number };
 const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
 const WORKSPACE_PADDING_RATIO = 0.18;
@@ -48,9 +51,12 @@ export function ArtworkRetouchEditor({
   const adjustedSourceRef = useRef<HTMLCanvasElement | null>(null);
   const editLayerRef = useRef<HTMLCanvasElement | null>(null);
   const currentStrokeRef = useRef<RetouchStroke | null>(null);
+  const currentShapeRef = useRef<RetouchShape | null>(null);
+  const shapeStartRef = useRef<RetouchPoint | null>(null);
   const selectionStartRef = useRef<RetouchPoint | null>(null);
   const panRef = useRef<{ clientX: number; clientY: number; scrollLeft: number; scrollTop: number } | null>(null);
   const toolBeforeSpaceRef = useRef<Tool | null>(null);
+  const toolBeforeEyedropperRef = useRef<Tool>("brush");
   const draftLoadedRef = useRef(false);
   const visibleOperationsRef = useRef<RetouchOperation[]>([]);
   const comparisonRef = useRef<number | null>(null);
@@ -58,6 +64,7 @@ export function ArtworkRetouchEditor({
   const [color, setColor] = useState("#ffffff");
   const [brushWidth, setBrushWidth] = useState(32);
   const [fillTolerance, setFillTolerance] = useState(18);
+  const [shapeType, setShapeType] = useState<RetouchShapeType>("circle");
   const [zoom, setZoom] = useState(1);
   const [operations, setOperations] = useState<RetouchOperation[]>([]);
   const [redoStack, setRedoStack] = useState<RetouchOperation[]>([]);
@@ -179,8 +186,9 @@ export function ArtworkRetouchEditor({
       if (key === " ") { event.preventDefault(); toolBeforeSpaceRef.current = tool; setTool("pan"); }
       else if (key === "b") chooseTool("brush");
       else if (key === "e") chooseTool("eraser");
-      else if (key === "i") chooseTool("eyedropper");
+      else if (key === "i") activateEyedropper();
       else if (key === "g") chooseTool("fill");
+      else if (key === "s") chooseTool("shape");
       else if (key === "r") chooseTool("select");
       else if (key === "escape") { setSelection(null); setPendingFill(null); }
     }
@@ -190,6 +198,7 @@ export function ArtworkRetouchEditor({
   });
 
   function chooseTool(next: Tool) { setPendingFill(null); setTool(next); }
+  function activateEyedropper() { if (tool !== "eyedropper") toolBeforeEyedropperRef.current = tool; chooseTool("eyedropper"); }
   function pointerPosition(event: ReactPointerEvent<HTMLCanvasElement>): RetouchPoint {
     const canvas = canvasRef.current; if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
@@ -218,6 +227,12 @@ export function ArtworkRetouchEditor({
       selectionStartRef.current = point; setSelection({ x: point.x, y: point.y, width: 0, height: 0 });
       event.currentTarget.setPointerCapture(event.pointerId); return;
     }
+    if (tool === "shape") {
+      shapeStartRef.current = point;
+      currentShapeRef.current = createRetouchShape({ shapeType, start: point, end: point, color, width: brushWidth, selection });
+      event.currentTarget.setPointerCapture(event.pointerId);
+      redraw([...operations, currentShapeRef.current], comparison); return;
+    }
     currentStrokeRef.current = { kind: "stroke", tool, color, width: brushWidth, points: [point], selection };
     event.currentTarget.setPointerCapture(event.pointerId);
     redraw([...operations, currentStrokeRef.current], comparison);
@@ -234,6 +249,11 @@ export function ArtworkRetouchEditor({
       const point = pointerPosition(event); const start = selectionStartRef.current;
       setSelection(normalizeSelection({ x: start.x, y: start.y, width: point.x - start.x, height: point.y - start.y })); return;
     }
+    if (shapeStartRef.current && tool === "shape") {
+      const point = pointerPosition(event);
+      currentShapeRef.current = createRetouchShape({ shapeType, start: shapeStartRef.current, end: point, color, width: brushWidth, selection });
+      redraw([...operations, currentShapeRef.current], comparison); return;
+    }
     const stroke = currentStrokeRef.current; if (!stroke) return;
     const point = pointerPosition(event); const previous = stroke.points[stroke.points.length - 1];
     if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < Math.max(1, stroke.width / 8)) return;
@@ -243,13 +263,20 @@ export function ArtworkRetouchEditor({
   function finishPointer(event: ReactPointerEvent<HTMLCanvasElement>) {
     panRef.current = null; selectionStartRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    const shape = currentShapeRef.current;
+    shapeStartRef.current = null; currentShapeRef.current = null;
+    if (shape) {
+      if (shape.bounds.width >= 2 && shape.bounds.height >= 2) { setOperations((current) => [...current, shape]); setRedoStack([]); }
+      else redraw(operations, comparison);
+      return;
+    }
     const stroke = currentStrokeRef.current; if (!stroke) return;
     currentStrokeRef.current = null; setOperations((current) => [...current, stroke]); setRedoStack([]);
   }
   function pickColor(point: RetouchPoint) {
     const canvas = canvasRef.current; const context = canvas?.getContext("2d", { willReadFrequently: true }); if (!context) return;
     const pixel = context.getImageData(Math.floor(point.x), Math.floor(point.y), 1, 1).data;
-    setColor(sampledRgbToHex(pixel[0], pixel[1], pixel[2])); setTool("brush");
+    setColor(sampledRgbToHex(pixel[0], pixel[1], pixel[2])); setTool(toolBeforeEyedropperRef.current);
   }
   function applyPendingFill() { if (!pendingFill) return; setOperations((current) => [...current, pendingFill]); setRedoStack([]); setPendingFill(null); }
   function undo() { setPendingFill(null); setOperations((current) => { const last = current.at(-1); if (!last) return current; setRedoStack((redoEntries) => [...redoEntries, last]); return current.slice(0, -1); }); }
@@ -272,7 +299,7 @@ export function ArtworkRetouchEditor({
   }
 
   const guides = useMemo(() => createGuideLayout(workspace, geometry, bleedMm, safeMarginMm), [bleedMm, geometry, safeMarginMm, workspace]);
-  const cursorStyle = tool === "eyedropper" || tool === "fill" ? "crosshair" : tool === "pan" ? "grab" : tool === "select" ? "crosshair" : "none";
+  const cursorStyle = tool === "eyedropper" || tool === "fill" || tool === "shape" ? "crosshair" : tool === "pan" ? "grab" : tool === "select" ? "crosshair" : "none";
   const checkerboard = { backgroundColor: "#f4f4f5", backgroundImage: "linear-gradient(45deg,#d4d4d8 25%,transparent 25%),linear-gradient(-45deg,#d4d4d8 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#d4d4d8 75%),linear-gradient(-45deg,transparent 75%,#d4d4d8 75%)", backgroundSize: "24px 24px", backgroundPosition: "0 0,0 12px,12px -12px,-12px 0" };
 
   return <div className="fixed inset-0 z-[80] grid place-items-center overflow-hidden bg-black/85 p-2 backdrop-blur-sm sm:p-5">
@@ -282,10 +309,11 @@ export function ArtworkRetouchEditor({
       <div className="grid min-h-0 lg:grid-cols-[248px_minmax(0,1fr)]">
         <aside className="order-2 overflow-y-auto border-t border-zinc-800 p-3 lg:order-1 lg:border-r lg:border-t-0 lg:p-4">
           <p className="mb-2 text-[11px] font-semibold uppercase text-zinc-500">Ferramentas</p>
-          <div className="grid grid-cols-3 gap-2"><ToolButton active={tool === "brush"} icon={<Brush size={15} />} label="Pincel" onClick={() => chooseTool("brush")} /><ToolButton active={tool === "eyedropper"} icon={<Pipette size={15} />} label="Capturar" onClick={() => chooseTool("eyedropper")} /><ToolButton active={tool === "eraser"} icon={<Eraser size={15} />} label="Borracha" onClick={() => chooseTool("eraser")} /><ToolButton active={tool === "fill"} icon={<PaintBucket size={15} />} label="Preencher" onClick={() => chooseTool("fill")} /><ToolButton active={tool === "select"} icon={<Scan size={15} />} label="Selecionar" onClick={() => chooseTool("select")} /><ToolButton active={tool === "pan"} icon={<Grab size={15} />} label="Mover" onClick={() => chooseTool("pan")} /></div>
+          <div className="grid grid-cols-3 gap-2"><ToolButton active={tool === "brush"} icon={<Brush size={15} />} label="Pincel" onClick={() => chooseTool("brush")} /><ToolButton active={tool === "eyedropper"} icon={<Pipette size={15} />} label="Capturar" onClick={activateEyedropper} /><ToolButton active={tool === "eraser"} icon={<Eraser size={15} />} label="Borracha" onClick={() => chooseTool("eraser")} /><ToolButton active={tool === "fill"} icon={<PaintBucket size={15} />} label="Preencher" onClick={() => chooseTool("fill")} /><ToolButton active={tool === "shape"} icon={<Shapes size={15} />} label="Formato" onClick={() => chooseTool("shape")} /><ToolButton active={tool === "select"} icon={<Scan size={15} />} label="Selecionar" onClick={() => chooseTool("select")} /><ToolButton active={tool === "pan"} icon={<Grab size={15} />} label="Mover" onClick={() => chooseTool("pan")} /></div>
           <div className="mt-5 grid gap-4">
-            <label><span className="mb-2 block text-xs font-medium text-zinc-300">Cor ativa</span><span className="flex h-10 items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-2"><input aria-label="Selecionar cor" className="h-7 w-9 cursor-pointer border-0 bg-transparent p-0" type="color" value={color} onChange={(event) => { setColor(event.target.value); chooseTool("brush"); }} /><span className="font-mono text-xs uppercase text-zinc-300">{color}</span></span></label>
-            <label><span className="mb-2 flex justify-between gap-2 text-xs font-medium text-zinc-300"><span>Espessura</span><span className="tabular-nums text-cyan-300">{brushWidth}px</span></span><input className="w-full accent-cyan-400" max="240" min="2" step="2" type="range" value={brushWidth} onChange={(event) => setBrushWidth(Number(event.target.value))} /></label>
+            <label><span className="mb-2 block text-xs font-medium text-zinc-300">Cor ativa</span><span className="flex h-10 items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-2"><input aria-label="Selecionar cor" className="h-7 w-9 cursor-pointer border-0 bg-transparent p-0" type="color" value={color} onChange={(event) => setColor(event.target.value)} /><span className="font-mono text-xs uppercase text-zinc-300">{color}</span><button className="focus-ring ml-auto grid h-7 w-7 place-items-center rounded text-zinc-400 hover:bg-zinc-800 hover:text-cyan-200" title="Capturar cor da imagem" type="button" onClick={activateEyedropper}><Pipette size={14} /></button></span></label>
+            {tool === "shape" ? <div><span className="mb-2 block text-xs font-medium text-zinc-300">Formato vazado</span><div className="grid grid-cols-4 gap-1.5"><ShapeButton active={shapeType === "circle"} icon={<Circle size={16} />} label="Círculo" onClick={() => setShapeType("circle")} /><ShapeButton active={shapeType === "square"} icon={<Square size={16} />} label="Quadrado" onClick={() => setShapeType("square")} /><ShapeButton active={shapeType === "rectangle"} icon={<RectangleHorizontal size={17} />} label="Retângulo" onClick={() => setShapeType("rectangle")} /><ShapeButton active={shapeType === "triangle"} icon={<Triangle size={16} />} label="Triângulo" onClick={() => setShapeType("triangle")} /></div><span className="mt-2 block text-[11px] leading-4 text-zinc-500">Arraste sobre a imagem. Somente o contorno será pintado.</span></div> : null}
+            <label><span className="mb-2 flex justify-between gap-2 text-xs font-medium text-zinc-300"><span>{tool === "shape" ? "Espessura do contorno" : "Espessura"}</span><span className="tabular-nums text-cyan-300">{brushWidth}px</span></span><input className="w-full accent-cyan-400" max="240" min="2" step="2" type="range" value={brushWidth} onChange={(event) => setBrushWidth(Number(event.target.value))} /></label>
             {tool === "fill" || pendingFill ? <label><span className="mb-2 flex justify-between gap-2 text-xs font-medium text-zinc-300"><span>Tolerância da cor</span><span className="tabular-nums text-cyan-300">{fillTolerance}</span></span><input className="w-full accent-cyan-400" max="100" min="0" type="range" value={fillTolerance} onChange={(event) => { setFillTolerance(Number(event.target.value)); setPendingFill(null); }} /><span className="mt-1 block text-[11px] text-zinc-600">Valores maiores incluem variações próximas da cor clicada.</span></label> : null}
             {pendingFill ? <div className="rounded-md border border-amber-700/50 bg-amber-950/30 p-3"><p className="text-xs text-amber-200">Prévia do preenchimento</p><div className="mt-2 flex gap-2"><button className="focus-ring flex-1 rounded-md bg-amber-300 px-2 py-1.5 text-xs font-semibold text-amber-950" type="button" onClick={applyPendingFill}>Aplicar</button><button className="focus-ring flex-1 rounded-md border border-amber-800 px-2 py-1.5 text-xs text-amber-200" type="button" onClick={() => setPendingFill(null)}>Cancelar</button></div></div> : null}
             {selection ? <div className="rounded-md border border-cyan-900 bg-cyan-950/20 p-2 text-xs text-cyan-200"><p>Ferramentas limitadas à seleção atual.</p><button className="mt-1 underline" type="button" onClick={() => setSelection(null)}>Remover seleção</button></div> : null}
@@ -300,12 +328,13 @@ export function ArtworkRetouchEditor({
         </aside>
         <main className="relative order-1 grid min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-zinc-900 lg:order-2"><div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2 text-[11px] text-zinc-400"><span>Pinte também na área quadriculada para estender o fundo e criar sangria.</span><span>{workspace ? `${workspace.width} × ${workspace.height}px · ${geometry ? geometryLabel(geometry) : "sem molde"}` : "Carregando..."}</span></div><div ref={viewportRef} className="relative min-h-0 overflow-auto p-4 sm:p-7"><div className="relative mx-auto" style={{ width: `${zoom * 100}%`, minWidth: zoom > 1 ? `${zoom * 100}%` : undefined, ...checkerboard }}><canvas ref={canvasRef} aria-label={`Editor da arte ${artworkName}`} className="block h-auto w-full touch-none shadow-[0_12px_40px_rgba(0,0,0,.45)]" style={{ cursor: cursorStyle }} onPointerCancel={finishPointer} onPointerDown={onPointerDown} onPointerEnter={updateCursor} onPointerLeave={() => setCursor(null)} onPointerMove={onPointerMove} onPointerUp={finishPointer} />{workspace ? <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${workspace.width} ${workspace.height}`}><rect fill="none" height={workspace.sourceHeight} stroke="rgba(255,255,255,.55)" strokeDasharray="12 8" strokeWidth="2" width={workspace.sourceWidth} x={workspace.offsetX} y={workspace.offsetY} />{showGuides && guides ? <><g transform={`translate(${guides.bleed.x} ${guides.bleed.y})`}><path d={guides.bleed.path} fill="none" stroke="rgba(251,191,36,.95)" strokeDasharray="12 8" strokeWidth="2" /></g><g transform={`translate(${guides.cut.x} ${guides.cut.y})`}><path d={guides.cut.path} fill="none" stroke="rgba(239,68,68,.95)" strokeDasharray="10 7" strokeWidth="2" /></g><g transform={`translate(${guides.safe.x} ${guides.safe.y})`}><path d={guides.safe.path} fill="none" stroke="rgba(103,232,249,.95)" strokeDasharray="10 7" strokeWidth="2" /></g></> : null}{selection ? <rect fill="rgba(34,211,238,.08)" height={selection.height} stroke="rgba(34,211,238,.95)" strokeDasharray="8 6" strokeWidth="2" width={selection.width} x={selection.x} y={selection.y} /> : null}{comparison !== null ? <line stroke="white" strokeWidth="3" x1={workspace.width * comparison / 100} x2={workspace.width * comparison / 100} y1="0" y2={workspace.height} /> : null}</svg> : null}</div>{showGuides && geometry ? <div className="mt-3 flex flex-wrap justify-center gap-4 text-[11px] text-zinc-400"><span className="text-amber-300">--- sangria</span><span className="text-red-300">--- corte</span><span className="text-cyan-300">--- área segura</span><span className="text-zinc-300">--- limite da imagem original</span></div> : null}{loading ? <div className="absolute inset-0 grid place-items-center bg-zinc-900/80 text-sm text-zinc-300"><span className="inline-flex items-center gap-2"><Loader2 className="animate-spin" size={18} /> Carregando imagem...</span></div> : null}</div></main>
       </div>
-      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 px-4 py-3 sm:px-5"><div className="min-w-0">{error ? <p className="text-sm text-red-300">{error}</p> : <p className="text-xs text-zinc-500">Atalhos: B pincel · E borracha · I conta-gotas · G preencher · R selecionar · Espaço mover · Ctrl+Z desfazer.</p>}</div><div className="flex gap-2"><button className="focus-ring rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-300" disabled={saving} type="button" onClick={onClose}>Fechar</button><button className="focus-ring inline-flex items-center gap-2 rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-cyan-950 disabled:opacity-50" disabled={saving || loading || !hasChanges || Boolean(pendingFill)} type="button" onClick={save}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Salvar nova versão</button></div></footer>
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 px-4 py-3 sm:px-5"><div className="min-w-0">{error ? <p className="text-sm text-red-300">{error}</p> : <p className="text-xs text-zinc-500">Atalhos: B pincel · E borracha · I conta-gotas · G preencher · S formato · R selecionar · Espaço mover · Ctrl+Z desfazer.</p>}</div><div className="flex gap-2"><button className="focus-ring rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-300" disabled={saving} type="button" onClick={onClose}>Fechar</button><button className="focus-ring inline-flex items-center gap-2 rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-cyan-950 disabled:opacity-50" disabled={saving || loading || !hasChanges || Boolean(pendingFill)} type="button" onClick={save}>{saving ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Salvar nova versão</button></div></footer>
     </div>
   </div>;
 }
 
 function ToolButton({ active, icon, label, onClick }: { active: boolean; icon: ReactNode; label: string; onClick: () => void }) { return <button aria-pressed={active} className={`focus-ring inline-flex h-10 items-center justify-center gap-1 rounded-md border px-1 text-[11px] ${active ? "border-cyan-400 bg-cyan-400/10 text-cyan-200" : "border-zinc-700 text-zinc-400 hover:bg-zinc-800"}`} type="button" onClick={onClick}>{icon}{label}</button>; }
+function ShapeButton({ active, icon, label, onClick }: { active: boolean; icon: ReactNode; label: string; onClick: () => void }) { return <button aria-label={label} aria-pressed={active} className={`focus-ring grid h-9 place-items-center rounded-md border ${active ? "border-cyan-400 bg-cyan-400/10 text-cyan-200" : "border-zinc-700 text-zinc-500 hover:bg-zinc-800"}`} title={label} type="button" onClick={onClick}>{icon}</button>; }
 function Adjustment({ label, min, max, value, onChange }: { label: string; min: number; max: number; value: number; onChange: (value: number) => void }) { return <label><span className="mb-1 flex justify-between text-[11px] text-zinc-400"><span>{label}</span><span>{value}%</span></span><input className="w-full accent-violet-400" max={max} min={min} type="range" value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>; }
 function DraftStatus({ status }: { status: "loading" | "saved" | "saving" | "error" | "idle" }) { if (status === "idle") return null; return <span className={`text-[11px] ${status === "error" ? "text-red-300" : "text-zinc-500"}`}>{status === "loading" ? "Carregando rascunho..." : status === "saving" ? "Salvando rascunho..." : status === "saved" ? "Rascunho salvo" : "Falha no autosave"}</span>; }
 
@@ -336,7 +365,8 @@ function rebuildEditLayer(context: CanvasRenderingContext2D, operations: Retouch
   context.clearRect(0, 0, context.canvas.width, context.canvas.height);
   for (const operation of operations) {
     if (operation.kind === "stroke") drawStroke(context, operation);
-    else applyFill(context, base, operation);
+    else if (operation.kind === "fill") applyFill(context, base, operation);
+    else drawOutlineShape(context, operation);
   }
 }
 function drawStroke(context: CanvasRenderingContext2D, stroke: RetouchStroke) {
@@ -353,6 +383,17 @@ function applyFill(editContext: CanvasRenderingContext2D, base: HTMLCanvasElemen
   const editImage = editContext.getImageData(0, 0, composite.width, composite.height); const [red, green, blue] = hexToRgb(fill.color);
   for (let index = 0; index < mask.length; index += 1) if (mask[index]) { const offset = index * 4; editImage.data[offset] = red; editImage.data[offset + 1] = green; editImage.data[offset + 2] = blue; editImage.data[offset + 3] = 255; }
   editContext.putImageData(editImage, 0, 0);
+}
+function drawOutlineShape(context: CanvasRenderingContext2D, shape: RetouchShape) {
+  const bounds = normalizeSelection(shape.bounds);
+  if (bounds.width <= 0 || bounds.height <= 0) return;
+  context.save(); clipSelection(context, shape.selection);
+  context.globalCompositeOperation = "source-over"; context.strokeStyle = shape.color; context.lineWidth = shape.width; context.lineJoin = "round"; context.lineCap = "round";
+  context.beginPath();
+  if (shape.shapeType === "circle") context.ellipse(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, bounds.width / 2, bounds.height / 2, 0, 0, Math.PI * 2);
+  else if (shape.shapeType === "triangle") { context.moveTo(bounds.x + bounds.width / 2, bounds.y); context.lineTo(bounds.x + bounds.width, bounds.y + bounds.height); context.lineTo(bounds.x, bounds.y + bounds.height); context.closePath(); }
+  else context.rect(bounds.x, bounds.y, bounds.width, bounds.height);
+  context.stroke(); context.restore();
 }
 function clipSelection(context: CanvasRenderingContext2D, selection?: RetouchSelection | null) { if (!selection) return; const normalized = normalizeSelection(selection); context.beginPath(); context.rect(normalized.x, normalized.y, normalized.width, normalized.height); context.clip(); }
 function createGuideLayout(workspace: Workspace | null, geometry: PrintGeometry | null | undefined, bleedMm: number, safeMarginMm: number) {

@@ -33,7 +33,16 @@ export type RetouchFill = {
   tolerance: number;
   selection?: RetouchSelection | null;
 };
-export type RetouchOperation = RetouchStroke | RetouchFill;
+export type RetouchShapeType = "circle" | "square" | "rectangle" | "triangle";
+export type RetouchShape = {
+  kind: "shape";
+  shapeType: RetouchShapeType;
+  bounds: RetouchSelection;
+  color: string;
+  width: number;
+  selection?: RetouchSelection | null;
+};
+export type RetouchOperation = RetouchStroke | RetouchFill | RetouchShape;
 export type RetouchAdjustments = { brightness: number; contrast: number; saturation: number; sharpness: number };
 export type RetouchDraft = {
   version: 1;
@@ -102,6 +111,26 @@ export function normalizeSelection(selection: RetouchSelection): RetouchSelectio
     width: Math.abs(selection.width),
     height: Math.abs(selection.height)
   };
+}
+
+export function createRetouchShape(input: {
+  shapeType: RetouchShapeType;
+  start: RetouchPoint;
+  end: RetouchPoint;
+  color: string;
+  width: number;
+  selection?: RetouchSelection | null;
+}): RetouchShape {
+  const width = input.end.x - input.start.x;
+  const height = input.end.y - input.start.y;
+  if (input.shapeType === "circle" || input.shapeType === "square") {
+    const size = Math.max(Math.abs(width), Math.abs(height));
+    return {
+      kind: "shape", shapeType: input.shapeType, color: input.color, width: input.width, selection: input.selection,
+      bounds: { x: width < 0 ? input.start.x - size : input.start.x, y: height < 0 ? input.start.y - size : input.start.y, width: size, height: size }
+    };
+  }
+  return { kind: "shape", shapeType: input.shapeType, color: input.color, width: input.width, selection: input.selection, bounds: normalizeSelection({ x: input.start.x, y: input.start.y, width, height }) };
 }
 
 function colorWithinTolerance(pixels: Uint8ClampedArray, offset: number, target: number[], tolerance: number) {
