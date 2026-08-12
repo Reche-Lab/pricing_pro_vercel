@@ -24,9 +24,23 @@ export async function POST(request: Request, route: { params: Promise<{ quoteId:
   const allowed = session.role === "owner" || await userHasPermission(session.userId, session.tenantId, "quotes:approve");
   if (!allowed) return NextResponse.json({ ok: false, error: "Você não possui permissão para reabrir orçamentos aceitos." }, { status: 403 });
   try {
+    console.info("Quote administrative editing requested.", {
+      quoteId: params.data.quoteId,
+      tenantId: session.tenantId,
+      userId: session.userId,
+      action: body.data.action,
+      reasonLength: body.data.reason?.length ?? 0
+    });
     const result = await setQuoteAdministrativeEditing({ userId: session.userId, tenantId: session.tenantId, quoteId: params.data.quoteId, action: body.data.action, reason: body.data.reason });
+    console.info("Quote administrative editing updated.", { quoteId: params.data.quoteId, tenantId: session.tenantId, action: body.data.action });
     return NextResponse.json({ ok: true, result });
   } catch (error) {
+    console.error("Quote administrative editing failed.", {
+      quoteId: params.data.quoteId,
+      tenantId: session.tenantId,
+      action: body.data.action,
+      message: error instanceof Error ? error.message : "Erro desconhecido"
+    });
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Não foi possível alterar o bloqueio do orçamento." }, { status: 409 });
   }
 }

@@ -57,6 +57,7 @@ Status atualizado durante a refatoracao inicial.
 - [x] Criar autenticação Bearer token para `/api/agent/v1`.
 - [x] Criar endpoints agent para produtos, cálculo, frete, orçamento composto, PDF, WhatsApp e link público.
 - [x] Proteger links públicos com expiração fixa de 3 dias, revogação manual e OTP opcional por e-mail.
+- [x] Permitir que administradores liberem orçamentos aprovados para edição mediante observação obrigatória e auditoria.
 - [x] Recuperar o link público ativo na área administrativa usando token criptografado em repouso.
 - [x] Permitir desconto percentual ou fixo no orçamento, com motivo, histórico, PDF, WhatsApp e integração Olist.
 - [x] Aplicar rate limit nos endpoints públicos de decisão, PDF, artes e assistente criativo.
@@ -170,7 +171,7 @@ Resultado:
 
 - lint passou;
 - typecheck passou;
-- testes passaram: 91 testes em 22 arquivos;
+- testes passaram: 124 testes em 30 arquivos;
 - build Next passou.
 
 ## Acoes Manuais Pendentes
