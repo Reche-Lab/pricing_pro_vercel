@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Activity,
   Calculator,
+  ChevronDown,
   CircleDollarSign,
   Clipboard,
   FileText,
@@ -1162,9 +1163,9 @@ export function PricingCalculator({
 
   return (
     <>
-    <section className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl shadow-zinc-950/20">
+    <section className="w-full max-w-full min-w-0 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl shadow-zinc-950/20">
       <div className="border-b border-zinc-800 bg-zinc-950 px-4 py-4 sm:px-5 sm:py-5 md:px-6">
-        <div className="grid gap-5 xl:grid-cols-[1fr_auto] xl:items-start">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
           <div className="min-w-0">
             <div className="mb-2 flex items-center gap-2 text-sm font-medium text-amber-400">
               <Calculator size={18} />
@@ -1176,9 +1177,9 @@ export function PricingCalculator({
             </p>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2 xl:w-[520px]">
+          <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:w-[520px]">
             <button
-              className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-md bg-amber-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+              className="focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-amber-500 px-4 py-2 text-center text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
               disabled={quoteActionsDisabled || customerHasValidationErrors || quickState === "creating_pdf"}
               type="button"
               onClick={generateQuickPdf}
@@ -1187,7 +1188,7 @@ export function PricingCalculator({
               {quickState === "creating_pdf" ? "Gerando..." : "Gerar PDF"}
             </button>
             <button
-              className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-md border border-zinc-700 px-4 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:text-zinc-500"
+              className="focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-zinc-700 px-4 py-2 text-center text-sm font-semibold text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:text-zinc-500"
               disabled={quoteActionsDisabled || customerHasValidationErrors || quickState === "copying_text"}
               type="button"
               onClick={copyQuickWhatsAppText}
@@ -1197,7 +1198,7 @@ export function PricingCalculator({
             </button>
             <button
               className={[
-                "focus-ring relative inline-flex h-11 items-center justify-center gap-2 overflow-hidden rounded-md border px-4 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:border-zinc-700 disabled:text-zinc-500 sm:col-span-2",
+                "focus-ring relative inline-flex min-h-11 items-center justify-center gap-2 overflow-hidden rounded-md border px-3 py-2 text-center text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:border-zinc-700 disabled:text-zinc-500 sm:col-span-2 sm:px-4",
                 draftAttention
                   ? "animate-pulse border-amber-300 bg-amber-400/15 text-amber-50 shadow-lg shadow-amber-500/30"
                   : "border-amber-400/40 text-amber-100 hover:bg-amber-400/10"
@@ -1254,8 +1255,8 @@ export function PricingCalculator({
         ) : null}
       </div>
 
-      <div className="grid gap-5 p-4 sm:p-5 md:p-6">
-        <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr_180px]">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 p-3 sm:gap-5 sm:p-5 md:p-6">
+        <div className="grid min-w-0 gap-3 lg:grid-cols-[1.4fr_1fr_180px]">
           <Control label="Produto">
             <select
               className="focus-ring h-11 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-white"
@@ -1296,8 +1297,8 @@ export function PricingCalculator({
           </Control>
         </div>
 
-        <div className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-900/70 p-3 lg:grid-cols-[minmax(220px,1fr)_minmax(280px,1fr)_max-content] lg:items-start">
-          <div>
+        <div className="grid min-w-0 gap-3 rounded-lg border border-zinc-800 bg-zinc-900/70 p-3 lg:grid-cols-[minmax(220px,1fr)_minmax(280px,1fr)_max-content] lg:items-start">
+          <div className="min-w-0">
             <Input
               label="Arte/lote para orcamento composto"
               placeholder="Ex.: Logo azul, Arte cliente A"
@@ -1307,7 +1308,7 @@ export function PricingCalculator({
           </div>
           <div className="min-w-0">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">Arquivo da arte</span>
-            <div className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-2">
+            <div className="flex min-h-10 min-w-0 flex-wrap items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1">
               {draftArtworkFile?.dataUrl.startsWith("data:image/") ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -1320,7 +1321,7 @@ export function PricingCalculator({
                   <ImageIcon size={15} />
                 </span>
               )}
-              <label className="focus-ring inline-flex h-7 shrink-0 cursor-pointer items-center gap-2 rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-800">
+              <label className="focus-ring inline-flex h-7 min-w-0 cursor-pointer items-center gap-2 rounded-md border border-zinc-700 px-2.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 sm:shrink-0 sm:px-3">
                 <Upload size={14} />
                 {draftArtworkFile ? "Trocar" : "Anexar"}
                 <input
@@ -1343,14 +1344,14 @@ export function PricingCalculator({
                 </button>
               ) : null}
             </div>
-            <p className={`mt-1 truncate text-xs ${draftArtworkMessage.startsWith("Arquivo") || draftArtworkMessage.startsWith("Use") ? "text-amber-300" : "text-zinc-500"}`}>
+            <p className={`mt-1 break-all text-xs sm:break-normal ${draftArtworkMessage.startsWith("Arquivo") || draftArtworkMessage.startsWith("Use") ? "text-amber-300" : "text-zinc-500"}`}>
               {draftArtworkMessage || (draftArtworkFile ? `${draftArtworkFile.fileName} · ${formatBytes(draftArtworkFile.fileSize)}` : "Opcional, até 5 MB.")}
             </p>
           </div>
           <div>
             <span className="mb-1 hidden text-xs font-medium uppercase tracking-wide text-transparent lg:block">Ação</span>
             <button
-              className="focus-ring inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-amber-500 px-4 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400 lg:w-auto"
+              className="focus-ring inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-amber-500 px-4 py-2 text-center text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400 lg:w-auto"
               disabled={readonlyMode || (simulatedChanged && !demoMode)}
               type="button"
               onClick={addCurrentItemToDraft}
@@ -1396,7 +1397,7 @@ export function PricingCalculator({
                 onChange={setOlistCustomerLookupTerm}
               />
               <button
-                className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-cyan-300 px-4 text-sm font-semibold text-zinc-950 hover:bg-cyan-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+                className="focus-ring inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-cyan-300 px-4 py-2 text-center text-sm font-semibold text-zinc-950 hover:bg-cyan-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400 lg:w-auto"
                 disabled={demoMode || readonlyMode || olistCustomerLookupState === "loading"}
                 onClick={lookupOlistCustomer}
                 type="button"
@@ -1419,21 +1420,21 @@ export function PricingCalculator({
               <div className="mt-3 grid gap-2">
                 {olistCustomerResults.map((customer, index) => (
                   <button
-                    className="focus-ring rounded-md border border-zinc-800 bg-zinc-950/60 p-3 text-left hover:border-cyan-300/40 hover:bg-zinc-950"
+                    className="focus-ring min-w-0 rounded-md border border-zinc-800 bg-zinc-950/60 p-3 text-left hover:border-cyan-300/40 hover:bg-zinc-950"
                     key={`${customer.id || customer.code || customer.name}-${index}`}
                     onClick={() => applyOlistCustomer(customer)}
                     type="button"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <p className="font-medium text-white">{customer.name || "Cliente sem nome"}</p>
-                        <p className="mt-1 text-xs text-zinc-500">
+                      <div className="min-w-0">
+                        <p className="break-words font-medium text-white">{customer.name || "Cliente sem nome"}</p>
+                        <p className="mt-1 break-all text-xs text-zinc-500 sm:break-words">
                           {[customer.document, customer.email, customer.phone].filter(Boolean).join(" · ") || "Sem documento/e-mail/telefone no retorno"}
                         </p>
                       </div>
                       <span className="rounded-full bg-cyan-300/10 px-2.5 py-1 text-xs text-cyan-100">Usar cliente</span>
                     </div>
-                    <p className="mt-2 text-xs text-zinc-500">
+                    <p className="mt-2 break-words text-xs text-zinc-500">
                       {[customer.addressLine, customer.addressNumber, customer.district, customer.city, customer.state, customer.postalCode]
                         .filter(Boolean)
                         .join(", ") || "Sem endereço no retorno"}
@@ -1671,7 +1672,7 @@ export function PricingCalculator({
             </div>
           ) : null}
           {shippingService === "melhor_envio" ? (
-            <label className="mt-3 flex w-fit items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm text-zinc-300">
+            <label className="mt-3 flex w-full items-start gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm text-zinc-300 sm:w-fit sm:items-center">
               <input
                 checked={includeMelhorEnvioInsurance}
                 className="h-4 w-4 accent-cyan-400"
@@ -1700,16 +1701,16 @@ export function PricingCalculator({
 
         <DetailsPanel icon={<Activity size={16} />} title="Ancoragem de precos & Custos">
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            <div className="inline-flex overflow-hidden rounded-md border border-zinc-700 bg-zinc-950 p-1">
+            <div className="grid w-full grid-cols-2 overflow-hidden rounded-md border border-zinc-700 bg-zinc-950 p-1 sm:inline-grid sm:w-auto">
               <button
-                className={`rounded px-3 py-1.5 text-sm ${simulatedCurve.mode === "interpolated" ? "bg-amber-500 text-zinc-950" : "text-zinc-300 hover:bg-zinc-800"}`}
+                className={`min-h-9 rounded px-2 py-1.5 text-center text-sm sm:px-3 ${simulatedCurve.mode === "interpolated" ? "bg-amber-500 text-zinc-950" : "text-zinc-300 hover:bg-zinc-800"}`}
                 type="button"
                 onClick={() => updateCurveMode("interpolated")}
               >
                 Curva progressiva
               </button>
               <button
-                className={`rounded px-3 py-1.5 text-sm ${simulatedCurve.mode === "step" ? "bg-amber-500 text-zinc-950" : "text-zinc-300 hover:bg-zinc-800"}`}
+                className={`min-h-9 rounded px-2 py-1.5 text-center text-sm sm:px-3 ${simulatedCurve.mode === "step" ? "bg-amber-500 text-zinc-950" : "text-zinc-300 hover:bg-zinc-800"}`}
                 type="button"
                 onClick={() => updateCurveMode("step")}
               >
@@ -1717,7 +1718,7 @@ export function PricingCalculator({
               </button>
             </div>
             <button
-              className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800"
+              className="focus-ring inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-center text-sm text-zinc-300 hover:bg-zinc-800 sm:w-auto"
               type="button"
               onClick={smoothAnchors}
               disabled={simulatedCurve.mode === "step"}
@@ -1726,7 +1727,7 @@ export function PricingCalculator({
               Recalcular intermediarios
             </button>
             <button
-              className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800"
+              className="focus-ring inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-center text-sm text-zinc-300 hover:bg-zinc-800 sm:w-auto"
               type="button"
               onClick={addCurvePoint}
             >
@@ -1734,7 +1735,7 @@ export function PricingCalculator({
               Adicionar ponto
             </button>
             <button
-              className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800"
+              className="focus-ring inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-center text-sm text-zinc-300 hover:bg-zinc-800 sm:w-auto"
               type="button"
               onClick={resetAnchors}
             >
@@ -1742,7 +1743,7 @@ export function PricingCalculator({
               Resetar curva
             </button>
             <button
-              className="focus-ring inline-flex items-center gap-2 rounded-md bg-amber-500 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+              className="focus-ring inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-amber-500 px-3 py-2 text-center text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400 sm:w-auto"
               disabled={persistentActionsDisabled || !simulatedChanged || saveState === "saving"}
               type="button"
               onClick={saveCurveVersion}
@@ -1753,7 +1754,7 @@ export function PricingCalculator({
           </div>
           <div className="grid gap-2">
             {simulatedCurve.points.map((point, index) => (
-              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_40px] gap-2" key={`${point.quantity}-${index}`}>
+              <div className="grid min-w-0 gap-2 rounded-md border border-zinc-800 bg-zinc-950/35 p-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_40px] sm:border-0 sm:bg-transparent sm:p-0" key={`${point.quantity}-${index}`}>
                 <Input
                   label={index === 0 ? "Quantidade inicial" : "Quantidade"}
                   min={1}
@@ -1771,13 +1772,14 @@ export function PricingCalculator({
                   onChange={(value) => updateCurvePoint(index, "unitPrice", value)}
                 />
                 <button
-                  className="focus-ring mt-6 inline-flex h-10 w-10 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="focus-ring inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-zinc-700 text-zinc-400 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40 sm:mt-6 sm:w-10"
                   disabled={simulatedCurve.points.length <= 1}
                   title="Remover ponto"
                   type="button"
                   onClick={() => removeCurvePoint(index)}
                 >
                   <Trash2 size={16} />
+                  <span className="text-xs sm:hidden">Remover ponto</span>
                 </button>
               </div>
             ))}
@@ -1824,7 +1826,7 @@ export function PricingCalculator({
           {saveState === "error" ? <p className="mt-3 text-sm text-red-300">Nao foi possivel salvar a curva.</p> : null}
         </DetailsPanel>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-6">
           <Metric icon={<CircleDollarSign size={18} />} label="Preco unitario" tone="amber" value={brl.format(simulatedResult.finalUnitPrice)} />
           <Metric label="Taxa fixa" value={brl.format(simulatedResult.fixedFeeTotal)} />
           <Metric label="Preco total" value={brl.format(simulatedResult.subtotal)} />
@@ -1848,13 +1850,13 @@ export function PricingCalculator({
           />
         </ChartPanel>
 
-        <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-          <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
+        <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <section className="min-w-0 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/70">
             <div className="border-b border-zinc-800 px-4 py-3">
               <h3 className="font-semibold text-white">Faixas de quantidade</h3>
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-[640px] divide-y divide-zinc-800 text-sm">
+            <div className="max-w-full overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+              <table className="min-w-[620px] divide-y divide-zinc-800 text-sm">
                 <thead className="text-left text-xs uppercase tracking-wide text-zinc-500">
                   <tr>
                     <th className="px-4 py-3 font-semibold">Qtd</th>
@@ -2051,18 +2053,18 @@ function QuoteDraftDrawer({
   const disabled = invalidCustomerFields || missingManualPriceReason || draftItems.length === 0 || ["creating", "creating_pdf", "copying_text"].includes(draftState);
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50 overflow-hidden">
       <button className="absolute inset-0 bg-black/70" aria-label="Fechar bandeja" type="button" onClick={onClose} />
-      <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col border-l border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl shadow-black/40 sm:w-[520px]">
-        <div className="flex items-start justify-between gap-4 border-b border-zinc-800 px-4 py-4">
-          <div>
+      <aside className="absolute right-0 top-0 flex h-dvh w-full max-w-xl min-w-0 flex-col overflow-x-hidden border-l border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl shadow-black/40 sm:w-[520px]">
+        <div className="flex min-w-0 items-start justify-between gap-3 border-b border-zinc-800 px-3 py-3 sm:gap-4 sm:px-4 sm:py-4">
+          <div className="min-w-0">
             <p className="inline-flex items-center gap-2 text-sm font-medium text-amber-400">
               <ShoppingCart size={16} />
               Bandeja de orcamento
             </p>
             <h3 className="mt-1 text-xl font-semibold text-white">{draftItems.length} item(ns)</h3>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <button
               className="focus-ring inline-flex h-9 items-center justify-center rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
               disabled={draftItems.length === 0}
@@ -2081,13 +2083,13 @@ function QuoteDraftDrawer({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 [overscroll-behavior:contain] sm:px-4 sm:py-4">
           <div className="grid gap-3">
             <details className="rounded-lg border border-zinc-800 bg-zinc-900/45">
-              <summary className="focus-ring flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-900">
-                <span className="min-w-0">
+              <summary className="focus-ring flex min-w-0 cursor-pointer list-none items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-900">
+                <span className="min-w-0 break-words">
                   <span className="font-medium text-zinc-200">Pagamento Olist</span>
-                  <span className="ml-2 text-zinc-500">
+                  <span className="ml-1.5 text-zinc-500 sm:ml-2">
                     {paymentSelected
                       ? `${paymentMethodId ? "selecionado" : "parcial"} · ${paymentInstallmentsCount}x`
                       : "opcional no orçamento"}
@@ -2310,7 +2312,7 @@ function QuoteDraftDrawer({
           </div>
         </div>
 
-        <div className="border-t border-zinc-800 px-4 py-4">
+        <div className="shrink-0 border-t border-zinc-800 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-4 sm:py-4">
           <dl className="mb-3 grid gap-2 text-sm">
             <Detail label="Itens estimados" value={brl.format(draftItems.reduce((sum, item) => sum + item.totalPrice, 0))} />
             <Detail label="Frete cliente" value={includeShipping ? brl.format(shippingAmount) : brl.format(0)} />
@@ -2331,9 +2333,9 @@ function QuoteDraftDrawer({
               Informe o motivo de cada preço manual para registrar o log no orçamento.
             </p>
           ) : null}
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-3 gap-2">
             <button
-              className="focus-ring inline-flex h-10 items-center justify-center rounded-md border border-zinc-700 px-3 text-sm font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+              className="focus-ring inline-flex min-h-10 items-center justify-center rounded-md border border-zinc-700 px-2 py-2 text-center text-xs font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50 sm:px-3 sm:text-sm"
               disabled={disabled}
               type="button"
               onClick={onCreateQuote}
@@ -2341,7 +2343,7 @@ function QuoteDraftDrawer({
               {draftState === "creating" ? "Criando..." : "Criar"}
             </button>
             <button
-              className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-amber-500 px-3 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:opacity-50"
+              className="focus-ring inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md bg-amber-500 px-2 py-2 text-center text-xs font-semibold text-zinc-950 hover:bg-amber-400 disabled:opacity-50 sm:gap-2 sm:px-3 sm:text-sm"
               disabled={disabled}
               type="button"
               onClick={onGeneratePdf}
@@ -2350,7 +2352,7 @@ function QuoteDraftDrawer({
               {draftState === "creating_pdf" ? "Gerando..." : "PDF"}
             </button>
             <button
-              className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-sm font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+              className="focus-ring inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md border border-zinc-700 px-2 py-2 text-center text-xs font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50 sm:gap-2 sm:px-3 sm:text-sm"
               disabled={disabled}
               type="button"
               onClick={onCopyWhatsApp}
@@ -2724,7 +2726,7 @@ function SelectOption({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="mb-1 block text-xs font-medium text-zinc-400">{label}</span>
       <select
         className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
@@ -2754,22 +2756,23 @@ function DetailsPanel({
   title: string;
 }) {
   return (
-    <details className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4" open={defaultOpen}>
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-        <span className="inline-flex items-center gap-2 font-medium text-amber-400">
-          {icon}
-          {title}
+    <details className="group min-w-0 rounded-lg border border-zinc-800 bg-zinc-900/70 p-3 sm:p-4" open={defaultOpen}>
+      <summary className="focus-ring flex min-w-0 cursor-pointer list-none items-center justify-between gap-2 rounded-md">
+        <span className="inline-flex min-w-0 items-center gap-2 font-medium text-amber-400">
+          <span className="shrink-0">{icon}</span>
+          <span className="min-w-0 break-words">{title}</span>
         </span>
-        <span className="text-xs text-zinc-500">Clique para expandir/recolher</span>
+        <span className="hidden text-xs text-zinc-500 sm:inline">Clique para expandir/recolher</span>
+        <ChevronDown className="shrink-0 text-zinc-500 transition-transform group-open:rotate-180 sm:hidden" size={17} />
       </summary>
-      <div className="mt-4">{children}</div>
+      <div className="mt-4 min-w-0">{children}</div>
     </details>
   );
 }
 
 function Control({ children, label }: { children: React.ReactNode; label: string }) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</span>
       {children}
     </label>
@@ -2800,7 +2803,7 @@ function Input<T extends number | string>({
   value: T;
 }) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</span>
       <input
         className={`focus-ring h-10 w-full rounded-md border bg-zinc-950 px-3 text-sm text-white ${error ? "border-rose-400/60" : "border-zinc-700"}`}
@@ -2949,10 +2952,10 @@ function calculateCnpjDigit(base: string, weights: number[]) {
 
 function CepPreview({ address, label }: { address: CepAddress | null; label: string }) {
   return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-950/50 p-3">
+    <div className="min-w-0 rounded-md border border-zinc-800 bg-zinc-950/50 p-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
       {address ? (
-        <p className="mt-1 text-sm text-zinc-300">
+        <p className="mt-1 break-words text-sm text-zinc-300">
           {[address.street, address.district, address.city, address.state, address.cep].filter(Boolean).join(" - ")}
         </p>
       ) : (
@@ -3035,19 +3038,19 @@ function Metric({
   }[tone];
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
-        {icon}
-        {label}
+    <div className="min-w-0 rounded-lg border border-zinc-800 bg-zinc-900/70 p-3 sm:p-4">
+      <div className="flex min-w-0 items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-zinc-500 sm:text-xs">
+        <span className="shrink-0">{icon}</span>
+        <span className="min-w-0 break-words">{label}</span>
       </div>
-      <p className={`mt-2 break-words text-xl font-semibold sm:text-2xl ${toneClass}`}>{value}</p>
+      <p className={`mt-2 break-words text-lg font-semibold sm:text-2xl ${toneClass}`}>{value}</p>
     </div>
   );
 }
 
 function ChartPanel({ children, subtitle, title }: { children: React.ReactNode; subtitle: string; title: string }) {
   return (
-    <section className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3 sm:p-4">
+    <section className="min-w-0 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/70 p-3 sm:p-4">
       <div className="mb-3 grid gap-3 sm:flex sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h3 className="font-semibold text-white">{title}</h3>
@@ -3064,6 +3067,7 @@ function ChartPanel({ children, subtitle, title }: { children: React.ReactNode; 
           </span>
         </div>
       </div>
+      <p className="mb-2 text-xs text-zinc-600 sm:hidden">Deslize o gráfico para os lados para consultar toda a curva.</p>
       {children}
     </section>
   );
@@ -3123,14 +3127,15 @@ function LineChart({
   const highlightedAnchors = simulated.filter((point) => anchorSet.has(point.quantity));
 
   return (
-    <div className="h-[300px] w-full overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-inner shadow-black/30 sm:h-[340px]">
+    <div className="w-full max-w-full min-w-0 overflow-x-auto overscroll-x-contain rounded-lg [-webkit-overflow-scrolling:touch]">
+      <div className="h-[300px] min-w-[680px] overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-inner shadow-black/30 sm:h-[340px] sm:min-w-0">
       <svg
-        className="h-full w-full"
+        className="h-full w-full touch-pan-x"
         preserveAspectRatio="none"
         role="img"
         viewBox={`0 0 ${width} ${height}`}
-        onMouseLeave={() => setTooltip(null)}
-        onMouseMove={(event) => {
+        onPointerLeave={() => setTooltip(null)}
+        onPointerMove={(event) => {
           const rect = event.currentTarget.getBoundingClientRect();
           const ratio = width / rect.width;
           const svgX = (event.clientX - rect.left) * ratio;
@@ -3217,6 +3222,7 @@ function LineChart({
           </g>
         ) : null}
       </svg>
+      </div>
     </div>
   );
 }
@@ -3266,9 +3272,9 @@ function buildQuantityTicks(minQuantity: number, maxQuantity: number, anchors?: 
 
 function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-zinc-800 pb-2 last:border-0 last:pb-0">
-      <dt className="text-zinc-500">{label}</dt>
-      <dd className="font-medium text-zinc-100">{value}</dd>
+    <div className="flex min-w-0 items-start justify-between gap-3 border-b border-zinc-800 pb-2 last:border-0 last:pb-0 sm:items-center sm:gap-4">
+      <dt className="min-w-0 text-zinc-500">{label}</dt>
+      <dd className="break-words text-right font-medium text-zinc-100">{value}</dd>
     </div>
   );
 }
