@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomInt } from "crypto";
+import { countsTowardIndependentArtworkLimit } from "@/domain/artwork/versions";
 import { calculatePlatformCosts, calculateQuote, normalizePricingCurvePoints, roundMoney } from "@/domain/pricing/pricing";
 import {
   calculateCompositeQuote,
@@ -1712,7 +1713,8 @@ export async function addQuoteItemArtwork(
       `,
       [tenantId, quoteId, quoteItemId]
     );
-    if (currentResult.rows.filter((artwork) => artwork.source_kind !== "pdf_page").length >= 10) {
+    const independentImages = currentResult.rows.filter((artwork) => countsTowardIndependentArtworkLimit(artwork.source_kind));
+    if (input.sourceKind !== "retouch" && independentImages.length >= 10) {
       throw new Error("Cada item pode ter no máximo 10 imagens de arte.");
     }
     if (currentResult.rows.length >= 100) throw new Error("Cada item pode ter no máximo 100 artes no total.");

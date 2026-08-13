@@ -1,5 +1,9 @@
 export type ArtworkVersionOrder = { id: string; parent_artwork_id?: string | null; is_active?: boolean };
 
+export function countsTowardIndependentArtworkLimit(sourceKind: string | null | undefined) {
+  return !["pdf_page", "retouch"].includes(sourceKind ?? "upload");
+}
+
 export function sortActiveArtworkVersions<T extends ArtworkVersionOrder>(all: T[]) {
   const positions = new Map(all.map((artwork, index) => [artwork.id, index]));
   const byId = new Map(all.map((artwork) => [artwork.id, artwork]));

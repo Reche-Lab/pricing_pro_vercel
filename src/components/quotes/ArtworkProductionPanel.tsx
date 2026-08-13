@@ -199,7 +199,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
           return <section className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-950/70" key={item.id}>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2"><div><p className="text-sm font-medium text-white">{item.description}</p><p className="text-xs text-zinc-500">Pedido: {item.quantity} unidades</p></div><div className="flex flex-wrap items-center gap-2">{!readOnly ? <button className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-md border border-cyan-700/70 px-2.5 text-xs font-medium text-cyan-200 hover:bg-cyan-950/50" type="button" onClick={() => setPdfImportItem(item)}><FileText size={13} /> Importar PDF</button> : null}<span className={`rounded px-2 py-1 text-xs ${itemAllocation?.allocated === item.quantity && itemAllocation.approved ? "bg-emerald-400/10 text-emerald-300" : "bg-amber-400/10 text-amber-300"}`}>{itemAllocation?.allocated ?? 0} de {item.quantity} distribuídas</span></div></div>
             <div className="grid gap-3 p-3">
-              {itemArtworks.length === 0 ? <p className="text-sm text-zinc-500">Adicione uma imagem pelo botão Editar ou gere uma nova arte com o assistente.</p> : itemArtworks.map((entry) => <ArtworkRow
+              {itemArtworks.length === 0 ? <p className="text-sm text-zinc-500">Adicione uma imagem pelo botão Editar ou gere uma nova arte com o assistente.</p> : itemArtworks.map((entry) => { const previous = entry.artwork.parent_artwork_id ? allArtworks.find((candidate) => candidate.artwork.id === entry.artwork.parent_artwork_id) ?? null : null; const original = findOriginalEntry(entry, allArtworks); return <ArtworkRow
                 busy={busy}
                 geometry={inferGeometry(item, entry.artwork)}
                 entry={entry}
@@ -209,11 +209,12 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
                 onApprove={approve}
                 onEdit={setEditing}
                 onRetouch={setRetouching}
-                previous={entry.artwork.parent_artwork_id ? allArtworks.find((candidate) => candidate.artwork.id === entry.artwork.parent_artwork_id) ?? null : null}
+                original={original.artwork.id === entry.artwork.id ? null : original}
+                previous={previous}
                 onVersionPreview={(previous) => setVersionPreview({ active: entry, previous })}
                 onQuantity={(quantity) => setQuantities((current) => ({ ...current, [entry.artwork.id]: quantity }))}
                 readOnly={readOnly}
-              />)}
+              />; })}
             </div>
           </section>;
         })}
@@ -271,7 +272,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
   );
 }
 
-function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, previous, onQuantity, onEdit, onRetouch, onVersionPreview, onApprove }: { entry: ArtworkEntry; quoteId: string; geometry: PrintGeometry | null; quantity: number; busy: string; readOnly: boolean; previous: ArtworkEntry | null; onQuantity: (quantity: number) => void; onEdit: (entry: ArtworkEntry) => void; onRetouch: (entry: ArtworkEntry) => void; onVersionPreview: (previous: ArtworkEntry) => void; onApprove: (entry: ArtworkEntry, status: "approved" | "rejected") => void }) {
+function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, original, previous, onQuantity, onEdit, onRetouch, onVersionPreview, onApprove }: { entry: ArtworkEntry; quoteId: string; geometry: PrintGeometry | null; quantity: number; busy: string; readOnly: boolean; original: ArtworkEntry | null; previous: ArtworkEntry | null; onQuantity: (quantity: number) => void; onEdit: (entry: ArtworkEntry) => void; onRetouch: (entry: ArtworkEntry) => void; onVersionPreview: (previous: ArtworkEntry) => void; onApprove: (entry: ArtworkEntry, status: "approved" | "rejected") => void }) {
   const prepared = Boolean(entry.artwork.prepared_data_url || entry.artwork.prepared_storage_path);
   const approved = entry.artwork.approval_status === "approved";
   const margins = inferMargins(entry.item, entry.artwork);
@@ -298,6 +299,7 @@ function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, previo
     <div className="flex flex-wrap items-end justify-between gap-3 border-t border-zinc-800 bg-zinc-950/50 p-3">
       <label className="w-36 shrink-0"><span className="mb-1 block text-xs font-medium text-zinc-400">Cópias desta arte</span><input className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm tabular-nums disabled:opacity-50" disabled={readOnly} min="1" type="number" value={quantity} onChange={(event) => onQuantity(Math.max(1, Number(event.target.value) || 1))} /></label>
       <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-2">
+        <ArtworkDownloadMenu entry={entry} original={original} prepared={prepared} quoteId={quoteId} />
         {previous ? <button className="focus-ring inline-flex h-9 flex-1 basis-[130px] items-center justify-center gap-2 rounded-md border border-violet-800/70 px-3 text-xs text-violet-200 hover:bg-violet-950/50" type="button" onClick={() => onVersionPreview(previous)}><Eye size={14} /> Ver original</button> : null}
         <button className="focus-ring inline-flex h-9 flex-1 basis-[110px] items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-900 disabled:opacity-50" disabled={readOnly || Boolean(busy)} type="button" onClick={() => onRetouch(entry)}><Paintbrush size={14} /> Retocar</button>
         <button className="focus-ring inline-flex h-9 flex-1 basis-[130px] items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-900 disabled:opacity-50" disabled={readOnly || !geometry || Boolean(busy)} type="button" onClick={() => onEdit(entry)}><ImageIcon size={14} /> {prepared ? "Reenquadrar" : "Enquadrar"}</button>
@@ -315,8 +317,13 @@ function ArtworkVersionModal({ active, previous, quoteId, busy, readOnly, onClos
 }
 
 function VersionImage({ entry, label, quoteId }: { entry: ArtworkEntry; label: string; quoteId: string }) {
-  return <article className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-900/50"><div className="flex items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2"><span className="text-xs font-semibold text-zinc-200">{label}</span>{entry.artwork.is_active !== false ? <span className="rounded bg-emerald-400/10 px-2 py-1 text-[10px] font-medium text-emerald-300">Em uso</span> : <span className="rounded bg-zinc-800 px-2 py-1 text-[10px] text-zinc-400">Histórico</span>}</div><div className="aspect-square bg-white p-2">{/* eslint-disable-next-line @next/next/no-img-element */}<img alt={entry.artwork.artwork_name || entry.artwork.file_name} className="h-full w-full object-contain" src={artworkImageUrl(quoteId, entry, "original")} /></div><div className="p-3"><p className="break-words text-sm font-medium text-white">{entry.artwork.artwork_name || entry.artwork.file_name}</p><p className="mt-1 break-all text-[11px] text-zinc-500">{entry.artwork.file_name}</p></div></article>;
+  return <article className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-900/50"><div className="flex items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2"><span className="text-xs font-semibold text-zinc-200">{label}</span>{entry.artwork.is_active !== false ? <span className="rounded bg-emerald-400/10 px-2 py-1 text-[10px] font-medium text-emerald-300">Em uso</span> : <span className="rounded bg-zinc-800 px-2 py-1 text-[10px] text-zinc-400">Histórico</span>}</div><div className="aspect-square bg-white p-2">{/* eslint-disable-next-line @next/next/no-img-element */}<img alt={entry.artwork.artwork_name || entry.artwork.file_name} className="h-full w-full object-contain" src={artworkImageUrl(quoteId, entry, "original")} /></div><div className="p-3"><p className="break-words text-sm font-medium text-white">{entry.artwork.artwork_name || entry.artwork.file_name}</p><p className="mt-1 break-all text-[11px] text-zinc-500">{entry.artwork.file_name}</p><a className="focus-ring mt-3 inline-flex h-9 items-center gap-2 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-800" href={artworkDownloadUrl(quoteId, entry, "original")}><Download size={14} /> Baixar esta versão</a></div></article>;
 }
+
+function ArtworkDownloadMenu({ entry, original, prepared, quoteId }: { entry: ArtworkEntry; original: ArtworkEntry | null; prepared: boolean; quoteId: string }) {
+  return <details className="group flex-1 basis-[150px]"><summary className="focus-ring flex h-9 cursor-pointer list-none items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-900"><Download size={14} /> Baixar versões</summary><div className="mt-1 grid gap-1 rounded-md border border-zinc-700 bg-zinc-950 p-1.5"><DownloadLink href={artworkDownloadUrl(quoteId, entry, "original")} label={entry.artwork.source_kind === "retouch" ? "Arte retocada" : "Arte original"} />{original ? <DownloadLink href={artworkDownloadUrl(quoteId, original, "original")} label="Arte original enviada" /> : null}{prepared ? <DownloadLink href={artworkDownloadUrl(quoteId, entry, "prepared")} label="Arte preparada e recortada" /> : null}</div></details>;
+}
+function DownloadLink({ href, label }: { href: string; label: string }) { return <a className="focus-ring flex min-h-9 items-center gap-2 rounded px-2.5 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white" href={href}><Download size={13} /> {label}</a>; }
 
 type Suggestions = { concept: string; composition: string; palette: string[]; typography: string; productionWarnings: string[]; generationPrompt: string };
 type PrintJob = { id: string; status: "generated" | "printed" | "cancelled"; page_count: number; copy_count: number; created_at: string };
@@ -326,6 +333,8 @@ function inferMargins(item: QuoteItemRow, artwork: QuoteItemArtworkRow) { return
 function formatMm(value: number) { return `${Number(value.toFixed(2)).toLocaleString("pt-BR")} mm`; }
 function initialQuantities(items: QuoteItemRow[]) { const result: Record<string, number> = {}; for (const item of items) { const arts = (item.artworks ?? []).filter((artwork) => artwork.is_active !== false); for (const artwork of arts) result[artwork.id] = artwork.production_quantity ?? (arts.length === 1 ? item.quantity : Math.max(1, Math.floor(item.quantity / arts.length))); } return result; }
 function artworkImageUrl(quoteId: string, entry: ArtworkEntry, kind: "original" | "prepared") { const inline = kind === "prepared" ? entry.artwork.prepared_data_url : entry.artwork.data_url; return inline || `/api/quotes/${quoteId}/items/${entry.item.id}/artworks/${entry.artwork.id}/file?kind=${kind}`; }
+function artworkDownloadUrl(quoteId: string, entry: ArtworkEntry, kind: "original" | "prepared") { return `/api/quotes/${quoteId}/items/${entry.item.id}/artworks/${entry.artwork.id}/file?kind=${kind}&download=1`; }
+function findOriginalEntry(entry: ArtworkEntry, all: ArtworkEntry[]) { let current = entry; const visited = new Set<string>(); while (current.artwork.parent_artwork_id && !visited.has(current.artwork.id)) { visited.add(current.artwork.id); const parent = all.find((candidate) => candidate.artwork.id === current.artwork.parent_artwork_id); if (!parent) break; current = parent; } return current; }
 function sortActiveArtworkEntries(all: ArtworkEntry[]) {
   const entries = new Map(all.map((entry) => [entry.artwork.id, entry]));
   return sortActiveArtworkVersions(all.map((entry) => entry.artwork)).map((artwork) => entries.get(artwork.id) as ArtworkEntry);

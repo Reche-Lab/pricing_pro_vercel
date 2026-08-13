@@ -168,11 +168,11 @@ export async function addPublicArtwork(input: {
     );
     if (!available.rows[0]) throw new Error("Este orçamento não está mais disponível para alterações.");
     const count = await client.query<{ count: number; total: number }>(
-      `select count(*) filter (where source_kind <> 'pdf_page')::int as count, count(*)::int as total from quote_item_artworks
+      `select count(*) filter (where source_kind not in ('pdf_page', 'retouch'))::int as count, count(*)::int as total from quote_item_artworks
        where tenant_id = $1 and quote_id = $2 and quote_item_id = $3`,
       [input.context.tenantId, input.context.quoteId, input.context.itemId]
     );
-    if ((count.rows[0]?.count ?? 0) >= 10) throw new Error("Cada item pode ter no máximo 10 versões de arte.");
+    if (input.sourceKind !== "retouch" && (count.rows[0]?.count ?? 0) >= 10) throw new Error("Cada item pode ter no máximo 10 imagens de arte independentes.");
     if ((count.rows[0]?.total ?? 0) >= 100) throw new Error("Cada item pode ter no máximo 100 artes no total.");
     if (input.parentArtworkId) {
       const parent = await client.query(

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sortActiveArtworkVersions } from "@/domain/artwork/versions";
+import { countsTowardIndependentArtworkLimit, sortActiveArtworkVersions } from "@/domain/artwork/versions";
 
 describe("artwork versions", () => {
   it("keeps an active retouch in the position of its original artwork", () => {
@@ -20,5 +20,12 @@ describe("artwork versions", () => {
       { id: "retouch-2", parent_artwork_id: "retouch-1", is_active: true }
     ]);
     expect(result.map((artwork) => artwork.id)).toEqual(["retouch-2", "other"]);
+  });
+
+  it("does not count retouches as independent artwork uploads", () => {
+    expect(countsTowardIndependentArtworkLimit("upload")).toBe(true);
+    expect(countsTowardIndependentArtworkLimit("openrouter")).toBe(true);
+    expect(countsTowardIndependentArtworkLimit("retouch")).toBe(false);
+    expect(countsTowardIndependentArtworkLimit("pdf_page")).toBe(false);
   });
 });
