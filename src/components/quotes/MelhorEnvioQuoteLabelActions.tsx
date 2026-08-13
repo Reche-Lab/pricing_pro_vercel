@@ -266,7 +266,7 @@ export function MelhorEnvioQuoteLabelActions({
               Este orçamento ainda não tem um serviço Melhor Envio vinculado. Faça a cotação e escolha a opção que será usada para a etiqueta.
             </p>
             <button
-              className="focus-ring inline-flex w-fit items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60"
+              className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-center text-sm font-medium text-zinc-300 hover:bg-zinc-950/60 disabled:opacity-60 sm:w-fit"
               disabled={loading === "quote"}
               onClick={quoteServices}
               type="button"
@@ -299,7 +299,7 @@ export function MelhorEnvioQuoteLabelActions({
               </select>
             </label>
             <button
-              className="focus-ring inline-flex w-fit items-center gap-2 rounded-md bg-cyan-400 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-cyan-300 disabled:opacity-60"
+              className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded-md bg-cyan-400 px-3 py-2 text-center text-sm font-semibold text-zinc-950 hover:bg-cyan-300 disabled:opacity-60 sm:w-fit"
               disabled={loading === "save-service"}
               onClick={saveSelectedService}
               type="button"
@@ -331,7 +331,7 @@ export function MelhorEnvioQuoteLabelActions({
                 />
               </label>
               <button
-                className="focus-ring inline-flex h-10 w-fit items-center gap-2 rounded-md bg-amber-400 px-3 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-60"
+                className="focus-ring inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-amber-400 px-3 py-2 text-center text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-60 md:w-fit"
                 disabled={loading === "quote-shipping-update"}
                 onClick={applyShippingToQuote}
                 type="button"
@@ -347,7 +347,7 @@ export function MelhorEnvioQuoteLabelActions({
         ) : null}
       </div>
 
-      <div className="grid gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-5">
         {OPERATIONS.map((operation, index) => {
           const done = selectedShipment ? operationDone(selectedShipment, operation.key) : false;
           const previous = OPERATIONS[index - 1];
@@ -357,7 +357,7 @@ export function MelhorEnvioQuoteLabelActions({
           const Icon = operation.icon;
           return (
             <button
-              className={`focus-ring grid min-h-28 gap-2 rounded-md border p-3 text-left text-xs transition-colors disabled:opacity-60 ${
+              className={`focus-ring grid min-h-24 gap-2 rounded-md border p-2.5 text-left text-xs transition-colors disabled:opacity-60 sm:min-h-28 sm:p-3 ${
                 done
                   ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100 hover:bg-emerald-400/15"
                   : "border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:bg-zinc-900"

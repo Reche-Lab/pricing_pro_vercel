@@ -70,10 +70,10 @@ export function ArtworkCropEditor({
   const imageY = (viewHeight - imageHeight) / 2 + offsetY * viewHeight / 2;
 
   return (
-    <div className="fixed inset-0 z-[70] grid place-items-center overflow-y-auto bg-black/80 p-3 backdrop-blur-sm sm:p-6">
-      <div className="my-auto grid max-h-[94vh] w-full max-w-4xl overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950 shadow-2xl lg:grid-cols-[minmax(320px,1fr)_360px]">
-        <div className="grid place-items-center bg-zinc-900 p-5 sm:p-8">
-          <div className="w-full max-w-[520px] overflow-hidden bg-zinc-800 shadow-[0_0_0_8px_rgba(34,211,238,0.12)]" style={{ aspectRatio: `${outputWidthMm} / ${outputHeightMm}` }}>
+    <div className="fixed inset-0 z-[70] grid place-items-center overflow-hidden bg-black/80 p-0 backdrop-blur-sm sm:p-3 lg:p-6">
+      <div className="grid h-dvh w-full min-w-0 grid-rows-[minmax(210px,42dvh)_minmax(0,1fr)] overflow-hidden border border-zinc-700 bg-zinc-950 shadow-2xl sm:h-[94dvh] sm:rounded-lg lg:max-w-4xl lg:grid-cols-[minmax(320px,1fr)_360px] lg:grid-rows-1">
+        <div className="grid min-h-0 place-items-center overflow-hidden bg-zinc-900 p-3 sm:p-5 lg:p-8">
+          <div className="w-full max-w-[520px] overflow-hidden bg-zinc-800 shadow-[0_0_0_5px_rgba(34,211,238,0.12)] sm:shadow-[0_0_0_8px_rgba(34,211,238,0.12)]" style={{ aspectRatio: `${outputWidthMm} / ${outputHeightMm}` }}>
             <svg aria-label={artwork.artwork_name ?? artwork.file_name} className="h-full w-full" viewBox={`0 0 ${viewWidth} ${viewHeight}`}>
               <defs><clipPath id={`artwork-shape-${artwork.id}`}><path d={clipPath} /></clipPath></defs>
               <path d={clipPath} fill="white" />
@@ -82,10 +82,10 @@ export function ArtworkCropEditor({
               <path d={safePath} fill="none" stroke="rgba(103,232,249,0.9)" strokeDasharray="9 7" strokeWidth="2" />
             </svg>
           </div>
-          <div className="mt-5 flex flex-wrap justify-center gap-4 text-xs text-zinc-400"><span className="text-amber-300">Área externa · sangria {formatMm(bleedMm)}</span><span><i className="mr-1 inline-block h-2 w-4 border-t border-dashed border-red-500" /> corte {geometryLabel(geometry)}</span><span><i className="mr-1 inline-block h-2 w-4 border-t border-dashed border-cyan-300" /> segurança {formatMm(safeMarginMm)}</span></div>
+          <div className="mt-3 flex max-w-full gap-3 overflow-x-auto pb-1 text-[11px] text-zinc-400 sm:mt-5 sm:flex-wrap sm:justify-center sm:gap-4 sm:text-xs"><span className="shrink-0 text-amber-300">Sangria {formatMm(bleedMm)}</span><span className="shrink-0"><i className="mr-1 inline-block h-2 w-4 border-t border-dashed border-red-500" /> corte {geometryLabel(geometry)}</span><span className="shrink-0"><i className="mr-1 inline-block h-2 w-4 border-t border-dashed border-cyan-300" /> segurança {formatMm(safeMarginMm)}</span></div>
         </div>
 
-        <div className="min-h-0 overflow-y-auto p-5">
+        <div className="min-h-0 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5">
           <div className="flex items-start justify-between gap-4">
             <div><h3 className="font-semibold text-white">Enquadrar arte</h3><p className="mt-1 text-sm text-zinc-500">As guias usam as medidas do produto. Preencha toda a sangria e mantenha textos dentro da área segura.</p></div>
             <button className="focus-ring rounded-md p-2 text-zinc-500 hover:bg-zinc-900 hover:text-white" type="button" onClick={onClose}><X size={18} /></button>
@@ -102,9 +102,9 @@ export function ArtworkCropEditor({
             <button className="focus-ring inline-flex w-fit items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-900" type="button" onClick={reset}><RotateCcw size={14} /> Restaurar enquadramento</button>
           </div>
           {error ? <p className="mt-4 rounded-md bg-red-400/10 p-3 text-sm text-red-300">{error}</p> : null}
-          <div className="mt-6 flex justify-end gap-2 border-t border-zinc-800 pt-4">
-            <button className="focus-ring rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-300" type="button" onClick={onClose}>Cancelar</button>
-            <button className="focus-ring inline-flex items-center gap-2 rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-cyan-950 disabled:opacity-50" disabled={saving} type="button" onClick={prepare}>{saving ? <Loader2 className="animate-spin" size={15} /> : null} Preparar arte</button>
+          <div className="sticky bottom-0 mt-6 grid grid-cols-2 gap-2 border-t border-zinc-800 bg-zinc-950/95 pt-4 backdrop-blur sm:flex sm:justify-end">
+            <button className="focus-ring min-h-10 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300 sm:px-4" type="button" onClick={onClose}>Cancelar</button>
+            <button className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-cyan-400 px-3 py-2 text-center text-sm font-semibold text-cyan-950 disabled:opacity-50 sm:px-4" disabled={saving} type="button" onClick={prepare}>{saving ? <Loader2 className="animate-spin" size={15} /> : null} Preparar arte</button>
           </div>
         </div>
       </div>

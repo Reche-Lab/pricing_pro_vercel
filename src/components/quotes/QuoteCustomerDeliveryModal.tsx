@@ -115,18 +115,18 @@ export function QuoteCustomerDeliveryModal({ quote, disabled = false }: { quote:
         <div
           aria-labelledby="customer-delivery-title"
           aria-modal="true"
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden bg-black/75 p-0 backdrop-blur-sm sm:p-4"
           onMouseDown={(event) => {
             if (event.currentTarget === event.target) setOpen(false);
           }}
           role="dialog"
         >
           <form
-            className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/50"
+            className="flex h-dvh w-full max-w-3xl flex-col overflow-hidden border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/50 sm:h-auto sm:max-h-[92dvh] sm:rounded-lg"
             onSubmit={submit}
           >
-            <header className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-800 p-5">
-              <div>
+            <header className="flex shrink-0 items-start justify-between gap-3 border-b border-zinc-800 p-4 sm:gap-4 sm:p-5">
+              <div className="min-w-0">
                 <h2 className="text-lg font-semibold text-white" id="customer-delivery-title">
                   Cliente e responsável pelo recebimento
                 </h2>
@@ -144,7 +144,7 @@ export function QuoteCustomerDeliveryModal({ quote, disabled = false }: { quote:
               </button>
             </header>
 
-            <div className="grid min-h-0 gap-5 overflow-y-auto p-5">
+            <div className="grid min-h-0 gap-4 overflow-y-auto overflow-x-hidden p-4 sm:gap-5 sm:p-5">
               <div className={`flex items-start gap-3 rounded-md border px-3 py-3 ${
                 quote.customer_external_olist_id
                   ? "border-emerald-400/20 bg-emerald-400/10"

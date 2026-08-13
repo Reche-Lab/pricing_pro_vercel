@@ -89,19 +89,19 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
         reopenedAt={detail.quote.edit_reopened_at}
         reopenedBy={detail.quote.edit_reopened_by_name}
       />
-      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] 2xl:grid-cols-[minmax(0,3fr)_minmax(0,5fr)]">
-        <section className="grid min-w-0 h-fit gap-4">
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 sm:gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] 2xl:grid-cols-[minmax(0,3fr)_minmax(0,5fr)]">
+        <section className="grid h-fit min-w-0 gap-4">
+          <div className="min-w-0 rounded-lg border border-zinc-800 bg-zinc-900/70 p-3 sm:p-4">
             <div className="grid gap-4">
               <div>
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
                   <p className="text-sm text-zinc-500">Cliente</p>
                   <QuoteCustomerDeliveryModal disabled={accepted && !administrativeEditingOpen} quote={detail.quote} />
                 </div>
-                <h2 className="text-lg font-semibold text-white">
+                <h2 className="break-words text-lg font-semibold text-white">
                   {detail.quote.customer_name ?? "Cliente nao informado"}
                 </h2>
-                <p className="text-sm text-zinc-500">
+                <p className="break-all text-sm text-zinc-500 sm:break-words">
                   {[detail.quote.customer_email, detail.quote.customer_phone].filter(Boolean).join(" - ")}
                 </p>
                 {detail.quote.delivery_attention_to ? (
@@ -113,13 +113,13 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
             </div>
           </div>
 
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
-            <div className="mb-3 flex items-end justify-between gap-4">
+          <div className="min-w-0 rounded-lg border border-zinc-800 bg-zinc-900/70 p-3 sm:p-4">
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-3 sm:gap-4">
               <div>
                 <h2 className="font-semibold">Resumo</h2>
                 <p className="text-xs text-zinc-500">Totais deste orçamento</p>
               </div>
-              <p className="text-xl font-semibold text-white">{brl.format(Number(detail.quote.grand_total))}</p>
+              <p className="break-words text-xl font-semibold text-white">{brl.format(Number(detail.quote.grand_total))}</p>
             </div>
             <dl className="grid gap-2 text-sm">
               <Detail label="Subtotal" value={brl.format(Number(detail.quote.subtotal))} />
@@ -153,8 +153,8 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
           />
 
           <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
-            <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3">
-              <div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 px-3 py-3 sm:px-4">
+              <div className="min-w-0">
                 <h2 className="font-semibold">Itens</h2>
                 <p className="text-xs text-zinc-500">{detail.items.length} item(ns) neste orçamento</p>
               </div>
@@ -168,9 +168,9 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
             </div>
             <div className="divide-y divide-zinc-800">
               {detail.items.map((item) => (
-                <div className="grid gap-2 px-4 py-3 text-sm sm:grid-cols-[1fr_auto]" key={item.id}>
-                  <div>
-                    <p className="font-medium text-white">{item.description}</p>
+                <div className="grid min-w-0 gap-2 px-3 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:px-4" key={item.id}>
+                  <div className="min-w-0">
+                    <p className="break-words font-medium text-white">{item.description}</p>
                     <p className="text-zinc-500">
                       {item.quantity} x {brl.format(Number(item.unit_price))}
                     </p>
@@ -179,7 +179,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                       <div className="mt-2 flex flex-wrap gap-2">
                         {item.artworks.filter((artwork) => artwork.is_active !== false).map((artwork) => (
                           <div
-                            className="flex max-w-full items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 px-2 py-1.5"
+                            className="flex w-full max-w-full min-w-0 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 px-2 py-1.5 sm:w-auto"
                             key={artwork.id}
                           >
                             {artwork.data_url?.startsWith("data:image/") || artwork.storage_path ? (
@@ -205,7 +205,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                       </p>
                     ) : null}
                   </div>
-                  <p className="font-semibold text-white">{brl.format(Number(item.total_price))}</p>
+                  <p className="break-words font-semibold text-white sm:text-right">{brl.format(Number(item.total_price))}</p>
                 </div>
               ))}
             </div>
@@ -239,7 +239,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
           <MelhorEnvioPayloadPreview quoteId={quoteId} />
         </section>
 
-        <aside className="grid min-w-0 h-fit gap-4">
+        <aside className="grid h-fit min-w-0 gap-4">
           <div className="min-w-0 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/70 p-4 sm:p-5">
             <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-end md:justify-between">
               <div className="min-w-0">

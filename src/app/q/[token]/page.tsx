@@ -34,11 +34,11 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
   const artworkReviewPending = artworkProgress.approved < artworkProgress.required;
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-4 py-6 text-zinc-100 sm:px-6 lg:px-8">
+    <main className="min-h-screen overflow-x-hidden bg-zinc-950 px-3 py-4 text-zinc-100 sm:px-6 sm:py-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
-        <header className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5">
+        <header className="min-w-0 rounded-lg border border-zinc-800 bg-zinc-900/70 p-4 sm:p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex items-center gap-4">
+            <div className="flex min-w-0 items-center gap-3 sm:gap-4">
               {detail.tenant.logo_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -51,10 +51,10 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
                   {detail.tenant.name.slice(0, 1).toUpperCase()}
                 </div>
               )}
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-medium uppercase tracking-wide text-cyan-200">Orçamento</p>
-                <h1 className="text-2xl font-semibold text-white">{detail.tenant.name}</h1>
-                <p className="mt-1 text-sm text-zinc-400">
+                <h1 className="break-words text-xl font-semibold text-white sm:text-2xl">{detail.tenant.name}</h1>
+                <p className="mt-1 break-all text-sm text-zinc-400 sm:break-words">
                   {[detail.tenant.company_phone, detail.tenant.company_site].filter(Boolean).join(" · ")}
                 </p>
               </div>
@@ -69,14 +69,14 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
           </div>
         </header>
 
-        <section className="mt-5 grid gap-5 lg:grid-cols-[1fr_320px]">
-          <div className="space-y-5">
-            <section className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5">
+        <section className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 sm:mt-5 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0 space-y-4 sm:space-y-5">
+            <section className="min-w-0 rounded-lg border border-zinc-800 bg-zinc-900/70 p-4 sm:p-5">
               <p className="text-sm text-zinc-500">Cliente</p>
-              <h2 className="mt-1 text-xl font-semibold text-white">
+              <h2 className="mt-1 break-words text-xl font-semibold text-white">
                 {detail.quote.customer_name ?? "Cliente não informado"}
               </h2>
-              <p className="mt-1 text-sm text-zinc-400">
+              <p className="mt-1 break-all text-sm text-zinc-400 sm:break-words">
                 {[detail.quote.customer_email, detail.quote.customer_phone].filter(Boolean).join(" · ")}
               </p>
             </section>
@@ -87,9 +87,9 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
               </div>
               <div className="divide-y divide-zinc-800">
                 {detail.items.map((item) => (
-                  <div className="grid gap-3 px-5 py-4 text-sm sm:grid-cols-[1fr_auto]" key={item.id}>
-                    <div>
-                      <p className="font-medium text-white">{item.description}</p>
+                  <div className="grid min-w-0 gap-3 px-4 py-4 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:px-5" key={item.id}>
+                    <div className="min-w-0">
+                      <p className="break-words font-medium text-white">{item.description}</p>
                       <p className="mt-1 text-zinc-400">
                         {item.quantity} x {brl.format(Number(item.unit_price))}
                       </p>
@@ -98,7 +98,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
                         <div className="mt-2 flex flex-wrap gap-2">
                           {item.artworks.filter((artwork) => artwork.is_active !== false).map((artwork) => (
                             <div
-                              className="flex max-w-full items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 px-2 py-1.5"
+                              className="flex w-full max-w-full min-w-0 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 px-2 py-1.5 sm:w-auto"
                               key={artwork.id}
                             >
                               {artwork.data_url?.startsWith("data:image/") || artwork.storage_path ? (
@@ -119,7 +119,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
                         </div>
                       ) : null}
                     </div>
-                    <div className="flex items-start justify-between gap-3 sm:grid sm:justify-items-end">
+                    <div className="flex flex-wrap items-start justify-between gap-3 sm:grid sm:justify-items-end">
                       <p className="font-semibold text-white">{brl.format(Number(item.total_price))}</p>
                       <PublicArtworkShortcut disabled={decisionLocked} hasArtwork={Boolean(item.artworks?.some((artwork) => artwork.is_active !== false))} itemId={item.id} />
                     </div>
@@ -129,15 +129,15 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
             </section>
 
             {detail.quote.notes ? (
-              <section className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5">
+              <section className="min-w-0 rounded-lg border border-zinc-800 bg-zinc-900/70 p-4 sm:p-5">
                 <h2 className="font-semibold text-white">Observações</h2>
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-zinc-300">{detail.quote.notes}</p>
               </section>
             ) : null}
           </div>
 
-          <aside className="space-y-5">
-            <section className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 p-5">
+          <aside className="order-first min-w-0 space-y-4 sm:space-y-5 lg:order-none">
+            <section className="min-w-0 rounded-lg border border-cyan-400/20 bg-cyan-400/10 p-4 sm:p-5">
               <p className="text-sm text-cyan-100/80">Total do orçamento</p>
               <p className="mt-2 text-3xl font-semibold tracking-tight text-white">
                 {brl.format(Number(detail.quote.grand_total))}
@@ -173,9 +173,9 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
 
 function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-4">
-      <dt className="text-zinc-400">{label}</dt>
-      <dd className="font-medium text-white">{value}</dd>
+    <div className="flex min-w-0 items-start justify-between gap-3 sm:items-center sm:gap-4">
+      <dt className="min-w-0 text-zinc-400">{label}</dt>
+      <dd className="break-words text-right font-medium text-white">{value}</dd>
     </div>
   );
 }

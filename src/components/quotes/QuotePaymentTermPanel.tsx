@@ -182,7 +182,7 @@ export function QuotePaymentTermPanel({
   }
 
   return (
-    <section className={`rounded-lg border p-4 ${
+    <section className={`min-w-0 rounded-lg border p-3 sm:p-4 ${
       selected
         ? "border-emerald-400/25 bg-emerald-400/10"
         : "border-amber-400/35 bg-amber-400/10"
@@ -197,15 +197,15 @@ export function QuotePaymentTermPanel({
             {selected ? <CheckCircle2 size={16} /> : <CreditCard size={16} />}
             Pagamento do pedido Olist
           </p>
-          <p className="mt-1 text-xs text-zinc-400">
+          <p className="mt-1 break-words text-xs text-zinc-400">
             {selectedReceivingMethod?.name
               ? `${selectedReceivingMethod.name}${selectedPaymentMethod?.name ? ` · ${selectedPaymentMethod.name}` : ""}${selectedCategory?.name ? ` · ${selectedCategory.name}` : ""}`
               : "Ainda não selecionado. Será exigido ao gerar pedido de venda."}
           </p>
         </button>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <button
-          className="focus-ring inline-flex h-8 w-fit items-center justify-center rounded-md border border-zinc-700 px-2 text-xs font-medium text-zinc-300 hover:bg-zinc-900"
+          className="focus-ring inline-flex h-9 flex-1 items-center justify-center rounded-md border border-zinc-700 px-2 text-xs font-medium text-zinc-300 hover:bg-zinc-900 sm:h-8 sm:flex-none"
           disabled={disabled}
             type="button"
             onClick={() => setOpen((current) => !current)}
@@ -213,7 +213,7 @@ export function QuotePaymentTermPanel({
             {open ? "Recolher" : "Configurar"}
           </button>
           <button
-            className="focus-ring inline-flex h-8 w-fit items-center justify-center gap-2 rounded-md border border-zinc-700 px-2 text-xs font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-60"
+            className="focus-ring inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-md border border-zinc-700 px-2 text-xs font-medium text-zinc-300 hover:bg-zinc-900 disabled:opacity-60 sm:h-8 sm:flex-none"
             disabled={disabled || state === "syncing"}
             type="button"
             onClick={syncOptions}

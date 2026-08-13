@@ -34,7 +34,7 @@ export default async function QuotesPage() {
       tenantLogoUrl={profile.tenant_logo_url}
       tenantName={profile.tenant_name}
     >
-      <div className="grid gap-6 xl:grid-cols-[460px_1fr]">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 sm:gap-6 xl:grid-cols-[460px_minmax(0,1fr)]">
         <QuoteForm
           customers={customers.map((customer) => ({ id: customer.id, name: customer.name }))}
           platforms={platforms.map((platform) => ({ id: platform.id, name: platform.name }))}
@@ -44,8 +44,8 @@ export default async function QuotesPage() {
           }))}
         />
 
-        <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
-          <div className="border-b border-zinc-800 px-5 py-4">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/70">
+          <div className="border-b border-zinc-800 px-4 py-4 sm:px-5">
             <h2 className="font-semibold">Orcamentos recentes</h2>
           </div>
           <div className="divide-y divide-zinc-800">
@@ -53,9 +53,9 @@ export default async function QuotesPage() {
               <p className="p-5 text-sm text-zinc-500">Nenhum orcamento criado ainda.</p>
             ) : (
               quotes.map((quote) => (
-                <div className="grid gap-3 px-5 py-4 text-sm md:grid-cols-[1fr_auto] md:items-center" key={quote.id}>
-                  <div>
-                    <Link className="font-medium text-white hover:underline" href={`/quotes/${quote.id}`}>
+                <div className="grid min-w-0 gap-3 px-4 py-4 text-sm md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:px-5" key={quote.id}>
+                  <div className="min-w-0">
+                    <Link className="break-words font-medium text-white hover:underline" href={`/quotes/${quote.id}`}>
                       {quote.customer_name ?? "Cliente nao informado"}
                     </Link>
                     <p className="text-zinc-500">
