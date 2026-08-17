@@ -77,6 +77,13 @@ Status atualizado durante a refatoracao inicial.
 - [x] Criar script para configurar credenciais Correios por tenant.
 - [x] Criar adapter Melhor Envio.
 - [x] Criar configuracao Melhor Envio por tenant.
+- [x] Criar configuração visual da API dos Correios por tenant.
+- [x] Criar solicitação pública para novos tenants com confirmação de e-mail.
+- [x] Criar fila de aprovação, pedido de informações e rejeição no superadmin.
+- [x] Provisionar tenant, owner, plano, trial e convite após aprovação.
+- [x] Criar termos versionados e aceite auditável no primeiro acesso.
+- [x] Bloquear páginas e APIs operacionais até o aceite vigente.
+- [x] Criar onboarding inicial para empresa, produtos, canais e embalagens.
 - [x] Criar API de autenticacao OAuth URL/refresh para Melhor Envio.
 - [x] Criar API de cotacao Melhor Envio.
 - [x] Criar APIs proxy para carrinho, checkout, geracao, impressao e rastreio Melhor Envio.

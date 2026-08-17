@@ -4,6 +4,7 @@ import { hashInviteToken } from "@/domain/users/invites";
 import { hashPassword } from "@/lib/auth/password";
 import { setSessionCookie } from "@/lib/auth/session";
 import { acceptUserInvite, getSessionProfile, recordInviteAccepted } from "@/repositories/users";
+import { getAcceptedActiveLegalTermVersion } from "@/repositories/legal-terms";
 
 const acceptInviteSchema = z.object({
   token: z.string().min(20),
@@ -28,12 +29,17 @@ export async function POST(request: Request) {
 
   await recordInviteAccepted(profile.user_id, profile.tenant_id, accepted.tenant_member_id);
 
+  const acceptedTermsVersion = profile.requires_legal_acceptance
+    ? await getAcceptedActiveLegalTermVersion(profile.user_id, profile.tenant_id)
+    : null;
   await setSessionCookie({
     userId: profile.user_id,
     tenantId: profile.tenant_id,
     email: profile.email,
-    role: profile.role
+    role: profile.role,
+    requiresTerms: profile.requires_legal_acceptance,
+    acceptedTermsVersion
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, next: profile.requires_legal_acceptance && !acceptedTermsVersion ? "/terms" : "/dashboard" });
 }

@@ -162,6 +162,12 @@ export function LandingPage() {
           </Link>
           <nav className="flex items-center gap-2">
             <Link
+              className="focus-ring hidden rounded-md px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-400/10 sm:inline-flex"
+              href="/request-access"
+            >
+              Experimentar
+            </Link>
+            <Link
               className="focus-ring hidden rounded-md px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-900 hover:text-white sm:inline-flex"
               href="/demo"
             >
@@ -200,11 +206,14 @@ export function LandingPage() {
               </Link>
               <Link
                 className="focus-ring inline-flex items-center justify-center gap-2 rounded-md border border-zinc-700 bg-zinc-950/70 px-5 py-3 text-sm font-semibold text-zinc-100 hover:border-zinc-500 hover:bg-zinc-900"
-                href="/login"
+                href="/request-access"
               >
-                Acessar meu console
+                Criar ambiente da empresa
               </Link>
             </div>
+            <Link className="mt-3 inline-flex text-sm font-medium text-zinc-500 hover:text-white" href="/login">
+              Já tenho acesso ao console
+            </Link>
             <div className="mt-8 grid gap-3 text-sm text-zinc-400 sm:grid-cols-3">
               <MiniStat label="Preço com margem" value="na hora" />
               <MiniStat label="PDF + WhatsApp" value="poucos cliques" />

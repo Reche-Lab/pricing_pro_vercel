@@ -5,12 +5,16 @@ import { useRouter } from "next/navigation";
 import { Building2, Copy, DollarSign, Gift, Save, ShieldCheck, TimerReset, Users, WandSparkles } from "lucide-react";
 import { MAX_ARTWORK_AI_GENERATION_LIMIT } from "@/domain/artwork/ai-generation-limit";
 import type { BillingPlanRow } from "@/repositories/billing";
+import type { AccessRequestRow } from "@/repositories/access-requests";
 import type { SuperadminTenantRow } from "@/repositories/superadmin";
+import { AccessRequestsPanel } from "@/components/superadmin/AccessRequestsPanel";
 
 export function SuperadminPanel({
+  accessRequests,
   billingPlans,
   tenants
 }: {
+  accessRequests: AccessRequestRow[];
   billingPlans: BillingPlanRow[];
   tenants: SuperadminTenantRow[];
 }) {
@@ -140,6 +144,8 @@ export function SuperadminPanel({
           </span>
         </div>
       </section>
+
+      <AccessRequestsPanel plans={billingPlans} requests={accessRequests} />
 
       <section className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5 xl:col-span-2">
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">

@@ -23,14 +23,15 @@ export function LoginForm() {
         password: form.get("password")
       })
     });
+    const data = await response.json().catch(() => null);
 
     setLoading(false);
     if (!response.ok) {
-      setError("Email ou senha invalidos.");
+      setError("E-mail ou senha inválidos.");
       return;
     }
 
-    router.push("/dashboard");
+    router.push(typeof data?.next === "string" ? data.next : "/dashboard");
     router.refresh();
   }
 

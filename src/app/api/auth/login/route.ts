@@ -3,6 +3,7 @@ import { z } from "zod";
 import { setSessionCookie } from "@/lib/auth/session";
 import { verifyPassword } from "@/lib/auth/password";
 import { findUserWithDefaultMembership } from "@/repositories/users";
+import { getAcceptedActiveLegalTermVersion } from "@/repositories/legal-terms";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -26,12 +27,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Invalid credentials." }, { status: 401 });
   }
 
+  const acceptedTermsVersion = user.requires_legal_acceptance
+    ? await getAcceptedActiveLegalTermVersion(user.id, user.tenant_id)
+    : null;
   await setSessionCookie({
     userId: user.id,
     tenantId: user.tenant_id,
     email: user.email,
-    role: user.role_key
+    role: user.role_key,
+    requiresTerms: user.requires_legal_acceptance,
+    acceptedTermsVersion
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, next: user.requires_legal_acceptance && !acceptedTermsVersion ? "/terms" : "/dashboard" });
 }

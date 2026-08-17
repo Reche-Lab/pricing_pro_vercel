@@ -10,6 +10,7 @@ export type UserWithMembership = {
   tenant_slug: string;
   role_key: string;
   is_super_admin: boolean;
+  requires_legal_acceptance: boolean;
 };
 
 export type TenantMemberRow = {
@@ -62,6 +63,7 @@ export async function findUserWithDefaultMembership(email: string): Promise<User
         u.name,
         u.password_hash,
         u.is_super_admin,
+        t.requires_legal_acceptance,
         t.id as tenant_id,
         t.name as tenant_name,
         t.slug as tenant_slug,
@@ -93,6 +95,7 @@ export async function getSessionProfile(userId: string, tenantId: string) {
       tenant_slug: string;
       role: string;
       is_super_admin: boolean;
+      requires_legal_acceptance: boolean;
     }>(
       `
         select
@@ -104,7 +107,8 @@ export async function getSessionProfile(userId: string, tenantId: string) {
           t.logo_url as tenant_logo_url,
           t.slug as tenant_slug,
           r.key as role,
-          u.is_super_admin
+          u.is_super_admin,
+          t.requires_legal_acceptance
         from app_users u
         join tenant_members tm on tm.user_id = u.id
         join tenants t on t.id = tm.tenant_id

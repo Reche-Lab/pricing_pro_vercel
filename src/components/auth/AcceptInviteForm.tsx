@@ -33,7 +33,7 @@ export function AcceptInviteForm({ token }: { token: string }) {
       return;
     }
 
-    router.push("/dashboard");
+    router.push(typeof data?.next === "string" ? data.next : "/dashboard");
     router.refresh();
   }
 
