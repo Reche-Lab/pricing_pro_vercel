@@ -4,9 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle, ArrowDownRight, ArrowRightLeft, ArrowUpRight, Building2, Check,
-  ChevronRight, CircleDollarSign, Download, FileSpreadsheet, Landmark, Loader2,
+  ChevronLeft, ChevronRight, CircleDollarSign, Download, FileSpreadsheet, Landmark, Loader2,
   Pencil, Plus, RotateCcw, Search, SlidersHorizontal, Tags, Trash2, Upload, WalletCards, X
 } from "lucide-react";
+import { isValidCompetence, shiftCompetence } from "@/domain/finance/competence";
 
 type Account = {
   id: string; name: string; institution: string; account_type: string; currency: string;
@@ -60,6 +61,8 @@ export function FinanceWorkspace({ initialOverview }: { initialOverview: Overvie
   const [overview, setOverview] = useState(initialOverview);
   const [tab, setTab] = useState<Tab>(initialOverview.transactions.length ? "dashboard" : "imports");
   const [busy, setBusy] = useState(false);
+  const [competenceDraft, setCompetenceDraft] = useState(initialOverview.competence);
+  const competenceRequest = useRef(0);
   const [message, setMessage] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
 
   async function refresh() {
@@ -71,15 +74,34 @@ export function FinanceWorkspace({ initialOverview }: { initialOverview: Overvie
   }
 
   async function changeCompetence(competence: string) {
+    if (!isValidCompetence(competence)) return;
+    if (competence === overview.competence) {
+      setCompetenceDraft(competence);
+      return;
+    }
+    const requestId = ++competenceRequest.current;
     setBusy(true);
     try {
       const response = await fetch(`/api/finance/overview?competence=${competence}`, { cache: "no-store" });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error);
+      if (requestId !== competenceRequest.current) return;
       setOverview(payload.overview);
+      setCompetenceDraft(payload.overview.competence);
       router.replace(`/finance?competence=${competence}`, { scroll: false });
-    } catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Falha ao alterar competência." }); }
-    finally { setBusy(false); }
+    } catch (error) {
+      if (requestId !== competenceRequest.current) return;
+      setCompetenceDraft(overview.competence);
+      setMessage({ tone: "error", text: error instanceof Error ? error.message : "Falha ao alterar competência." });
+    } finally {
+      if (requestId === competenceRequest.current) setBusy(false);
+    }
+  }
+
+  function moveCompetence(offset: number) {
+    const next = shiftCompetence(overview.competence, offset);
+    setCompetenceDraft(next);
+    void changeCompetence(next);
   }
 
   return (
@@ -87,7 +109,14 @@ export function FinanceWorkspace({ initialOverview }: { initialOverview: Overvie
       <div className="flex flex-col gap-3 rounded-lg border border-zinc-800 bg-zinc-900/70 p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-400/10 text-emerald-300"><WalletCards size={20} /></div>
-          <div><p className="text-xs uppercase text-zinc-500">Competência</p><input aria-label="Competência" className="mt-1 rounded-md border border-zinc-700 px-2 py-1 text-sm" onChange={(event) => changeCompetence(event.target.value)} type="month" value={overview.competence} /></div>
+          <div>
+            <p className="text-xs uppercase text-zinc-500">Competência</p>
+            <div className="mt-1 flex items-center gap-1">
+              <button aria-label="Mês anterior" className="focus-ring flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white disabled:opacity-40" disabled={busy} onClick={() => moveCompetence(-1)} title="Mês anterior" type="button"><ChevronLeft size={16}/></button>
+              <input aria-label="Competência" className="h-9 min-w-0 rounded-md border border-zinc-700 px-2 text-sm" onBlur={() => { if (!isValidCompetence(competenceDraft)) setCompetenceDraft(overview.competence); }} onChange={(event) => { const next = event.target.value; setCompetenceDraft(next); if (isValidCompetence(next)) void changeCompetence(next); }} type="month" value={competenceDraft}/>
+              <button aria-label="Próximo mês" className="focus-ring flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white disabled:opacity-40" disabled={busy} onClick={() => moveCompetence(1)} title="Próximo mês" type="button"><ChevronRight size={16}/></button>
+            </div>
+          </div>
           {busy ? <Loader2 className="animate-spin text-zinc-500" size={18} /> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
