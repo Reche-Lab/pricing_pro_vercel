@@ -182,10 +182,32 @@ Resultado:
 
 - lint passou;
 - typecheck passou;
-- testes passaram: 128 testes em 30 arquivos;
+- testes passaram: 139 testes em 32 arquivos;
 - build Next passou.
 
 ## Acoes Manuais Pendentes
+
+### Módulo financeiro
+
+- [x] Criar modelo multi-tenant, permissões e RLS para dados financeiros.
+- [x] Preservar arquivos originais e linhas brutas imutáveis.
+- [x] Implementar adapters Nubank, Olist Conta Digital e Mercado Pago com fixtures reais.
+- [x] Preparar adapters PayPal e CSV genérico com mapeamento.
+- [x] Implementar preview, importação transacional e deduplicação por checksum.
+- [x] Implementar classificação manual/em lote e criação de regras do tenant.
+- [x] Criar regras iniciais exclusivas da Ground Shop.
+- [x] Identificar transferências e excluir automaticamente somente pares empresariais de alta confiança.
+- [x] Implementar dashboard, filtros, fechamento e reabertura auditada.
+- [x] Exportar CSV e Excel com proteção contra formula injection.
+- [x] Implementar conciliação assistida Olist em modo leitura.
+- [x] Validar os valores de regressão de julho de 2026.
+- [x] Restringir temporariamente menu, página e APIs financeiras a owner/admin/superadmin.
+- [ ] Homologar o adapter com um CSV PayPal real.
+- [ ] Implementar IA opcional para classificação, recorrência e anomalias.
+- [ ] Implementar escrita assistida no Olist somente após homologação contábil e de idempotência.
+- [ ] Adicionar PDF gerencial, histórico multi-mês e médias móveis.
+
+Rode `supabase/migrations/0054_financial_statements.sql` antes de acessar `/finance`.
 
 Importar as caixas do `boxes.csv` para o tenant `ground-shop`:
 
@@ -209,7 +231,7 @@ Configurar Olist/CRM em `/settings`. Informe Base URL, path de cliente, path de 
 
 Ponto de atencao:
 
-- `npm install` reportou 7 vulnerabilidades transitivas no audit. Nao rodei `npm audit fix --force` porque ele pode aplicar breaking changes. Isso deve ser tratado em uma etapa propria de hardening.
+- `npm audit fix` verificou que não havia outra correção compatível. Permaneceram 10 alertas transitivos; eliminá-los exige upgrades com quebra (`Next 16`, `Vitest 4` e downgrade do `ExcelJS`). Não foi usado `--force` para não introduzir regressões sem uma migração dedicada.
 
 ## Migrations Criadas
 

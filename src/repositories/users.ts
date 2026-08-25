@@ -184,13 +184,14 @@ export async function listRoles(userId: string, tenantId: string): Promise<RoleR
       `
         select id, key, name
         from roles
-        where key in ('owner', 'admin', 'manager', 'sales', 'viewer', 'support')
+        where key in ('owner', 'admin', 'manager', 'finance', 'sales', 'viewer', 'support')
         order by case key
           when 'owner' then 1
           when 'admin' then 2
           when 'manager' then 3
-          when 'sales' then 4
-          when 'viewer' then 5
+          when 'finance' then 4
+          when 'sales' then 5
+          when 'viewer' then 6
           else 6
         end
       `

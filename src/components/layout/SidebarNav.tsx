@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   BarChart3,
   Boxes,
@@ -15,12 +16,14 @@ import {
   Sparkles,
   Store,
   Truck,
-  Users
+  Users,
+  WalletCards
 } from "lucide-react";
 
 const primaryItems = [
   { href: "/dashboard", label: "Dashboard", icon: Gauge },
-  { href: "/pricing", label: "Precificador", icon: BarChart3 }
+  { href: "/pricing", label: "Precificador", icon: BarChart3 },
+  { href: "/finance", label: "Financeiro", icon: WalletCards }
 ];
 
 const settingsItems = [
@@ -38,11 +41,25 @@ const settingsItems = [
 
 export function SidebarNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
   const pathname = usePathname();
+  const [canAccessFinance, setCanAccessFinance] = useState(isSuperAdmin);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/me", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => {
+        if (!active || !payload?.profile) return;
+        const profile = payload.profile as { role?: string; is_super_admin?: boolean };
+        setCanAccessFinance(Boolean(profile.is_super_admin || profile.role === "owner" || profile.role === "admin"));
+      })
+      .catch(() => null);
+    return () => { active = false; };
+  }, []);
 
   return (
     <nav className="flex gap-2 overflow-x-auto pb-1 text-sm [-webkit-overflow-scrolling:touch] lg:grid lg:gap-6 lg:overflow-visible lg:pb-0">
       <div className="flex shrink-0 gap-2 lg:grid lg:gap-1">
-        {primaryItems.map((item) => (
+        {primaryItems.filter((item) => item.href !== "/finance" || canAccessFinance).map((item) => (
           <NavItem active={isActive(pathname, item.href)} href={item.href} icon={item.icon} key={item.href}>
             {item.label}
           </NavItem>
