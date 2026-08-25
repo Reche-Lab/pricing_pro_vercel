@@ -1,8 +1,9 @@
 import type pg from "pg";
-import { classifyTransactions } from "@/domain/finance/classification";
+import { classifyTransactions, ruleMatchesTransaction } from "@/domain/finance/classification";
 import { randomUUID } from "node:crypto";
 import { sha256 } from "@/domain/finance/csv";
 import { calculateFinancialMetrics } from "@/domain/finance/metrics";
+import { calculateFinancialHealth } from "@/domain/finance/health";
 import { suggestInternalTransfers } from "@/domain/finance/transfers";
 import type { ClassificationRule, ParsedStatement } from "@/domain/finance/types";
 import { withTenantContext } from "@/lib/db/client";
@@ -67,6 +68,31 @@ export type FinancialNatureRow = {
   protected: boolean;
   active: boolean;
   transaction_count: string;
+};
+
+export type FinancialRuleRow = {
+  id: string;
+  name: string;
+  priority: number;
+  source_type: string | null;
+  financial_account_id: string | null;
+  account_name: string | null;
+  conditions: ClassificationRule["conditions"];
+  actions: ClassificationRule["actions"];
+  enabled: boolean;
+  auto_apply: boolean;
+  updated_at: string;
+};
+
+export type FinancialRuleInput = {
+  name: string;
+  priority: number;
+  sourceType?: string | null;
+  financialAccountId?: string | null;
+  conditions: ClassificationRule["conditions"];
+  actions: ClassificationRule["actions"];
+  enabled: boolean;
+  autoApply: boolean;
 };
 
 export async function listFinancialNatures(userId: string, tenantId: string, includeInactive = true) {
@@ -286,6 +312,101 @@ export async function listFinancialAccounts(userId: string, tenantId: string) {
   });
 }
 
+export async function listFinancialRules(userId: string, tenantId: string) {
+  return withTenantContext(userId, tenantId, async (client) => listRulesWithClient(client, tenantId));
+}
+
+export async function createFinancialRule(userId: string, tenantId: string, input: FinancialRuleInput) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    await validateRuleReferences(client, tenantId, input);
+    const result = await client.query<{ id: string }>(
+      `insert into financial_classification_rules (
+         tenant_id, scope, priority, name, financial_account_id, source_type, conditions, actions,
+         enabled, auto_apply, created_by
+       ) values ($1,'tenant',$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
+      [tenantId, input.priority, input.name, input.financialAccountId ?? null, input.sourceType ?? null,
+        JSON.stringify(input.conditions), JSON.stringify(input.actions), input.enabled, input.autoApply, userId]
+    );
+    await audit(client, tenantId, userId, "financial_rule.create", "financial_classification_rule", result.rows[0].id, null, input);
+    return (await listRulesWithClient(client, tenantId)).find((rule) => rule.id === result.rows[0].id)!;
+  });
+}
+
+export async function updateFinancialRule(userId: string, tenantId: string, ruleId: string, input: FinancialRuleInput) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    await validateRuleReferences(client, tenantId, input);
+    const before = await client.query(`select * from financial_classification_rules where tenant_id = $1 and id = $2`, [tenantId, ruleId]);
+    if (!before.rows[0]) throw new Error("Regra automática não encontrada.");
+    await client.query(
+      `update financial_classification_rules set priority=$3, name=$4, financial_account_id=$5,
+         source_type=$6, conditions=$7, actions=$8, enabled=$9, auto_apply=$10, updated_at=now()
+       where tenant_id=$1 and id=$2`,
+      [tenantId, ruleId, input.priority, input.name, input.financialAccountId ?? null, input.sourceType ?? null,
+        JSON.stringify(input.conditions), JSON.stringify(input.actions), input.enabled, input.autoApply]
+    );
+    await audit(client, tenantId, userId, "financial_rule.update", "financial_classification_rule", ruleId, before.rows[0], input);
+    return (await listRulesWithClient(client, tenantId)).find((rule) => rule.id === ruleId)!;
+  });
+}
+
+export async function deactivateFinancialRule(userId: string, tenantId: string, ruleId: string) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const result = await client.query(`update financial_classification_rules set enabled=false, updated_at=now()
+      where tenant_id=$1 and id=$2 returning id, name`, [tenantId, ruleId]);
+    if (!result.rows[0]) throw new Error("Regra automática não encontrada.");
+    await audit(client, tenantId, userId, "financial_rule.deactivate", "financial_classification_rule", ruleId, result.rows[0], { enabled: false });
+    return { deactivated: true };
+  });
+}
+
+export async function simulateFinancialRule(userId: string, tenantId: string, competence: string, input: FinancialRuleInput) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    await validateRuleReferences(client, tenantId, input);
+    const transactions = await listTransactionsWithClient(client, tenantId, competence);
+    const rule = toClassificationRule("simulation", input);
+    const matches = transactions.filter((row) => (!input.financialAccountId || row.account_id === input.financialAccountId)
+      && (!input.sourceType || row.source_type === input.sourceType)
+      && ruleMatchesTransaction(toNormalizedTransaction(row), rule));
+    return {
+      count: matches.length,
+      totalCents: matches.reduce((sum, row) => sum + Math.abs(Number(row.amount_cents)), 0),
+      samples: matches.slice(0, 5).map((row) => ({ id: row.id, date: row.transaction_date,
+        description: row.original_description, amountCents: Number(row.amount_cents), accountName: row.account_name }))
+    };
+  });
+}
+
+export async function applyFinancialRule(userId: string, tenantId: string, ruleId: string, competence: string) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const rows = await listRulesWithClient(client, tenantId);
+    const row = rows.find((item) => item.id === ruleId);
+    if (!row) throw new Error("Regra automática não encontrada.");
+    const transactions = await listTransactionsWithClient(client, tenantId, competence);
+    const rule = toClassificationRule(row.id, {
+      name: row.name, priority: row.priority, sourceType: row.source_type,
+      financialAccountId: row.financial_account_id, conditions: row.conditions, actions: row.actions,
+      enabled: row.enabled, autoApply: row.auto_apply
+    });
+    const ids = transactions.filter((transaction) => !["manual", "transfer_match"].includes(transaction.classification_source)
+      && transaction.nature !== "informative"
+      && (!row.financial_account_id || transaction.account_id === row.financial_account_id)
+      && (!row.source_type || transaction.source_type === row.source_type)
+      && ruleMatchesTransaction(toNormalizedTransaction(transaction), rule)).map((transaction) => transaction.id);
+    if (ids.length) {
+      await client.query(`update financial_transactions set nature=$3, category_id=$4,
+        include_external_cash_flow=$5, include_operating_result=$6, review_required=$7,
+        review_status=case when $7 then 'pending' else 'reviewed' end,
+        classification_confidence=case when $7 then 0.7 else 1 end,
+        classification_source='rule', classification_rule_id=$8, updated_at=now()
+        where tenant_id=$1 and id=any($2::uuid[])`, [tenantId, ids, row.actions.nature,
+        row.actions.categoryId ?? null, row.actions.includeExternalCashFlow ?? true,
+        row.actions.includeOperatingResult ?? false, row.actions.reviewRequired ?? false, ruleId]);
+    }
+    await audit(client, tenantId, userId, "financial_rule.apply", "financial_classification_rule", ruleId, null, { competence, updated: ids.length });
+    return { updated: ids.length };
+  });
+}
+
 export async function upsertFinancialAccount(userId: string, tenantId: string, input: {
   id?: string; name: string; institution: string; accountType: string; currency: string;
   ownershipType: string; sameEconomicEntity: boolean; requiredForMonthlyClose: boolean; olistAccountId?: string | null;
@@ -348,7 +469,7 @@ export async function importFinancialStatement(input: {
     );
     if (!account.rows[0]) throw new Error("Conta financeira não encontrada para este tenant.");
 
-    const rules = await loadRules(client, input.tenantId);
+    const rules = await loadRules(client, input.tenantId, input.accountId);
     const classified = classifyTransactions(input.parsed.transactions, rules);
     const credits = classified.filter((item) => item.amountCents > 0).reduce((sum, item) => sum + item.amountCents, 0);
     const debits = Math.abs(classified.filter((item) => item.amountCents < 0).reduce((sum, item) => sum + item.amountCents, 0));
@@ -427,7 +548,8 @@ export async function getFinancialOverview(userId: string, tenantId: string, com
       listTransactionsWithClient(client, tenantId, competence),
       client.query<FinancialAccountRow>(`select * from financial_accounts where tenant_id = $1 and active = true order by name`, [tenantId]),
       client.query(`select id, original_filename, source_type, status, transaction_row_count, credit_total_cents,
-                           debit_total_cents, final_balance_cents, imported_at, financial_account_id
+                           debit_total_cents, initial_balance_cents, final_balance_cents, calculated_balance_cents,
+                           error_message, metadata, imported_at, financial_account_id
                     from bank_statement_imports where tenant_id = $1 and competence = $2 order by imported_at desc`, [tenantId, `${competence}-01`]),
       client.query<{ status: string; closing_notes: string | null }>(`select status, closing_notes from financial_months where tenant_id = $1 and competence = $2`, [tenantId, `${competence}-01`]),
       client.query<FinancialCategoryRow>(`select id, name, type, affects_operating_result from financial_categories where tenant_id = $1 and active = true order by name`, [tenantId]),
@@ -448,10 +570,59 @@ export async function getFinancialOverview(userId: string, tenantId: string, com
       internalTransferConfirmed: row.transfer_status === "confirmed",
       reviewRequired: row.review_required, reviewStatus: row.review_status
     }));
+    const requiredAccounts = accounts.rows.filter((account) => account.required_for_monthly_close);
+    const validImportAccounts = new Set(imports.rows.filter((item) => ["needs_review", "completed"].includes(String(item.status)))
+      .map((item) => String(item.financial_account_id)));
+    const health = calculateFinancialHealth({
+      requiredAccounts: requiredAccounts.length,
+      missingAccounts: requiredAccounts.filter((account) => !validImportAccounts.has(account.id)).length,
+      failedImports: imports.rows.filter((item) => item.status === "failed").length,
+      importsNeedingReview: imports.rows.filter((item) => item.status === "needs_review").length,
+      balanceMismatches: imports.rows.filter((item) => item.final_balance_cents !== null && item.calculated_balance_cents !== null
+        && Number(item.final_balance_cents) !== Number(item.calculated_balance_cents)).length,
+      pendingReviews: normalized.filter((item) => item.reviewRequired && item.reviewStatus === "pending").length,
+      unclassifiedTransactions: normalized.filter((item) => item.nature === "unclassified").length,
+      suggestedTransfers: transfers.rows.filter((item) => item.status === "suggested").length
+    });
     return {
       competence, month: month.rows[0] ?? { status: "open", closing_notes: null },
       metrics: calculateFinancialMetrics(normalized), accounts: accounts.rows,
-      imports: imports.rows, transactions, categories: categories.rows, natures: natures.rows, transfers: transfers.rows
+      imports: imports.rows, transactions, categories: categories.rows, natures: natures.rows, transfers: transfers.rows, health
+    };
+  });
+}
+
+export async function getFinancialComparison(userId: string, tenantId: string, endCompetence: string, months: number) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const end = `${endCompetence}-01`;
+    const series = await client.query<{
+      competence: string; external_inflows_cents: string; external_outflows_cents: string;
+      operating_result_cents: string; transaction_count: string; pending_count: string;
+    }>(`with periods as (
+        select generate_series($2::date - (($3::int - 1) * interval '1 month'), $2::date, interval '1 month')::date competence
+      ) select p.competence::text,
+        coalesce(sum(case when t.include_external_cash_flow and t.amount_cents > 0 and coalesce(m.status,'') <> 'confirmed' then t.amount_cents else 0 end),0)::text external_inflows_cents,
+        coalesce(abs(sum(case when t.include_external_cash_flow and t.amount_cents < 0 and coalesce(m.status,'') <> 'confirmed' then t.amount_cents else 0 end)),0)::text external_outflows_cents,
+        coalesce(sum(case when t.include_operating_result then t.amount_cents else 0 end),0)::text operating_result_cents,
+        count(t.id) filter (where t.direction <> 'neutral')::text transaction_count,
+        count(t.id) filter (where (t.review_required and t.review_status='pending') or t.nature='unclassified')::text pending_count
+      from periods p left join financial_transactions t on t.tenant_id=$1 and t.competence=p.competence
+      left join internal_transfer_matches m on m.id=t.internal_transfer_pair_id and m.tenant_id=t.tenant_id
+      group by p.competence order by p.competence`, [tenantId, end, months]);
+    const categoryRows = await client.query<{ category_name: string; amount_cents: string }>(
+      `select coalesce(c.name,'Sem categoria') category_name,
+        sum(t.amount_cents)::text amount_cents
+       from financial_transactions t left join financial_categories c on c.id=t.category_id and c.tenant_id=t.tenant_id
+       where t.tenant_id=$1 and t.competence between ($2::date - (($3::int - 1) * interval '1 month')) and $2::date
+         and t.include_operating_result
+       group by coalesce(c.name,'Sem categoria') order by abs(sum(t.amount_cents)) desc limit 8`, [tenantId, end, months]);
+    return {
+      endCompetence, months,
+      series: series.rows.map((row) => ({ competence: row.competence.slice(0, 7),
+        externalInflowsCents: Number(row.external_inflows_cents), externalOutflowsCents: Number(row.external_outflows_cents),
+        operatingResultCents: Number(row.operating_result_cents), transactionCount: Number(row.transaction_count),
+        pendingCount: Number(row.pending_count) })),
+      categories: categoryRows.rows.map((row) => ({ name: row.category_name, amountCents: Number(row.amount_cents) }))
     };
   });
 }
@@ -525,12 +696,15 @@ export async function setTransferStatus(userId: string, tenantId: string, matchI
 
 export async function closeFinancialMonth(userId: string, tenantId: string, input: { competence: string; force: boolean; notes?: string }) {
   return withTenantContext(userId, tenantId, async (client) => {
-    const checks = await client.query<{ missing_accounts: string; pending_reviews: string; failed_imports: string }>(
+    const checks = await client.query<{ missing_accounts: string; pending_reviews: string; failed_imports: string; balance_mismatches: string }>(
       `select
         (select count(*) from financial_accounts a where a.tenant_id = $1 and a.active and a.required_for_monthly_close
           and not exists (select 1 from bank_statement_imports i where i.tenant_id = a.tenant_id and i.financial_account_id = a.id and i.competence = $2 and i.status in ('needs_review','completed')))::text missing_accounts,
         (select count(*) from financial_transactions t where t.tenant_id = $1 and t.competence = $2 and t.review_required and t.review_status = 'pending')::text pending_reviews,
-        (select count(*) from bank_statement_imports i where i.tenant_id = $1 and i.competence = $2 and i.status = 'failed')::text failed_imports`,
+        (select count(*) from bank_statement_imports i where i.tenant_id = $1 and i.competence = $2 and i.status = 'failed')::text failed_imports,
+        (select count(*) from bank_statement_imports i where i.tenant_id = $1 and i.competence = $2
+          and i.final_balance_cents is not null and i.calculated_balance_cents is not null
+          and i.final_balance_cents <> i.calculated_balance_cents)::text balance_mismatches`,
       [tenantId, `${input.competence}-01`]
     );
     const pending = checks.rows[0];
@@ -616,15 +790,17 @@ async function listTransactionsWithClient(client: pg.PoolClient, tenantId: strin
   return result.rows;
 }
 
-async function loadRules(client: pg.PoolClient, tenantId: string): Promise<ClassificationRule[]> {
-  const result = await client.query<ClassificationRule & { source_type: string | null }>(
-    `select r.id, r.priority, r.source_type, r.conditions, r.actions ||
+async function loadRules(client: pg.PoolClient, tenantId: string, accountId?: string): Promise<ClassificationRule[]> {
+  const result = await client.query<ClassificationRule & { source_type: string | null; financial_account_id: string | null }>(
+    `select r.id, r.priority, r.source_type, r.financial_account_id, r.conditions, r.actions ||
       case when c.id is null then '{}'::jsonb else jsonb_build_object('categoryId', c.id) end as actions
      from financial_classification_rules r
      left join financial_categories c on c.tenant_id = r.tenant_id and c.name = r.actions->>'categoryName'
-     where r.tenant_id = $1 and r.enabled and r.auto_apply order by r.priority, r.created_at`, [tenantId]
+     where r.tenant_id = $1 and r.enabled and r.auto_apply
+       and ($2::uuid is null or r.financial_account_id is null or r.financial_account_id=$2)
+     order by r.priority, r.created_at`, [tenantId, accountId ?? null]
   );
-  return result.rows.map((row) => ({ ...row, sourceType: row.source_type }));
+  return result.rows.map((row) => ({ ...row, sourceType: row.source_type, financialAccountId: row.financial_account_id }));
 }
 
 async function refreshTransferSuggestions(client: pg.PoolClient, tenantId: string, competence: string) {
@@ -663,6 +839,50 @@ async function refreshTransferSuggestions(client: pg.PoolClient, tenantId: strin
 
 function findSourceIdentifier(values: Record<string, string>) {
   return values.Identificador || values.REFERENCE_ID || values["ID da transação"] || null;
+}
+
+async function listRulesWithClient(client: pg.PoolClient, tenantId: string) {
+  const result = await client.query<FinancialRuleRow>(`select r.id, r.name, r.priority, r.source_type,
+    r.financial_account_id, a.name account_name, r.conditions, r.actions ||
+      case when c.id is null then '{}'::jsonb else jsonb_build_object('categoryId',c.id,'categoryName',c.name) end actions,
+    r.enabled, r.auto_apply, r.updated_at::text
+    from financial_classification_rules r
+    left join financial_accounts a on a.id=r.financial_account_id and a.tenant_id=r.tenant_id
+    left join financial_categories c on c.tenant_id=r.tenant_id and (
+      c.id=nullif(r.actions->>'categoryId','')::uuid or
+      ((r.actions->>'categoryId') is null and c.name=r.actions->>'categoryName')
+    )
+    where r.tenant_id=$1 order by r.enabled desc, r.priority, r.name`, [tenantId]);
+  return result.rows;
+}
+
+async function validateRuleReferences(client: pg.PoolClient, tenantId: string, input: FinancialRuleInput) {
+  const nature = await client.query(`select id from financial_natures where tenant_id=$1 and key=$2 and active`, [tenantId, input.actions.nature]);
+  if (!nature.rows[0]) throw new Error("Selecione uma natureza financeira ativa.");
+  if (input.actions.categoryId) {
+    const category = await client.query(`select id from financial_categories where tenant_id=$1 and id=$2 and active`, [tenantId, input.actions.categoryId]);
+    if (!category.rows[0]) throw new Error("Selecione uma categoria financeira ativa.");
+  }
+  if (input.financialAccountId) {
+    const account = await client.query(`select id from financial_accounts where tenant_id=$1 and id=$2 and active`, [tenantId, input.financialAccountId]);
+    if (!account.rows[0]) throw new Error("Selecione uma conta financeira ativa.");
+  }
+}
+
+function toClassificationRule(id: string, input: FinancialRuleInput): ClassificationRule {
+  return { id, priority: input.priority, sourceType: input.sourceType, financialAccountId: input.financialAccountId,
+    conditions: input.conditions, actions: input.actions };
+}
+
+function toNormalizedTransaction(row: FinancialTransactionRow) {
+  return {
+    sourceLineNumber: 0, transactionDate: row.transaction_date, competence: row.competence.slice(0, 7),
+    originalDescription: row.original_description, normalizedDescription: row.normalized_description,
+    counterparty: row.counterparty ?? undefined, amountCents: Number(row.amount_cents), currency: "BRL",
+    direction: row.direction, sourceType: row.source_type as ParsedStatement["sourceType"], nature: row.nature,
+    includeExternalCashFlow: row.include_external_cash_flow, includeOperatingResult: row.include_operating_result,
+    reviewRequired: row.review_required, rawData: {}
+  };
 }
 
 async function audit(client: pg.PoolClient, tenantId: string, userId: string, action: string, entityType: string,

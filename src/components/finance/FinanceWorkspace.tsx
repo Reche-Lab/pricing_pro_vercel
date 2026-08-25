@@ -8,8 +8,9 @@ import {
   Pencil, Plus, RotateCcw, Search, SlidersHorizontal, Tags, Trash2, Upload, WalletCards, X
 } from "lucide-react";
 import { isValidCompetence, shiftCompetence } from "@/domain/finance/competence";
+import { ComparisonWorkspace, PendingCenter, RulesWorkspace } from "@/components/finance/FinanceIntelligence";
 
-type Account = {
+export type FinanceAccount = {
   id: string; name: string; institution: string; account_type: string; currency: string;
   ownership_type: string; same_economic_entity: boolean; required_for_monthly_close: boolean; active: boolean;
 };
@@ -19,15 +20,20 @@ type Transaction = {
   category_id: string | null; category_name: string | null; account_name: string; source_type: string;
   review_required: boolean; review_status: string; transfer_status: string | null;
 };
-type Overview = {
+export type FinanceOverview = {
   competence: string; month: { status: string; closing_notes: string | null };
-  metrics: Record<string, number>; accounts: Account[];
+  metrics: Record<string, number>; accounts: FinanceAccount[];
   imports: Array<Record<string, string | number | null>>; transactions: Transaction[];
   categories: Array<{ id: string; name: string; type: string; affects_operating_result: boolean }>;
   natures: ManagedNature[];
   transfers: Array<Record<string, string | number | null>>;
+  health: { score: number; readyToClose: boolean; blockingCount: number; attentionCount: number;
+    pendencies: Array<{ key: string; count: number; severity: "blocking" | "attention"; label: string;
+      description: string; action: "imports" | "transactions" | "transfers" }> };
 };
-type Tab = "dashboard" | "imports" | "transactions" | "transfers" | "olist" | "accounts" | "categories" | "natures";
+type Account = FinanceAccount;
+type Overview = FinanceOverview;
+export type FinanceTab = "dashboard" | "pendencies" | "comparison" | "imports" | "transactions" | "transfers" | "rules" | "olist" | "accounts" | "categories" | "natures";
 type ManagedCategory = {
   id: string; parent_id: string | null; name: string; type: "income" | "expense" | "neutral";
   affects_operating_result: boolean; active: boolean; olist_category_id: string | null;
@@ -56,10 +62,10 @@ const FALLBACK_NATURES = [
   ["unclassified", "Não classificado"], ["informative", "Informativo"]
 ] as const;
 
-export function FinanceWorkspace({ initialOverview }: { initialOverview: Overview }) {
+export function FinanceWorkspace({ initialOverview }: { initialOverview: FinanceOverview }) {
   const router = useRouter();
   const [overview, setOverview] = useState(initialOverview);
-  const [tab, setTab] = useState<Tab>(initialOverview.transactions.length ? "dashboard" : "imports");
+  const [tab, setTab] = useState<FinanceTab>(initialOverview.transactions.length ? "dashboard" : "imports");
   const [busy, setBusy] = useState(false);
   const [competenceDraft, setCompetenceDraft] = useState(initialOverview.competence);
   const competenceRequest = useRef(0);
@@ -130,18 +136,22 @@ export function FinanceWorkspace({ initialOverview }: { initialOverview: Overvie
       {message ? <Notice {...message} onClose={() => setMessage(null)} /> : null}
       <nav className="flex gap-1 overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-900/50 p-1" aria-label="Financeiro">
         {([
-          ["dashboard", "Visão geral"], ["imports", "Importações"], ["transactions", `Lançamentos (${overview.transactions.length})`],
-          ["transfers", `Transferências (${overview.transfers.length})`], ["categories", "Categorias"], ["natures", "Naturezas"], ["accounts", `Contas (${overview.accounts.length})`]
+          ["dashboard", "Visão geral"], ["pendencies", `Pendências${overview.health.blockingCount ? ` (${overview.health.blockingCount})` : ""}`], ["comparison", "Evolução"],
+          ["imports", "Importações"], ["transactions", `Lançamentos (${overview.transactions.length})`],
+          ["transfers", `Transferências (${overview.transfers.length})`], ["rules", "Regras"], ["categories", "Categorias"], ["natures", "Naturezas"], ["accounts", `Contas (${overview.accounts.length})`]
           , ["olist", "Conciliação Olist"]
-        ] as Array<[Tab, string]>).map(([id, label]) => (
+        ] as Array<[FinanceTab, string]>).map(([id, label]) => (
           <button className={`focus-ring shrink-0 rounded-md px-3 py-2 text-sm font-medium ${tab === id ? "bg-zinc-700 text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-white"}`} key={id} onClick={() => setTab(id)}>{label}</button>
         ))}
       </nav>
 
-      {tab === "dashboard" ? <Dashboard overview={overview} onRefresh={refresh} onMessage={setMessage} /> : null}
+      {tab === "dashboard" ? <Dashboard overview={overview} onRefresh={refresh} onMessage={setMessage} onNavigate={setTab} /> : null}
+      {tab === "pendencies" ? <PendingCenter overview={overview} onNavigate={setTab} /> : null}
+      {tab === "comparison" ? <ComparisonWorkspace competence={overview.competence} onMessage={setMessage} /> : null}
       {tab === "imports" ? <ImportWorkspace overview={overview} onRefresh={refresh} onMessage={setMessage} /> : null}
       {tab === "transactions" ? <Transactions overview={overview} onRefresh={refresh} onMessage={setMessage} /> : null}
       {tab === "transfers" ? <Transfers overview={overview} onRefresh={refresh} onMessage={setMessage} /> : null}
+      {tab === "rules" ? <RulesWorkspace overview={overview} onRefresh={refresh} onMessage={setMessage} /> : null}
       {tab === "olist" ? <OlistReconciliation overview={overview} onMessage={setMessage} /> : null}
       {tab === "categories" ? <Categories onMessage={setMessage} onRefresh={refresh} /> : null}
       {tab === "natures" ? <Natures onMessage={setMessage} onRefresh={refresh} /> : null}
@@ -150,7 +160,7 @@ export function FinanceWorkspace({ initialOverview }: { initialOverview: Overvie
   );
 }
 
-function Dashboard({ overview, onRefresh, onMessage }: PanelProps) {
+function Dashboard({ overview, onRefresh, onMessage, onNavigate }: PanelProps & { onNavigate: (tab: FinanceTab) => void }) {
   const metrics = overview.metrics;
   const accountTotals = useMemo(() => overview.transactions.reduce<Record<string, { incoming: number; outgoing: number }>>((totals, item) => {
     const current = totals[item.account_name] ?? { incoming: 0, outgoing: 0 };
@@ -161,6 +171,7 @@ function Dashboard({ overview, onRefresh, onMessage }: PanelProps) {
   const maxAccount = Math.max(1, ...Object.values(accountTotals).flatMap((item) => [item.incoming, item.outgoing]));
   return (
     <div className="space-y-4">
+      <PendingCenter overview={overview} onNavigate={onNavigate} compact />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Metric label="Entradas externas" value={metrics.externalInflowsCents} icon={ArrowUpRight} tone="emerald" />
         <Metric label="Saídas externas" value={metrics.externalOutflowsCents} icon={ArrowDownRight} tone="rose" />
@@ -388,7 +399,7 @@ function AccountForm({ onCancel, onCreated }: { onCancel?: () => void; onCreated
   return <div><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Field label="Nome da conta"><input placeholder="Ex.: Nubank empresa" value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})}/></Field><Field label="Instituição"><select value={form.institution} onChange={(e)=>setForm({...form,institution:e.target.value})}><option value="nubank">Nubank</option><option value="olist">Olist Conta Digital</option><option value="mercado_pago">Mercado Pago</option><option value="paypal">PayPal</option><option value="other">Outra</option></select></Field><Field label="Titularidade"><select value={form.ownershipType} onChange={(e)=>setForm({...form,ownershipType:e.target.value})}><option value="company">Empresa</option><option value="owner">Titular</option><option value="partner">Sócio</option><option value="personal">Pessoal</option><option value="third_party">Terceiro</option></select></Field></div><div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-4"><label className="flex items-center gap-2 text-sm text-zinc-300"><input checked={form.sameEconomicEntity} onChange={(e)=>setForm({...form,sameEconomicEntity:e.target.checked})} type="checkbox"/>Integra o mesmo caixa operacional</label><label className="flex items-center gap-2 text-sm text-zinc-300"><input checked={form.requiredForMonthlyClose} onChange={(e)=>setForm({...form,requiredForMonthlyClose:e.target.checked})} type="checkbox"/>Obrigatória no fechamento</label></div>{error?<p className="mt-3 rounded-md border border-rose-500/30 bg-rose-500/10 p-2 text-sm text-rose-100">{error}</p>:null}<div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">{onCancel?<button className="rounded-md border border-zinc-700 px-3 py-2 text-sm" onClick={onCancel} type="button">Cancelar</button>:null}<button className="rounded-md bg-emerald-500 px-3 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50" disabled={busy||form.name.trim().length<2} onClick={submit} type="button">{busy?<Loader2 className="mr-1 inline animate-spin" size={15}/>:null}Salvar conta e continuar</button></div></div>;
 }
 
-function MonthAction({overview,onRefresh,onMessage}:PanelProps){const action=overview.month.status==="completed"?"reopen":"close";const [open,setOpen]=useState(false);const [busy,setBusy]=useState(false);const [notes,setNotes]=useState("");const [force,setForce]=useState(false);const [error,setError]=useState("");async function submit(){if(action==="reopen"&&!notes.trim()){setError("Informe o motivo da reabertura.");return;}if(force&&!notes.trim()){setError("A justificativa é obrigatória para concluir com pendências.");return;}setBusy(true);setError("");try{const response=await fetch("/api/finance/month",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({competence:overview.competence,action,force,notes})});const payload=await response.json();if(payload.result?.requiresJustification){setForce(true);setError(`Existem pendências: ${payload.result.checks.pending_reviews} revisão(ões), ${payload.result.checks.missing_accounts} conta(s) sem extrato e ${payload.result.checks.failed_imports} lote(s) com erro. Justifique para continuar.`);return;}if(!response.ok)throw new Error(payload.error);setOpen(false);await onRefresh();onMessage({tone:"success",text:action==="close"?"Competência concluída.":"Competência reaberta com auditoria."});}catch(caught){setError(caught instanceof Error?caught.message:"Falha no fechamento.");}finally{setBusy(false);}}return <><button className="mt-4 w-full rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800" onClick={()=>setOpen(true)}>{action==="reopen"?"Reabrir competência":"Concluir competência"}</button>{open?<Modal title={action==="reopen"?"Reabrir competência":"Concluir competência"} onClose={()=>setOpen(false)}><p className="text-sm text-zinc-400">{action==="reopen"?"A reabertura será registrada na auditoria e permitirá novas alterações.":"O sistema verificará contas obrigatórias, revisões e importações com erro."}</p><label className="mt-4 grid gap-1.5 text-xs font-medium text-zinc-400">{force?"Justificativa obrigatória":action==="reopen"?"Motivo":"Observação opcional"}<textarea className="min-h-24 rounded-md border border-zinc-700 p-3 text-sm" onChange={(event)=>setNotes(event.target.value)} value={notes}/></label>{error?<p className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-sm text-amber-100">{error}</p>:null}<button className="mt-4 w-full rounded-md bg-amber-400 px-3 py-2.5 font-semibold text-zinc-950 disabled:opacity-50" disabled={busy} onClick={submit}>{busy?<Loader2 className="mr-2 inline animate-spin" size={15}/>:null}{force?"Concluir com pendências":action==="reopen"?"Confirmar reabertura":"Verificar e concluir"}</button></Modal>:null}</>}
+function MonthAction({overview,onRefresh,onMessage}:PanelProps){const action=overview.month.status==="completed"?"reopen":"close";const [open,setOpen]=useState(false);const [busy,setBusy]=useState(false);const [notes,setNotes]=useState("");const [force,setForce]=useState(false);const [error,setError]=useState("");async function submit(){if(action==="reopen"&&!notes.trim()){setError("Informe o motivo da reabertura.");return;}if(force&&!notes.trim()){setError("A justificativa é obrigatória para concluir com pendências.");return;}setBusy(true);setError("");try{const response=await fetch("/api/finance/month",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({competence:overview.competence,action,force,notes})});const payload=await response.json();if(payload.result?.requiresJustification){setForce(true);const checks=payload.result.checks;setError(`Existem pendências: ${checks.pending_reviews} revisão(ões), ${checks.missing_accounts} conta(s) sem extrato, ${checks.failed_imports} lote(s) com erro e ${checks.balance_mismatches??0} diferença(s) de saldo. Justifique para continuar.`);return;}if(!response.ok)throw new Error(payload.error);setOpen(false);await onRefresh();onMessage({tone:"success",text:action==="close"?"Competência concluída.":"Competência reaberta com auditoria."});}catch(caught){setError(caught instanceof Error?caught.message:"Falha no fechamento.");}finally{setBusy(false);}}return <><button className="mt-4 w-full rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800" onClick={()=>setOpen(true)}>{action==="reopen"?"Reabrir competência":"Concluir competência"}</button>{open?<Modal title={action==="reopen"?"Reabrir competência":"Concluir competência"} onClose={()=>setOpen(false)}><p className="text-sm text-zinc-400">{action==="reopen"?"A reabertura será registrada na auditoria e permitirá novas alterações.":"O sistema verificará contas obrigatórias, revisões, importações e consistência dos saldos."}</p><label className="mt-4 grid gap-1.5 text-xs font-medium text-zinc-400">{force?"Justificativa obrigatória":action==="reopen"?"Motivo":"Observação opcional"}<textarea className="min-h-24 rounded-md border border-zinc-700 p-3 text-sm" onChange={(event)=>setNotes(event.target.value)} value={notes}/></label>{error?<p className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-sm text-amber-100">{error}</p>:null}<button className="mt-4 w-full rounded-md bg-amber-400 px-3 py-2.5 font-semibold text-zinc-950 disabled:opacity-50" disabled={busy} onClick={submit}>{busy?<Loader2 className="mr-2 inline animate-spin" size={15}/>:null}{force?"Concluir com pendências":action==="reopen"?"Confirmar reabertura":"Verificar e concluir"}</button></Modal>:null}</>}
 
 type Message={tone:"success"|"error"|"info";text:string}; type PanelProps={overview:Overview;onRefresh:()=>Promise<void>;onMessage:(message:Message)=>void};
 function Metric({label,value,icon:Icon,tone,signed=false}:{label:string;value:number;icon:React.ComponentType<{size?:number}>;tone:string;signed?:boolean}){const colors:Record<string,string>={emerald:"text-emerald-300 bg-emerald-400/10",rose:"text-rose-300 bg-rose-400/10",amber:"text-amber-300 bg-amber-400/10",cyan:"text-cyan-300 bg-cyan-400/10"};return <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4"><div className={`mb-4 flex h-8 w-8 items-center justify-center rounded-md ${colors[tone]}`}><Icon size={17}/></div><p className="text-xs text-zinc-500">{label}</p><p className={`mt-1 text-xl font-semibold ${signed&&value<0?"text-rose-300":"text-white"}`}>{money(value)}</p></div>}

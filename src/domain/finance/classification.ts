@@ -9,7 +9,7 @@ export function classifyTransaction(
     return { ...transaction, classificationConfidence: 1, classificationSource: "adapter" };
   }
   const matched = [...rules]
-    .filter((rule) => (!rule.sourceType || rule.sourceType === transaction.sourceType) && matchesRule(transaction, rule))
+    .filter((rule) => (!rule.sourceType || rule.sourceType === transaction.sourceType) && ruleMatchesTransaction(transaction, rule))
     .sort((left, right) => left.priority - right.priority)[0];
   if (!matched) {
     return { ...transaction, classificationConfidence: 0, classificationSource: "unclassified" };
@@ -31,7 +31,7 @@ export function classifyTransactions(transactions: NormalizedFinancialTransactio
   return transactions.map((transaction) => classifyTransaction(transaction, rules));
 }
 
-function matchesRule(transaction: NormalizedFinancialTransaction, rule: ClassificationRule) {
+export function ruleMatchesTransaction(transaction: NormalizedFinancialTransaction, rule: ClassificationRule) {
   const conditions = rule.conditions;
   const description = normalizeText(transaction.normalizedDescription);
   if (conditions.descriptionContains && !description.includes(normalizeText(conditions.descriptionContains))) return false;
@@ -50,4 +50,3 @@ function matchesRule(transaction: NormalizedFinancialTransaction, rule: Classifi
   if (conditions.exactAmountCents !== undefined && absoluteAmount !== conditions.exactAmountCents) return false;
   return true;
 }
-

@@ -88,6 +88,7 @@ export type ClassificationRule = {
   id: string;
   priority: number;
   sourceType?: string | null;
+  financialAccountId?: string | null;
   conditions: {
     descriptionContains?: string;
     descriptionStartsWith?: string;
@@ -113,4 +114,3 @@ export type ClassifiedTransaction = NormalizedFinancialTransaction & {
   classificationConfidence: number;
   classificationSource: string;
 };
-

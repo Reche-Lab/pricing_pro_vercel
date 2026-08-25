@@ -202,12 +202,17 @@ Resultado:
 - [x] Implementar conciliação assistida Olist em modo leitura.
 - [x] Validar os valores de regressão de julho de 2026.
 - [x] Restringir temporariamente menu, página e APIs financeiras a owner/admin/superadmin.
+- [x] Criar central de pendências com prontidão mensal, bloqueios, alertas e atalhos de resolução.
+- [x] Incluir divergência de saldo entre os controles obrigatórios do fechamento auditado.
+- [x] Implementar manutenção de regras automáticas por tenant com prioridade, origem, conta, condições e ações.
+- [x] Permitir simular regras na competência antes de salvar e aplicá-las sem sobrescrever classificações manuais ou transferências confirmadas.
+- [x] Implementar comparativo de 3, 6 e 12 meses com métricas selecionáveis, variação, gráfico interativo e impacto por categoria.
 - [ ] Homologar o adapter com um CSV PayPal real.
 - [ ] Implementar IA opcional para classificação, recorrência e anomalias.
 - [ ] Implementar escrita assistida no Olist somente após homologação contábil e de idempotência.
-- [ ] Adicionar PDF gerencial, histórico multi-mês e médias móveis.
+- [ ] Adicionar PDF gerencial e médias móveis configuráveis.
 
-Rode `supabase/migrations/0054_financial_statements.sql` antes de acessar `/finance`.
+Para uma instalação nova, rode as migrations financeiras `0054`, `0055` e `0056` antes de acessar `/finance`. Os blocos de pendências, regras e evolução reutilizam esse modelo e não exigem migration adicional.
 
 Importar as caixas do `boxes.csv` para o tenant `ground-shop`:
 

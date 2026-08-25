@@ -132,8 +132,13 @@ GET|POST /api/finance/accounts
 POST     /api/finance/imports
 GET      /api/finance/imports/:importId/file
 GET      /api/finance/overview?competence=AAAA-MM
+GET      /api/finance/comparison?competence=AAAA-MM&months=3|6|12
 PATCH    /api/finance/transactions
 PATCH    /api/finance/transfers/:matchId
+GET|POST /api/finance/rules
+PATCH|DELETE /api/finance/rules/:ruleId
+POST     /api/finance/rules/simulate
+POST     /api/finance/rules/:ruleId/apply
 POST     /api/finance/month
 GET      /api/finance/export?competence=AAAA-MM&format=csv|xlsx
 GET      /api/finance/olist/search?competence=AAAA-MM
