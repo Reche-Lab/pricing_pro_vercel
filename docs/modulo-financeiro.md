@@ -77,8 +77,11 @@ Não há nova variável de ambiente. O arquivo original é preservado em `bytea`
 6. Para CSV desconhecido, relacione data, descrição, valor e identificador.
 7. Confirme a importação.
 8. Revise `Lançamentos`, classifique em lote e opcionalmente crie uma regra futura.
-9. Confirme ou rejeite transferências que exigem revisão.
-10. Exporte CSV/Excel e conclua a competência. Pendências exigem justificativa.
+9. Em `Categorias`, crie e mantenha categorias e subcategorias de receita, despesa ou movimentação neutra.
+10. Confirme ou rejeite transferências que exigem revisão.
+11. Exporte CSV/Excel e conclua a competência. Pendências exigem justificativa.
+
+Categorias excluídas são desativadas, não removidas fisicamente. Elas deixam de ser oferecidas para novas classificações, suas regras automáticas são desativadas e os lançamentos históricos continuam identificados corretamente.
 
 O checksum impede a duplicação do mesmo arquivo. Os hashes e identificadores de origem preservam a rastreabilidade por linha.
 

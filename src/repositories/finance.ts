@@ -46,10 +46,135 @@ export type FinancialTransactionRow = {
 
 export type FinancialCategoryRow = {
   id: string;
+  parent_id: string | null;
   name: string;
-  type: string;
+  type: "income" | "expense" | "neutral";
   affects_operating_result: boolean;
+  active: boolean;
+  olist_category_id: string | null;
+  transaction_count: string;
+  active_children_count: string;
 };
+
+export async function listFinancialCategories(userId: string, tenantId: string, includeInactive = true) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    await ensureDefaultCategories(client, tenantId);
+    const result = await client.query<FinancialCategoryRow>(
+      `select c.id, c.parent_id, c.name, c.type, c.affects_operating_result, c.active,
+              c.olist_category_id,
+              count(distinct t.id)::text as transaction_count,
+              count(distinct child.id) filter (where child.active)::text as active_children_count
+       from financial_categories c
+       left join financial_transactions t on t.tenant_id = c.tenant_id
+         and (t.category_id = c.id or t.subcategory_id = c.id)
+       left join financial_categories child on child.tenant_id = c.tenant_id and child.parent_id = c.id
+       where c.tenant_id = $1 and ($2::boolean or c.active)
+       group by c.id
+       order by c.active desc, c.parent_id nulls first, c.name`,
+      [tenantId, includeInactive]
+    );
+    return result.rows;
+  });
+}
+
+export async function createFinancialCategory(userId: string, tenantId: string, input: {
+  name: string; type: "income" | "expense" | "neutral"; parentId?: string | null;
+  affectsOperatingResult: boolean; olistCategoryId?: string | null;
+}) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    await validateCategoryParent(client, tenantId, input.parentId ?? null, input.type);
+    const duplicate = await client.query(
+      `select id from financial_categories
+       where tenant_id = $1 and parent_id is not distinct from $2::uuid and lower(name) = lower($3) limit 1`,
+      [tenantId, input.parentId ?? null, input.name]
+    );
+    if (duplicate.rows[0]) throw new Error("Já existe uma categoria com este nome no mesmo nível.");
+    const result = await client.query<FinancialCategoryRow>(
+      `insert into financial_categories (
+         tenant_id, parent_id, name, type, affects_operating_result, olist_category_id
+       ) values ($1,$2,$3,$4,$5,$6)
+       returning id, parent_id, name, type, affects_operating_result, active, olist_category_id,
+         '0'::text transaction_count, '0'::text active_children_count`,
+      [tenantId, input.parentId ?? null, input.name, input.type, input.affectsOperatingResult, input.olistCategoryId ?? null]
+    );
+    await audit(client, tenantId, userId, "financial_category.create", "financial_category", result.rows[0].id, null, result.rows[0]);
+    return result.rows[0];
+  });
+}
+
+export async function updateFinancialCategory(userId: string, tenantId: string, categoryId: string, input: {
+  name: string; type: "income" | "expense" | "neutral"; parentId?: string | null;
+  affectsOperatingResult: boolean; olistCategoryId?: string | null; active?: boolean;
+}) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    if (categoryId === input.parentId) throw new Error("Uma categoria não pode ser subordinada a ela mesma.");
+    const before = await client.query<FinancialCategoryRow>(
+      `select id, parent_id, name, type, affects_operating_result, active, olist_category_id,
+         '0'::text transaction_count, '0'::text active_children_count
+       from financial_categories where tenant_id = $1 and id = $2 limit 1`, [tenantId, categoryId]
+    );
+    if (!before.rows[0]) throw new Error("Categoria financeira não encontrada.");
+    const children = await client.query<{ count: string }>(
+      `select count(*)::text count from financial_categories where tenant_id = $1 and parent_id = $2 and active`,
+      [tenantId, categoryId]
+    );
+    if (Number(children.rows[0]?.count) > 0 && input.parentId) {
+      throw new Error("Uma categoria com subcategorias não pode se tornar subcategoria.");
+    }
+    if (Number(children.rows[0]?.count) > 0 && before.rows[0].type !== input.type) {
+      throw new Error("Altere ou mova as subcategorias antes de mudar o tipo desta categoria.");
+    }
+    await validateCategoryParent(client, tenantId, input.parentId ?? null, input.type);
+    const duplicate = await client.query(
+      `select id from financial_categories where tenant_id = $1 and id <> $2
+       and parent_id is not distinct from $3::uuid and lower(name) = lower($4) limit 1`,
+      [tenantId, categoryId, input.parentId ?? null, input.name]
+    );
+    if (duplicate.rows[0]) throw new Error("Já existe uma categoria com este nome no mesmo nível.");
+    const result = await client.query<FinancialCategoryRow>(
+      `update financial_categories set parent_id = $3, name = $4, type = $5,
+         affects_operating_result = $6, olist_category_id = $7,
+         active = coalesce($8, active), updated_at = now()
+       where tenant_id = $1 and id = $2
+       returning id, parent_id, name, type, affects_operating_result, active, olist_category_id,
+         '0'::text transaction_count, '0'::text active_children_count`,
+      [tenantId, categoryId, input.parentId ?? null, input.name, input.type,
+        input.affectsOperatingResult, input.olistCategoryId ?? null, input.active ?? null]
+    );
+    await audit(client, tenantId, userId, "financial_category.update", "financial_category", categoryId, before.rows[0], result.rows[0]);
+    return result.rows[0];
+  });
+}
+
+export async function deactivateFinancialCategory(userId: string, tenantId: string, categoryId: string) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const before = await client.query<FinancialCategoryRow>(
+      `select c.id, c.parent_id, c.name, c.type, c.affects_operating_result, c.active, c.olist_category_id,
+         (select count(*)::text from financial_transactions t where t.tenant_id = c.tenant_id and (t.category_id = c.id or t.subcategory_id = c.id)) transaction_count,
+         (select count(*)::text from financial_categories child where child.tenant_id = c.tenant_id and child.parent_id = c.id and child.active) active_children_count
+       from financial_categories c where c.tenant_id = $1 and c.id = $2 limit 1`, [tenantId, categoryId]
+    );
+    const category = before.rows[0];
+    if (!category) throw new Error("Categoria financeira não encontrada.");
+    if (Number(category.active_children_count) > 0) throw new Error("Desative ou mova as subcategorias antes de excluir esta categoria.");
+    await client.query(`update financial_categories set active = false, updated_at = now() where tenant_id = $1 and id = $2`, [tenantId, categoryId]);
+    await client.query(`update financial_classification_rules set enabled = false, updated_at = now()
+      where tenant_id = $1 and actions->>'categoryId' = $2`, [tenantId, categoryId]);
+    await audit(client, tenantId, userId, "financial_category.deactivate", "financial_category", categoryId, category, { ...category, active: false });
+    return { deactivated: true, preservedTransactions: Number(category.transaction_count) };
+  });
+}
+
+async function validateCategoryParent(client: pg.PoolClient, tenantId: string, parentId: string | null, type: string) {
+  if (!parentId) return;
+  const parent = await client.query<{ id: string; parent_id: string | null; type: string; active: boolean }>(
+    `select id, parent_id, type, active from financial_categories where tenant_id = $1 and id = $2 limit 1`,
+    [tenantId, parentId]
+  );
+  if (!parent.rows[0] || !parent.rows[0].active) throw new Error("Categoria principal não encontrada ou inativa.");
+  if (parent.rows[0].parent_id) throw new Error("A estrutura permite somente categoria e subcategoria.");
+  if (parent.rows[0].type !== type) throw new Error("A subcategoria deve ter o mesmo tipo da categoria principal.");
+}
 
 export async function listFinancialAccounts(userId: string, tenantId: string) {
   return withTenantContext(userId, tenantId, async (client) => {
