@@ -125,6 +125,20 @@ Fontes oficiais consultadas: [índice da API v3](https://api-docs.erp.olist.com/
 
 Em `/finance`, a aba `Conciliação Olist` é somente leitura. O módulo funciona normalmente sem Olist. Escrita exigirá preview, confirmação, conta/categoria, chave de idempotência e auditoria antes de ser habilitada.
 
+### Permissões financeiras do Olist
+
+O Olist controla o acesso por módulo. Um token válido pode consultar contatos e pedidos e ainda receber `403` nos endpoints financeiros. Para habilitar a conciliação:
+
+1. No Olist ERP, acesse `Configurações > Geral > Aplicativos` e abra o aplicativo usado pelo Pricing Pro.
+2. Libere a permissão `Consultar` nos módulos `Contas a Receber` e `Contas a Pagar`.
+3. Confirme que o usuário que autoriza o aplicativo também possui acesso a esses módulos.
+4. Salve as permissões, gere um novo `Client Secret` e atualize-o em `Configurações > Geral > Olist e CRM` no Pricing Pro.
+5. Clique em `Conectar Olist` novamente para emitir tokens com a configuração atualizada.
+
+A consulta usa paginação de 100 registros por chamada, conforme o contrato oficial, e diagnostica cada módulo separadamente. Um módulo autorizado continua disponível mesmo quando o outro retorna `401` ou `403`.
+
+Referência: [configuração e permissões de aplicativos API v3](https://ajuda.olist.com/hubs-e-plataformas-via-api/aplicativos-api-v3-configuracoes-e-utilizacao) e [autenticação OAuth](https://api-docs.erp.olist.com/documentacao/comecando/autenticacao).
+
 ## Endpoints
 
 ```text

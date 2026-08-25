@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle, ArrowDownRight, ArrowRightLeft, ArrowUpRight, Building2, Check,
   ChevronLeft, ChevronRight, CircleDollarSign, Download, FileSpreadsheet, Landmark, Loader2,
-  Pencil, Plus, RotateCcw, Search, SlidersHorizontal, Tags, Trash2, Upload, WalletCards, X
+  CircleCheck, CircleX, ExternalLink, Pencil, Plus, RefreshCw, RotateCcw, Search, Settings,
+  ShieldAlert, SlidersHorizontal, Tags, Trash2, Upload, WalletCards, X
 } from "lucide-react";
 import { isValidCompetence, shiftCompetence } from "@/domain/finance/competence";
 import { ComparisonWorkspace, PendingCenter, RulesWorkspace } from "@/components/finance/FinanceIntelligence";
@@ -314,19 +315,51 @@ function Transfers({ overview, onRefresh, onMessage }: PanelProps) {
 
 function OlistReconciliation({ overview, onMessage }: { overview: Overview; onMessage: (message: Message) => void }) {
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ external: Array<{id:string;recordType:string;date:string|null;amountCents:number|null;counterparty:string|null;status:string|null}>; suggestions:Array<{localTransactionId:string;externalId:string;score:number;reasons:string[]}> } | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [result, setResult] = useState<{
+    ok:boolean; error?:string|null; warning?:string|null; partial?:boolean; requiresReconnect?:boolean;
+    requiresOlistConfiguration?:boolean; configurationPath?:string;
+    external:Array<{id:string;recordType:string;date:string|null;amountCents:number|null;counterparty:string|null;status:string|null}>;
+    suggestions:Array<{localTransactionId:string;externalId:string;score:number;reasons:string[]}>;
+    diagnostics?:Array<{resource:"accounts_receivable"|"accounts_payable";label:string;path:string;status:"available"|"forbidden"|"authentication_required"|"error";httpStatus:number|null;count:number;message:string|null}>;
+  } | null>(null);
   async function search() {
     setBusy(true);
     try {
       const response = await fetch(`/api/finance/olist/search?competence=${overview.competence}`, { cache: "no-store" });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Falha ao consultar o Olist.");
-      setResult(payload);
-      onMessage({ tone: "success", text: `Consulta concluída: ${payload.external.length} conta(s) e ${payload.suggestions.length} correspondência(s) sugerida(s).` });
+      if (payload.diagnostics || payload.requiresOlistConfiguration || payload.requiresReconnect) {
+        setResult({ external: [], suggestions: [], ...payload });
+      }
+      if (!response.ok && !payload.diagnostics) throw new Error(payload.error || "Falha ao consultar o Olist.");
+      if (response.ok) {
+        setResult(payload);
+        onMessage({ tone: payload.partial ? "info" : "success", text: payload.partial ? payload.warning : `Consulta concluída: ${payload.external.length} conta(s) e ${payload.suggestions.length} correspondência(s) sugerida(s).` });
+      }
     } catch (error) { onMessage({ tone: "error", text: error instanceof Error ? error.message : "Falha ao consultar o Olist." }); }
     finally { setBusy(false); }
   }
-  return <section className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold text-white">Conciliação assistida com Olist</h2><p className="mt-1 max-w-2xl text-xs text-zinc-500">Consulta contas a receber e a pagar da competência. Esta fase é somente leitura: nenhuma conta será criada, baixada ou alterada no ERP.</p></div><button className="shrink-0 rounded-md bg-cyan-400 px-3 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50" disabled={busy} onClick={search}>{busy?<Loader2 className="mr-2 inline animate-spin" size={15}/>:<Search className="mr-2 inline" size={15}/>}Consultar Olist</button></div>{result?<div className="mt-4 grid gap-3 lg:grid-cols-2"><div><h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Registros externos</h3><div className="max-h-96 space-y-2 overflow-y-auto">{result.external.map((item)=><div className="rounded-md bg-zinc-950/60 p-3 text-sm" key={`${item.recordType}-${item.id}`}><div className="flex justify-between gap-3"><span className="truncate text-zinc-300">{item.counterparty||`Registro ${item.id}`}</span><strong className="shrink-0 text-zinc-100">{item.amountCents===null?"Sem valor":money(item.amountCents)}</strong></div><p className="mt-1 text-xs text-zinc-600">{item.recordType==="accounts_receivable"?"Conta a receber":"Conta a pagar"} · {item.date||"Sem data"} · {item.status||"Sem situação"}</p></div>)}</div></div><div><h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Correspondências sugeridas</h3><div className="space-y-2">{result.suggestions.map((item)=><div className="rounded-md border border-cyan-400/20 bg-cyan-400/5 p-3" key={`${item.localTransactionId}-${item.externalId}`}><p className="text-sm font-medium text-cyan-100">Compatibilidade {Math.round(item.score*100)}%</p><p className="mt-1 text-xs text-zinc-500">{item.reasons.join(" · ")}</p></div>)}{!result.suggestions.length?<Empty text="Nenhuma correspondência forte encontrada."/>:null}</div></div></div>:null}</section>;
+  async function reconnect() {
+    setConnecting(true);
+    try {
+      const redirectPath = `/finance?competence=${overview.competence}`;
+      const response = await fetch(`/api/olist/auth-url?redirectPath=${encodeURIComponent(redirectPath)}`);
+      const payload = await response.json();
+      if (!response.ok || !payload.authUrl) throw new Error(payload.error || "Não foi possível iniciar a autenticação Olist.");
+      window.location.assign(payload.authUrl);
+    } catch (error) {
+      onMessage({ tone: "error", text: error instanceof Error ? error.message : "Não foi possível iniciar a autenticação Olist." });
+      setConnecting(false);
+    }
+  }
+  const needsAttention = Boolean(result?.error || result?.warning || result?.diagnostics?.some((item)=>item.status!=="available"));
+  return <section className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold text-white">Conciliação assistida com Olist</h2><p className="mt-1 max-w-2xl text-xs leading-5 text-zinc-500">Consulta contas a receber e a pagar da competência. Esta fase é somente leitura: nenhuma conta será criada, baixada ou alterada no ERP.</p></div><button className="inline-flex shrink-0 items-center justify-center rounded-md bg-cyan-400 px-3 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50" disabled={busy} onClick={search}>{busy?<Loader2 className="mr-2 animate-spin" size={15}/>:<Search className="mr-2" size={15}/>}Consultar Olist</button></div>
+    {result?.diagnostics?.length?<div className="mt-4 grid gap-2 sm:grid-cols-2">{result.diagnostics.map((item)=><div className={`rounded-md border p-3 ${item.status==="available"?"border-emerald-400/20 bg-emerald-400/5":"border-amber-400/20 bg-amber-400/5"}`} key={item.resource}><div className="flex items-start gap-2">{item.status==="available"?<CircleCheck className="mt-0.5 shrink-0 text-emerald-300" size={17}/>:item.status==="authentication_required"?<CircleX className="mt-0.5 shrink-0 text-rose-300" size={17}/>:<ShieldAlert className="mt-0.5 shrink-0 text-amber-300" size={17}/>}<div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-medium text-zinc-100">{item.label}</p><span className={`rounded px-1.5 py-0.5 text-[10px] ${item.status==="available"?"bg-emerald-400/10 text-emerald-200":"bg-zinc-950/60 text-zinc-400"}`}>{item.status==="available"?`${item.count} registro(s)`:item.httpStatus?`HTTP ${item.httpStatus}`:"Indisponível"}</span></div><p className="mt-1 text-xs leading-5 text-zinc-500">{item.message??"Leitura autorizada para este módulo."}</p></div></div></div>)}</div>:null}
+    {needsAttention?<div className="mt-3 rounded-md border border-amber-400/20 bg-amber-400/5 p-3"><div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 shrink-0 text-amber-300" size={18}/><div className="min-w-0 flex-1"><p className="text-sm font-medium text-amber-100">Acesso financeiro do Olist precisa de atenção</p><p className="mt-1 text-xs leading-5 text-zinc-400">{result?.error||result?.warning||"Ao menos um módulo financeiro não está autorizado."}</p><ol className="mt-2 space-y-1 text-xs leading-5 text-zinc-500"><li>1. No Olist ERP, abra Configurações, Geral, Aplicativos e selecione este aplicativo.</li><li>2. Libere a permissão de leitura nos módulos Contas a Receber e Contas a Pagar.</li><li>3. Salve, gere um novo Client Secret, atualize as credenciais e refaça o OAuth.</li></ol><div className="mt-3 flex flex-wrap gap-2"><a className="inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-800" href={result?.configurationPath||"/settings?section=olist"}><Settings size={14}/>Configurar Olist<ExternalLink size={12}/></a><button className="inline-flex items-center gap-2 rounded-md bg-amber-300 px-3 py-2 text-xs font-semibold text-zinc-950 disabled:opacity-50" disabled={connecting} onClick={reconnect}>{connecting?<Loader2 className="animate-spin" size={14}/>:<RefreshCw size={14}/>}Refazer conexão OAuth</button></div></div></div></div>:null}
+    {result&&result.external.length?<div className="mt-4 grid gap-3 lg:grid-cols-2"><div><h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Registros externos</h3><div className="max-h-96 space-y-2 overflow-y-auto">{result.external.map((item)=><div className="rounded-md bg-zinc-950/60 p-3 text-sm" key={`${item.recordType}-${item.id}`}><div className="flex justify-between gap-3"><span className="truncate text-zinc-300">{item.counterparty||`Registro ${item.id}`}</span><strong className="shrink-0 text-zinc-100">{item.amountCents===null?"Sem valor":money(item.amountCents)}</strong></div><p className="mt-1 text-xs text-zinc-600">{item.recordType==="accounts_receivable"?"Conta a receber":"Conta a pagar"} · {item.date||"Sem data"} · {item.status||"Sem situação"}</p></div>)}</div></div><div><h3 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Correspondências sugeridas</h3><div className="space-y-2">{result.suggestions.map((item)=><div className="rounded-md border border-cyan-400/20 bg-cyan-400/5 p-3" key={`${item.localTransactionId}-${item.externalId}`}><p className="text-sm font-medium text-cyan-100">Compatibilidade {Math.round(item.score*100)}%</p><p className="mt-1 text-xs text-zinc-500">{item.reasons.join(" · ")}</p></div>)}{!result.suggestions.length?<Empty text="Nenhuma correspondência forte encontrada."/>:null}</div></div></div>:null}
+    {result&&!result.external.length&&!needsAttention?<Empty text="O Olist não retornou contas financeiras para esta competência."/>:null}
+  </section>;
 }
 
 function Categories({ onMessage, onRefresh }: { onMessage: (message: Message) => void; onRefresh: () => Promise<void> }) {
