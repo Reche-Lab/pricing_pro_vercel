@@ -45,6 +45,7 @@ Rode no SQL Editor do Supabase:
 ```text
 supabase/migrations/0054_financial_statements.sql
 supabase/migrations/0055_finance_admin_only.sql
+supabase/migrations/0056_financial_natures.sql
 ```
 
 Ela cria:
@@ -78,10 +79,13 @@ Não há nova variável de ambiente. O arquivo original é preservado em `bytea`
 7. Confirme a importação.
 8. Revise `Lançamentos`, classifique em lote e opcionalmente crie uma regra futura.
 9. Em `Categorias`, crie e mantenha categorias e subcategorias de receita, despesa ou movimentação neutra.
-10. Confirme ou rejeite transferências que exigem revisão.
-11. Exporte CSV/Excel e conclua a competência. Pendências exigem justificativa.
+10. Em `Naturezas`, mantenha os significados gerenciais e seus comportamentos padrão no fluxo de caixa e resultado operacional.
+11. Confirme ou rejeite transferências que exigem revisão.
+12. Exporte CSV/Excel e conclua a competência. Pendências exigem justificativa.
 
 Categorias excluídas são desativadas, não removidas fisicamente. Elas deixam de ser oferecidas para novas classificações, suas regras automáticas são desativadas e os lançamentos históricos continuam identificados corretamente.
+
+Naturezas também usam exclusão lógica. `Não classificado`, `Transferência interna` e `Informativo` são protegidas porque participam do processamento automático; podem ter nome e padrões ajustados, mas não podem ser excluídas.
 
 O checksum impede a duplicação do mesmo arquivo. Os hashes e identificadores de origem preservam a rastreabilidade por linha.
 

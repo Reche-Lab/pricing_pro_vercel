@@ -1,5 +1,6 @@
 import type pg from "pg";
 import { classifyTransactions } from "@/domain/finance/classification";
+import { randomUUID } from "node:crypto";
 import { sha256 } from "@/domain/finance/csv";
 import { calculateFinancialMetrics } from "@/domain/finance/metrics";
 import { suggestInternalTransfers } from "@/domain/finance/transfers";
@@ -55,6 +56,103 @@ export type FinancialCategoryRow = {
   transaction_count: string;
   active_children_count: string;
 };
+
+export type FinancialNatureRow = {
+  id: string;
+  key: string;
+  name: string;
+  type: "income" | "expense" | "neutral";
+  default_include_external_cash_flow: boolean;
+  default_include_operating_result: boolean;
+  protected: boolean;
+  active: boolean;
+  transaction_count: string;
+};
+
+export async function listFinancialNatures(userId: string, tenantId: string, includeInactive = true) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const result = await client.query<FinancialNatureRow>(
+      `select n.id, n.key, n.name, n.type, n.default_include_external_cash_flow,
+              n.default_include_operating_result, n.protected, n.active,
+              count(t.id)::text transaction_count
+       from financial_natures n
+       left join financial_transactions t on t.tenant_id = n.tenant_id and t.nature = n.key
+       where n.tenant_id = $1 and ($2::boolean or n.active)
+       group by n.id order by n.active desc, n.name`, [tenantId, includeInactive]
+    );
+    return result.rows;
+  });
+}
+
+export async function createFinancialNature(userId: string, tenantId: string, input: {
+  name: string; type: "income" | "expense" | "neutral";
+  defaultIncludeExternalCashFlow: boolean; defaultIncludeOperatingResult: boolean;
+}) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const duplicate = await client.query(`select id from financial_natures where tenant_id = $1 and lower(name) = lower($2) limit 1`, [tenantId, input.name]);
+    if (duplicate.rows[0]) throw new Error("Já existe uma natureza com este nome.");
+    const base = input.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "natureza";
+    const key = `${base}_${randomUUID().slice(0, 6)}`;
+    const result = await client.query<FinancialNatureRow>(
+      `insert into financial_natures (
+         tenant_id, key, name, type, default_include_external_cash_flow, default_include_operating_result
+       ) values ($1,$2,$3,$4,$5,$6)
+       returning id, key, name, type, default_include_external_cash_flow,
+         default_include_operating_result, protected, active, '0'::text transaction_count`,
+      [tenantId, key, input.name, input.type, input.defaultIncludeExternalCashFlow, input.defaultIncludeOperatingResult]
+    );
+    await audit(client, tenantId, userId, "financial_nature.create", "financial_nature", result.rows[0].id, null, result.rows[0]);
+    return result.rows[0];
+  });
+}
+
+export async function updateFinancialNature(userId: string, tenantId: string, natureId: string, input: {
+  name: string; type: "income" | "expense" | "neutral";
+  defaultIncludeExternalCashFlow: boolean; defaultIncludeOperatingResult: boolean; active?: boolean;
+}) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const before = await client.query<FinancialNatureRow>(
+      `select id, key, name, type, default_include_external_cash_flow, default_include_operating_result,
+         protected, active, '0'::text transaction_count from financial_natures where tenant_id = $1 and id = $2 limit 1`,
+      [tenantId, natureId]
+    );
+    if (!before.rows[0]) throw new Error("Natureza financeira não encontrada.");
+    const duplicate = await client.query(`select id from financial_natures where tenant_id = $1 and id <> $2 and lower(name) = lower($3) limit 1`, [tenantId, natureId, input.name]);
+    if (duplicate.rows[0]) throw new Error("Já existe uma natureza com este nome.");
+    const result = await client.query<FinancialNatureRow>(
+      `update financial_natures set name = $3, type = $4,
+         default_include_external_cash_flow = $5, default_include_operating_result = $6,
+         active = coalesce($7, active), updated_at = now()
+       where tenant_id = $1 and id = $2
+       returning id, key, name, type, default_include_external_cash_flow,
+         default_include_operating_result, protected, active, '0'::text transaction_count`,
+      [tenantId, natureId, input.name, input.type, input.defaultIncludeExternalCashFlow,
+        input.defaultIncludeOperatingResult, input.active ?? null]
+    );
+    await audit(client, tenantId, userId, "financial_nature.update", "financial_nature", natureId, before.rows[0], result.rows[0]);
+    return result.rows[0];
+  });
+}
+
+export async function deactivateFinancialNature(userId: string, tenantId: string, natureId: string) {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const before = await client.query<FinancialNatureRow>(
+      `select n.id, n.key, n.name, n.type, n.default_include_external_cash_flow,
+         n.default_include_operating_result, n.protected, n.active,
+         (select count(*)::text from financial_transactions t where t.tenant_id = n.tenant_id and t.nature = n.key) transaction_count
+       from financial_natures n where n.tenant_id = $1 and n.id = $2 limit 1`, [tenantId, natureId]
+    );
+    const nature = before.rows[0];
+    if (!nature) throw new Error("Natureza financeira não encontrada.");
+    if (nature.protected) throw new Error("Esta natureza é necessária para o processamento financeiro e não pode ser excluída.");
+    await client.query(`update financial_natures set active = false, updated_at = now() where tenant_id = $1 and id = $2`, [tenantId, natureId]);
+    await client.query(`update financial_classification_rules set enabled = false, updated_at = now()
+      where tenant_id = $1 and actions->>'nature' = $2`, [tenantId, nature.key]);
+    await audit(client, tenantId, userId, "financial_nature.deactivate", "financial_nature", natureId, nature, { ...nature, active: false });
+    return { deactivated: true, preservedTransactions: Number(nature.transaction_count) };
+  });
+}
 
 export async function listFinancialCategories(userId: string, tenantId: string, includeInactive = true) {
   return withTenantContext(userId, tenantId, async (client) => {
@@ -325,7 +423,7 @@ export async function importFinancialStatement(input: {
 
 export async function getFinancialOverview(userId: string, tenantId: string, competence: string) {
   return withTenantContext(userId, tenantId, async (client) => {
-    const [transactions, accounts, imports, month, categories, transfers] = await Promise.all([
+    const [transactions, accounts, imports, month, categories, natures, transfers] = await Promise.all([
       listTransactionsWithClient(client, tenantId, competence),
       client.query<FinancialAccountRow>(`select * from financial_accounts where tenant_id = $1 and active = true order by name`, [tenantId]),
       client.query(`select id, original_filename, source_type, status, transaction_row_count, credit_total_cents,
@@ -333,6 +431,9 @@ export async function getFinancialOverview(userId: string, tenantId: string, com
                     from bank_statement_imports where tenant_id = $1 and competence = $2 order by imported_at desc`, [tenantId, `${competence}-01`]),
       client.query<{ status: string; closing_notes: string | null }>(`select status, closing_notes from financial_months where tenant_id = $1 and competence = $2`, [tenantId, `${competence}-01`]),
       client.query<FinancialCategoryRow>(`select id, name, type, affects_operating_result from financial_categories where tenant_id = $1 and active = true order by name`, [tenantId]),
+      client.query<FinancialNatureRow>(`select id, key, name, type, default_include_external_cash_flow,
+        default_include_operating_result, protected, active, '0'::text transaction_count
+        from financial_natures where tenant_id = $1 and active = true order by name`, [tenantId]),
       client.query(`select m.*, outgoing.original_description as outgoing_description, incoming.original_description as incoming_description,
                            outgoing.amount_cents as amount_cents
                     from internal_transfer_matches m
@@ -350,7 +451,7 @@ export async function getFinancialOverview(userId: string, tenantId: string, com
     return {
       competence, month: month.rows[0] ?? { status: "open", closing_notes: null },
       metrics: calculateFinancialMetrics(normalized), accounts: accounts.rows,
-      imports: imports.rows, transactions, categories: categories.rows, transfers: transfers.rows
+      imports: imports.rows, transactions, categories: categories.rows, natures: natures.rows, transfers: transfers.rows
     };
   });
 }
@@ -361,6 +462,8 @@ export async function classifyFinancialTransactions(userId: string, tenantId: st
   createRule?: { name: string; descriptionContains: string };
 }) {
   return withTenantContext(userId, tenantId, async (client) => {
+    const nature = await client.query(`select id from financial_natures where tenant_id = $1 and key = $2 and active limit 1`, [tenantId, input.nature]);
+    if (!nature.rows[0]) throw new Error("Natureza financeira não encontrada ou inativa.");
     const before = await client.query(`select id, nature, category_id, include_external_cash_flow, include_operating_result
       from financial_transactions where tenant_id = $1 and id = any($2::uuid[])`, [tenantId, input.transactionIds]);
     if (before.rowCount !== input.transactionIds.length) throw new Error("Um ou mais lançamentos não pertencem a este tenant.");
