@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, ClipboardList, Copy, MailQuestion, X } from "lucide-react";
 import type { AccessRequestRow } from "@/repositories/access-requests";
 import type { BillingPlanRow } from "@/repositories/billing";
+import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 
 export function AccessRequestsPanel({ requests, plans }: { requests: AccessRequestRow[]; plans: BillingPlanRow[] }) {
   const router = useRouter();
@@ -53,5 +54,5 @@ function AccessRequestCard({ request, plans, disabled, onReview }: { request: Ac
 
 function Status({ status }: { status: AccessRequestRow["status"] }) { const labels: Record<AccessRequestRow["status"], string> = { pending_email: "aguardando e-mail", pending_review: "em análise", needs_information: "aguardando informações", approved: "aprovada", rejected: "rejeitada", expired: "expirada", cancelled: "cancelada" }; return <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-400">{labels[status]}</span>; }
 function Input({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label><span className="mb-1 block text-xs text-zinc-500">{label}</span><input className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm" onChange={(e) => onChange(e.target.value)} pattern="[a-z0-9]+(-[a-z0-9]+)*" value={value} /></label>; }
-function NumberInput({ label, value, min, onChange }: { label: string; value: number; min: number; onChange: (value: number) => void }) { return <label><span className="mb-1 block text-xs text-zinc-500">{label}</span><input className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm" min={min} onChange={(e) => onChange(Number(e.target.value))} type="number" value={value} /></label>; }
+function NumberInput({ label, value, min, onChange }: { label: string; value: number; min: number; onChange: (value: number) => void }) { return <label><span className="mb-1 block text-xs text-zinc-500">{label}</span><EditableNumberInput className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm" min={min} onValueChange={onChange} value={value} /></label>; }
 function slugify(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }

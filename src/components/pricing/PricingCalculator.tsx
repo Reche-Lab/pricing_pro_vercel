@@ -37,6 +37,7 @@ import type { DemoProductVariant } from "@/domain/pricing/defaults";
 import type { PlatformRule, PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
 import { fetchCepAddress, formatCep, normalizeCep, type CepAddress } from "@/lib/cep";
 import { OlistQuoteActions } from "@/components/quotes/OlistQuoteActions";
+import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 
 export type PricingPlatformOption = PlatformRule & {
   name: string;
@@ -1286,13 +1287,12 @@ export function PricingCalculator({
           </Control>
 
           <Control label="Quantidade">
-            <input
+            <EditableNumberInput
               className="focus-ring h-11 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-white"
               min={1}
               max={50000}
-              type="number"
               value={quantity}
-              onChange={(event) => setQuantity(Number(event.target.value))}
+              onValueChange={setQuantity}
             />
           </Control>
         </div>
@@ -2132,35 +2132,32 @@ function QuoteDraftDrawer({
                     <>
                       <label className="block">
                         <span className="mb-1 block text-xs font-medium text-zinc-500">Parcelas</span>
-                        <input
+                        <EditableNumberInput
                           className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
                           min={1}
                           max={24}
-                          type="number"
                           value={paymentInstallmentsCount}
-                          onChange={(event) => onPaymentInstallmentsCountChange(Math.max(1, Math.min(24, Number(event.currentTarget.value))))}
+                          onValueChange={(value) => onPaymentInstallmentsCountChange(Math.max(1, Math.min(24, value)))}
                         />
                       </label>
                       <label className="block">
                         <span className="mb-1 block text-xs font-medium text-zinc-500">Intervalo entre parcelas</span>
-                        <input
+                        <EditableNumberInput
                           className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
                           min={0}
-                          type="number"
                           value={paymentIntervalDays}
-                          onChange={(event) => onPaymentIntervalDaysChange(Math.max(0, Number(event.currentTarget.value)))}
+                          onValueChange={(value) => onPaymentIntervalDaysChange(Math.max(0, value))}
                         />
                       </label>
                     </>
                   ) : null}
                   <label className="block">
                     <span className="mb-1 block text-xs font-medium text-zinc-500">Vencimento em dias</span>
-                    <input
+                    <EditableNumberInput
                       className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
                       min={0}
-                      type="number"
                       value={paymentFirstDueDays}
-                      onChange={(event) => onPaymentFirstDueDaysChange(Math.max(0, Number(event.currentTarget.value)))}
+                      onValueChange={(value) => onPaymentFirstDueDaysChange(Math.max(0, value))}
                     />
                   </label>
                 </div>
@@ -2254,13 +2251,12 @@ function QuoteDraftDrawer({
                           <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-zinc-500">
                             Preço unitário neste orçamento
                           </span>
-                          <input
+                          <EditableNumberInput
                             className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
                             min={0}
                             step={0.01}
-                            type="number"
                             value={Number.isFinite(item.unitPrice) ? item.unitPrice : 0}
-                            onChange={(event) => onUpdateItemManualPrice(item.id, Number(event.currentTarget.value))}
+                            onValueChange={(value) => onUpdateItemManualPrice(item.id, value)}
                           />
                         </label>
                         <button
@@ -2805,19 +2801,28 @@ function Input<T extends number | string>({
   return (
     <label className="block min-w-0">
       <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</span>
-      <input
-        className={`focus-ring h-10 w-full rounded-md border bg-zinc-950 px-3 text-sm text-white ${error ? "border-rose-400/60" : "border-zinc-700"}`}
-        min={min}
-        placeholder={placeholder}
-        step={step}
-        type={type}
-        value={value}
-        onBlur={onBlur}
-        onChange={(event) => {
-          const nextValue = type === "number" ? Number(event.target.value) : event.target.value;
-          onChange(nextValue as T);
-        }}
-      />
+      {type === "number" ? (
+        <EditableNumberInput
+          className={`focus-ring h-10 w-full rounded-md border bg-zinc-950 px-3 text-sm text-white ${error ? "border-rose-400/60" : "border-zinc-700"}`}
+          min={min}
+          placeholder={placeholder}
+          step={step}
+          value={Number(value)}
+          onBlur={onBlur}
+          onValueChange={(nextValue) => onChange(nextValue as T)}
+        />
+      ) : (
+        <input
+          className={`focus-ring h-10 w-full rounded-md border bg-zinc-950 px-3 text-sm text-white ${error ? "border-rose-400/60" : "border-zinc-700"}`}
+          min={min}
+          placeholder={placeholder}
+          step={step}
+          type={type}
+          value={value}
+          onBlur={onBlur}
+          onChange={(event) => onChange(event.target.value as T)}
+        />
+      )}
       {error ? (
         <span className="mt-1 block text-xs text-rose-300">{error}</span>
       ) : helper ? (
@@ -3004,14 +3009,13 @@ function EditableCostToggle({
       </div>
       <label className="mt-2 flex items-center gap-2">
         {prefix ? <span className="text-sm text-zinc-500">{prefix}</span> : null}
-        <input
+        <EditableNumberInput
           className="focus-ring h-9 min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-sm font-medium text-zinc-100 disabled:opacity-50"
           disabled={!checked}
           min={0}
           step="0.01"
-          type="number"
           value={value}
-          onChange={(event) => onValueChange(Number(event.target.value))}
+          onValueChange={onValueChange}
         />
         {suffix ? <span className="text-sm text-zinc-500">{suffix}</span> : null}
       </label>

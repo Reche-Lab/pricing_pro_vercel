@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, CreditCard, KeyRound, RotateCcw, Save } from "lucide-react";
+import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 
 type PaymentOption = {
   kind: "payment_method" | "receiving_method" | "category";
@@ -370,13 +371,12 @@ function NumberInput({
   return (
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-zinc-400">{label}</span>
-      <input
+      <EditableNumberInput
         className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
         max={max}
         min={min}
-        type="number"
         value={value}
-        onChange={(event) => onChange(Math.max(min, Math.min(max ?? Number.MAX_SAFE_INTEGER, Number(event.currentTarget.value))))}
+        onValueChange={(nextValue) => onChange(Math.max(min, Math.min(max ?? Number.MAX_SAFE_INTEGER, nextValue)))}
       />
     </label>
   );

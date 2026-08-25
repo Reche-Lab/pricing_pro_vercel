@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FilePlus2, Plus, Trash2 } from "lucide-react";
+import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 
 export type QuoteFormVariant = {
   id: string;
@@ -185,13 +186,12 @@ export function QuoteForm({ variants, platforms, customers }: QuoteFormProps) {
                   </label>
                   <label className="block">
                     <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">Qtd</span>
-                    <input
+                    <EditableNumberInput
                       className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
                       min={1}
                       required
-                      type="number"
                       value={item.quantity}
-                      onChange={(event) => updateItem(index, "quantity", Number(event.target.value))}
+                      onValueChange={(value) => updateItem(index, "quantity", value)}
                     />
                   </label>
                   <button

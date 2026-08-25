@@ -30,6 +30,7 @@ import {
   type RetouchShapeType,
   type RetouchStroke
 } from "@/domain/artwork/retouch";
+import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 
 type Tool = "brush" | "eyedropper" | "eraser" | "fill" | "shape" | "select" | "compose" | "pan";
 type Workspace = { width: number; height: number; sourceWidth: number; sourceHeight: number; offsetX: number; offsetY: number };
@@ -420,7 +421,7 @@ function ToolButton({ active, description, icon, label, shortcut, onClick }: { a
 function ShapeButton({ active, icon, label, onClick }: { active: boolean; icon: ReactNode; label: string; onClick: () => void }) { return <button aria-label={label} aria-pressed={active} className={`focus-ring group grid h-11 place-items-center rounded-md border transition ${active ? "border-cyan-500/70 bg-cyan-400/10 text-cyan-100 shadow-[inset_0_0_14px_rgba(34,211,238,.06)]" : "border-zinc-700 bg-zinc-950/40 text-zinc-500 hover:-translate-y-px hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-200"}`} title={`Usar ${label.toLowerCase()}`} type="button" onClick={onClick}><span className="transition-transform group-hover:scale-110">{icon}</span></button>; }
 function IconButton({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) { return <button aria-label={label} className="focus-ring grid h-8 w-8 place-items-center rounded text-zinc-400 transition hover:bg-zinc-700 hover:text-white" title={label} type="button" onClick={onClick}>{icon}</button>; }
 function ActionButton({ disabled, icon, label, title, onClick }: { disabled: boolean; icon: ReactNode; label: string; title: string; onClick: () => void }) { return <button aria-label={title} className="focus-ring inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-900/30 text-xs font-medium text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-30" disabled={disabled} title={title} type="button" onClick={onClick}>{icon}{label}</button>; }
-function DimensionInput({ label, max, value, onChange }: { label: string; max: number; value: number; onChange: (value: number) => void }) { return <label><span className="mb-1 block text-[11px] text-zinc-400">{label} (px)</span><input className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs tabular-nums text-zinc-200" max={max} min="2" step="1" type="number" value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>; }
+function DimensionInput({ label, max, value, onChange }: { label: string; max: number; value: number; onChange: (value: number) => void }) { return <label><span className="mb-1 block text-[11px] text-zinc-400">{label} (px)</span><EditableNumberInput className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs tabular-nums text-zinc-200" max={max} min="2" step="1" value={value} onValueChange={onChange} /></label>; }
 function ShapeSelectionOverlay({ shape, workspace }: { shape: RetouchShape; workspace: Workspace }) {
   const bounds = normalizeSelection(shape.bounds);
   const handleSize = Math.max(10, Math.min(workspace.width, workspace.height) * .012);

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Plus, Save, Trash2 } from "lucide-react";
 import type { PricingCurveMode, PricingCurvePoint } from "@/domain/pricing/types";
+import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 
 const ANCHORS = [1, 10, 50, 100, 500, 1000] as const;
 
@@ -129,26 +130,24 @@ export function AnchorEditor({ variantId, anchors, mode = "interpolated", platfo
               <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px] gap-2 rounded-md border border-zinc-800 bg-zinc-950/70 p-2" key={`${point.quantity}-${index}`}>
                 <label className="block">
                   <span className="mb-1 block text-xs text-zinc-500">Qtd.</span>
-                  <input
+                  <EditableNumberInput
                     className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-white"
                     min={1}
                     required
                     step="1"
-                    type="number"
                     value={point.quantity}
-                    onChange={(event) => updatePoint(index, "quantity", Number(event.target.value))}
+                    onValueChange={(value) => updatePoint(index, "quantity", value)}
                   />
                 </label>
                 <label className="block">
                   <span className="mb-1 block text-xs text-zinc-500">Preço</span>
-                  <input
+                  <EditableNumberInput
                     className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-white"
                     min={0}
                     required
                     step="0.0001"
-                    type="number"
                     value={point.unitPrice}
-                    onChange={(event) => updatePoint(index, "unitPrice", Number(event.target.value))}
+                    onValueChange={(value) => updatePoint(index, "unitPrice", value)}
                   />
                 </label>
                 <button

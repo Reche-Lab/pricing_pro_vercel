@@ -8,6 +8,7 @@ import type { BillingPlanRow } from "@/repositories/billing";
 import type { AccessRequestRow } from "@/repositories/access-requests";
 import type { SuperadminTenantRow } from "@/repositories/superadmin";
 import { AccessRequestsPanel } from "@/components/superadmin/AccessRequestsPanel";
+import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 
 export function SuperadminPanel({
   accessRequests,
@@ -421,13 +422,12 @@ function TenantArtworkAiLimit({ currentLimit, tenantId }: { currentLimit: number
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
           <label>
             <span className="mb-1 block text-[11px] text-zinc-500">Gerações por produto</span>
-            <input
+            <EditableNumberInput
               className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
               max={MAX_ARTWORK_AI_GENERATION_LIMIT}
               min={0}
-              onChange={(event) => setLimit(Number(event.target.value))}
+              onValueChange={setLimit}
               step={1}
-              type="number"
               value={limit}
             />
           </label>
@@ -511,12 +511,11 @@ function TenantBillingActions({
         <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
           <label className="block">
             <span className="mb-1 block text-[11px] text-zinc-500">Dias a partir de hoje</span>
-            <input
+            <EditableNumberInput
               className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs"
               min={1}
-              type="number"
               value={trialDays}
-              onChange={(event) => setTrialDays(Number(event.target.value))}
+              onValueChange={setTrialDays}
             />
           </label>
           <button
@@ -536,23 +535,21 @@ function TenantBillingActions({
         <div className="mt-2 grid grid-cols-[1fr_1fr_auto] gap-2">
           <label className="block">
             <span className="mb-1 block text-[11px] text-zinc-500">% desconto</span>
-            <input
+            <EditableNumberInput
               className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs"
               max={100}
               min={1}
-              type="number"
               value={discountPercent}
-              onChange={(event) => setDiscountPercent(Number(event.target.value))}
+              onValueChange={setDiscountPercent}
             />
           </label>
           <label className="block">
             <span className="mb-1 block text-[11px] text-zinc-500">Duração em dias</span>
-            <input
+            <EditableNumberInput
               className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs"
               min={1}
-              type="number"
               value={voucherDays}
-              onChange={(event) => setVoucherDays(Number(event.target.value))}
+              onValueChange={setVoucherDays}
             />
           </label>
           <button

@@ -18,6 +18,7 @@ import {
   X
 } from "lucide-react";
 import type { ShipmentRow } from "@/repositories/shipments";
+import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 
 type QuoteOption = {
   code: string;
@@ -321,13 +322,12 @@ export function MelhorEnvioQuoteLabelActions({
             <div className="grid gap-3 rounded-md border border-amber-400/20 bg-amber-400/10 p-3 md:grid-cols-[minmax(0,220px)_auto_1fr] md:items-end">
               <label className="block">
                 <span className="mb-1 block text-sm font-medium text-amber-100">Frete no orçamento</span>
-                <input
+                <EditableNumberInput
                   className="focus-ring h-10 w-full rounded-md border border-amber-300/30 bg-zinc-950 px-3 text-sm text-white"
                   min={0}
                   step={0.01}
-                  type="number"
                   value={Number.isFinite(manualShippingAmount) ? manualShippingAmount : 0}
-                  onChange={(event) => setManualShippingAmount(Number(event.currentTarget.value))}
+                  onValueChange={setManualShippingAmount}
                 />
               </label>
               <button

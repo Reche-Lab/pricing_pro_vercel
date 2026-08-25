@@ -8,6 +8,7 @@ import { isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
 import { calculateQuoteDiscount, quoteDiscountLabel, type QuoteDiscountType } from "@/domain/quotes/discount";
 import type { PricingCurve } from "@/domain/pricing/types";
 import type { QuoteDetail, QuoteEditLogRow, QuoteItemRow } from "@/repositories/quotes";
+import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 
 export type QuoteEditVariant = {
   id: string;
@@ -750,14 +751,13 @@ function NumberField({
   return (
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-zinc-400">{label}</span>
-      <input
+      <EditableNumberInput
         className="focus-ring h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
         disabled={disabled}
         min={min}
         step={step}
-        type="number"
         value={Number.isFinite(value) ? value : 0}
-        onChange={(event) => onChange(Number(event.currentTarget.value))}
+        onValueChange={onChange}
       />
     </label>
   );

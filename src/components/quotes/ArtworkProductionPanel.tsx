@@ -12,6 +12,7 @@ import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from
 import { geometryLabel, resolvePrintGeometry, resolvePrintMargins, type PrintGeometry } from "@/domain/artwork/geometry";
 import { sortActiveArtworkVersions } from "@/domain/artwork/versions";
 import type { QuoteItemArtworkRow, QuoteItemRow } from "@/repositories/quotes";
+import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 
 type ArtworkEntry = { item: QuoteItemRow; artwork: QuoteItemArtworkRow };
 
@@ -297,7 +298,7 @@ function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, origin
     </div>
 
     <div className="grid gap-3 border-t border-zinc-800 bg-zinc-950/50 p-3 sm:flex sm:flex-wrap sm:items-end sm:justify-between">
-      <label className="w-full sm:w-36 sm:shrink-0"><span className="mb-1 block text-xs font-medium text-zinc-400">Cópias desta arte</span><input className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm tabular-nums disabled:opacity-50" disabled={readOnly} min="1" type="number" value={quantity} onChange={(event) => onQuantity(Math.max(1, Number(event.target.value) || 1))} /></label>
+      <label className="w-full sm:w-36 sm:shrink-0"><span className="mb-1 block text-xs font-medium text-zinc-400">Cópias desta arte</span><EditableNumberInput className="focus-ring h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm tabular-nums disabled:opacity-50" disabled={readOnly} min="1" value={quantity} onValueChange={(value) => onQuantity(Math.max(1, value))} /></label>
       <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-2">
         <ArtworkDownloadMenu entry={entry} original={original} prepared={prepared} quoteId={quoteId} />
         {previous ? <button className="focus-ring inline-flex h-9 flex-1 basis-[130px] items-center justify-center gap-2 rounded-md border border-violet-800/70 px-3 text-xs text-violet-200 hover:bg-violet-950/50" type="button" onClick={() => onVersionPreview(previous)}><Eye size={14} /> Ver original</button> : null}
