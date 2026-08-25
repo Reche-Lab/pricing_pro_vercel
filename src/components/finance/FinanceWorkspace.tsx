@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle, ArrowDownRight, ArrowRightLeft, ArrowUpRight, Building2, Check,
@@ -28,6 +28,7 @@ type Overview = {
 type Tab = "dashboard" | "imports" | "transactions" | "transfers" | "olist" | "accounts";
 type Preview = {
   file: File; status: "loading" | "ready" | "importing" | "done" | "error" | "mapping";
+  accountId: string;
   data?: { institution: string; adapterName: string; rows: number; transactions: number; inflowsCents: number;
     outflowsCents: number; initialBalanceCents: number | null; finalBalanceCents: number | null;
     informativeRows: number; mismatchedPeriodRows: number; warnings: string[] };
@@ -80,6 +81,7 @@ export function FinanceWorkspace({ initialOverview }: { initialOverview: Overvie
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={overview.month.status} />
+          <button className="focus-ring inline-flex items-center gap-2 rounded-md bg-cyan-500 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-cyan-400" onClick={() => setTab("imports")} type="button"><Upload size={15} /> Importar extratos CSV</button>
           <a className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800" href={`/api/finance/export?competence=${overview.competence}&format=csv`}><Download size={15} /> CSV</a>
           <a className="focus-ring inline-flex items-center gap-2 rounded-md bg-emerald-500 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-400" href={`/api/finance/export?competence=${overview.competence}&format=xlsx`}><FileSpreadsheet size={15} /> Excel</a>
         </div>
@@ -151,22 +153,44 @@ function Dashboard({ overview, onRefresh, onMessage }: PanelProps) {
   );
 }
 
-function ImportWorkspace({ overview, onRefresh }: PanelProps) {
+function ImportWorkspace({ overview, onRefresh, onMessage }: PanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [accountId, setAccountId] = useState(overview.accounts[0]?.id ?? "");
   const [previews, setPreviews] = useState<Preview[]>([]);
+  const [creatingAccount, setCreatingAccount] = useState(false);
+
+  useEffect(() => {
+    if (!overview.accounts.some((account) => account.id === accountId)) {
+      setAccountId(overview.accounts[0]?.id ?? "");
+    }
+  }, [accountId, overview.accounts]);
+
   async function addFiles(files: File[]) {
     const accepted = files.filter((file) => file.name.toLowerCase().endsWith(".csv"));
-    setPreviews(accepted.map((file) => ({ file, status: "loading" })));
+    if (!accountId) {
+      onMessage({ tone: "info", text: "Cadastre a conta financeira que receberá os lançamentos antes de selecionar o extrato." });
+      setCreatingAccount(true);
+      return;
+    }
+    if (!accepted.length) {
+      onMessage({ tone: "error", text: "Nenhum arquivo CSV válido foi selecionado." });
+      return;
+    }
+    if (accepted.length !== files.length) {
+      onMessage({ tone: "info", text: "Arquivos que não eram CSV foram ignorados." });
+    }
+    const startIndex = previews.length;
+    setPreviews((current) => [...current, ...accepted.map((file) => ({ file, accountId, status: "loading" as const }))]);
     await Promise.all(accepted.map(async (file, index) => {
+      const position = startIndex + index;
       try {
         const payload = await sendFile(file, accountId, overview.competence, "preview");
-        setPreviews((current) => current.map((item, position) => position === index ? {
+        setPreviews((current) => current.map((item, itemIndex) => itemIndex === position ? {
           ...item, status: payload.needsMapping ? "mapping" : "ready", data: payload.preview,
           headers: payload.headers, error: payload.error
         } : item));
       } catch (error) {
-        setPreviews((current) => current.map((item, position) => position === index ? { ...item, status: "error", error: error instanceof Error ? error.message : "Falha na leitura." } : item));
+        setPreviews((current) => current.map((item, itemIndex) => itemIndex === position ? { ...item, status: "error", error: error instanceof Error ? error.message : "Falha na leitura." } : item));
       }
     }));
   }
@@ -174,32 +198,36 @@ function ImportWorkspace({ overview, onRefresh }: PanelProps) {
     const item = previews[index];
     setPreviews((current) => current.map((entry, position) => position === index ? { ...entry, status: "importing" } : entry));
     try {
-      const payload = await sendFile(item.file, accountId, overview.competence, "import", item.mapping);
+      const payload = await sendFile(item.file, item.accountId, overview.competence, "import", item.mapping);
       setPreviews((current) => current.map((entry, position) => position === index ? { ...entry, status: "done", error: payload.result?.duplicate ? "Arquivo já importado; nenhum lançamento foi duplicado." : undefined } : entry));
       await onRefresh();
     } catch (error) {
       setPreviews((current) => current.map((entry, position) => position === index ? { ...entry, status: "error", error: error instanceof Error ? error.message : "Falha na importação." } : entry));
     }
   }
-  if (!overview.accounts.length) return <Empty text="Cadastre ao menos uma conta financeira antes de importar." />;
+  if (!overview.accounts.length) return <section className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 sm:p-6">
+    <div className="mx-auto max-w-2xl text-center"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-cyan-400/10 text-cyan-300"><Building2 size={22}/></div><h2 className="mt-3 font-semibold text-white">Cadastre a primeira conta financeira</h2><p className="mt-1 text-sm leading-6 text-zinc-400">Cada extrato precisa ser associado à conta correta para que saldos, transferências e relatórios não sejam misturados.</p></div>
+    <div className="mx-auto mt-5 max-w-3xl"><AccountForm onCancel={undefined} onCreated={async (account) => { await onRefresh(); setAccountId(account.id); onMessage({ tone: "success", text: "Conta cadastrada. Agora você já pode importar o extrato CSV." }); }} /></div>
+  </section>;
   return <div className="space-y-4"><div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)]">
     <section className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
-      <div className="grid gap-3 sm:grid-cols-2"><Field label="Conta do extrato"><select value={accountId} onChange={(event) => setAccountId(event.target.value)}>{overview.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></Field><Field label="Competência"><input disabled type="month" value={overview.competence} /></Field></div>
+      <div className="flex items-end gap-2"><div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2"><Field label="Conta padrão para os novos arquivos"><select value={accountId} onChange={(event) => setAccountId(event.target.value)}>{overview.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></Field><Field label="Competência"><input disabled type="month" value={overview.competence} /></Field></div><button aria-label="Cadastrar nova conta" className="focus-ring flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800" onClick={() => setCreatingAccount(true)} title="Cadastrar nova conta" type="button"><Plus size={18}/></button></div>
       <button className="focus-ring mt-4 flex min-h-44 w-full flex-col items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-950/50 p-5 text-center transition-colors hover:border-emerald-500/60 hover:bg-emerald-500/5" onClick={() => inputRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); addFiles(Array.from(event.dataTransfer.files)); }} type="button">
         <Upload className="mb-3 text-emerald-300" size={28} /><span className="font-medium text-zinc-200">Arraste vários extratos CSV ou selecione os arquivos</span><span className="mt-1 text-xs text-zinc-500">Nubank, Olist Conta Digital, Mercado Pago, PayPal ou CSV genérico, até 10 MB cada.</span>
       </button><input accept=".csv,text/csv" className="hidden" multiple onChange={(event) => addFiles(Array.from(event.target.files ?? []))} ref={inputRef} type="file" />
     </section>
-    <section className="space-y-3">{previews.map((item, index) => <ImportPreview item={item} key={`${item.file.name}-${index}`} onImport={() => importOne(index)} onMapping={(mapping) => setPreviews((current) => current.map((entry, position) => position === index ? { ...entry, mapping, status: "ready" } : entry))} />)}
+    <section className="space-y-3">{previews.map((item, index) => <ImportPreview accounts={overview.accounts} item={item} key={`${item.file.name}-${index}`} onAccountChange={(nextAccountId) => setPreviews((current) => current.map((entry, position) => position === index ? { ...entry, accountId: nextAccountId } : entry))} onImport={() => importOne(index)} onMapping={(mapping) => setPreviews((current) => current.map((entry, position) => position === index ? { ...entry, mapping, status: "ready" } : entry))} />)}
       {!previews.length ? <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4"><p className="text-sm font-medium text-zinc-300">Fluxo seguro em duas etapas</p><ol className="mt-3 space-y-2 text-xs text-zinc-500"><li>1. Detectamos a instituição e validamos os totais.</li><li>2. Você confere a prévia antes de gravar.</li><li>3. Arquivos repetidos são reconhecidos pelo checksum.</li><li>4. O original e cada linha bruta permanecem preservados.</li></ol></div> : null}
     </section>
-  </div>{overview.imports.length ? <section className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4"><h2 className="font-semibold text-white">Arquivos desta competência</h2><div className="mt-3 grid gap-2">{overview.imports.map((item)=><div className="flex flex-col gap-2 rounded-md bg-zinc-950/50 px-3 py-2 text-sm sm:flex-row sm:items-center" key={String(item.id)}><div className="min-w-0 flex-1"><p className="truncate text-zinc-300">{String(item.original_filename)}</p><p className="text-xs text-zinc-600">{String(item.source_type)} · {String(item.transaction_row_count)} movimentações · {String(item.status)}</p></div><a className="inline-flex items-center gap-1 text-xs font-medium text-emerald-300 hover:text-emerald-200" href={`/api/finance/imports/${item.id}/file`}><Download size={14}/>Original</a></div>)}</div></section>:null}</div>;
+  </div>{overview.imports.length ? <section className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4"><h2 className="font-semibold text-white">Arquivos desta competência</h2><div className="mt-3 grid gap-2">{overview.imports.map((item)=><div className="flex flex-col gap-2 rounded-md bg-zinc-950/50 px-3 py-2 text-sm sm:flex-row sm:items-center" key={String(item.id)}><div className="min-w-0 flex-1"><p className="truncate text-zinc-300">{String(item.original_filename)}</p><p className="text-xs text-zinc-600">{String(item.source_type)} · {String(item.transaction_row_count)} movimentações · {String(item.status)}</p></div><a className="inline-flex items-center gap-1 text-xs font-medium text-emerald-300 hover:text-emerald-200" href={`/api/finance/imports/${item.id}/file`}><Download size={14}/>Original</a></div>)}</div></section>:null}{creatingAccount ? <Modal onClose={() => setCreatingAccount(false)} title="Nova conta financeira"><AccountForm onCancel={() => setCreatingAccount(false)} onCreated={async (account) => { setCreatingAccount(false); await onRefresh(); setAccountId(account.id); onMessage({ tone: "success", text: "Conta cadastrada e selecionada para os próximos extratos." }); }} /></Modal> : null}</div>;
 }
 
-function ImportPreview({ item, onImport, onMapping }: { item: Preview; onImport: () => void; onMapping: (mapping: Record<string, string>) => void }) {
+function ImportPreview({ accounts, item, onAccountChange, onImport, onMapping }: { accounts: Account[]; item: Preview; onAccountChange: (accountId: string) => void; onImport: () => void; onMapping: (mapping: Record<string, string>) => void }) {
   const [mapping, setMapping] = useState<Record<string, string>>({});
   if (item.status === "loading") return <div className="rounded-lg border border-zinc-800 p-4 text-sm text-zinc-400"><Loader2 className="mr-2 inline animate-spin" size={16} />Lendo {item.file.name}...</div>;
   return <div className={`rounded-lg border p-4 ${item.status === "error" ? "border-rose-500/40 bg-rose-500/5" : item.status === "done" ? "border-emerald-500/40 bg-emerald-500/5" : "border-zinc-800 bg-zinc-900/60"}`}>
     <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{item.file.name}</p><p className="mt-1 text-xs text-zinc-500">{item.data?.adapterName ?? "Layout não reconhecido"}</p></div>{item.status === "done" ? <Check className="text-emerald-300" size={18} /> : null}</div>
+    {item.status !== "done" ? <label className="mt-3 grid gap-1.5 text-xs font-medium text-zinc-400">Importar nesta conta<select className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm" disabled={item.status === "importing"} onChange={(event) => onAccountChange(event.target.value)} value={item.accountId}>{accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label> : null}
     {item.data ? <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><Mini label="Movimentações" value={item.data.transactions} /><Mini label="Informativas" value={item.data.informativeRows} /><Mini label="Entradas" value={money(item.data.inflowsCents)} /><Mini label="Saídas" value={money(item.data.outflowsCents)} /></div> : null}
     {item.status === "mapping" && item.headers ? <div className="mt-3 space-y-2">{["date", "description", "amount", "identifier"].map((field) => <label className="grid grid-cols-[90px_1fr] items-center gap-2 text-xs" key={field}><span className="text-zinc-500">{({date:"Data",description:"Descrição",amount:"Valor",identifier:"Identificador"} as Record<string,string>)[field]}</span><select onChange={(event) => setMapping((current) => ({ ...current, [field]: event.target.value }))} value={mapping[field] ?? ""}><option value="">Selecione...</option>{item.headers!.map((header) => <option key={header}>{header}</option>)}</select></label>)}<button className="w-full rounded-md border border-zinc-700 px-3 py-2 text-xs" disabled={!mapping.date || !mapping.description || !mapping.amount} onClick={() => onMapping(mapping)}>Usar este mapeamento</button></div> : null}
     {item.error ? <p className="mt-3 text-xs text-amber-200">{item.error}</p> : null}
@@ -249,9 +277,16 @@ function OlistReconciliation({ overview, onMessage }: { overview: Overview; onMe
 }
 
 function Accounts({ accounts, onRefresh, onMessage }: { accounts: Account[]; onRefresh:()=>Promise<void>; onMessage:(message:Message)=>void }) {
-  const [open,setOpen]=useState(!accounts.length); const [busy,setBusy]=useState(false); const [form,setForm]=useState({name:"",institution:"nubank",accountType:"checking",currency:"BRL",ownershipType:"company",sameEconomicEntity:true,requiredForMonthlyClose:true});
-  async function submit(){setBusy(true);try{const response=await fetch("/api/finance/accounts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(form)});const payload=await response.json();if(!response.ok)throw new Error(errorText(payload.error));setOpen(false);setForm({...form,name:""});await onRefresh();onMessage({tone:"success",text:"Conta financeira cadastrada."});}catch(error){onMessage({tone:"error",text:error instanceof Error?error.message:"Falha ao cadastrar conta."});}finally{setBusy(false);}}
-  return <div className="space-y-3"><div className="flex justify-end"><button className="inline-flex items-center gap-2 rounded-md bg-emerald-500 px-3 py-2 text-sm font-semibold text-zinc-950" onClick={()=>setOpen(true)}><Plus size={16}/>Nova conta</button></div>{open?<div className="rounded-lg border border-emerald-500/30 bg-zinc-900/70 p-4"><h2 className="font-semibold text-white">Conta financeira</h2><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Field label="Nome"><input placeholder="Ex.: Nubank empresa" value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})}/></Field><Field label="Instituição"><select value={form.institution} onChange={(e)=>setForm({...form,institution:e.target.value})}><option value="nubank">Nubank</option><option value="olist">Olist Conta Digital</option><option value="mercado_pago">Mercado Pago</option><option value="paypal">PayPal</option><option value="other">Outra</option></select></Field><Field label="Titularidade"><select value={form.ownershipType} onChange={(e)=>setForm({...form,ownershipType:e.target.value})}><option value="company">Empresa</option><option value="owner">Titular</option><option value="partner">Sócio</option><option value="personal">Pessoal</option><option value="third_party">Terceiro</option></select></Field></div><div className="mt-3 flex flex-wrap gap-4"><label className="flex items-center gap-2 text-sm text-zinc-300"><input checked={form.sameEconomicEntity} onChange={(e)=>setForm({...form,sameEconomicEntity:e.target.checked})} type="checkbox"/>Integra o mesmo caixa operacional</label><label className="flex items-center gap-2 text-sm text-zinc-300"><input checked={form.requiredForMonthlyClose} onChange={(e)=>setForm({...form,requiredForMonthlyClose:e.target.checked})} type="checkbox"/>Obrigatória no fechamento</label></div><div className="mt-4 flex justify-end gap-2"><button className="rounded-md border border-zinc-700 px-3 py-2 text-sm" onClick={()=>setOpen(false)}>Cancelar</button><button className="rounded-md bg-emerald-500 px-3 py-2 text-sm font-semibold text-zinc-950" disabled={busy||form.name.length<2} onClick={submit}>{busy?<Loader2 className="mr-1 inline animate-spin" size={15}/>:null}Salvar conta</button></div></div>:null}<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{accounts.map((account)=><div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4" key={account.id}><div className="flex items-start gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-md bg-zinc-800 text-zinc-300"><Building2 size={17}/></div><div><h3 className="font-medium text-white">{account.name}</h3><p className="text-xs text-zinc-500">{account.institution} · {account.currency}</p></div></div><div className="mt-4 flex flex-wrap gap-2 text-[11px]"><span className="rounded bg-zinc-800 px-2 py-1 text-zinc-300">{ownershipLabel(account.ownership_type)}</span>{account.required_for_monthly_close?<span className="rounded bg-amber-400/10 px-2 py-1 text-amber-200">Obrigatória</span>:null}{account.same_economic_entity?<span className="rounded bg-cyan-400/10 px-2 py-1 text-cyan-200">Caixa operacional</span>:null}</div></div>)}</div></div>;
+  const [open,setOpen]=useState(!accounts.length);
+  return <div className="space-y-3"><div className="flex justify-end"><button className="inline-flex items-center gap-2 rounded-md bg-emerald-500 px-3 py-2 text-sm font-semibold text-zinc-950" onClick={()=>setOpen(true)}><Plus size={16}/>Nova conta</button></div>{open?<div className="rounded-lg border border-emerald-500/30 bg-zinc-900/70 p-4"><h2 className="font-semibold text-white">Conta financeira</h2><AccountForm onCancel={()=>setOpen(false)} onCreated={async()=>{setOpen(false);await onRefresh();onMessage({tone:"success",text:"Conta financeira cadastrada."});}}/></div>:null}<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{accounts.map((account)=><div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4" key={account.id}><div className="flex items-start gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-md bg-zinc-800 text-zinc-300"><Building2 size={17}/></div><div><h3 className="font-medium text-white">{account.name}</h3><p className="text-xs text-zinc-500">{account.institution} · {account.currency}</p></div></div><div className="mt-4 flex flex-wrap gap-2 text-[11px]"><span className="rounded bg-zinc-800 px-2 py-1 text-zinc-300">{ownershipLabel(account.ownership_type)}</span>{account.required_for_monthly_close?<span className="rounded bg-amber-400/10 px-2 py-1 text-amber-200">Obrigatória</span>:null}{account.same_economic_entity?<span className="rounded bg-cyan-400/10 px-2 py-1 text-cyan-200">Caixa operacional</span>:null}</div></div>)}</div></div>;
+}
+
+function AccountForm({ onCancel, onCreated }: { onCancel?: () => void; onCreated: (account: Account) => Promise<void> | void }) {
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const [form,setForm]=useState({name:"",institution:"nubank",accountType:"checking",currency:"BRL",ownershipType:"company",sameEconomicEntity:true,requiredForMonthlyClose:true});
+  async function submit(){setBusy(true);setError("");try{const response=await fetch("/api/finance/accounts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(form)});const payload=await response.json();if(!response.ok)throw new Error(errorText(payload.error));await onCreated(payload.account as Account);}catch(caught){setError(caught instanceof Error?caught.message:"Falha ao cadastrar conta.");}finally{setBusy(false);}}
+  return <div><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Field label="Nome da conta"><input placeholder="Ex.: Nubank empresa" value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})}/></Field><Field label="Instituição"><select value={form.institution} onChange={(e)=>setForm({...form,institution:e.target.value})}><option value="nubank">Nubank</option><option value="olist">Olist Conta Digital</option><option value="mercado_pago">Mercado Pago</option><option value="paypal">PayPal</option><option value="other">Outra</option></select></Field><Field label="Titularidade"><select value={form.ownershipType} onChange={(e)=>setForm({...form,ownershipType:e.target.value})}><option value="company">Empresa</option><option value="owner">Titular</option><option value="partner">Sócio</option><option value="personal">Pessoal</option><option value="third_party">Terceiro</option></select></Field></div><div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-4"><label className="flex items-center gap-2 text-sm text-zinc-300"><input checked={form.sameEconomicEntity} onChange={(e)=>setForm({...form,sameEconomicEntity:e.target.checked})} type="checkbox"/>Integra o mesmo caixa operacional</label><label className="flex items-center gap-2 text-sm text-zinc-300"><input checked={form.requiredForMonthlyClose} onChange={(e)=>setForm({...form,requiredForMonthlyClose:e.target.checked})} type="checkbox"/>Obrigatória no fechamento</label></div>{error?<p className="mt-3 rounded-md border border-rose-500/30 bg-rose-500/10 p-2 text-sm text-rose-100">{error}</p>:null}<div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">{onCancel?<button className="rounded-md border border-zinc-700 px-3 py-2 text-sm" onClick={onCancel} type="button">Cancelar</button>:null}<button className="rounded-md bg-emerald-500 px-3 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50" disabled={busy||form.name.trim().length<2} onClick={submit} type="button">{busy?<Loader2 className="mr-1 inline animate-spin" size={15}/>:null}Salvar conta e continuar</button></div></div>;
 }
 
 function MonthAction({overview,onRefresh,onMessage}:PanelProps){const action=overview.month.status==="completed"?"reopen":"close";const [open,setOpen]=useState(false);const [busy,setBusy]=useState(false);const [notes,setNotes]=useState("");const [force,setForce]=useState(false);const [error,setError]=useState("");async function submit(){if(action==="reopen"&&!notes.trim()){setError("Informe o motivo da reabertura.");return;}if(force&&!notes.trim()){setError("A justificativa é obrigatória para concluir com pendências.");return;}setBusy(true);setError("");try{const response=await fetch("/api/finance/month",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({competence:overview.competence,action,force,notes})});const payload=await response.json();if(payload.result?.requiresJustification){setForce(true);setError(`Existem pendências: ${payload.result.checks.pending_reviews} revisão(ões), ${payload.result.checks.missing_accounts} conta(s) sem extrato e ${payload.result.checks.failed_imports} lote(s) com erro. Justifique para continuar.`);return;}if(!response.ok)throw new Error(payload.error);setOpen(false);await onRefresh();onMessage({tone:"success",text:action==="close"?"Competência concluída.":"Competência reaberta com auditoria."});}catch(caught){setError(caught instanceof Error?caught.message:"Falha no fechamento.");}finally{setBusy(false);}}return <><button className="mt-4 w-full rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800" onClick={()=>setOpen(true)}>{action==="reopen"?"Reabrir competência":"Concluir competência"}</button>{open?<Modal title={action==="reopen"?"Reabrir competência":"Concluir competência"} onClose={()=>setOpen(false)}><p className="text-sm text-zinc-400">{action==="reopen"?"A reabertura será registrada na auditoria e permitirá novas alterações.":"O sistema verificará contas obrigatórias, revisões e importações com erro."}</p><label className="mt-4 grid gap-1.5 text-xs font-medium text-zinc-400">{force?"Justificativa obrigatória":action==="reopen"?"Motivo":"Observação opcional"}<textarea className="min-h-24 rounded-md border border-zinc-700 p-3 text-sm" onChange={(event)=>setNotes(event.target.value)} value={notes}/></label>{error?<p className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-sm text-amber-100">{error}</p>:null}<button className="mt-4 w-full rounded-md bg-amber-400 px-3 py-2.5 font-semibold text-zinc-950 disabled:opacity-50" disabled={busy} onClick={submit}>{busy?<Loader2 className="mr-2 inline animate-spin" size={15}/>:null}{force?"Concluir com pendências":action==="reopen"?"Confirmar reabertura":"Verificar e concluir"}</button></Modal>:null}</>}
