@@ -6,7 +6,7 @@ import {
   RectangleHorizontal, Redo2, RotateCcw, Save, Shapes, SlidersHorizontal, Square, Trash2, Triangle,
   Undo2, X, ZoomIn, ZoomOut
 } from "lucide-react";
-import { createPrintGuideLayout, geometryLabel, type PrintGeometry } from "@/domain/artwork/geometry";
+import { calculatePrintGuideDimensions, createPrintGuideLayout, geometryLabel, type PrintGeometry } from "@/domain/artwork/geometry";
 import {
   calculateCenteredLayerBounds,
   createRetouchedArtworkFileName,
@@ -135,7 +135,13 @@ export function ArtworkRetouchEditor({
       .then((loaded) => {
         bitmap = loaded;
         if (!active || !canvasRef.current) return;
-        const area = createWorkspace(loaded.width, loaded.height);
+        const dimensions = geometry ? calculatePrintGuideDimensions({
+          safeWidthMm: geometry.widthMm,
+          safeHeightMm: geometry.heightMm,
+          sangriaIncrementMm: safeMarginMm,
+          cutIncrementMm: bleedMm
+        }) : null;
+        const area = createRetouchWorkspace(loaded.width, loaded.height, dimensions ? dimensions.cutWidthMm / dimensions.cutHeightMm : null);
         canvasRef.current.width = area.width; canvasRef.current.height = area.height;
         const editLayer = document.createElement("canvas"); editLayer.width = area.width; editLayer.height = area.height;
         sourceRef.current = loaded; editLayerRef.current = editLayer;
@@ -143,7 +149,7 @@ export function ArtworkRetouchEditor({
       })
       .catch((loadError) => { if (active) { setLoading(false); setError(loadError instanceof Error ? loadError.message : "Não foi possível carregar a imagem."); } });
     return () => { active = false; bitmap?.close(); sourceRef.current = null; adjustedSourceRef.current = null; editLayerRef.current = null; };
-  }, [imageUrl]);
+  }, [bleedMm, geometry, imageUrl, safeMarginMm]);
 
   useEffect(() => {
     const source = sourceRef.current;
@@ -368,7 +374,7 @@ export function ArtworkRetouchEditor({
       margins: { bleedMm, safeMarginMm },
       viewportWidth: workspace.width,
       viewportHeight: workspace.height,
-      paddingRatio: 0.04
+      paddingRatio: 0
     });
     return layout;
   }, [bleedMm, geometry, safeMarginMm, workspace]);
@@ -494,11 +500,20 @@ function shapeHandles(shape: RetouchShape): Array<{ handle: RetouchShapeHandle; 
   ];
 }
 
-function createWorkspace(width: number, height: number): Workspace {
+export function createRetouchWorkspace(width: number, height: number, targetAspectRatio: number | null): Workspace {
   const maxRatio = Math.max(0, (Math.sqrt(MAX_WORKSPACE_PIXELS / (width * height)) - 1) / 2);
   const ratio = Math.min(WORKSPACE_PADDING_RATIO, maxRatio);
-  const offsetX = Math.round(width * ratio); const offsetY = Math.round(height * ratio);
-  return { width: width + offsetX * 2, height: height + offsetY * 2, sourceWidth: width, sourceHeight: height, offsetX, offsetY };
+  let workspaceWidth = width * (1 + ratio * 2);
+  let workspaceHeight = height * (1 + ratio * 2);
+  if (targetAspectRatio && Number.isFinite(targetAspectRatio) && targetAspectRatio > 0) {
+    if (workspaceWidth / workspaceHeight < targetAspectRatio) workspaceWidth = workspaceHeight * targetAspectRatio;
+    else workspaceHeight = workspaceWidth / targetAspectRatio;
+  }
+  const normalizedWidth = Math.max(width, Math.round(workspaceWidth));
+  const normalizedHeight = Math.max(height, Math.round(workspaceHeight));
+  const offsetX = Math.round((normalizedWidth - width) / 2);
+  const offsetY = Math.round((normalizedHeight - height) / 2);
+  return { width: normalizedWidth, height: normalizedHeight, sourceWidth: width, sourceHeight: height, offsetX, offsetY };
 }
 function buildAdjustedSource(source: ImageBitmap, workspace: Workspace, adjustments: RetouchAdjustments, composition: RetouchComposition, geometry?: PrintGeometry | null) {
   const canvas = document.createElement("canvas"); canvas.width = workspace.width; canvas.height = workspace.height;

@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { calculateCenteredLayerBounds, createRetouchedArtworkFileName, createRetouchShape, findContiguousColorRegion, moveRetouchShape, normalizeSelection, resizeRetouchShape, sampledRgbToHex } from "@/domain/artwork/retouch";
 import { retouchDraftSchema } from "@/services/artwork/retouch-draft";
+import { createRetouchWorkspace } from "@/components/quotes/ArtworkRetouchEditor";
 
 describe("artwork retouch", () => {
+  it("uses the physical cut aspect ratio for the retouch workspace", () => {
+    const circular = createRetouchWorkspace(1200, 800, 1);
+    expect(circular.width).toBe(circular.height);
+    expect(circular.offsetX).toBeGreaterThan(0);
+    expect(circular.offsetY).toBeGreaterThan(0);
+
+    const rectangular = createRetouchWorkspace(800, 1200, 59 / 39);
+    expect(rectangular.width / rectangular.height).toBeCloseTo(59 / 39, 2);
+  });
+
   it("creates a safe and traceable file name without replacing the original extension", () => {
     expect(createRetouchedArtworkFileName("Arte São João.final.PNG", 123456))
       .toBe("Arte-Sao-Joao-final-retoque-123456.webp");
