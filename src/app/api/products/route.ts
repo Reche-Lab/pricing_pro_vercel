@@ -49,7 +49,7 @@ const createProductSchema = z.object({
   anchors: anchorsSchema.optional()
 }).superRefine((input, context) => {
   if (input.printSafeMarginMm * 2 >= Math.min(input.printWidthMm, input.printHeightMm)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: "A margem de segurança não deixa área útil dentro do corte.", path: ["printSafeMarginMm"] });
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "O acréscimo da sangria não deixa uma área de segurança válida.", path: ["printSafeMarginMm"] });
   }
 }).transform((input, context) => {
   if (input.curve) return { ...input, curve: input.curve };

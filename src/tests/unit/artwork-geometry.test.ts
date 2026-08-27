@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { createPrintGuideLayout, createShapePath, resolvePrintGeometry, resolvePrintMargins, validatePrintMargins } from "@/domain/artwork/geometry";
+import { calculatePrintGuideDimensions, createPrintGuideLayout, createShapePath, resolvePrintGeometry, resolvePrintMargins, validatePrintMargins } from "@/domain/artwork/geometry";
 import { prepareArtwork } from "@/services/artwork/production";
 
 describe("artwork print geometry", () => {
@@ -22,6 +22,19 @@ describe("artwork print geometry", () => {
     expect(resolvePrintMargins({ print_bleed_mm: 3, print_safe_margin_mm: 2.5 })).toEqual({ bleedMm: 3, safeMarginMm: 2.5 });
     expect(resolvePrintMargins({ print_bleed_mm: 3, print_safe_margin_mm: 2.5, bleed_mm: 1.5, safe_margin_mm: 1 })).toEqual({ bleedMm: 1.5, safeMarginMm: 1 });
     expect(resolvePrintMargins({ print_bleed_mm: 0, print_safe_margin_mm: 0 })).toEqual({ bleedMm: 0, safeMarginMm: 0 });
+  });
+
+  it("calculates sangria and cut as per-side increments after the absolute safety size", () => {
+    expect(calculatePrintGuideDimensions({ safeWidthMm: 41, safeHeightMm: 41, sangriaIncrementMm: 2, cutIncrementMm: 3 })).toEqual({
+      safeWidthMm: 41,
+      safeHeightMm: 41,
+      sangriaWidthMm: 45,
+      sangriaHeightMm: 45,
+      cutWidthMm: 51,
+      cutHeightMm: 51,
+      sangriaIncrementMm: 2,
+      cutIncrementMm: 3
+    });
   });
 
   it("rejects a safe margin that consumes the finished cut area", () => {

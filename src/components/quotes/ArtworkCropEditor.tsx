@@ -73,6 +73,10 @@ export function ArtworkCropEditor({
   const imageHeight = viewHeight * scale;
   const imageX = (viewWidth - imageWidth) / 2 + offsetX * viewWidth / 2;
   const imageY = (viewHeight - imageHeight) / 2 + offsetY * viewHeight / 2;
+  const oneDimension = geometry.shape === "circle" || geometry.shape === "square";
+  const safeAbsolute = formatAbsoluteSize(guides.safeWidthMm, guides.safeHeightMm, oneDimension);
+  const sangriaAbsolute = formatAbsoluteSize(geometry.widthMm, geometry.heightMm, oneDimension);
+  const cutAbsolute = formatAbsoluteSize(guides.outputWidthMm, guides.outputHeightMm, oneDimension);
 
   return (
     <div className="fixed inset-0 z-[70] grid place-items-center overflow-hidden bg-black/80 p-0 backdrop-blur-sm sm:p-3 lg:p-6">
@@ -88,7 +92,7 @@ export function ArtworkCropEditor({
               <GuidePath d={safePath} color="rgba(103,232,249,1)" dash="10 6" haloWidth={7} width={3.5} />
             </svg>
           </div>
-          <div className="mt-3 flex max-w-full gap-3 overflow-x-auto pb-1 text-[11px] text-zinc-400 sm:mt-5 sm:flex-wrap sm:justify-center sm:gap-4 sm:text-xs"><span className="shrink-0 text-cyan-300">Menor: segurança {formatMm(safeMarginMm)}</span><span className="shrink-0 text-amber-300">Intermediária: sangria</span><span className="shrink-0 text-rose-300">Maior: corte efetivo (+{formatMm(bleedMm)})</span></div>
+          <div className="mt-3 flex max-w-full gap-3 overflow-x-auto pb-1 text-[11px] text-zinc-400 sm:mt-5 sm:flex-wrap sm:justify-center sm:gap-4 sm:text-xs"><span className="shrink-0 text-cyan-300">Segurança: {safeAbsolute}</span><span className="shrink-0 text-amber-300">Sangria: {sangriaAbsolute}</span><span className="shrink-0 text-rose-300">Corte: {cutAbsolute}</span></div>
         </div>
 
         <div className="min-h-0 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5">
@@ -97,9 +101,10 @@ export function ArtworkCropEditor({
             <button className="focus-ring rounded-md p-2 text-zinc-500 hover:bg-zinc-900 hover:text-white" type="button" onClick={onClose}><X size={18} /></button>
           </div>
           <div className="mt-4 grid gap-2 rounded-md border border-zinc-800 bg-zinc-900/55 p-3 text-xs leading-5">
-            <GuideHelp color="cyan" title="1. Área de segurança · menor marcação">Mantenha textos, logos, rostos e outros elementos importantes dentro desta área.</GuideHelp>
-            <GuideHelp color="amber" title="2. Limite visível / sangria · marcação intermediária">Esta linha indica até onde a arte ficará visível no produto. O fundo e as cores não devem terminar aqui: precisam continuar até o corte.</GuideHelp>
-            <GuideHelp color="rose" title="3. Corte efetivo · maior marcação">É o limite físico de corte. Continue o mesmo fundo por toda a faixa entre a sangria e esta linha para evitar bordas brancas e compensar pequenas variações do corte. Não coloque elementos importantes nessa faixa, pois ela ficará oculta.</GuideHelp>
+            <p className="mb-1 font-semibold text-zinc-200">Geometria de impressão e corte</p>
+            <GuideHelp color="cyan" title={`1. Segurança · ${safeAbsolute}`}>Mantenha textos, logos, rostos e outros elementos importantes dentro desta área.</GuideHelp>
+            <GuideHelp color="amber" title={`2. Sangria / limite visível · ${sangriaAbsolute}`}>Esta linha indica até onde a arte ficará visível no produto. O fundo e as cores não devem terminar aqui: precisam continuar até o corte.</GuideHelp>
+            <GuideHelp color="rose" title={`3. Corte efetivo · ${cutAbsolute}`}>É o limite físico de corte. Continue o mesmo fundo por toda a faixa entre a sangria e esta linha para evitar bordas brancas e compensar pequenas variações do corte. Não coloque elementos importantes nessa faixa, pois ela ficará oculta.</GuideHelp>
           </div>
           <div className="mt-5 grid gap-5">
             <div>
@@ -137,3 +142,6 @@ function GuidePath({ d, color, dash, haloWidth, width }: { d: string; color: str
 }
 
 function formatMm(value: number) { return `${Number(value.toFixed(2)).toLocaleString("pt-BR")} mm`; }
+function formatAbsoluteSize(width: number, height: number, oneDimension: boolean) {
+  return oneDimension ? formatMm(width) : `${formatMm(width)} × ${formatMm(height)}`;
+}

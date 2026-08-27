@@ -17,6 +17,17 @@ export type PrintMargins = {
   safeMarginMm: number;
 };
 
+export type PrintGuideDimensions = {
+  safeWidthMm: number;
+  safeHeightMm: number;
+  sangriaWidthMm: number;
+  sangriaHeightMm: number;
+  cutWidthMm: number;
+  cutHeightMm: number;
+  sangriaIncrementMm: number;
+  cutIncrementMm: number;
+};
+
 export type PrintGuideLayout = {
   /** Limite total da arte preparada. Mantido como alias do corte efetivo. */
   outer: { x: number; y: number; width: number; height: number; path: string };
@@ -62,6 +73,30 @@ export function resolvePrintMargins(source: GeometrySource, fallback: PrintMargi
   return {
     bleedMm: nonNegative(source.bleed_mm) ?? nonNegative(source.print_bleed_mm) ?? fallback.bleedMm,
     safeMarginMm: nonNegative(source.safe_margin_mm) ?? nonNegative(source.print_safe_margin_mm) ?? fallback.safeMarginMm
+  };
+}
+
+export function calculatePrintGuideDimensions(input: {
+  safeWidthMm: number;
+  safeHeightMm: number;
+  sangriaIncrementMm: number;
+  cutIncrementMm: number;
+}): PrintGuideDimensions {
+  const safeWidthMm = Math.max(0, finite(input.safeWidthMm));
+  const safeHeightMm = Math.max(0, finite(input.safeHeightMm));
+  const sangriaIncrementMm = Math.max(0, finite(input.sangriaIncrementMm));
+  const cutIncrementMm = Math.max(0, finite(input.cutIncrementMm));
+  const sangriaWidthMm = safeWidthMm + sangriaIncrementMm * 2;
+  const sangriaHeightMm = safeHeightMm + sangriaIncrementMm * 2;
+  return {
+    safeWidthMm,
+    safeHeightMm,
+    sangriaWidthMm,
+    sangriaHeightMm,
+    cutWidthMm: sangriaWidthMm + cutIncrementMm * 2,
+    cutHeightMm: sangriaHeightMm + cutIncrementMm * 2,
+    sangriaIncrementMm,
+    cutIncrementMm
   };
 }
 
@@ -229,6 +264,7 @@ function toward(from: { x: number; y: number }, to: { x: number; y: number }, am
 function distance(a: { x: number; y: number }, b: { x: number; y: number }) { return Math.hypot(a.x - b.x, a.y - b.y); }
 function move(point: { x: number; y: number }) { return `M ${n(point.x)} ${n(point.y)}`; }
 function n(value: number) { return Number(value.toFixed(3)); }
+function finite(value: number) { return Number.isFinite(value) ? value : 0; }
 function positive(value: unknown) { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : 0; }
 function nonNegative(value: unknown) { if (value === null || value === undefined || value === "") return null; const number = Number(value); return Number.isFinite(number) && number >= 0 ? number : null; }
 function clamp(value: number, min: number, max: number) { return Math.min(max, Math.max(min, Number.isFinite(value) ? value : 0)); }
