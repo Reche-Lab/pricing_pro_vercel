@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { calculatePrintGuideDimensions, type PrintCornerStyle, type PrintShape } from "@/domain/artwork/geometry";
+import type { PrintCornerStyle, PrintGuideDimensions, PrintShape } from "@/domain/artwork/geometry";
 
 export type PrintGeometryFormValues = {
   shape: PrintShape;
@@ -29,49 +29,61 @@ export function PrintGeometryFields({ defaults }: { defaults?: Partial<PrintGeom
   const defaultSangriaIncrement = numeric(defaults?.safeMarginMm) ?? 2;
   const defaultSafeWidth = numeric(defaults?.widthMm);
   const defaultSafeHeight = numeric(defaults?.heightMm) ?? defaultSafeWidth;
+  const defaultCutIncrement = numeric(defaults?.bleedMm) ?? 2;
   const [safeWidth, setSafeWidth] = useState(valueText(defaultSafeWidth));
   const [safeHeight, setSafeHeight] = useState(valueText(defaultSafeHeight));
-  const [sangriaIncrement, setSangriaIncrement] = useState(valueText(defaultSangriaIncrement));
-  const [cutIncrement, setCutIncrement] = useState(valueText(numeric(defaults?.bleedMm) ?? 2));
+  const [sangriaWidth, setSangriaWidth] = useState(valueText(addTotal(defaultSafeWidth, defaultSangriaIncrement)));
+  const [sangriaHeight, setSangriaHeight] = useState(valueText(addTotal(defaultSafeHeight, defaultSangriaIncrement)));
+  const [cutWidth, setCutWidth] = useState(valueText(addTotal(addTotal(defaultSafeWidth, defaultSangriaIncrement), defaultCutIncrement)));
+  const [cutHeight, setCutHeight] = useState(valueText(addTotal(addTotal(defaultSafeHeight, defaultSangriaIncrement), defaultCutIncrement)));
   const oneDimension = shape === "circle" || shape === "square";
   const polygon = shape === "triangle" || shape === "hexagon";
-  const values = [numeric(safeWidth), numeric(oneDimension ? safeWidth : safeHeight), numeric(sangriaIncrement), numeric(cutIncrement)];
-  const dimensions = values.every((value) => value !== null)
-    ? calculatePrintGuideDimensions({ safeWidthMm: values[0]!, safeHeightMm: values[1]!, sangriaIncrementMm: values[2]!, cutIncrementMm: values[3]! })
-    : null;
+  const calculation = calculateAbsoluteGuides({
+    safeWidth, safeHeight: oneDimension ? safeWidth : safeHeight,
+    sangriaWidth, sangriaHeight: oneDimension ? sangriaWidth : sangriaHeight,
+    cutWidth, cutHeight: oneDimension ? cutWidth : cutHeight,
+    oneDimension
+  });
+  const dimensions = calculation.dimensions;
 
   return (
     <div className="mt-4 rounded-lg border border-cyan-900/60 bg-cyan-950/20 p-4">
       <p className="text-sm font-medium text-cyan-100">Geometria de impressão e corte</p>
-      <p className="mt-1 text-xs leading-5 text-zinc-500">Informe somente a Segurança como tamanho absoluto. Sangria e Corte são acréscimos por lado em relação à linha imediatamente anterior.</p>
+      <p className="mt-1 text-xs leading-5 text-zinc-500">Informe o tamanho total de cada linha. O sistema calcula automaticamente a distância correspondente em cada lado.</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label><span className="mb-1 block text-xs font-medium text-zinc-400">Formato</span><select className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white" name="printShape" value={shape} onChange={(event) => setShape(event.target.value as PrintShape)}>{shapeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
         {shape !== "circle" ? <label><span className="mb-1 block text-xs font-medium text-zinc-400">Acabamento dos cantos</span><select className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white" name="printCornerStyle" value={cornerStyle} onChange={(event) => setCornerStyle(event.target.value as PrintCornerStyle)}><option value="sharp">Pontas / cantos retos</option><option value="rounded">Cantos arredondados</option></select></label> : <input name="printCornerStyle" type="hidden" value="sharp" />}
         {shape !== "circle" && cornerStyle === "rounded" ? <GeometryInput defaultValue={defaults?.cornerRadiusMm ?? 2} label="Raio do canto (mm)" name="printCornerRadiusMm" /> : <input name="printCornerRadiusMm" type="hidden" value="0" />}
         {polygon ? <GeometryInput defaultValue={defaults?.rotationDegrees ?? 0} label="Orientação (graus)" min="-180" name="printShapeRotationDegrees" /> : <input name="printShapeRotationDegrees" type="hidden" value="0" />}
       </div>
-      <div className="mt-4 grid gap-3 rounded-md border border-zinc-800 bg-zinc-950/45 p-3 sm:grid-cols-2 lg:grid-cols-4">
-        <GuideNumberInput hint={dimensions ? `Valor absoluto: ${formatMmValue(dimensions.safeWidthMm)} mm` : "Esta é a única medida absoluta."} label={shape === "circle" ? "Segurança · diâmetro absoluto" : oneDimension ? "Segurança · lado absoluto" : "Segurança · largura absoluta"} min="1" value={safeWidth} onChange={setSafeWidth} />
-        {!oneDimension ? <GuideNumberInput hint={dimensions ? `Valor absoluto: ${formatMmValue(dimensions.safeHeightMm)} mm` : "Esta é a única medida absoluta."} label="Segurança · altura absoluta" min="1" value={safeHeight} onChange={setSafeHeight} /> : null}
-        <GuideNumberInput hint={dimensions ? `Valor absoluto calculado: ${sizeLabel(dimensions.sangriaWidthMm, dimensions.sangriaHeightMm, oneDimension)}` : "Somente a diferença para a Segurança."} label="Sangria · acréscimo por lado" min="0" value={sangriaIncrement} onChange={setSangriaIncrement} />
-        <GuideNumberInput hint={dimensions ? `Valor absoluto calculado: ${sizeLabel(dimensions.cutWidthMm, dimensions.cutHeightMm, oneDimension)}` : "Somente a diferença para a Sangria."} label="Corte · acréscimo por lado" min="0" value={cutIncrement} onChange={setCutIncrement} />
+      <div className="mt-4 grid gap-4 rounded-md border border-zinc-800 bg-zinc-950/45 p-3 lg:grid-cols-3">
+        <AbsoluteGuideFields color="cyan" label="Segurança" oneDimension={oneDimension} shape={shape} width={safeWidth} height={safeHeight} onWidthChange={setSafeWidth} onHeightChange={setSafeHeight} hint="Tamanho total da menor linha." />
+        <AbsoluteGuideFields color="amber" label="Sangria" oneDimension={oneDimension} shape={shape} width={sangriaWidth} height={sangriaHeight} onWidthChange={setSangriaWidth} onHeightChange={setSangriaHeight} hint={dimensions ? `${formatMmValue(dimensions.sangriaIncrementMm)} mm por lado após a Segurança.` : "Deve ser igual ou maior que a Segurança."} />
+        <AbsoluteGuideFields color="rose" label="Corte" oneDimension={oneDimension} shape={shape} width={cutWidth} height={cutHeight} onWidthChange={setCutWidth} onHeightChange={setCutHeight} hint={dimensions ? `${formatMmValue(dimensions.cutIncrementMm)} mm por lado após a Sangria.` : "Deve ser igual ou maior que a Sangria."} />
       </div>
+      {calculation.error ? <p className="mt-2 rounded-md border border-red-900/60 bg-red-950/25 px-3 py-2 text-xs text-red-300">{calculation.error}</p> : null}
       <input name="printWidthMm" type="hidden" value={dimensions ? dimensions.safeWidthMm : ""} />
       <input name="printHeightMm" type="hidden" value={dimensions ? dimensions.safeHeightMm : ""} />
       <input name="printSafeMarginMm" type="hidden" value={dimensions ? dimensions.sangriaIncrementMm : ""} />
       <input name="printBleedMm" type="hidden" value={dimensions ? dimensions.cutIncrementMm : ""} />
       <div className="mt-3 grid gap-2 rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-3 text-[11px] leading-5 text-zinc-500 sm:grid-cols-3">
         <GuideSummary color="cyan" label="Segurança" value={dimensions ? sizeLabel(dimensions.safeWidthMm, dimensions.safeHeightMm, oneDimension) : "Informe a medida absoluta"}>Elementos importantes ficam dentro dela.</GuideSummary>
-        <GuideSummary color="amber" label="Sangria" value={dimensions ? sizeLabel(dimensions.sangriaWidthMm, dimensions.sangriaHeightMm, oneDimension) : "Calculada automaticamente"}>Segurança + acréscimo em cada lado. Limite visível.</GuideSummary>
-        <GuideSummary color="rose" label="Corte" value={dimensions ? sizeLabel(dimensions.cutWidthMm, dimensions.cutHeightMm, oneDimension) : "Calculado automaticamente"}>Sangria + acréscimo em cada lado. Continue o fundo até aqui.</GuideSummary>
+        <GuideSummary color="amber" label="Sangria" value={dimensions ? sizeLabel(dimensions.sangriaWidthMm, dimensions.sangriaHeightMm, oneDimension) : "Informe a medida absoluta"}>Limite visível. Distância lateral calculada automaticamente.</GuideSummary>
+        <GuideSummary color="rose" label="Corte" value={dimensions ? sizeLabel(dimensions.cutWidthMm, dimensions.cutHeightMm, oneDimension) : "Informe a medida absoluta"}>Continue o fundo até esta medida total.</GuideSummary>
       </div>
       <label className="mt-3 inline-flex items-center gap-2 text-xs text-zinc-300"><input className="h-4 w-4 accent-cyan-400" defaultChecked={defaults?.allowPrintRotation ?? true} name="allowPrintRotation" type="checkbox" />Permitir girar 90° na folha para economizar espaço</label>
     </div>
   );
 }
 
-function GuideNumberInput({ hint, label, min, value, onChange }: { hint: string; label: string; min: string; value: string; onChange: (value: string) => void }) {
-  return <label><span className="mb-1 block text-xs font-medium text-zinc-300">{label} (mm)</span><input className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white" inputMode="decimal" min={min} required step="0.1" type="number" value={value} onChange={(event) => onChange(event.target.value)} /><span className="mt-1 block text-[10px] text-zinc-500">{hint}</span></label>;
+function AbsoluteGuideFields({ color, hint, label, oneDimension, shape, width, height, onWidthChange, onHeightChange }: { color: "cyan" | "amber" | "rose"; hint: string; label: string; oneDimension: boolean; shape: PrintShape; width: string; height: string; onWidthChange: (value: string) => void; onHeightChange: (value: string) => void }) {
+  const heading = color === "cyan" ? "text-cyan-300" : color === "amber" ? "text-amber-300" : "text-rose-300";
+  const dimension = shape === "circle" ? "Diâmetro total" : oneDimension ? "Lado total" : "Largura total";
+  return <fieldset className="min-w-0 border-l-2 border-zinc-700 pl-3"><legend className={`mb-2 text-xs font-semibold ${heading}`}>{label}</legend><div className={`grid gap-2 ${oneDimension ? "grid-cols-1" : "sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"}`}><AbsoluteInput guide={label} label={dimension} value={width} onChange={onWidthChange} />{!oneDimension ? <AbsoluteInput guide={label} label="Altura total" value={height} onChange={onHeightChange} /> : null}</div><p className="mt-1.5 text-[10px] leading-4 text-zinc-500">{hint}</p></fieldset>;
+}
+
+function AbsoluteInput({ guide, label, value, onChange }: { guide: string; label: string; value: string; onChange: (value: string) => void }) {
+  return <label><span className="mb-1 block text-[11px] font-medium text-zinc-400">{label} (mm)</span><input aria-label={`${guide} · ${label} (mm)`} className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white" inputMode="decimal" min="1" required step="0.1" type="number" value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
 function GuideSummary({ color, label, value, children }: { color: "cyan" | "amber" | "rose"; label: string; value: string; children: React.ReactNode }) {
@@ -89,6 +101,23 @@ function numeric(value: string | number | null | undefined) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 function valueText(value: number | null) { return value === null ? "" : String(Number(value.toFixed(2))); }
+function addTotal(value: number | null, perSide: number) { return value === null ? null : value + perSide * 2; }
+function calculateAbsoluteGuides(input: { safeWidth: string; safeHeight: string; sangriaWidth: string; sangriaHeight: string; cutWidth: string; cutHeight: string; oneDimension: boolean }): { dimensions: PrintGuideDimensions | null; error: string | null } {
+  const values = [input.safeWidth, input.safeHeight, input.sangriaWidth, input.sangriaHeight, input.cutWidth, input.cutHeight].map(numeric);
+  if (values.some((value) => value === null)) return { dimensions: null, error: null };
+  const [safeWidthMm, safeHeightMm, sangriaWidthMm, sangriaHeightMm, cutWidthMm, cutHeightMm] = values as number[];
+  if (sangriaWidthMm < safeWidthMm || sangriaHeightMm < safeHeightMm) return { dimensions: null, error: "A Sangria precisa ser igual ou maior que a Segurança." };
+  if (cutWidthMm < sangriaWidthMm || cutHeightMm < sangriaHeightMm) return { dimensions: null, error: "O Corte precisa ser igual ou maior que a Sangria." };
+  const sangriaWidthIncrement = (sangriaWidthMm - safeWidthMm) / 2;
+  const sangriaHeightIncrement = (sangriaHeightMm - safeHeightMm) / 2;
+  const cutWidthIncrement = (cutWidthMm - sangriaWidthMm) / 2;
+  const cutHeightIncrement = (cutHeightMm - sangriaHeightMm) / 2;
+  if (!input.oneDimension && (!same(sangriaWidthIncrement, sangriaHeightIncrement) || !same(cutWidthIncrement, cutHeightIncrement))) {
+    return { dimensions: null, error: "Em formatos com largura e altura, mantenha a mesma expansão em todos os lados." };
+  }
+  return { dimensions: { safeWidthMm, safeHeightMm, sangriaWidthMm, sangriaHeightMm, cutWidthMm, cutHeightMm, sangriaIncrementMm: sangriaWidthIncrement, cutIncrementMm: cutWidthIncrement }, error: null };
+}
+function same(left: number, right: number) { return Math.abs(left - right) < 0.001; }
 function sizeLabel(width: number, height: number, oneDimension: boolean) {
   return oneDimension ? `${formatMmValue(width)} mm` : `${formatMmValue(width)} × ${formatMmValue(height)} mm`;
 }

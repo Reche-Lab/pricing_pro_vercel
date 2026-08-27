@@ -44,7 +44,7 @@ As guias devem ser interpretadas do centro para fora:
 2. `Limite visível / sangria`: contorno intermediário. A parte visível no produto termina nessa linha.
 3. `Corte efetivo`: maior contorno. O fundo, as cores e as texturas devem continuar sem interrupção da sangria até esta linha para compensar variações do corte e evitar marcas ou bordas brancas. Essa faixa ficará oculta e não deve conter elementos importantes.
 
-No cadastro do produto, somente a Segurança é informada como dimensão absoluta. Sangria é o acréscimo por lado depois da Segurança, e Corte é o acréscimo por lado depois da Sangria. Por exemplo, Segurança de `41 mm`, Sangria de `2 mm` por lado e Corte de `3 mm` por lado resultam em uma área visível de `45 mm` e corte efetivo de `51 mm`.
+No cadastro do produto, Segurança, Sangria e Corte são informados como dimensões totais absolutas. Por exemplo: Segurança de `53 mm`, Sangria de `56 mm` e Corte de `59 mm`. O sistema converte internamente cada diferença total em distância lateral: nesse exemplo, são `1,5 mm` por lado da Segurança até a Sangria e mais `1,5 mm` por lado até o Corte.
 
 ## Formatos de produto
 
