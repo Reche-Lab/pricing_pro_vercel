@@ -132,7 +132,7 @@ export async function prepareArtwork(input: {
       ? " A imagem foi deslocada de forma independente dentro da área de corte."
       : "";
   const notes = qualityStatus === "ready"
-    ? `Arte preparada em ${input.dpi} DPI com ${input.bleedMm} mm de sangria.${whiteMarginNote}`
+    ? `Arte preparada em ${input.dpi} DPI com ${input.bleedMm} mm entre o limite da sangria e o corte efetivo.${whiteMarginNote}`
     : `A imagem original tem ${metadata.width} x ${metadata.height} px e pode perder nitidez em ${input.dpi} DPI.${whiteMarginNote}`;
 
   return {

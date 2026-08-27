@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, RotateCcw, X } from "lucide-react";
-import { createPrintGuideLayout, geometryLabel, type PrintGeometry } from "@/domain/artwork/geometry";
+import { LocateFixed, Loader2, RotateCcw, X } from "lucide-react";
+import { createPrintGuideLayout, type PrintGeometry } from "@/domain/artwork/geometry";
 import type { QuoteItemArtworkRow } from "@/repositories/quotes";
 
 export function ArtworkCropEditor({
@@ -56,6 +56,10 @@ export function ArtworkCropEditor({
     setScale(1); setOffsetX(0); setOffsetY(0); setRotation(0);
   }
 
+  function centerArtwork() {
+    setOffsetX(0); setOffsetY(0);
+  }
+
   const outputWidthMm = geometry.widthMm + bleedMm * 2;
   const outputHeightMm = geometry.heightMm + bleedMm * 2;
   const viewWidth = 1000;
@@ -63,6 +67,7 @@ export function ArtworkCropEditor({
   const guides = createPrintGuideLayout({ geometry, margins: { bleedMm, safeMarginMm }, viewportWidth: viewWidth, viewportHeight: viewHeight });
   const clipPath = guides.outer.path;
   const cutPath = guides.cut.path;
+  const bleedPath = guides.bleed.path;
   const safePath = guides.safe.path;
   const imageWidth = viewWidth * scale;
   const imageHeight = viewHeight * scale;
@@ -78,17 +83,23 @@ export function ArtworkCropEditor({
               <defs><clipPath id={`artwork-shape-${artwork.id}`}><path d={clipPath} /></clipPath></defs>
               <path d={clipPath} fill="white" />
               <image clipPath={`url(#artwork-shape-${artwork.id})`} height={imageHeight} href={imageUrl} preserveAspectRatio="xMidYMid slice" transform={`rotate(${rotation} ${viewWidth / 2} ${viewHeight / 2})`} width={imageWidth} x={imageX} y={imageY} />
-              <path d={cutPath} fill="none" stroke="rgba(239,68,68,0.9)" strokeDasharray="9 7" strokeWidth="2" />
-              <path d={safePath} fill="none" stroke="rgba(103,232,249,0.9)" strokeDasharray="9 7" strokeWidth="2" />
+              <GuidePath d={cutPath} color="rgba(244,63,94,1)" dash="14 9" haloWidth={9} width={4.5} />
+              <GuidePath d={bleedPath} color="rgba(251,191,36,1)" dash="12 7" haloWidth={8} width={4} />
+              <GuidePath d={safePath} color="rgba(103,232,249,1)" dash="10 6" haloWidth={7} width={3.5} />
             </svg>
           </div>
-          <div className="mt-3 flex max-w-full gap-3 overflow-x-auto pb-1 text-[11px] text-zinc-400 sm:mt-5 sm:flex-wrap sm:justify-center sm:gap-4 sm:text-xs"><span className="shrink-0 text-amber-300">Sangria {formatMm(bleedMm)}</span><span className="shrink-0"><i className="mr-1 inline-block h-2 w-4 border-t border-dashed border-red-500" /> corte {geometryLabel(geometry)}</span><span className="shrink-0"><i className="mr-1 inline-block h-2 w-4 border-t border-dashed border-cyan-300" /> segurança {formatMm(safeMarginMm)}</span></div>
+          <div className="mt-3 flex max-w-full gap-3 overflow-x-auto pb-1 text-[11px] text-zinc-400 sm:mt-5 sm:flex-wrap sm:justify-center sm:gap-4 sm:text-xs"><span className="shrink-0 text-cyan-300">Menor: segurança {formatMm(safeMarginMm)}</span><span className="shrink-0 text-amber-300">Intermediária: sangria</span><span className="shrink-0 text-rose-300">Maior: corte efetivo (+{formatMm(bleedMm)})</span></div>
         </div>
 
         <div className="min-h-0 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5">
           <div className="flex items-start justify-between gap-4">
-            <div><h3 className="font-semibold text-white">Enquadrar arte</h3><p className="mt-1 text-sm text-zinc-500">As guias usam as medidas do produto. Preencha toda a sangria e mantenha textos dentro da área segura.</p></div>
+            <div><h3 className="font-semibold text-white">Centralizar e enquadrar arte</h3><p className="mt-1 text-sm text-zinc-500">Posicione a composição usando as três guias de produção abaixo.</p></div>
             <button className="focus-ring rounded-md p-2 text-zinc-500 hover:bg-zinc-900 hover:text-white" type="button" onClick={onClose}><X size={18} /></button>
+          </div>
+          <div className="mt-4 grid gap-2 rounded-md border border-zinc-800 bg-zinc-900/55 p-3 text-xs leading-5">
+            <GuideHelp color="cyan" title="1. Área de segurança · menor marcação">Mantenha textos, logos, rostos e outros elementos importantes dentro desta área.</GuideHelp>
+            <GuideHelp color="amber" title="2. Limite visível / sangria · marcação intermediária">Esta linha indica até onde a arte ficará visível no produto. O fundo e as cores não devem terminar aqui: precisam continuar até o corte.</GuideHelp>
+            <GuideHelp color="rose" title="3. Corte efetivo · maior marcação">É o limite físico de corte. Continue o mesmo fundo por toda a faixa entre a sangria e esta linha para evitar bordas brancas e compensar pequenas variações do corte. Não coloque elementos importantes nessa faixa, pois ela ficará oculta.</GuideHelp>
           </div>
           <div className="mt-5 grid gap-5">
             <div>
@@ -99,7 +110,7 @@ export function ArtworkCropEditor({
             <Slider label="Posição vertical" min={-1} max={1} step={0.01} value={offsetY} onChange={setOffsetY} display={`${Math.round(offsetY * 100)}%`} />
             <p className="-mt-3 text-[11px] leading-4 text-zinc-600">O deslocamento move a imagem em relação ao corte em qualquer nível de zoom, inclusive em 1x.</p>
             <Slider label="Rotação" min={-180} max={180} step={1} value={rotation} onChange={setRotation} display={`${Math.round(rotation)}°`} />
-            <button className="focus-ring inline-flex w-fit items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-900" type="button" onClick={reset}><RotateCcw size={14} /> Restaurar enquadramento</button>
+            <div className="flex flex-wrap gap-2"><button className="focus-ring inline-flex items-center gap-2 rounded-md border border-cyan-800/80 px-3 py-2 text-xs text-cyan-200 hover:bg-cyan-950/40" type="button" onClick={centerArtwork}><LocateFixed size={14} /> Centralizar arte</button><button className="focus-ring inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-900" type="button" onClick={reset}><RotateCcw size={14} /> Restaurar tudo</button></div>
           </div>
           {error ? <p className="mt-4 rounded-md bg-red-400/10 p-3 text-sm text-red-300">{error}</p> : null}
           <div className="sticky bottom-0 mt-6 grid grid-cols-2 gap-2 border-t border-zinc-800 bg-zinc-950/95 pt-4 backdrop-blur sm:flex sm:justify-end">
@@ -114,6 +125,15 @@ export function ArtworkCropEditor({
 
 function Slider({ label, min, max, step, value, display, onChange }: { label: string; min: number; max: number; step: number; value: number; display: string; onChange: (value: number) => void }) {
   return <label><span className="mb-2 flex justify-between gap-3 text-xs font-medium text-zinc-300"><span>{label}</span><span className="tabular-nums text-cyan-300">{display}</span></span><input className="w-full accent-cyan-400" max={max} min={min} step={step} type="range" value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>;
+}
+
+function GuideHelp({ color, title, children }: { color: "cyan" | "amber" | "rose"; title: string; children: React.ReactNode }) {
+  const colorClass = color === "cyan" ? "bg-cyan-300" : color === "amber" ? "bg-amber-300" : "bg-rose-400";
+  return <div className="flex items-start gap-2 text-zinc-400"><span className={`mt-2 h-0.5 w-5 shrink-0 ${colorClass}`} /><span><strong className="block font-medium text-zinc-200">{title}</strong>{children}</span></div>;
+}
+
+function GuidePath({ d, color, dash, haloWidth, width }: { d: string; color: string; dash: string; haloWidth: number; width: number }) {
+  return <><path d={d} fill="none" stroke="rgba(0,0,0,.88)" strokeWidth={haloWidth} /><path d={d} fill="none" stroke={color} strokeDasharray={dash} strokeLinecap="round" strokeWidth={width} /></>;
 }
 
 function formatMm(value: number) { return `${Number(value.toFixed(2)).toLocaleString("pt-BR")} mm`; }

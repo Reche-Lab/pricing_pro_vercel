@@ -184,10 +184,9 @@ export async function generatePrintPdf(
       const scale = 8;
       const width = Math.round((artwork.geometry.widthMm + bleedMm * 2) * scale);
       const height = Math.round((artwork.geometry.heightMm + bleedMm * 2) * scale);
-      const inset = bleedMm * scale;
       const svg = createShapeSvg({
-        shape: artwork.geometry.shape, width, height, inset,
-        cornerRadius: artwork.geometry.cornerRadiusMm * scale,
+        shape: artwork.geometry.shape, width, height, inset: 0,
+        cornerRadius: (artwork.geometry.cornerRadiusMm + bleedMm) * scale,
         rotationDegrees: artwork.geometry.rotationDegrees,
         fill: "none", stroke: "#262626", strokeWidth: 1.5
       });

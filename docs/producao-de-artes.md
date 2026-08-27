@@ -9,7 +9,7 @@ O módulo transforma as imagens vinculadas aos itens de um orçamento em arquivo
 1. Cadastre em `Produtos` o formato e as dimensões finais de impressão da variante em milímetros.
 2. Anexe uma imagem ao item do orçamento, envie uma referência diretamente pelo assistente ou crie uma arte do zero.
 3. Abra `Itens > Produção de artes` no orçamento.
-4. Clique em `Enquadrar` e ajuste zoom, posição e rotação com as áreas de corte e segurança visíveis. O deslocamento horizontal e vertical funciona independentemente do zoom, inclusive em `1x`. O zoom pode ficar abaixo de `1x`; nesse caso, a região do corte sem imagem recebe fundo branco.
+4. Clique em `Enquadrar` e ajuste zoom, posição e rotação usando as três marcações de produção. A menor é a área de segurança, a intermediária é o limite obrigatório da sangria e a maior é o corte efetivo. O deslocamento horizontal e vertical funciona independentemente do zoom, inclusive em `1x`. O zoom pode ficar abaixo de `1x`; nesse caso, a região sem imagem recebe fundo branco.
 5. Confira o alerta de qualidade, informe quantas cópias pertencem à arte e aprove a versão.
 6. Quando houver várias artes no item, distribua exatamente a quantidade vendida entre elas.
 7. Clique em `Visualizar folhas` para revisar as páginas A4 antes da geração definitiva.
@@ -36,7 +36,13 @@ No `Estúdio de aprovação das artes`, o cliente pode:
 
 A arte original nunca é sobrescrita. Ao enviar uma substituição, a versão atual permanece válida até que a nova seja reenquadrada e aprovada; a aprovação de uma versão desmarca as demais versões do mesmo produto. Para itens personalizados, o aceite final do orçamento é bloqueado enquanto não houver uma arte preparada e aprovada. Todas as ações públicas são auditadas sem expor uma sessão interna do tenant.
 
-O PDF mantém escala física, quantidade de cada item, margens, espaçamento, sangria e o contorno exato das linhas de corte. Círculos iguais podem usar distribuição alternada. Os demais formatos usam organização por linhas, com rotação de 90° somente quando ela estiver habilitada no produto e melhorar o aproveitamento da folha.
+O PDF mantém escala física, quantidade de cada item, margens, espaçamento, sangria e o maior contorno como linha efetiva de corte. Círculos iguais podem usar distribuição alternada. Os demais formatos usam organização por linhas, com rotação de 90° somente quando ela estiver habilitada no produto e melhorar o aproveitamento da folha.
+
+As guias devem ser interpretadas do centro para fora:
+
+1. `Área de segurança`: menor contorno. Textos, logos, rostos e elementos essenciais ficam dentro dele.
+2. `Limite visível / sangria`: contorno intermediário. A parte visível no produto termina nessa linha.
+3. `Corte efetivo`: maior contorno. O fundo, as cores e as texturas devem continuar sem interrupção da sangria até esta linha para compensar variações do corte e evitar marcas ou bordas brancas. Essa faixa ficará oculta e não deve conter elementos importantes.
 
 ## Formatos de produto
 

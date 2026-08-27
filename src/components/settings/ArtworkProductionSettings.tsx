@@ -36,12 +36,12 @@ export function ArtworkProductionSettings({ profile }: { profile: ArtworkProduct
           <Input defaultValue={profile.marginMm} label="Margem superior e lateral (mm)" name="marginMm" />
           <Input defaultValue={profile.bottomMarginMm} label="Margem inferior de segurança (mm)" min="10" name="bottomMarginMm" />
           <Input defaultValue={profile.gapMm} label="Espaço entre artes (mín. 3 mm)" min="3" name="gapMm" />
-          <Input defaultValue={profile.bleedMm} label="Sangria padrão (mm)" name="bleedMm" />
+          <Input defaultValue={profile.bleedMm} label="Margem da sangria até o corte (mm)" name="bleedMm" />
           <Input defaultValue={profile.safeMarginMm} label="Segurança padrão (mm)" name="safeMarginMm" />
           <Input defaultValue={profile.dpi} label="Resolução (DPI)" name="dpi" step="1" />
           <label><span className="mb-1 block text-xs font-medium text-zinc-400">Distribuição</span><select className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" defaultValue={profile.layoutMode} name="layoutMode"><option value="auto">Automática</option><option value="grid">Grade</option><option value="hex">Alternada</option></select></label>
         </div>
-        <p className="mt-2 text-[11px] leading-5 text-zinc-500">Produtos com medidas próprias usam os valores cadastrados em Produtos. Estes campos permanecem como fallback para registros antigos.</p>
+        <p className="mt-2 text-[11px] leading-5 text-zinc-500">Produtos com medidas próprias usam os valores cadastrados em Produtos. A margem de sangria amplia o molde até o corte efetivo; estes campos permanecem como fallback para registros antigos.</p>
         <p className="text-xs leading-5 text-zinc-500">As artes sempre começam no topo útil da folha. A margem inferior protege a saída do papel e o espaçamento nunca será menor que 3 mm.</p>
         <label className="inline-flex items-center gap-2 text-sm text-zinc-300"><input className="accent-cyan-400" defaultChecked={profile.drawCutLines} name="drawCutLines" type="checkbox" /> Incluir linhas de corte</label>
         {message ? <p className="text-sm text-zinc-300">{message}</p> : null}

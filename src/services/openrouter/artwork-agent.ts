@@ -89,7 +89,7 @@ export function buildArtworkGenerationPrompt(input: {
   const referenceInstruction = input.referenceDataUrl
     ? "Use a imagem de referência como base da nova versão. Preserve composição, identidade, textos e elementos que não tenham sido explicitamente alterados. Aplique somente as mudanças solicitadas e não redesenhe arbitrariamente a arte."
     : "Crie uma arte original a partir da solicitação, sem depender de uma imagem anterior.";
-  return `${referenceInstruction}\nSolicitação: ${input.prompt}\n${geometryInstruction(input.geometry, input.diameterMm)}\nCrie a imagem respeitando exatamente a proporção e a orientação do formato final. Mantenha a composição centralizada, o fundo preenchendo toda a área até além do corte e os elementos importantes dentro da margem segura. Sem mockup, sem fotografia do produto e sem linha de corte.`;
+  return `${referenceInstruction}\nSolicitação: ${input.prompt}\n${geometryInstruction(input.geometry, input.diameterMm)}\nCrie a imagem respeitando exatamente a proporção e a orientação do formato final. Mantenha a composição centralizada e os elementos importantes dentro da margem segura. A parte visível termina no limite da sangria, mas o mesmo fundo, cores e texturas devem continuar sem interrupção por toda a margem externa até o corte efetivo, evitando qualquer borda branca. Não inclua linha de corte na imagem. Sem mockup e sem fotografia do produto.`;
 }
 
 function formatDescription(input: { geometry?: PrintGeometry; diameterMm?: number }) {

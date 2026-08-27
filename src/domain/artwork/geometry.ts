@@ -18,8 +18,13 @@ export type PrintMargins = {
 };
 
 export type PrintGuideLayout = {
+  /** Limite total da arte preparada. Mantido como alias do corte efetivo. */
   outer: { x: number; y: number; width: number; height: number; path: string };
+  /** Maior contorno: corte físico; o fundo deve continuar até ele, embora a faixa fique oculta. */
   cut: { x: number; y: number; width: number; height: number; path: string };
+  /** Contorno intermediário: limite da área visível no produto. */
+  bleed: { x: number; y: number; width: number; height: number; path: string };
+  /** Menor contorno: região recomendada para textos e elementos importantes. */
   safe: { x: number; y: number; width: number; height: number; path: string };
   unitsPerMm: number;
   outputWidthMm: number;
@@ -151,9 +156,11 @@ export function createPrintGuideLayout(input: {
     rotationDegrees: geometry.rotationDegrees,
     inset
   });
+  const effectiveCut = { x, y, width: outerWidth, height: outerHeight, path: shapePath(0, geometry.cornerRadiusMm + margins.bleedMm) };
   return {
-    outer: { x, y, width: outerWidth, height: outerHeight, path: shapePath(0, geometry.cornerRadiusMm + margins.bleedMm) },
-    cut: { x, y, width: outerWidth, height: outerHeight, path: shapePath(bleedInset, geometry.cornerRadiusMm) },
+    outer: effectiveCut,
+    cut: effectiveCut,
+    bleed: { x, y, width: outerWidth, height: outerHeight, path: shapePath(bleedInset, geometry.cornerRadiusMm) },
     safe: { x, y, width: outerWidth, height: outerHeight, path: shapePath(safeInset, geometry.cornerRadiusMm - margins.safeMarginMm) },
     unitsPerMm,
     outputWidthMm,

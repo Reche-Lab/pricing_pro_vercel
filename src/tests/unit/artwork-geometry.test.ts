@@ -37,9 +37,9 @@ describe("artwork print geometry", () => {
     expect(guides.outputHeightMm).toBe(56);
     expect(guides.safeWidthMm).toBe(76);
     expect(guides.safeHeightMm).toBe(46);
-    expect(guides.cut.width).toBe(guides.outer.width);
-    expect(guides.cut.path).not.toBe(guides.outer.path);
-    expect(guides.safe.path).not.toBe(guides.cut.path);
+    expect(guides.cut).toEqual(guides.outer);
+    expect(guides.bleed.path).not.toBe(guides.cut.path);
+    expect(guides.safe.path).not.toBe(guides.bleed.path);
   });
 
   it("prepares a rectangular rounded artwork at physical dimensions", async () => {
