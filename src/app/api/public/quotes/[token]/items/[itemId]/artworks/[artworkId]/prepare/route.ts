@@ -26,7 +26,7 @@ export async function POST(request: Request, route: { params: Promise<{ token: s
   let storagePath: string | null = null;
   try {
     const source = await loadArtworkDataUrl(context.artwork.data_url, context.artwork.storage_path);
-    const prepared = await prepareArtwork({ dataUrl: source, geometry, bleedMm: margins.bleedMm, dpi: context.profile.dpi, scale: body.data.scale, offsetX: body.data.offsetX, offsetY: body.data.offsetY, rotationDegrees: body.data.rotationDegrees });
+    const prepared = await prepareArtwork({ dataUrl: source, geometry, bleedMm: margins.bleedMm, safeMarginMm: margins.safeMarginMm, dpi: context.profile.dpi, scale: body.data.scale, offsetX: body.data.offsetX, offsetY: body.data.offsetY, rotationDegrees: body.data.rotationDegrees });
     const decoded = decodeDataUrl(prepared.dataUrl);
     storagePath = await uploadArtworkObject({ path: `${context.tenantId}/quotes/${context.quoteId}/items/${context.itemId}/prepared/${params.data.artworkId}-v${Date.now()}.png`, contentType: "image/png", bytes: decoded.bytes });
     await savePublicPreparedArtwork({ context, artworkId: params.data.artworkId, geometry, margins, prepared, preparedDataUrl: storagePath ? null : prepared.dataUrl, preparedStoragePath: storagePath, crop: body.data });

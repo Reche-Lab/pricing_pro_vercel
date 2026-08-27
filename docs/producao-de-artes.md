@@ -51,7 +51,7 @@ No cadastro do produto, somente a Segurança é informada como dimensão absolut
 Cada variante pode ter sua própria geometria de impressão. O cadastro e a edição de produtos permitem definir:
 
 - circular, quadrado, retangular, triangular ou hexagonal;
-- largura e altura finais, sem sangria;
+- largura e altura absolutas da área de segurança;
 - cantos retos ou arredondados e o raio do arredondamento;
 - orientação de triângulos e hexágonos;
 - permissão para girar a peça em 90° durante a montagem A4.
@@ -64,14 +64,14 @@ Em `Configurações > Produção de artes e impressão` podem ser alterados:
 
 - tamanho da folha;
 - margem externa;
-- sangria;
-- área segura;
+- acréscimo da Segurança até a Sangria, por lado;
+- acréscimo da Sangria até o Corte, por lado;
 - espaço entre artes;
 - resolução em DPI;
 - distribuição automática, em grade ou alternada;
 - exibição das linhas de corte.
 
-Os padrões são A4 (`210 x 297 mm`), margem de `7 mm`, sangria de `2 mm`, área segura de `2 mm`, intervalo de `2 mm` e `300 DPI`.
+Os padrões são A4 (`210 x 297 mm`), margem de `7 mm`, acréscimo de Sangria de `2 mm` por lado, acréscimo de Corte de `2 mm` por lado, intervalo mínimo de `3 mm` e `300 DPI`.
 
 ## OpenRouter
 

@@ -36,8 +36,8 @@ export function ArtworkProductionSettings({ profile }: { profile: ArtworkProduct
           <Input defaultValue={profile.marginMm} label="Margem superior e lateral (mm)" name="marginMm" />
           <Input defaultValue={profile.bottomMarginMm} label="Margem inferior de segurança (mm)" min="10" name="bottomMarginMm" />
           <Input defaultValue={profile.gapMm} label="Espaço entre artes (mín. 3 mm)" min="3" name="gapMm" />
-          <Input defaultValue={profile.bleedMm} label="Margem da sangria até o corte (mm)" name="bleedMm" />
-          <Input defaultValue={profile.safeMarginMm} label="Segurança padrão (mm)" name="safeMarginMm" />
+          <Input defaultValue={profile.safeMarginMm} label="Acréscimo da Segurança até a Sangria (mm por lado)" name="safeMarginMm" />
+          <Input defaultValue={profile.bleedMm} label="Acréscimo da Sangria até o Corte (mm por lado)" name="bleedMm" />
           <Input defaultValue={profile.dpi} label="Resolução (DPI)" name="dpi" step="1" />
           <label><span className="mb-1 block text-xs font-medium text-zinc-400">Distribuição</span><select className="focus-ring w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" defaultValue={profile.layoutMode} name="layoutMode"><option value="auto">Automática</option><option value="grid">Grade</option><option value="hex">Alternada</option></select></label>
         </div>

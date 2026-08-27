@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { degrees, PDFDocument } from "pdf-lib";
-import { createShapeSvg, type PrintGeometry } from "@/domain/artwork/geometry";
+import { calculatePrintGuideDimensions, createShapeSvg, type PrintGeometry } from "@/domain/artwork/geometry";
 import { decodeImageDataUrl, mmToPoints, type ArtworkProductionProfile } from "./production";
 
 export type PrintArtwork = {
@@ -21,6 +21,7 @@ export type PrintPlacement = {
   yMm: number;
   geometry: PrintGeometry;
   bleedMm: number;
+  safeMarginMm: number;
   rotated: boolean;
 };
 
@@ -67,7 +68,7 @@ export function createImpositionPlan(artworks: PrintArtwork[], profile: ArtworkP
   if (!copies.length) return { pageCount: 0, copyCount: 0, placements: [] };
 
   const grid = createShelfPlan(copies, effectiveProfile);
-  const circular = copies.every((copy) => copy.geometry.shape === "circle" && copy.geometry.widthMm === copies[0].geometry.widthMm && artworkBleedMm(copy, effectiveProfile) === artworkBleedMm(copies[0], effectiveProfile));
+  const circular = copies.every((copy) => copy.geometry.shape === "circle" && copy.geometry.widthMm === copies[0].geometry.widthMm && artworkBleedMm(copy, effectiveProfile) === artworkBleedMm(copies[0], effectiveProfile) && artworkSafeMarginMm(copy, effectiveProfile) === artworkSafeMarginMm(copies[0], effectiveProfile));
   if (!circular || effectiveProfile.layoutMode === "grid") return grid;
   const hex = createHexPlan(copies, effectiveProfile);
   if (effectiveProfile.layoutMode === "hex") return hex;
@@ -88,7 +89,9 @@ function createShelfPlan(copies: PrintArtwork[], profile: ArtworkProductionProfi
 
   for (const artwork of copies) {
     const bleedMm = artworkBleedMm(artwork, profile);
-    const original = { width: artwork.geometry.widthMm + bleedMm * 2, height: artwork.geometry.heightMm + bleedMm * 2, rotated: false };
+    const safeMarginMm = artworkSafeMarginMm(artwork, profile);
+    const dimensions = artworkDimensions(artwork.geometry, safeMarginMm, bleedMm);
+    const original = { width: dimensions.cutWidthMm, height: dimensions.cutHeightMm, rotated: false };
     const rotated = { width: original.height, height: original.width, rotated: true };
     const candidates = artwork.geometry.allowPrintRotation && original.width !== original.height ? [original, rotated] : [original];
     if (!candidates.some((candidate) => candidate.width <= availableWidth + 0.001 && candidate.height <= availableHeight + 0.001)) {
@@ -119,6 +122,7 @@ function createShelfPlan(copies: PrintArtwork[], profile: ArtworkProductionProfi
       yMm: y,
       geometry: artwork.geometry,
       bleedMm,
+      safeMarginMm,
       rotated: selected.rotated
     });
     x += selected.width + profile.gapMm;
@@ -130,7 +134,8 @@ function createShelfPlan(copies: PrintArtwork[], profile: ArtworkProductionProfi
 
 function createHexPlan(copies: PrintArtwork[], profile: ArtworkProductionProfile): ImpositionPlan {
   const bleedMm = artworkBleedMm(copies[0], profile);
-  const outer = copies[0].geometry.widthMm + bleedMm * 2;
+  const safeMarginMm = artworkSafeMarginMm(copies[0], profile);
+  const outer = artworkDimensions(copies[0].geometry, safeMarginMm, bleedMm).cutWidthMm;
   const horizontalStep = outer + profile.gapMm;
   const verticalStep = outer * Math.sqrt(3) / 2 + profile.gapMm;
   const availableWidth = profile.pageWidthMm - profile.marginMm * 2;
@@ -157,6 +162,7 @@ function createHexPlan(copies: PrintArtwork[], profile: ArtworkProductionProfile
       yMm: profile.marginMm + row * verticalStep,
       geometry: artwork.geometry,
       bleedMm: artworkBleedMm(artwork, profile),
+      safeMarginMm: artworkSafeMarginMm(artwork, profile),
       rotated: false
     });
   });
@@ -181,12 +187,14 @@ export async function generatePrintPdf(
     imageById.set(artwork.id, await pdf.embedPng(new Uint8Array(imageBytes)));
     if (profile.drawCutLines) {
       const bleedMm = artworkBleedMm(artwork, profile);
+      const safeMarginMm = artworkSafeMarginMm(artwork, profile);
+      const dimensions = artworkDimensions(artwork.geometry, safeMarginMm, bleedMm);
       const scale = 8;
-      const width = Math.round((artwork.geometry.widthMm + bleedMm * 2) * scale);
-      const height = Math.round((artwork.geometry.heightMm + bleedMm * 2) * scale);
+      const width = Math.round(dimensions.cutWidthMm * scale);
+      const height = Math.round(dimensions.cutHeightMm * scale);
       const svg = createShapeSvg({
         shape: artwork.geometry.shape, width, height, inset: 0,
-        cornerRadius: (artwork.geometry.cornerRadiusMm + bleedMm) * scale,
+        cornerRadius: (artwork.geometry.cornerRadiusMm + safeMarginMm + bleedMm) * scale,
         rotationDegrees: artwork.geometry.rotationDegrees,
         fill: "none", stroke: "#262626", strokeWidth: 1.5
       });
@@ -199,8 +207,9 @@ export async function generatePrintPdf(
     const page = pages[placement.pageIndex];
     const image = imageById.get(placement.artworkId);
     if (!image) continue;
-    const originalWidthPt = mmToPoints(placement.geometry.widthMm + placement.bleedMm * 2);
-    const originalHeightPt = mmToPoints(placement.geometry.heightMm + placement.bleedMm * 2);
+    const dimensions = artworkDimensions(placement.geometry, placement.safeMarginMm, placement.bleedMm);
+    const originalWidthPt = mmToPoints(dimensions.cutWidthMm);
+    const originalHeightPt = mmToPoints(dimensions.cutHeightMm);
     const occupiedHeightPt = placement.rotated ? originalWidthPt : originalHeightPt;
     const x = mmToPoints(placement.xMm);
     const y = page.getHeight() - mmToPoints(placement.yMm) - occupiedHeightPt;
@@ -218,4 +227,17 @@ export async function generatePrintPdf(
 
 function artworkBleedMm(artwork: PrintArtwork, profile: ArtworkProductionProfile) {
   return Number.isFinite(artwork.bleedMm) && (artwork.bleedMm as number) >= 0 ? artwork.bleedMm as number : profile.bleedMm;
+}
+
+function artworkSafeMarginMm(artwork: PrintArtwork, profile: ArtworkProductionProfile) {
+  return Number.isFinite(artwork.safeMarginMm) && (artwork.safeMarginMm as number) >= 0 ? artwork.safeMarginMm as number : profile.safeMarginMm;
+}
+
+function artworkDimensions(geometry: PrintGeometry, safeMarginMm: number, bleedMm: number) {
+  return calculatePrintGuideDimensions({
+    safeWidthMm: geometry.widthMm,
+    safeHeightMm: geometry.heightMm,
+    sangriaIncrementMm: safeMarginMm,
+    cutIncrementMm: bleedMm
+  });
 }

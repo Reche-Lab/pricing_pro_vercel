@@ -27,10 +27,10 @@ export function PrintGeometryFields({ defaults }: { defaults?: Partial<PrintGeom
   const [shape, setShape] = useState<PrintShape>(defaults?.shape ?? "circle");
   const [cornerStyle, setCornerStyle] = useState<PrintCornerStyle>(defaults?.cornerStyle ?? "sharp");
   const defaultSangriaIncrement = numeric(defaults?.safeMarginMm) ?? 2;
-  const defaultVisibleWidth = numeric(defaults?.widthMm);
-  const defaultVisibleHeight = numeric(defaults?.heightMm) ?? defaultVisibleWidth;
-  const [safeWidth, setSafeWidth] = useState(valueText(defaultVisibleWidth === null ? null : Math.max(0, defaultVisibleWidth - defaultSangriaIncrement * 2)));
-  const [safeHeight, setSafeHeight] = useState(valueText(defaultVisibleHeight === null ? null : Math.max(0, defaultVisibleHeight - defaultSangriaIncrement * 2)));
+  const defaultSafeWidth = numeric(defaults?.widthMm);
+  const defaultSafeHeight = numeric(defaults?.heightMm) ?? defaultSafeWidth;
+  const [safeWidth, setSafeWidth] = useState(valueText(defaultSafeWidth));
+  const [safeHeight, setSafeHeight] = useState(valueText(defaultSafeHeight));
   const [sangriaIncrement, setSangriaIncrement] = useState(valueText(defaultSangriaIncrement));
   const [cutIncrement, setCutIncrement] = useState(valueText(numeric(defaults?.bleedMm) ?? 2));
   const oneDimension = shape === "circle" || shape === "square";
@@ -56,8 +56,8 @@ export function PrintGeometryFields({ defaults }: { defaults?: Partial<PrintGeom
         <GuideNumberInput hint={dimensions ? `Valor absoluto calculado: ${sizeLabel(dimensions.sangriaWidthMm, dimensions.sangriaHeightMm, oneDimension)}` : "Somente a diferença para a Segurança."} label="Sangria · acréscimo por lado" min="0" value={sangriaIncrement} onChange={setSangriaIncrement} />
         <GuideNumberInput hint={dimensions ? `Valor absoluto calculado: ${sizeLabel(dimensions.cutWidthMm, dimensions.cutHeightMm, oneDimension)}` : "Somente a diferença para a Sangria."} label="Corte · acréscimo por lado" min="0" value={cutIncrement} onChange={setCutIncrement} />
       </div>
-      <input name="printWidthMm" type="hidden" value={dimensions ? dimensions.sangriaWidthMm : ""} />
-      <input name="printHeightMm" type="hidden" value={dimensions ? dimensions.sangriaHeightMm : ""} />
+      <input name="printWidthMm" type="hidden" value={dimensions ? dimensions.safeWidthMm : ""} />
+      <input name="printHeightMm" type="hidden" value={dimensions ? dimensions.safeHeightMm : ""} />
       <input name="printSafeMarginMm" type="hidden" value={dimensions ? dimensions.sangriaIncrementMm : ""} />
       <input name="printBleedMm" type="hidden" value={dimensions ? dimensions.cutIncrementMm : ""} />
       <div className="mt-3 grid gap-2 rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-3 text-[11px] leading-5 text-zinc-500 sm:grid-cols-3">

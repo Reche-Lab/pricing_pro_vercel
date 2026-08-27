@@ -38,6 +38,7 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
       dataUrl: sourceDataUrl,
       geometry,
       bleedMm: margins.bleedMm,
+      safeMarginMm: margins.safeMarginMm,
       dpi: production.profile.dpi,
       scale: body.data.scale,
       offsetX: body.data.offsetX,

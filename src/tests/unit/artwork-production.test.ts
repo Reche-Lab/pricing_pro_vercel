@@ -8,15 +8,16 @@ const circle55 = { shape: "circle", widthMm: 55, heightMm: 55, cornerStyle: "sha
 const roundedRectangle = { shape: "rectangle", widthMm: 80, heightMm: 50, cornerStyle: "rounded", cornerRadiusMm: 5, rotationDegrees: 0, allowPrintRotation: true } as const;
 
 describe("artwork production", () => {
-  it("prepares a circular PNG at the exact diameter plus bleed", async () => {
+  it("prepares a circular PNG from safety plus sangria and cut increments", async () => {
     const source = await sharp({ create: { width: 1000, height: 800, channels: 4, background: "#e11d48" } }).png().toBuffer();
     const prepared = await prepareCircularArtwork({
       dataUrl: `data:image/png;base64,${source.toString("base64")}`,
       diameterMm: 45,
       bleedMm: 2,
+      safeMarginMm: 2,
       dpi: 300
     });
-    expect(prepared.widthPx).toBe(mmToPixels(49, 300));
+    expect(prepared.widthPx).toBe(mmToPixels(53, 300));
     expect(prepared.heightPx).toBe(prepared.widthPx);
     expect(prepared.dataUrl).toMatch(/^data:image\/png;base64,/);
     const metadata = await sharp(Buffer.from(prepared.dataUrl.split(",")[1], "base64")).metadata();
@@ -30,6 +31,7 @@ describe("artwork production", () => {
       dataUrl: `data:image/png;base64,${source.toString("base64")}`,
       diameterMm: 45,
       bleedMm: 2,
+      safeMarginMm: 2,
       dpi: 150,
       scale: 0.5
     });
@@ -78,16 +80,17 @@ describe("artwork production", () => {
   it("starts every page at the top and enforces spacing and a protected bottom edge", () => {
     const square40 = { shape: "square" as const, widthMm: 40, heightMm: 40, cornerStyle: "sharp" as const, cornerRadiusMm: 0, rotationDegrees: 0, allowPrintRotation: true };
     const profile = { ...DEFAULT_ARTWORK_PROFILE, layoutMode: "grid" as const, marginMm: 5, bottomMarginMm: 20, gapMm: 0, bleedMm: 0 };
+    const outerSize = 40 + profile.safeMarginMm * 2;
     const plan = createImpositionPlan([{ id: "square", label: "Quadrado", quantity: 40, geometry: square40, preparedDataUrl: "unused" }], profile);
     for (let page = 0; page < plan.pageCount; page += 1) {
       const placements = plan.placements.filter((placement) => placement.pageIndex === page);
       expect(Math.min(...placements.map((placement) => placement.yMm))).toBe(profile.marginMm);
-      expect(placements.every((placement) => placement.yMm + 40 <= profile.pageHeightMm - profile.bottomMarginMm + 0.001)).toBe(true);
+      expect(placements.every((placement) => placement.yMm + outerSize <= profile.pageHeightMm - profile.bottomMarginMm + 0.001)).toBe(true);
       for (let leftIndex = 0; leftIndex < placements.length; leftIndex += 1) {
         for (let rightIndex = leftIndex + 1; rightIndex < placements.length; rightIndex += 1) {
           const left = placements[leftIndex]; const right = placements[rightIndex];
-          const horizontalGap = Math.max(right.xMm - (left.xMm + 40), left.xMm - (right.xMm + 40));
-          const verticalGap = Math.max(right.yMm - (left.yMm + 40), left.yMm - (right.yMm + 40));
+          const horizontalGap = Math.max(right.xMm - (left.xMm + outerSize), left.xMm - (right.xMm + outerSize));
+          const verticalGap = Math.max(right.yMm - (left.yMm + outerSize), left.yMm - (right.yMm + outerSize));
           expect(Math.max(horizontalGap, verticalGap)).toBeGreaterThanOrEqual(3 - 0.001);
         }
       }
@@ -109,7 +112,7 @@ describe("artwork production", () => {
 
   it("keeps the same minimum spacing and bottom protection in the alternating circular layout", () => {
     const profile = { ...DEFAULT_ARTWORK_PROFILE, layoutMode: "hex" as const, marginMm: 5, bottomMarginMm: 20, gapMm: 0 };
-    const outerDiameter = circle55.widthMm + profile.bleedMm * 2;
+    const outerDiameter = circle55.widthMm + (profile.safeMarginMm + profile.bleedMm) * 2;
     const plan = createImpositionPlan([{ id: "circle", label: "Circular", quantity: 40, geometry: circle55, preparedDataUrl: "unused" }], profile);
     for (let page = 0; page < plan.pageCount; page += 1) {
       const placements = plan.placements.filter((placement) => placement.pageIndex === page);
@@ -127,7 +130,7 @@ describe("artwork production", () => {
 
   it("writes a valid multipage PDF using physical A4 dimensions", async () => {
     const source = await sharp({ create: { width: 700, height: 700, channels: 4, background: "#0891b2" } }).png().toBuffer();
-    const prepared = await prepareCircularArtwork({ dataUrl: `data:image/png;base64,${source.toString("base64")}`, diameterMm: 55, bleedMm: 2, dpi: 300 });
+    const prepared = await prepareCircularArtwork({ dataUrl: `data:image/png;base64,${source.toString("base64")}`, diameterMm: 55, bleedMm: 2, safeMarginMm: 2, dpi: 300 });
     const result = await generatePrintPdf([
       { id: "art-1", label: "Arte 1", quantity: 13, geometry: circle55, preparedDataUrl: prepared.dataUrl }
     ], DEFAULT_ARTWORK_PROFILE);
@@ -153,6 +156,7 @@ describe("artwork production", () => {
       dataUrl: `data:image/png;base64,${source.toString("base64")}`,
       geometry: roundedRectangle,
       bleedMm: 2,
+      safeMarginMm: 2,
       dpi: 150
     }));
     const result = await generatePrintPdf([

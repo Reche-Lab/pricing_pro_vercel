@@ -288,8 +288,8 @@ function ArtworkRow({ entry, quoteId, geometry, quantity, busy, readOnly, origin
         </div>
         {entry.artwork.artwork_name ? <p className="mt-1 break-all text-[11px] text-zinc-600">{entry.artwork.file_name}</p> : null}
         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500">
-          <span>{geometry ? geometryLabel(geometry) : "Geometria pendente"}</span>
-          <span>Sangria {formatMm(margins.bleedMm)} · segurança {formatMm(margins.safeMarginMm)}</span>
+          <span>{geometry ? `Segurança: ${geometryLabel(geometry)}` : "Geometria pendente"}</span>
+          <span>Sangria +{formatMm(margins.safeMarginMm)} · Corte +{formatMm(margins.bleedMm)} por lado</span>
           <span>{entry.artwork.source_kind === "openrouter" ? "Gerada por IA" : entry.artwork.source_kind === "retouch" ? "Retoque manual" : entry.artwork.source_kind === "pdf_page" ? `Página ${entry.artwork.source_pdf_page ?? "-"} do PDF` : "Arquivo enviado"}</span>
           {entry.artwork.dpi ? <span>{entry.artwork.dpi} DPI</span> : null}
         </div>

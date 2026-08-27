@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import { createShapeSvg, type PrintGeometry } from "@/domain/artwork/geometry";
+import { calculatePrintGuideDimensions, createShapeSvg, type PrintGeometry } from "@/domain/artwork/geometry";
 
 export type ArtworkProductionProfile = {
   pageWidthMm: number;
@@ -55,6 +55,7 @@ export async function prepareCircularArtwork(input: {
   dataUrl: string;
   diameterMm: number;
   bleedMm: number;
+  safeMarginMm?: number;
   dpi: number;
   scale?: number;
   offsetX?: number;
@@ -71,6 +72,7 @@ export async function prepareArtwork(input: {
   dataUrl: string;
   geometry: PrintGeometry;
   bleedMm: number;
+  safeMarginMm?: number;
   dpi: number;
   scale?: number;
   offsetX?: number;
@@ -83,8 +85,15 @@ export async function prepareArtwork(input: {
   const metadata = await image.metadata();
   if (!metadata.width || !metadata.height) throw new Error("Não foi possível identificar as dimensões da arte.");
 
-  const outputWidthMm = input.geometry.widthMm + input.bleedMm * 2;
-  const outputHeightMm = input.geometry.heightMm + input.bleedMm * 2;
+  const safeMarginMm = Math.max(0, input.safeMarginMm ?? 0);
+  const dimensions = calculatePrintGuideDimensions({
+    safeWidthMm: input.geometry.widthMm,
+    safeHeightMm: input.geometry.heightMm,
+    sangriaIncrementMm: safeMarginMm,
+    cutIncrementMm: input.bleedMm
+  });
+  const outputWidthMm = dimensions.cutWidthMm;
+  const outputHeightMm = dimensions.cutHeightMm;
   const outputWidthPx = mmToPixels(outputWidthMm, input.dpi);
   const outputHeightPx = mmToPixels(outputHeightMm, input.dpi);
   const requiredFinishedPx = Math.max(mmToPixels(input.geometry.widthMm, input.dpi), mmToPixels(input.geometry.heightMm, input.dpi));
@@ -102,7 +111,7 @@ export async function prepareArtwork(input: {
     shape: input.geometry.shape,
     width: outputWidthPx,
     height: outputHeightPx,
-    cornerRadius: (input.geometry.cornerRadiusMm + input.bleedMm) * pxPerMm,
+    cornerRadius: (input.geometry.cornerRadiusMm + safeMarginMm + input.bleedMm) * pxPerMm,
     rotationDegrees: input.geometry.rotationDegrees,
     fill: "white"
   }));
@@ -132,7 +141,7 @@ export async function prepareArtwork(input: {
       ? " A imagem foi deslocada de forma independente dentro da área de corte."
       : "";
   const notes = qualityStatus === "ready"
-    ? `Arte preparada em ${input.dpi} DPI com ${input.bleedMm} mm entre o limite da sangria e o corte efetivo.${whiteMarginNote}`
+    ? `Arte preparada em ${input.dpi} DPI: segurança + ${safeMarginMm} mm por lado até a sangria + ${input.bleedMm} mm por lado até o corte.${whiteMarginNote}`
     : `A imagem original tem ${metadata.width} x ${metadata.height} px e pode perder nitidez em ${input.dpi} DPI.${whiteMarginNote}`;
 
   return {

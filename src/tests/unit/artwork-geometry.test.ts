@@ -37,19 +37,21 @@ describe("artwork print geometry", () => {
     });
   });
 
-  it("rejects a safe margin that consumes the finished cut area", () => {
+  it("accepts sangria increments because they expand outward from safety", () => {
     const geometry = resolvePrintGeometry({ print_shape: "circle", print_width_mm: 25, print_height_mm: 25 });
-    expect(geometry && validatePrintMargins(geometry, { bleedMm: 2, safeMarginMm: 13 })).toContain("área útil");
+    expect(geometry && validatePrintMargins(geometry, { bleedMm: 2, safeMarginMm: 13 })).toBeNull();
     expect(geometry && validatePrintMargins(geometry, { bleedMm: 2, safeMarginMm: 2 })).toBeNull();
   });
 
   it("uses the same physical dimensions for retouch, framing and print guides", () => {
     const geometry = { shape: "rectangle", widthMm: 80, heightMm: 50, cornerStyle: "rounded", cornerRadiusMm: 4, rotationDegrees: 0, allowPrintRotation: true } as const;
     const guides = createPrintGuideLayout({ geometry, margins: { bleedMm: 3, safeMarginMm: 2 }, viewportWidth: 1200, viewportHeight: 900, paddingRatio: 0.05 });
-    expect(guides.outputWidthMm).toBe(86);
-    expect(guides.outputHeightMm).toBe(56);
-    expect(guides.safeWidthMm).toBe(76);
-    expect(guides.safeHeightMm).toBe(46);
+    expect(guides.safeWidthMm).toBe(80);
+    expect(guides.safeHeightMm).toBe(50);
+    expect(guides.sangriaWidthMm).toBe(84);
+    expect(guides.sangriaHeightMm).toBe(54);
+    expect(guides.outputWidthMm).toBe(90);
+    expect(guides.outputHeightMm).toBe(60);
     expect(guides.cut).toEqual(guides.outer);
     expect(guides.bleed.path).not.toBe(guides.cut.path);
     expect(guides.safe.path).not.toBe(guides.bleed.path);
@@ -61,10 +63,11 @@ describe("artwork print geometry", () => {
       dataUrl: `data:image/png;base64,${source.toString("base64")}`,
       geometry: { shape: "rectangle", widthMm: 80, heightMm: 50, cornerStyle: "rounded", cornerRadiusMm: 5, rotationDegrees: 0, allowPrintRotation: true },
       bleedMm: 2,
+      safeMarginMm: 2,
       dpi: 150
     });
     expect(prepared.widthPx).toBeGreaterThan(prepared.heightPx);
-    expect(prepared.widthPx).toBe(Math.round(84 / 25.4 * 150));
-    expect(prepared.heightPx).toBe(Math.round(54 / 25.4 * 150));
+    expect(prepared.widthPx).toBe(Math.round(88 / 25.4 * 150));
+    expect(prepared.heightPx).toBe(Math.round(58 / 25.4 * 150));
   });
 });

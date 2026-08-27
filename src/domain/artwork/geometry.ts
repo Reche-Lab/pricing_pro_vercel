@@ -42,6 +42,8 @@ export type PrintGuideLayout = {
   outputHeightMm: number;
   safeWidthMm: number;
   safeHeightMm: number;
+  sangriaWidthMm: number;
+  sangriaHeightMm: number;
 };
 
 type GeometrySource = {
@@ -101,11 +103,9 @@ export function calculatePrintGuideDimensions(input: {
 }
 
 export function validatePrintMargins(geometry: PrintGeometry, margins: PrintMargins) {
-  if (margins.bleedMm < 0 || margins.bleedMm > 50) return "A sangria deve estar entre 0 e 50 mm.";
-  if (margins.safeMarginMm < 0 || margins.safeMarginMm > 50) return "A margem de segurança deve estar entre 0 e 50 mm.";
-  if (margins.safeMarginMm * 2 >= Math.min(geometry.widthMm, geometry.heightMm)) {
-    return "A margem de segurança precisa deixar uma área útil no interior do corte.";
-  }
+  if (margins.bleedMm < 0 || margins.bleedMm > 50) return "O acréscimo da Sangria até o Corte deve estar entre 0 e 50 mm.";
+  if (margins.safeMarginMm < 0 || margins.safeMarginMm > 50) return "O acréscimo da Segurança até a Sangria deve estar entre 0 e 50 mm.";
+  if (geometry.widthMm <= 0 || geometry.heightMm <= 0) return "A área de segurança precisa ter dimensões positivas.";
   return null;
 }
 
@@ -171,8 +171,14 @@ export function createPrintGuideLayout(input: {
   paddingRatio?: number;
 }): PrintGuideLayout {
   const { geometry, margins } = input;
-  const outputWidthMm = geometry.widthMm + margins.bleedMm * 2;
-  const outputHeightMm = geometry.heightMm + margins.bleedMm * 2;
+  const dimensions = calculatePrintGuideDimensions({
+    safeWidthMm: geometry.widthMm,
+    safeHeightMm: geometry.heightMm,
+    sangriaIncrementMm: margins.safeMarginMm,
+    cutIncrementMm: margins.bleedMm
+  });
+  const outputWidthMm = dimensions.cutWidthMm;
+  const outputHeightMm = dimensions.cutHeightMm;
   const padding = clamp(input.paddingRatio ?? 0, 0, 0.4);
   const availableWidth = input.viewportWidth * (1 - padding * 2);
   const availableHeight = input.viewportHeight * (1 - padding * 2);
@@ -191,17 +197,19 @@ export function createPrintGuideLayout(input: {
     rotationDegrees: geometry.rotationDegrees,
     inset
   });
-  const effectiveCut = { x, y, width: outerWidth, height: outerHeight, path: shapePath(0, geometry.cornerRadiusMm + margins.bleedMm) };
+  const effectiveCut = { x, y, width: outerWidth, height: outerHeight, path: shapePath(0, geometry.cornerRadiusMm + margins.safeMarginMm + margins.bleedMm) };
   return {
     outer: effectiveCut,
     cut: effectiveCut,
-    bleed: { x, y, width: outerWidth, height: outerHeight, path: shapePath(bleedInset, geometry.cornerRadiusMm) },
-    safe: { x, y, width: outerWidth, height: outerHeight, path: shapePath(safeInset, geometry.cornerRadiusMm - margins.safeMarginMm) },
+    bleed: { x, y, width: outerWidth, height: outerHeight, path: shapePath(bleedInset, geometry.cornerRadiusMm + margins.safeMarginMm) },
+    safe: { x, y, width: outerWidth, height: outerHeight, path: shapePath(safeInset, geometry.cornerRadiusMm) },
     unitsPerMm,
     outputWidthMm,
     outputHeightMm,
-    safeWidthMm: Math.max(0, geometry.widthMm - margins.safeMarginMm * 2),
-    safeHeightMm: Math.max(0, geometry.heightMm - margins.safeMarginMm * 2)
+    safeWidthMm: dimensions.safeWidthMm,
+    safeHeightMm: dimensions.safeHeightMm,
+    sangriaWidthMm: dimensions.sangriaWidthMm,
+    sangriaHeightMm: dimensions.sangriaHeightMm
   };
 }
 

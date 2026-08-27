@@ -60,9 +60,10 @@ export function ArtworkCropEditor({
     setOffsetX(0); setOffsetY(0);
   }
 
-  const outputWidthMm = geometry.widthMm + bleedMm * 2;
-  const outputHeightMm = geometry.heightMm + bleedMm * 2;
   const viewWidth = 1000;
+  const physicalDimensions = createPrintGuideLayout({ geometry, margins: { bleedMm, safeMarginMm }, viewportWidth: viewWidth, viewportHeight: viewWidth });
+  const outputWidthMm = physicalDimensions.outputWidthMm;
+  const outputHeightMm = physicalDimensions.outputHeightMm;
   const viewHeight = Math.max(200, viewWidth * outputHeightMm / outputWidthMm);
   const guides = createPrintGuideLayout({ geometry, margins: { bleedMm, safeMarginMm }, viewportWidth: viewWidth, viewportHeight: viewHeight });
   const clipPath = guides.outer.path;
@@ -75,7 +76,7 @@ export function ArtworkCropEditor({
   const imageY = (viewHeight - imageHeight) / 2 + offsetY * viewHeight / 2;
   const oneDimension = geometry.shape === "circle" || geometry.shape === "square";
   const safeAbsolute = formatAbsoluteSize(guides.safeWidthMm, guides.safeHeightMm, oneDimension);
-  const sangriaAbsolute = formatAbsoluteSize(geometry.widthMm, geometry.heightMm, oneDimension);
+  const sangriaAbsolute = formatAbsoluteSize(guides.sangriaWidthMm, guides.sangriaHeightMm, oneDimension);
   const cutAbsolute = formatAbsoluteSize(guides.outputWidthMm, guides.outputHeightMm, oneDimension);
 
   return (

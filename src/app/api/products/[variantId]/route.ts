@@ -30,10 +30,6 @@ const updateProductSchema = z.object({
   printSafeMarginMm: z.number().min(0).max(50),
   allowPrintRotation: z.boolean(),
   variantActive: z.boolean()
-}).superRefine((input, context) => {
-  if (input.printSafeMarginMm * 2 >= Math.min(input.printWidthMm, input.printHeightMm)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: "O acréscimo da sangria não deixa uma área de segurança válida.", path: ["printSafeMarginMm"] });
-  }
 });
 
 export async function PATCH(request: Request, context: { params: Promise<{ variantId: string }> }) {
