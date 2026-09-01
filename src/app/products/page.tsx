@@ -56,6 +56,11 @@ export default async function ProductsPage() {
                       <div className="mt-2 flex flex-wrap gap-2">
                         <span className="rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-400">{item.product_category}</span>
                         {item.sku ? <span className="rounded-md bg-zinc-900 px-2 py-1 text-xs text-zinc-400">SKU {item.sku}</span> : null}
+                        {item.aliases.length ? (
+                          <span className="rounded-md bg-violet-400/10 px-2 py-1 text-xs text-violet-200">
+                            {item.aliases.length} {item.aliases.length === 1 ? "alias de busca" : "aliases de busca"}
+                          </span>
+                        ) : null}
                         {printGeometry ? <span className="rounded-md bg-cyan-400/10 px-2 py-1 text-xs text-cyan-200">{geometryLabel(printGeometry)}</span> : null}
                         <span className="rounded-md bg-amber-400/10 px-2 py-1 text-xs text-amber-200">Sangria +{formatMm(item.print_safe_margin_mm)} por lado</span>
                         <span className="rounded-md bg-rose-400/10 px-2 py-1 text-xs text-rose-200">Corte +{formatMm(item.print_bleed_mm)} por lado</span>
@@ -103,7 +108,8 @@ export default async function ProductsPage() {
                       printBleedMm: item.print_bleed_mm,
                       printSafeMarginMm: item.print_safe_margin_mm,
                       allowPrintRotation: item.allow_print_rotation,
-                      variantActive: item.variant_active
+                      variantActive: item.variant_active,
+                      aliases: item.aliases
                       }}
                     />
                     {canWriteProducts ? <ProductDeleteButton productName={item.product_name} variantId={item.variant_id} variantName={item.variant_name} /> : null}

@@ -5,6 +5,12 @@ import {
   type CompositeQuoteInputItem
 } from "@/domain/quotes/composite-pricing";
 import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
+import {
+  productSearchRequiresClarification,
+  rankProductCandidates,
+  type ProductSearchAlias,
+  type RankedProduct
+} from "@/domain/products/product-search";
 import { getPool, query, withTenantContext } from "@/lib/db/client";
 
 export type AgentContext = {
@@ -31,6 +37,9 @@ export type AgentProduct = {
   height_cm: string | null;
   width_cm: string | null;
   length_cm: string | null;
+  print_width_mm: string | null;
+  print_height_mm: string | null;
+  aliases: ProductSearchAlias[];
 };
 
 export type AgentPlatform = {
@@ -257,10 +266,21 @@ export function hasAgentScope(context: AgentContext, scope: string) {
 export async function searchAgentProducts(
   context: AgentContext,
   term: string,
-  limit = 10
+  limit = 10,
+  offset = 0,
+  category?: string | null
 ): Promise<AgentProduct[]> {
+  const result = await searchAgentProductMatches(context, term, { limit, offset, category });
+  return result.products;
+}
+
+export async function searchAgentProductMatches(
+  context: AgentContext,
+  term: string,
+  options: { limit?: number; offset?: number; category?: string | null } = {}
+): Promise<{ products: RankedProduct<AgentProduct>[]; total: number }> {
   return withTenantContext(context.actorUserId, context.tenantId, async (client) => {
-    const normalized = `%${term.trim().replace(/\s+/g, "%")}%`;
+    const category = clean(options.category);
     const result = await client.query<AgentProduct>(
       `
         select
@@ -276,31 +296,43 @@ export async function searchAgentProducts(
           v.unit_weight_kg,
           v.height_cm,
           v.width_cm,
-          v.length_cm
+          v.length_cm,
+          to_jsonb(v)->>'print_width_mm' as print_width_mm,
+          to_jsonb(v)->>'print_height_mm' as print_height_mm,
+          coalesce((
+            select jsonb_agg(
+              jsonb_build_object(
+                'alias', psa.alias,
+                'normalizedAlias', psa.normalized_alias,
+                'source', psa.source
+              )
+              order by psa.alias
+            )
+            from product_search_aliases psa
+            where psa.tenant_id = v.tenant_id
+              and psa.product_variant_id = v.id
+              and psa.active = true
+          ), '[]'::jsonb) as aliases
         from products p
         join product_variants v on v.product_id = p.id and v.tenant_id = p.tenant_id
         where p.tenant_id = $1
           and p.active = true
           and v.active = true
-          and (
-            $2 = ''
-            or lower(coalesce(v.sku, '')) = lower($2)
-            or lower(p.name) like lower($3)
-            or lower(v.name) like lower($3)
-            or lower(coalesce(p.description, '')) like lower($3)
-            or lower(coalesce(v.description, '')) like lower($3)
-            or lower(p.category) like lower($3)
-          )
-        order by
-          case when lower(coalesce(v.sku, '')) = lower($2) then 0 else 1 end,
-          p.name,
-          v.name
-        limit $4
+          and p.deleted_at is null
+          and v.deleted_at is null
+          and ($2::text is null or lower(p.category) = lower($2::text))
+        order by p.name, v.name, v.sku
       `,
-      [context.tenantId, term.trim(), normalized, limit]
+      [context.tenantId, category]
     );
 
-    return result.rows;
+    const ranked = rankProductCandidates(result.rows, term);
+    const offset = Math.max(0, options.offset ?? 0);
+    const limit = Math.max(1, Math.min(500, options.limit ?? 10));
+    return {
+      products: ranked.slice(offset, offset + limit),
+      total: ranked.length
+    };
   });
 }
 
@@ -309,54 +341,41 @@ export async function resolveAgentVariant(context: AgentContext, input: {
   productVariantId?: string | null;
   productName?: string | null;
 }): Promise<AgentProduct> {
-  return withTenantContext(context.actorUserId, context.tenantId, async (client) => {
-    const result = await client.query<AgentProduct>(
-      `
-        select
-          p.id as product_id,
-          p.name as product_name,
-          p.slug as product_slug,
-          p.category as product_category,
-          p.description as product_description,
-          v.id as variant_id,
-          v.name as variant_name,
-          v.description as variant_description,
-          v.sku,
-          v.unit_weight_kg,
-          v.height_cm,
-          v.width_cm,
-          v.length_cm
-        from products p
-        join product_variants v on v.product_id = p.id and v.tenant_id = p.tenant_id
-        where p.tenant_id = $1
-          and p.active = true
-          and v.active = true
-          and (
-            ($2::uuid is not null and v.id = $2::uuid)
-            or ($3::text is not null and lower(v.sku) = lower($3::text))
-            or ($4::text is not null and (lower(p.name) like lower($4::text) or lower(v.name) like lower($4::text)))
-          )
-        order by
-          case when $2::uuid is not null and v.id = $2::uuid then 0 else 1 end,
-          case when $3::text is not null and lower(v.sku) = lower($3::text) then 0 else 1 end,
-          p.name,
-          v.name
-        limit 2
-      `,
-      [
-        context.tenantId,
-        input.productVariantId ?? null,
-        clean(input.productSku),
-        input.productName ? `%${input.productName.trim().replace(/\s+/g, "%")}%` : null
-      ]
-    );
+  const searchTerm = clean(input.productVariantId) ?? clean(input.productSku) ?? clean(input.productName);
+  if (!searchTerm) {
+    throw new AgentApiError("product_required", "Informe productVariantId, productSku ou productName.", 400);
+  }
 
-    if (result.rows.length === 0) throw new AgentApiError("product_not_found", "Produto não encontrado.", 404);
-    if (result.rows.length > 1 && !input.productVariantId && !input.productSku) {
-      throw new AgentApiError("ambiguous_product", "Mais de um produto corresponde à busca.", 409);
-    }
-    return result.rows[0];
-  });
+  const result = await searchAgentProductMatches(context, searchTerm, { limit: 5 });
+  const exactMatch = input.productVariantId
+    ? result.products.find((product) => product.matchedBy === "id" && product.confidence === 1)
+    : input.productSku
+      ? result.products.find((product) => product.matchedBy === "sku" && product.confidence === 1)
+      : null;
+  if ((input.productVariantId || input.productSku) && !exactMatch) {
+    throw new AgentApiError(
+      "product_not_found",
+      `Produto não encontrado para o identificador "${searchTerm}". Consulte o catálogo e use um variantId ou SKU válido.`,
+      404
+    );
+  }
+  if (exactMatch) return exactMatch;
+
+  if (result.products.length === 0) {
+    throw new AgentApiError("product_not_found", `Produto não encontrado para "${searchTerm}".`, 404);
+  }
+
+  if (productSearchRequiresClarification(result.products)) {
+    const options = result.products.slice(0, 3).map((product) => {
+      return `${product.product_name} - ${product.variant_name}${product.sku ? ` (SKU ${product.sku})` : ""}`;
+    });
+    throw new AgentApiError(
+      "ambiguous_product",
+      `Mais de um produto pode corresponder a "${searchTerm}": ${options.join(", ")}. Use o variantId ou SKU da opção correta.`,
+      409
+    );
+  }
+  return result.products[0];
 }
 
 export async function resolveAgentPlatform(context: AgentContext, platformSlug?: string | null): Promise<AgentPlatform> {

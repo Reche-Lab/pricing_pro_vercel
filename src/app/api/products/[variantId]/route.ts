@@ -29,7 +29,11 @@ const updateProductSchema = z.object({
   printBleedMm: z.number().min(0).max(50),
   printSafeMarginMm: z.number().min(0).max(50),
   allowPrintRotation: z.boolean(),
-  variantActive: z.boolean()
+  variantActive: z.boolean(),
+  aliases: z.array(z.object({
+    alias: z.string().trim().min(2).max(120),
+    source: z.enum(["manual", "ai"]).default("manual")
+  })).max(30).default([])
 });
 
 export async function PATCH(request: Request, context: { params: Promise<{ variantId: string }> }) {

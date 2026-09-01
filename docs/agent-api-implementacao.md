@@ -127,6 +127,22 @@ GET /api/agent/v1/products
 GET /api/agent/v1/products/search?q=botton%203,5
 ```
 
+O catálogo é paginado com `limit` (1 a 500), `offset` e filtro opcional `category`. A resposta inclui
+`pagination.hasMore` e `pagination.nextOffset`; continue consultando enquanto `hasMore` for verdadeiro para obter
+todo o catálogo do tenant.
+
+A busca aceita nomes aproximados e aliases configurados na variante. Ela normaliza acentos, pontuação e medidas,
+portanto `3,5 cm`, `3.5cm` e `35 mm` representam a mesma dimensão. A resposta informa:
+
+- `searchAliases`: nomes alternativos cadastrados;
+- `match.confidence`: confiança entre 0 e 1;
+- `match.matchedBy`: `sku`, `alias`, `name`, `category` ou `fuzzy`;
+- `match.matchedAlias`: alias responsável pelo resultado, quando houver;
+- `requiresClarification`: indica que o agente deve pedir ao cliente para escolher uma opção.
+
+As sugestões de aliases por IA existem somente na tela administrativa de Produtos. Nenhum endpoint de agente
+chama LLM durante consulta, cálculo ou criação de orçamento.
+
 Resposta deve conter apenas informações úteis para orçamento:
 
 - `productId`;
@@ -140,6 +156,9 @@ Resposta deve conter apenas informações úteis para orçamento:
 - canais disponíveis.
 
 Não retornar custo interno por padrão.
+
+Depois de localizar um produto, prefira enviar seu `variantId` nas chamadas seguintes. SKU também é aceito, mas
+ambos são identificadores exatos; nomes aproximados devem passar primeiro por `/products/search`.
 
 ### Simulação de Preço
 

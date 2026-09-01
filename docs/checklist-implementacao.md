@@ -56,6 +56,11 @@ Status atualizado durante a refatoracao inicial.
 - [x] Criar migration de API keys/idempotência para agentes.
 - [x] Criar autenticação Bearer token para `/api/agent/v1`.
 - [x] Criar endpoints agent para produtos, cálculo, frete, orçamento composto, PDF, WhatsApp e link público.
+- [x] Criar aliases multi-tenant por variante com origem manual ou sugestão aprovada de IA.
+- [x] Normalizar acentos, pontuação e medidas equivalentes (`3,5 cm`, `3.5cm`, `35 mm`) nas buscas de produtos.
+- [x] Unificar busca e resolução usada por preço, frete e orçamento com ranking determinístico e indicação de ambiguidade.
+- [x] Paginar o catálogo completo da API de agente e retornar metadados de correspondência sem custos internos.
+- [x] Adicionar sugestões de aliases via OpenRouter somente na configuração administrativa de Produtos, sem LLM nas APIs de agente.
 - [x] Proteger links públicos com expiração fixa de 3 dias, revogação manual e OTP opcional por e-mail.
 - [x] Permitir que administradores liberem orçamentos aprovados para edição mediante observação obrigatória e auditoria.
 - [x] Recuperar o link público ativo na área administrativa usando token criptografado em repouso.
@@ -182,7 +187,7 @@ Resultado:
 
 - lint passou;
 - typecheck passou;
-- testes passaram: 139 testes em 32 arquivos;
+- testes passaram: 165 testes em 39 arquivos;
 - build Next passou.
 
 ## Acoes Manuais Pendentes
@@ -239,6 +244,10 @@ Ponto de atencao:
 - `npm audit fix` verificou que não havia outra correção compatível. Permaneceram 10 alertas transitivos; eliminá-los exige upgrades com quebra (`Next 16`, `Vitest 4` e downgrade do `ExcelJS`). Não foi usado `--force` para não introduzir regressões sem uma migração dedicada.
 
 ## Migrations Criadas
+
+Migration mais recente deste bloco:
+
+- `supabase/migrations/0058_product_search_aliases.sql`
 
 1. `supabase/migrations/0001_multitenant_core.sql`
 2. `supabase/migrations/0002_rls_policies.sql`

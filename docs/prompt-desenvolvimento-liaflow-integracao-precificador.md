@@ -92,10 +92,12 @@ Use para validar credenciais e disponibilidade.
 ### Listar Produtos
 
 ```txt
-GET /products?limit=25
+GET /products?limit=100&offset=0
 ```
 
-Use quando o agente precisar listar opções disponíveis.
+Use quando o agente precisar listar opções disponíveis. Percorra `pagination.nextOffset` enquanto
+`pagination.hasMore` for verdadeiro para carregar todo o catálogo do tenant. O catálogo pode ser armazenado em
+cache por pouco tempo, mas preço e disponibilidade devem continuar vindo do Pricing Pro.
 
 ### Buscar Produtos
 
@@ -103,7 +105,13 @@ Use quando o agente precisar listar opções disponíveis.
 GET /products/search?q=botton%203,5&limit=10
 ```
 
-Use sempre que o usuário informar um produto por nome aproximado. Não invente SKU. Se houver múltiplos resultados, peça para o usuário escolher.
+Use sempre que o usuário informar um produto por nome aproximado. A busca já considera aliases, erros comuns,
+acentos e equivalência de medidas como `3,5 cm`, `3.5cm` e `35 mm`. Não invente SKU e não tente fazer busca por
+LLM dentro da integração.
+
+Se `requiresClarification` vier como `true`, apresente as melhores opções com nome, variante e SKU e peça ao
+usuário para escolher. Depois da escolha, preserve o `variantId` retornado e use-o em preço, frete e orçamento;
+isso evita uma nova resolução ambígua.
 
 ### Calcular Preço
 
@@ -294,8 +302,8 @@ src/integrations/pricing-pro/
 Com as seguintes funções:
 
 - `pricingProHealth()`
-- `searchPricingProducts({ query, limit })`
-- `listPricingProducts({ limit })`
+- `searchPricingProducts({ query, limit, offset, category })`
+- `listPricingProducts({ limit, offset, category })`
 - `calculatePricing({ platformSlug, pricingRule, items })`
 - `quotePricingShipping({ customerPostalCode, insuranceValue, items })`
 - `createCompositePricingQuote({ externalConversationId, customer, platformSlug, pricingRule, items, shipping, output, idempotencyKey })`

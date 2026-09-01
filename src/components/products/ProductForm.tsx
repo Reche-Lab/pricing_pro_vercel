@@ -7,6 +7,7 @@ import type { PricingCurveMode, PricingCurvePoint } from "@/domain/pricing/types
 import { OlistProductLookupButton } from "./OlistProductLookupButton";
 import { PrintGeometryFields } from "./PrintGeometryFields";
 import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
+import { ProductAliasesField } from "./ProductAliasesField";
 
 const ANCHORS = [1, 10, 50, 100, 500, 1000] as const;
 const initialPoints = ANCHORS.map((quantity) => ({ quantity, unitPrice: 0 }));
@@ -17,6 +18,7 @@ export function ProductForm() {
   const [loading, setLoading] = useState(false);
   const [curveMode, setCurveMode] = useState<PricingCurveMode>("interpolated");
   const [points, setPoints] = useState<PricingCurvePoint[]>(initialPoints);
+  const [aliasesResetKey, setAliasesResetKey] = useState(0);
 
   function updatePoint(index: number, field: keyof PricingCurvePoint, value: number) {
     setPoints((current) =>
@@ -82,6 +84,7 @@ export function ProductForm() {
         printBleedMm: Number(form.get("printBleedMm") || 0),
         printSafeMarginMm: Number(form.get("printSafeMarginMm") || 0),
         allowPrintRotation: form.get("allowPrintRotation") === "on",
+        aliases: parseAliases(form.get("aliasesJson")),
         curve: {
           mode: curveMode,
           points: curvePoints
@@ -98,6 +101,7 @@ export function ProductForm() {
     formElement.reset();
     setCurveMode("interpolated");
     setPoints(initialPoints);
+    setAliasesResetKey((current) => current + 1);
     router.refresh();
   }
 
@@ -140,6 +144,8 @@ export function ProductForm() {
         <span className="mb-1 block text-sm font-medium text-zinc-300">Descricao</span>
         <textarea className="focus-ring min-h-20 w-full rounded-md border border-zinc-700 px-3 py-2" name="description" />
       </label>
+
+      <ProductAliasesField resetKey={aliasesResetKey} />
 
       <div className="mt-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -222,6 +228,15 @@ export function ProductForm() {
       </button>
     </form>
   );
+}
+
+function parseAliases(value: FormDataEntryValue | null) {
+  try {
+    const parsed = JSON.parse(String(value || "[]"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function Input({

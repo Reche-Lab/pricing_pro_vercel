@@ -1,8 +1,14 @@
 import { createProductSlug } from "@/domain/products/products";
+import {
+  normalizeProductAliases,
+  type ProductAliasSource,
+  type ProductSearchAlias
+} from "@/domain/products/product-search";
 import { normalizePricingCurvePoints } from "@/domain/pricing/pricing";
 import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
 import type { PrintCornerStyle, PrintShape } from "@/domain/artwork/geometry";
 import { withTenantContext } from "@/lib/db/client";
+import type { PoolClient } from "pg";
 
 export type ProductVariantRow = {
   product_id: string;
@@ -33,6 +39,7 @@ export type ProductVariantRow = {
   curve_mode: PricingCurveMode | null;
   anchors: Record<string, number> | null;
   platform_curves?: Record<string, { mode: PricingCurveMode; anchors: Record<string, number> | null }> | null;
+  aliases: ProductSearchAlias[];
 };
 
 export type ProductAdminRow = ProductVariantRow & {
@@ -65,6 +72,7 @@ export type CreateProductWithVariantInput = {
   printBleedMm: number;
   printSafeMarginMm: number;
   curve: PricingCurve;
+  aliases?: Array<{ alias: string; source?: ProductAliasSource }>;
 };
 
 export type PricingCurveInput = PricingCurve & {
@@ -95,6 +103,7 @@ export type UpdateProductVariantInput = {
   printBleedMm: number;
   printSafeMarginMm: number;
   variantActive: boolean;
+  aliases?: Array<{ alias: string; source?: ProductAliasSource }>;
 };
 
 export async function listProductVariants(userId: string, tenantId: string): Promise<ProductVariantRow[]> {
@@ -127,6 +136,20 @@ export async function listProductVariants(userId: string, tenantId: string): Pro
           coalesce((to_jsonb(v)->>'allow_print_rotation')::boolean, true) as allow_print_rotation,
           coalesce(to_jsonb(v)->>'print_bleed_mm', '2') as print_bleed_mm,
           coalesce(to_jsonb(v)->>'print_safe_margin_mm', '2') as print_safe_margin_mm,
+          coalesce((
+            select jsonb_agg(
+              jsonb_build_object(
+                'alias', psa.alias,
+                'normalizedAlias', psa.normalized_alias,
+                'source', psa.source
+              )
+              order by psa.alias
+            )
+            from product_search_aliases psa
+            where psa.tenant_id = v.tenant_id
+              and psa.product_variant_id = v.id
+              and psa.active = true
+          ), '[]'::jsonb) as aliases,
           pc.mode as curve_mode,
           (
             select jsonb_object_agg(pa.quantity::text, pa.unit_price order by pa.quantity)
@@ -212,6 +235,20 @@ export async function listProductsAdmin(userId: string, tenantId: string): Promi
           coalesce((to_jsonb(v)->>'allow_print_rotation')::boolean, true) as allow_print_rotation,
           coalesce(to_jsonb(v)->>'print_bleed_mm', '2') as print_bleed_mm,
           coalesce(to_jsonb(v)->>'print_safe_margin_mm', '2') as print_safe_margin_mm,
+          coalesce((
+            select jsonb_agg(
+              jsonb_build_object(
+                'alias', psa.alias,
+                'normalizedAlias', psa.normalized_alias,
+                'source', psa.source
+              )
+              order by psa.alias
+            )
+            from product_search_aliases psa
+            where psa.tenant_id = v.tenant_id
+              and psa.product_variant_id = v.id
+              and psa.active = true
+          ), '[]'::jsonb) as aliases,
           v.active as variant_active,
           pc.id as curve_id,
           pc.version as curve_version,
@@ -398,8 +435,40 @@ export async function createProductWithVariant(
       ]
     );
 
+    await syncProductAliases(client, tenantId, userId, variantId, input.aliases ?? []);
+
     return { productId, variantId, curveId };
   });
+}
+
+async function syncProductAliases(
+  client: PoolClient,
+  tenantId: string,
+  userId: string,
+  variantId: string,
+  aliases: Array<{ alias: string; source?: ProductAliasSource }>
+) {
+  const normalized = normalizeProductAliases(aliases);
+  await client.query(
+    `delete from product_search_aliases where tenant_id = $1 and product_variant_id = $2`,
+    [tenantId, variantId]
+  );
+  for (const alias of normalized) {
+    await client.query(
+      `
+        insert into product_search_aliases (
+          tenant_id,
+          product_variant_id,
+          alias,
+          normalized_alias,
+          source,
+          created_by
+        )
+        values ($1, $2, $3, $4, $5, $6)
+      `,
+      [tenantId, variantId, alias.alias, alias.normalizedAlias, alias.source, userId]
+    );
+  }
 }
 
 export async function updateProductVariant(
@@ -493,6 +562,8 @@ export async function updateProductVariant(
         input.variantActive
       ]
     );
+
+    await syncProductAliases(client, tenantId, userId, variantId, input.aliases ?? []);
 
     await client.query(
       `

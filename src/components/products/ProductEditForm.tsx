@@ -6,6 +6,8 @@ import { Pencil, Save } from "lucide-react";
 import { OlistProductLookupButton } from "./OlistProductLookupButton";
 import { PrintGeometryFields } from "./PrintGeometryFields";
 import type { PrintCornerStyle, PrintShape } from "@/domain/artwork/geometry";
+import type { ProductSearchAlias } from "@/domain/products/product-search";
+import { ProductAliasesField } from "./ProductAliasesField";
 
 type ProductEditValues = {
   productName: string;
@@ -32,6 +34,7 @@ type ProductEditValues = {
   printBleedMm: string;
   printSafeMarginMm: string;
   variantActive: boolean;
+  aliases: ProductSearchAlias[];
 };
 
 export function ProductEditForm({ product }: { product: ProductEditValues }) {
@@ -76,6 +79,7 @@ export function ProductEditForm({ product }: { product: ProductEditValues }) {
         printBleedMm: Number(form.get("printBleedMm") || 0),
         printSafeMarginMm: Number(form.get("printSafeMarginMm") || 0),
         allowPrintRotation: form.get("allowPrintRotation") === "on",
+        aliases: parseAliases(form.get("aliasesJson")),
         variantActive: form.get("variantActive") === "on"
       })
     });
@@ -135,6 +139,8 @@ export function ProductEditForm({ product }: { product: ProductEditValues }) {
               name="description"
             />
           </label>
+
+          <ProductAliasesField defaultAliases={product.aliases} />
 
           <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
             <p className="text-sm font-medium text-zinc-300">Medidas unitárias para embalagem</p>
@@ -211,4 +217,13 @@ function Checkbox({ label, name, defaultChecked }: { label: string; name: string
 function optionalNumber(value: FormDataEntryValue | null) {
   const numeric = Number(value || 0);
   return numeric > 0 ? numeric : null;
+}
+
+function parseAliases(value: FormDataEntryValue | null) {
+  try {
+    const parsed = JSON.parse(String(value || "[]"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }

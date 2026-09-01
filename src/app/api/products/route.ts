@@ -14,6 +14,11 @@ const curveSchema = z.object({
   points: z.array(pointSchema).min(1).max(50)
 });
 
+const aliasSchema = z.object({
+  alias: z.string().trim().min(2).max(120),
+  source: z.enum(["manual", "ai"]).default("manual")
+});
+
 const anchorsSchema = z.object({
   1: z.number().nonnegative(),
   10: z.number().nonnegative(),
@@ -45,6 +50,7 @@ const createProductSchema = z.object({
   printBleedMm: z.number().min(0).max(50).default(2),
   printSafeMarginMm: z.number().min(0).max(50).default(2),
   allowPrintRotation: z.boolean().default(true),
+  aliases: z.array(aliasSchema).max(30).default([]),
   curve: curveSchema.optional(),
   anchors: anchorsSchema.optional()
 }).transform((input, context) => {
