@@ -77,6 +77,24 @@ describe("artwork production", () => {
     expect(plan.pageCount).toBeGreaterThan(1);
   });
 
+  it("fits twenty 48 mm cuts on one A4 sheet with four items per row", () => {
+    const circle48 = { shape: "circle" as const, widthMm: 48, heightMm: 48, cornerStyle: "sharp" as const, cornerRadiusMm: 0, rotationDegrees: 0, allowPrintRotation: true };
+    const profile = { ...DEFAULT_ARTWORK_PROFILE, layoutMode: "grid" as const, gapMm: 3, sideMarginMm: 4 };
+    const plan = createImpositionPlan([{
+      id: "circle-48", label: "Corte 48 mm", quantity: 20, geometry: circle48,
+      bleedMm: 0, safeMarginMm: 0, preparedDataUrl: "unused"
+    }], profile);
+    const firstPage = plan.placements.filter((placement) => placement.pageIndex === 0);
+    const columns = [...new Set(firstPage.map((placement) => placement.xMm))];
+    const rows = [...new Set(firstPage.map((placement) => placement.yMm))];
+
+    expect(plan.pageCount).toBe(1);
+    expect(firstPage).toHaveLength(20);
+    expect(columns).toEqual([4, 55, 106, 157]);
+    expect(rows).toEqual([7, 58, 109, 160, 211]);
+    expect(Math.max(...firstPage.map((placement) => placement.xMm + 48))).toBeLessThanOrEqual(206);
+  });
+
   it("starts every page at the top and enforces spacing and a protected bottom edge", () => {
     const square40 = { shape: "square" as const, widthMm: 40, heightMm: 40, cornerStyle: "sharp" as const, cornerRadiusMm: 0, rotationDegrees: 0, allowPrintRotation: true };
     const profile = { ...DEFAULT_ARTWORK_PROFILE, layoutMode: "grid" as const, marginMm: 5, bottomMarginMm: 20, gapMm: 0, bleedMm: 0 };

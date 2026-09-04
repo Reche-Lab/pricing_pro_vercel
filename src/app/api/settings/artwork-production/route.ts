@@ -8,6 +8,7 @@ const schema = z.object({
   pageWidthMm: z.number().min(100).max(1000),
   pageHeightMm: z.number().min(100).max(1000),
   marginMm: z.number().min(0).max(50),
+  sideMarginMm: z.number().min(0).max(50),
   bottomMarginMm: z.number().min(10).max(80),
   bleedMm: z.number().min(0).max(20),
   safeMarginMm: z.number().min(0).max(20),
@@ -18,6 +19,9 @@ const schema = z.object({
 }).superRefine((profile, context) => {
   if (profile.marginMm + profile.bottomMarginMm >= profile.pageHeightMm) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["bottomMarginMm"], message: "As margens verticais precisam deixar área útil na folha." });
+  }
+  if (profile.sideMarginMm * 2 >= profile.pageWidthMm) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["sideMarginMm"], message: "As margens laterais precisam deixar área útil na folha." });
   }
 });
 

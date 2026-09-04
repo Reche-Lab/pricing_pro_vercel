@@ -79,12 +79,12 @@ function createShelfPlan(copies: PrintArtwork[], profile: ArtworkProductionProfi
 
   const placements: PrintPlacement[] = [];
   let pageIndex = 0;
-  let x = profile.marginMm;
+  let x = profile.sideMarginMm;
   let y = profile.marginMm;
   let rowHeight = 0;
-  const maxX = profile.pageWidthMm - profile.marginMm;
+  const maxX = profile.pageWidthMm - profile.sideMarginMm;
   const maxY = profile.pageHeightMm - profile.bottomMarginMm;
-  const availableWidth = maxX - profile.marginMm;
+  const availableWidth = maxX - profile.sideMarginMm;
   const availableHeight = maxY - profile.marginMm;
 
   for (const artwork of copies) {
@@ -100,14 +100,14 @@ function createShelfPlan(copies: PrintArtwork[], profile: ArtworkProductionProfi
     const currentFits = candidates.filter((candidate) => x + candidate.width <= maxX + 0.001 && y + Math.max(rowHeight, candidate.height) <= maxY + 0.001);
     let selected = currentFits.sort((a, b) => Math.max(rowHeight, a.height) - Math.max(rowHeight, b.height))[0] ?? candidates[0];
     if (x + selected.width > maxX + 0.001) {
-      x = profile.marginMm;
+      x = profile.sideMarginMm;
       y += rowHeight + profile.gapMm;
       rowHeight = 0;
       selected = candidates.filter((candidate) => x + candidate.width <= maxX + 0.001).sort((a, b) => a.height - b.height)[0] ?? candidates[0];
     }
     if (y + selected.height > maxY + 0.001) {
       pageIndex += 1;
-      x = profile.marginMm;
+      x = profile.sideMarginMm;
       y = profile.marginMm;
       rowHeight = 0;
       selected = candidates
@@ -138,7 +138,7 @@ function createHexPlan(copies: PrintArtwork[], profile: ArtworkProductionProfile
   const outer = artworkDimensions(copies[0].geometry, safeMarginMm, bleedMm).cutWidthMm;
   const horizontalStep = outer + profile.gapMm;
   const verticalStep = outer * Math.sqrt(3) / 2 + profile.gapMm;
-  const availableWidth = profile.pageWidthMm - profile.marginMm * 2;
+  const availableWidth = profile.pageWidthMm - profile.sideMarginMm * 2;
   const availableHeight = profile.pageHeightMm - profile.marginMm - profile.bottomMarginMm;
   const columnsEven = Math.floor((availableWidth + profile.gapMm) / horizontalStep);
   const columnsOdd = Math.floor((availableWidth - horizontalStep / 2 + profile.gapMm) / horizontalStep);
@@ -158,7 +158,7 @@ function createHexPlan(copies: PrintArtwork[], profile: ArtworkProductionProfile
       artworkId: artwork.id,
       label: artwork.label,
       pageIndex,
-      xMm: profile.marginMm + (row % 2 ? horizontalStep / 2 : 0) + offset * horizontalStep,
+      xMm: profile.sideMarginMm + (row % 2 ? horizontalStep / 2 : 0) + offset * horizontalStep,
       yMm: profile.marginMm + row * verticalStep,
       geometry: artwork.geometry,
       bleedMm: artworkBleedMm(artwork, profile),
