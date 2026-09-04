@@ -377,10 +377,12 @@ Quando usar:
 Endpoint:
 
 ```txt
-GET /quotes/{{quoteId}}/pdf
+GET /quotes/{{quoteId}}/pdf?artwork=original
 ```
 
 Este endpoint exige Bearer token e retorna PDF binário. Para o cliente final, prefira o campo `publicPdfUrl` retornado ao criar orçamento com link público.
+O parâmetro opcional `artwork` aceita `original` (padrão), `edited` ou `cropped`. Quando a versão solicitada não
+existir para uma arte, o PDF usa a versão anterior disponível sem remover o item do documento.
 
 ## Fluxo Conversacional Recomendado
 

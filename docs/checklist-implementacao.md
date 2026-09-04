@@ -98,6 +98,7 @@ Status atualizado durante a refatoracao inicial.
 - [x] Criar texto de WhatsApp do orcamento.
 - [x] Criar vinculo inicial de envios/shipments ao orcamento.
 - [x] Gerar PDF do orcamento pela nova arquitetura.
+- [x] Permitir escolher arte original, editada ou recortada no PDF do orçamento, mantendo a original como padrão.
 - [x] Criar acoes visuais de Melhor Envio por shipment no detalhe do orcamento.
 - [x] Persistir payload/resposta/status das etapas Melhor Envio em shipments.
 - [x] Criar migration de endereco completo para tenant e clientes.

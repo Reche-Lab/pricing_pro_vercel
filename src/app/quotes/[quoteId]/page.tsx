@@ -1,5 +1,4 @@
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
 import { z } from "zod";
 import { AppShell } from "@/components/layout/AppShell";
 import { DeleteQuoteButton } from "@/components/quotes/DeleteQuoteButton";
@@ -13,6 +12,7 @@ import { QuotePaymentTermPanel } from "@/components/quotes/QuotePaymentTermPanel
 import { QuoteStatusActions } from "@/components/quotes/QuoteStatusActions";
 import { QuoteAdministrativeEditingControl } from "@/components/quotes/QuoteAdministrativeEditingControl";
 import { QuoteWhatsAppButton } from "@/components/quotes/QuoteWhatsAppButton";
+import { QuotePdfDownloadButton } from "@/components/quotes/QuotePdfDownloadButton";
 import { PublicQuoteLinkButton } from "@/components/quotes/PublicQuoteLinkButton";
 import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
 import { isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
@@ -71,6 +71,9 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
     member.member_status === "active" &&
     member.external_olist_user_id
   ))?.external_olist_user_id ?? null;
+  const activePdfArtworks = detail.items.flatMap((item) => (item.artworks ?? []).filter((artwork) => artwork.is_active !== false));
+  const editedPdfArtworkCount = activePdfArtworks.filter((artwork) => Boolean(artwork.parent_artwork_id)).length;
+  const croppedPdfArtworkCount = activePdfArtworks.filter((artwork) => Boolean(artwork.prepared_data_url || artwork.prepared_storage_path)).length;
 
   return (
     <AppShell
@@ -250,12 +253,12 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
             </div>
             <div className="mt-5 grid gap-5">
               <div className="grid min-w-0 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-                <Link
-                  className="focus-ring inline-flex min-h-10 items-center justify-center rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-950/60"
-                  href={`/api/quotes/${quoteId}/pdf`}
-                >
-                  Baixar PDF
-                </Link>
+                <QuotePdfDownloadButton
+                  artworkCount={activePdfArtworks.length}
+                  croppedCount={croppedPdfArtworkCount}
+                  editedCount={editedPdfArtworkCount}
+                  quoteId={quoteId}
+                />
                 <QuoteWhatsAppButton quoteId={quoteId} />
                 <PublicQuoteLinkButton
                   activeUntil={detail.quote.public_token_expires_at}

@@ -32,6 +32,11 @@ export async function GET(request: Request, context: { params: Promise<{ quoteId
   if (!parsed.success) {
     return failAgentRequest(log, new AgentApiError("invalid_quote_id", "ID de orçamento inválido.", 400));
   }
+  const artworkVariant = z.enum(["original", "edited", "cropped"])
+    .safeParse(new URL(request.url).searchParams.get("artwork") ?? "original");
+  if (!artworkVariant.success) {
+    return failAgentRequest(log, new AgentApiError("invalid_artwork_variant", "Versão da arte inválida.", 400));
+  }
 
   const token = authorizationToken(request);
   if (!token) return failAgentRequest(log, new AgentApiError("unauthorized", "Token de agente ausente.", 401));
@@ -52,10 +57,11 @@ export async function GET(request: Request, context: { params: Promise<{ quoteId
     tenantName: agentContext.tenantName,
     tenant,
     quote: detail.quote,
-    items: detail.items
+    items: detail.items,
+    artworkVariant: artworkVariant.data
   });
   await logAgentAudit(agentContext, "agent.quotes.pdf", { quoteId });
-  logAgentBinarySuccess(log, { quoteId, bytes: pdf.length });
+  logAgentBinarySuccess(log, { quoteId, bytes: pdf.length, artworkVariant: artworkVariant.data });
 
   return new Response(Buffer.from(pdf), {
     headers: {

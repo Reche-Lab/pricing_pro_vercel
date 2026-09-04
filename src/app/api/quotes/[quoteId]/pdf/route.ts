@@ -6,7 +6,9 @@ import { getTenantShippingProfile } from "@/repositories/tenant-settings";
 import { getSessionProfile } from "@/repositories/users";
 import { generateQuotePdf } from "@/services/pdf/quote-pdf";
 
-export async function GET(_request: Request, context: { params: Promise<{ quoteId: string }> }) {
+const artworkVariantSchema = z.enum(["original", "edited", "cropped"]);
+
+export async function GET(request: Request, context: { params: Promise<{ quoteId: string }> }) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ ok: false }, { status: 401 });
 
@@ -14,6 +16,10 @@ export async function GET(_request: Request, context: { params: Promise<{ quoteI
   const quoteIdParsed = z.string().uuid().safeParse(quoteId);
   if (!quoteIdParsed.success) {
     return NextResponse.json({ ok: false, error: "Invalid quote id." }, { status: 400 });
+  }
+  const artworkVariant = artworkVariantSchema.safeParse(new URL(request.url).searchParams.get("artwork") ?? "original");
+  if (!artworkVariant.success) {
+    return NextResponse.json({ ok: false, error: "Seleção de arte inválida." }, { status: 400 });
   }
 
   const [profile, detail, tenant] = await Promise.all([
@@ -29,7 +35,8 @@ export async function GET(_request: Request, context: { params: Promise<{ quoteI
     tenantName: profile.tenant_name,
     tenant,
     quote: detail.quote,
-    items: detail.items
+    items: detail.items,
+    artworkVariant: artworkVariant.data
   });
 
   return new Response(Buffer.from(pdf), {

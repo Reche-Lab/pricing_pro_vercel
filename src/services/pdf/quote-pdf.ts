@@ -1,6 +1,11 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import sharp from "sharp";
 import { quoteDiscountLabel } from "@/domain/quotes/discount";
+import {
+  quotePdfArtworkVariantLabel,
+  resolveQuotePdfArtworkAsset,
+  type QuotePdfArtworkVariant
+} from "@/domain/quotes/pdf-artwork";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 import { loadArtworkDataUrl } from "@/services/storage/artwork-storage";
 
@@ -22,6 +27,7 @@ export async function generateQuotePdf(input: {
   } | null;
   quote: QuoteDetail;
   items: QuoteItemRow[];
+  artworkVariant?: QuotePdfArtworkVariant;
 }): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   let page = pdf.addPage(PAGE_SIZE);
@@ -132,12 +138,15 @@ export async function generateQuotePdf(input: {
     [230, 44, 44, 90, 90]
   );
 
-  const attachedArtworks = input.items.flatMap((item) =>
-    (item.artworks ?? []).filter((artwork) => artwork.is_active !== false).map((artwork) => ({
+  const artworkVariant = input.artworkVariant ?? "original";
+  const attachedArtworks = input.items.flatMap((item) => {
+    const itemArtworks = item.artworks ?? [];
+    return itemArtworks.filter((artwork) => artwork.is_active !== false).map((artwork) => ({
       item,
-      artwork
-    }))
-  );
+      artwork,
+      asset: resolveQuotePdfArtworkAsset(artwork, itemArtworks, artworkVariant)
+    }));
+  });
   if (attachedArtworks.length) {
     drawSectionTitle("Artes do orcamento");
     for (const entry of attachedArtworks) {
@@ -164,7 +173,7 @@ export async function generateQuotePdf(input: {
         borderColor: rgb(0.82, 0.82, 0.86),
         borderWidth: 0.5
       });
-      const artworkDataUrl = await loadArtworkDataUrl(entry.artwork.data_url, entry.artwork.storage_path).catch(() => null);
+      const artworkDataUrl = await loadArtworkDataUrl(entry.asset.dataUrl, entry.asset.storagePath).catch(() => null);
       const embedded = artworkDataUrl ? await loadDataImage(pdf, artworkDataUrl) : null;
       if (embedded) {
         const fitted = fitImage(embedded.width, embedded.height, ARTWORK_THUMBNAIL.width - 8, ARTWORK_THUMBNAIL.height - 8);
@@ -175,7 +184,7 @@ export async function generateQuotePdf(input: {
           height: fitted.height
         });
       } else {
-        const label = entry.artwork.mime_type === "application/pdf" ? "PDF" : fileExtension(entry.artwork.file_name) || "ARQ";
+        const label = entry.asset.mimeType === "application/pdf" ? "PDF" : fileExtension(entry.asset.fileName) || "ARQ";
         page.drawText(sanitizePdfText(label.toUpperCase()), {
           x: imageX + 34,
           y: imageY + 51,
@@ -209,14 +218,14 @@ export async function generateQuotePdf(input: {
         font: bold,
         color: rgb(0.28, 0.28, 0.3)
       });
-      page.drawText(sanitizePdfText(`Arquivo: ${entry.artwork.file_name}`), {
+      page.drawText(sanitizePdfText(`Arquivo: ${entry.asset.fileName} | Versao: ${quotePdfArtworkVariantLabel(entry.asset.effectiveVariant)}`), {
         x: textX,
         y: cardY + 43,
         size: 8,
         font: regular,
         color: rgb(0.42, 0.42, 0.45)
       });
-      page.drawText(sanitizePdfText(`Tipo: ${entry.artwork.mime_type} | Tamanho: ${formatBytes(entry.artwork.file_size)}`), {
+      page.drawText(sanitizePdfText(`Tipo: ${entry.asset.mimeType} | Tamanho original: ${formatBytes(entry.artwork.file_size)}`), {
         x: textX,
         y: cardY + 29,
         size: 8,
