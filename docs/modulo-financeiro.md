@@ -158,6 +158,16 @@ GET      /api/finance/export?competence=AAAA-MM&format=csv|xlsx
 GET      /api/finance/olist/search?competence=AAAA-MM
 ```
 
+O Excel inclui duas visões dos lançamentos:
+
+- `Lancamentos`: modelo detalhado de 24 colunas, com UID, origem, linha do extrato, identificador original,
+  natureza, categoria/subcategoria, indicadores de inclusão, observação e fórmulas de fluxo e resultado;
+- `Lancamentos_Resumo`: visão compacta preservada para leitura rápida.
+
+Os campos são preenchidos com os dados classificados e com a linha bruta importada sempre que disponíveis.
+Valores sem classificação aparecem como `A classificar`, e as colunas calculadas são entregues com fórmula e
+resultado armazenado no arquivo.
+
 ## Teste de regressão Ground Shop
 
 Com os três arquivos de julho de 2026:

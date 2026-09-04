@@ -40,9 +40,17 @@ export type FinancialTransactionRow = {
   source_type: string;
   account_name: string;
   account_id: string;
+  source_line_number: number;
+  source_identifier: string | null;
+  raw_payload: Record<string, unknown>;
+  nature_name: string | null;
   category_id: string | null;
   category_name: string | null;
+  category_parent_name: string | null;
+  subcategory_name: string | null;
   transfer_status: string | null;
+  transfer_key: string | null;
+  notes: string | null;
   import_filename: string;
 };
 
@@ -777,11 +785,21 @@ async function listTransactionsWithClient(client: pg.PoolClient, tenantId: strin
       t.counterparty, t.amount_cents::text, t.direction, t.nature, t.include_external_cash_flow,
       t.include_operating_result, t.review_required, t.review_status, t.classification_confidence::text,
       t.classification_source, t.source_type, a.name account_name, a.id account_id,
-      t.category_id, c.name category_name, m.status transfer_status, i.original_filename import_filename
+      r.source_line_number, coalesce(t.source_identifier, r.source_identifier) source_identifier,
+      r.raw_payload, n.name nature_name,
+      t.category_id, c.name category_name, cp.name category_parent_name,
+      coalesce(sc.name, case when c.parent_id is not null then c.name end) subcategory_name,
+      m.status transfer_status,
+      case when m.id is not null then 'TRF-' || upper(substr(replace(m.id::text, '-', ''), 1, 16)) end transfer_key,
+      t.notes, i.original_filename import_filename
     from financial_transactions t
     join financial_accounts a on a.id = t.financial_account_id and a.tenant_id = t.tenant_id
     join bank_statement_imports i on i.id = t.import_id and i.tenant_id = t.tenant_id
+    join bank_statement_raw_rows r on r.id = t.raw_row_id and r.tenant_id = t.tenant_id
+    left join financial_natures n on n.tenant_id = t.tenant_id and n.key = t.nature
     left join financial_categories c on c.id = t.category_id and c.tenant_id = t.tenant_id
+    left join financial_categories cp on cp.id = c.parent_id and cp.tenant_id = c.tenant_id
+    left join financial_categories sc on sc.id = t.subcategory_id and sc.tenant_id = t.tenant_id
     left join internal_transfer_matches m on m.id = t.internal_transfer_pair_id and m.tenant_id = t.tenant_id
     where t.tenant_id = $1 and t.competence = $2
     order by t.transaction_date desc, t.created_at desc`,

@@ -187,7 +187,7 @@ Resultado:
 
 - lint passou;
 - typecheck passou;
-- testes passaram: 165 testes em 39 arquivos;
+- testes passaram: 167 testes em 40 arquivos;
 - build Next passou.
 
 ## Acoes Manuais Pendentes
@@ -204,6 +204,8 @@ Resultado:
 - [x] Identificar transferências e excluir automaticamente somente pares empresariais de alta confiança.
 - [x] Implementar dashboard, filtros, fechamento e reabertura auditada.
 - [x] Exportar CSV e Excel com proteção contra formula injection.
+- [x] Incluir no Excel a aba detalhada `Lancamentos` com os 24 campos do modelo fornecido, fórmulas e rastreabilidade até o extrato original.
+- [x] Preservar a exportação compacta anterior na aba `Lancamentos_Resumo`.
 - [x] Implementar conciliação assistida Olist em modo leitura.
 - [x] Validar os valores de regressão de julho de 2026.
 - [x] Restringir temporariamente menu, página e APIs financeiras a owner/admin/superadmin.
