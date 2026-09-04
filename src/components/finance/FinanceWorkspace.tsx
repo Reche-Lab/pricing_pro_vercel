@@ -5,29 +5,40 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle, ArrowDownRight, ArrowRightLeft, ArrowUpRight, Building2, Check,
   ChevronLeft, ChevronRight, CircleDollarSign, Download, FileSpreadsheet, Landmark, Loader2,
-  CircleCheck, CircleX, ExternalLink, Pencil, Plus, RefreshCw, RotateCcw, Search, Settings,
+  BarChart3, Calculator, CircleCheck, CircleX, ExternalLink, Pencil, Plus, RefreshCw, RotateCcw, Search, Settings,
   ShieldAlert, SlidersHorizontal, Tags, Trash2, Upload, WalletCards, X
 } from "lucide-react";
 import { isValidCompetence, shiftCompetence } from "@/domain/finance/competence";
 import { ComparisonWorkspace, PendingCenter, RulesWorkspace } from "@/components/finance/FinanceIntelligence";
+import { FinancialIndicatorsPanel } from "@/components/finance/FinancialIndicatorsPanel";
+import type { FinancialIndicatorFormula, FinancialIndicatorUnit, FinancialIndicatorComponentResult } from "@/domain/finance/indicators";
 
 export type FinanceAccount = {
   id: string; name: string; institution: string; account_type: string; currency: string;
   ownership_type: string; same_economic_entity: boolean; required_for_monthly_close: boolean; active: boolean;
 };
-type Transaction = {
+export type FinanceTransaction = {
   id: string; transaction_date: string; original_description: string; counterparty: string | null;
   amount_cents: string; direction: "inflow" | "outflow" | "neutral"; nature: string;
-  category_id: string | null; category_name: string | null; account_name: string; source_type: string;
+  category_id: string | null; subcategory_id: string | null; category_name: string | null;
+  account_name: string; account_id: string; source_type: string;
+  include_external_cash_flow: boolean; include_operating_result: boolean;
   review_required: boolean; review_status: string; transfer_status: string | null;
+};
+export type FinanceIndicator = {
+  id: string; name: string; description: string | null; unit: FinancialIndicatorUnit;
+  sort_order: number; active: boolean; version_id: string; version: number; effective_from: string;
+  formula: FinancialIndicatorFormula; value: number; component_results: FinancialIndicatorComponentResult[];
+  frozen_at: string | null; is_frozen: boolean;
 };
 export type FinanceOverview = {
   competence: string; month: { status: string; closing_notes: string | null };
   metrics: Record<string, number>; accounts: FinanceAccount[];
-  imports: Array<Record<string, string | number | null>>; transactions: Transaction[];
-  categories: Array<{ id: string; name: string; type: string; affects_operating_result: boolean }>;
+  imports: Array<Record<string, string | number | null>>; transactions: FinanceTransaction[];
+  categories: Array<{ id: string; parent_id: string | null; name: string; type: string; affects_operating_result: boolean }>;
   natures: ManagedNature[];
   transfers: Array<Record<string, string | number | null>>;
+  indicators: FinanceIndicator[];
   health: { score: number; readyToClose: boolean; blockingCount: number; attentionCount: number;
     pendencies: Array<{ key: string; count: number; severity: "blocking" | "attention"; label: string;
       description: string; action: "imports" | "transactions" | "transfers" }> };
@@ -69,6 +80,7 @@ export function FinanceWorkspace({ initialOverview }: { initialOverview: Finance
   const [tab, setTab] = useState<FinanceTab>(initialOverview.transactions.length ? "dashboard" : "imports");
   const [busy, setBusy] = useState(false);
   const [competenceDraft, setCompetenceDraft] = useState(initialOverview.competence);
+  const [transactionDrilldown, setTransactionDrilldown] = useState<{ label: string; ids: string[] } | null>(null);
   const competenceRequest = useRef(0);
   const [message, setMessage] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
 
@@ -142,15 +154,15 @@ export function FinanceWorkspace({ initialOverview }: { initialOverview: Finance
           ["transfers", `Transferências (${overview.transfers.length})`], ["rules", "Regras"], ["categories", "Categorias"], ["natures", "Naturezas"], ["accounts", `Contas (${overview.accounts.length})`]
           , ["olist", "Conciliação Olist"]
         ] as Array<[FinanceTab, string]>).map(([id, label]) => (
-          <button className={`focus-ring shrink-0 rounded-md px-3 py-2 text-sm font-medium ${tab === id ? "bg-zinc-700 text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-white"}`} key={id} onClick={() => setTab(id)}>{label}</button>
+          <button className={`focus-ring shrink-0 rounded-md px-3 py-2 text-sm font-medium ${tab === id ? "bg-zinc-700 text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-white"}`} key={id} onClick={() => { setTab(id); if (id !== "transactions") setTransactionDrilldown(null); }}>{label}</button>
         ))}
       </nav>
 
-      {tab === "dashboard" ? <Dashboard overview={overview} onRefresh={refresh} onMessage={setMessage} onNavigate={setTab} /> : null}
+      {tab === "dashboard" ? <Dashboard overview={overview} onRefresh={refresh} onMessage={setMessage} onNavigate={setTab} onDrilldown={(label, ids) => { setTransactionDrilldown({ label, ids }); setTab("transactions"); }} /> : null}
       {tab === "pendencies" ? <PendingCenter overview={overview} onNavigate={setTab} /> : null}
       {tab === "comparison" ? <ComparisonWorkspace competence={overview.competence} onMessage={setMessage} /> : null}
       {tab === "imports" ? <ImportWorkspace overview={overview} onRefresh={refresh} onMessage={setMessage} /> : null}
-      {tab === "transactions" ? <Transactions overview={overview} onRefresh={refresh} onMessage={setMessage} /> : null}
+      {tab === "transactions" ? <Transactions overview={overview} onRefresh={refresh} onMessage={setMessage} drilldown={transactionDrilldown} onClearDrilldown={() => setTransactionDrilldown(null)} /> : null}
       {tab === "transfers" ? <Transfers overview={overview} onRefresh={refresh} onMessage={setMessage} /> : null}
       {tab === "rules" ? <RulesWorkspace overview={overview} onRefresh={refresh} onMessage={setMessage} /> : null}
       {tab === "olist" ? <OlistReconciliation overview={overview} onMessage={setMessage} /> : null}
@@ -161,7 +173,7 @@ export function FinanceWorkspace({ initialOverview }: { initialOverview: Finance
   );
 }
 
-function Dashboard({ overview, onRefresh, onMessage, onNavigate }: PanelProps & { onNavigate: (tab: FinanceTab) => void }) {
+function Dashboard({ overview, onRefresh, onMessage, onNavigate, onDrilldown }: PanelProps & { onNavigate: (tab: FinanceTab) => void; onDrilldown: (label: string, ids: string[]) => void }) {
   const metrics = overview.metrics;
   const accountTotals = useMemo(() => overview.transactions.reduce<Record<string, { incoming: number; outgoing: number }>>((totals, item) => {
     const current = totals[item.account_name] ?? { incoming: 0, outgoing: 0 };
@@ -179,6 +191,20 @@ function Dashboard({ overview, onRefresh, onMessage, onNavigate }: PanelProps & 
         <Metric label="Fluxo líquido externo" value={metrics.externalNetCashFlowCents} icon={CircleDollarSign} tone="amber" signed />
         <Metric label="Resultado operacional" value={metrics.operatingResultCents} icon={Landmark} tone="cyan" signed />
       </div>
+      <section className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-cyan-400/10 text-cyan-300"><Calculator size={18}/></div>
+          <div><h2 className="font-semibold text-white">Composição do resultado operacional</h2><p className="mt-1 text-xs leading-5 text-zinc-500">Entradas e saídas marcadas para compor o resultado. Selecione uma linha para auditar os lançamentos.</p></div>
+        </div>
+        <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:items-stretch">
+          <OperatingPart label="Entradas operacionais" value={metrics.operationalInflowsCents} tone="emerald" onClick={() => onDrilldown("Entradas operacionais", overview.transactions.filter((item) => item.include_operating_result && Number(item.amount_cents) > 0).map((item) => item.id))}/>
+          <span className="hidden items-center text-xl text-zinc-600 md:flex">−</span>
+          <OperatingPart label="Saídas operacionais" value={metrics.operationalOutflowsCents} tone="rose" onClick={() => onDrilldown("Saídas operacionais", overview.transactions.filter((item) => item.include_operating_result && Number(item.amount_cents) < 0).map((item) => item.id))}/>
+          <span className="hidden items-center text-xl text-zinc-600 md:flex">=</span>
+          <OperatingPart label="Resultado operacional" value={metrics.operatingResultCents} tone="cyan" signed onClick={() => onDrilldown("Composição do resultado operacional", overview.transactions.filter((item) => item.include_operating_result).map((item) => item.id))}/>
+        </div>
+      </section>
+      <FinancialIndicatorsPanel overview={overview} onRefresh={onRefresh} onMessage={onMessage} onDrilldown={onDrilldown} />
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.7fr)]">
         <section className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
           <div className="mb-5"><h2 className="font-semibold text-white">Movimentação por conta</h2><p className="text-xs text-zinc-500">Entradas e saídas brutas da competência. Clique em Lançamentos para revisar os detalhes.</p></div>
@@ -291,10 +317,11 @@ function ImportPreview({ accounts, item, onAccountChange, onImport, onMapping }:
   </div>;
 }
 
-function Transactions({ overview, onRefresh, onMessage }: PanelProps) {
+function Transactions({ overview, onRefresh, onMessage, drilldown, onClearDrilldown }: PanelProps & { drilldown: { label: string; ids: string[] } | null; onClearDrilldown: () => void }) {
   const [search, setSearch] = useState(""); const [nature, setNature] = useState(""); const [selected, setSelected] = useState<string[]>([]); const [editing, setEditing] = useState(false);
-  const filtered = useMemo(() => overview.transactions.filter((item) => (!nature || item.nature === nature) && (!search || `${item.original_description} ${item.counterparty ?? ""} ${item.account_name}`.toLowerCase().includes(search.toLowerCase()))), [overview.transactions, nature, search]);
+  const filtered = useMemo(() => overview.transactions.filter((item) => (!drilldown || drilldown.ids.includes(item.id)) && (!nature || item.nature === nature) && (!search || `${item.original_description} ${item.counterparty ?? ""} ${item.account_name}`.toLowerCase().includes(search.toLowerCase()))), [overview.transactions, nature, search, drilldown]);
   return <section className="min-w-0 rounded-lg border border-zinc-800 bg-zinc-900/60">
+    {drilldown ? <div className="flex items-center gap-3 border-b border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-sm text-cyan-100"><BarChart3 className="shrink-0" size={16}/><p className="min-w-0 flex-1"><strong>{drilldown.label}</strong> · {drilldown.ids.length} lançamento(s) na memória de cálculo</p><button className="rounded-md border border-cyan-400/20 px-2 py-1 text-xs hover:bg-cyan-400/10" onClick={onClearDrilldown}>Ver todos</button></div> : null}
     <div className="flex flex-col gap-3 border-b border-zinc-800 p-3 sm:flex-row sm:items-center"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" size={16} /><input className="w-full rounded-md border border-zinc-700 py-2 pl-9 pr-3 text-sm" onChange={(event) => setSearch(event.target.value)} placeholder="Descrição, contraparte ou conta" value={search} /></div><select className="rounded-md border border-zinc-700 px-3 py-2 text-sm" onChange={(event) => setNature(event.target.value)} value={nature}><option value="">Todas as naturezas</option>{overview.natures.map((item) => <option key={item.key} value={item.key}>{item.name}</option>)}</select>{selected.length ? <button className="rounded-md bg-amber-400 px-3 py-2 text-sm font-semibold text-zinc-950" onClick={() => setEditing(true)}><SlidersHorizontal className="mr-2 inline" size={15} />Classificar {selected.length}</button> : null}</div>
     <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="bg-zinc-950/60 text-xs uppercase text-zinc-500"><tr><th className="p-3"><input aria-label="Selecionar todos" checked={selected.length === filtered.length && filtered.length > 0} onChange={(event) => setSelected(event.target.checked ? filtered.map((item) => item.id) : [])} type="checkbox" /></th><th>Data</th><th>Descrição</th><th>Conta</th><th>Classificação</th><th className="pr-4 text-right">Valor</th></tr></thead><tbody>{filtered.map((item) => <tr className="border-t border-zinc-800/80 hover:bg-zinc-800/30" key={item.id}><td className="p-3"><input checked={selected.includes(item.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} type="checkbox" /></td><td className="whitespace-nowrap text-xs text-zinc-500">{dateBr(item.transaction_date)}</td><td className="max-w-md whitespace-normal py-3 pr-4"><p className="text-zinc-200">{item.original_description}</p><p className="mt-1 text-xs text-zinc-600">{item.counterparty || item.source_type}</p></td><td className="whitespace-nowrap pr-4 text-xs text-zinc-400">{item.account_name}</td><td className="pr-4"><NatureBadge nature={item.nature} natures={overview.natures} review={item.review_required && item.review_status === "pending"} /><p className="mt-1 text-xs text-zinc-600">{item.category_name ?? "Sem categoria"}</p></td><td className={`whitespace-nowrap pr-4 text-right font-semibold ${Number(item.amount_cents) >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{money(Number(item.amount_cents))}</td></tr>)}</tbody></table></div>
     {!filtered.length ? <Empty text="Nenhum lançamento encontrado para os filtros selecionados." /> : null}
@@ -436,6 +463,7 @@ function MonthAction({overview,onRefresh,onMessage}:PanelProps){const action=ove
 
 type Message={tone:"success"|"error"|"info";text:string}; type PanelProps={overview:Overview;onRefresh:()=>Promise<void>;onMessage:(message:Message)=>void};
 function Metric({label,value,icon:Icon,tone,signed=false}:{label:string;value:number;icon:React.ComponentType<{size?:number}>;tone:string;signed?:boolean}){const colors:Record<string,string>={emerald:"text-emerald-300 bg-emerald-400/10",rose:"text-rose-300 bg-rose-400/10",amber:"text-amber-300 bg-amber-400/10",cyan:"text-cyan-300 bg-cyan-400/10"};return <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4"><div className={`mb-4 flex h-8 w-8 items-center justify-center rounded-md ${colors[tone]}`}><Icon size={17}/></div><p className="text-xs text-zinc-500">{label}</p><p className={`mt-1 text-xl font-semibold ${signed&&value<0?"text-rose-300":"text-white"}`}>{money(value)}</p></div>}
+function OperatingPart({label,value,tone,signed=false,onClick}:{label:string;value:number;tone:"emerald"|"rose"|"cyan";signed?:boolean;onClick:()=>void}){const tones={emerald:"border-emerald-400/20 bg-emerald-400/5 hover:bg-emerald-400/10",rose:"border-rose-400/20 bg-rose-400/5 hover:bg-rose-400/10",cyan:"border-cyan-400/20 bg-cyan-400/5 hover:bg-cyan-400/10"};return <button className={`group flex min-h-20 items-center gap-3 rounded-md border p-3 text-left transition-colors ${tones[tone]}`} onClick={onClick} type="button"><div className="min-w-0 flex-1"><p className="text-xs text-zinc-500">{label}</p><p className={`mt-1 text-lg font-semibold ${signed&&value<0?"text-rose-300":"text-zinc-100"}`}>{money(value)}</p></div><ChevronRight className="shrink-0 text-zinc-600 transition-transform group-hover:translate-x-0.5 group-hover:text-zinc-300" size={16}/></button>}
 function Bar({width,tone}:{width:number;tone:"emerald"|"rose"}){return <div className="h-2 overflow-hidden rounded-full bg-zinc-800"><div className={`h-full rounded-full ${tone==="emerald"?"bg-emerald-400":"bg-rose-400"}`} style={{width:`${Math.max(width?2:0,width)}%`}}/></div>}
 function ReviewLine({label,value,danger=false}:{label:string;value:string|number;danger?:boolean}){return <div className="flex items-center justify-between gap-3 rounded-md bg-zinc-950/50 px-3 py-2 text-sm"><span className="text-zinc-400">{label}</span><strong className={danger?"text-amber-300":"text-zinc-200"}>{value}</strong></div>}
 function NatureBadge({nature,natures,review}:{nature:string;natures:ManagedNature[];review:boolean}){const label=natures.find((item)=>item.key===nature)?.name??FALLBACK_NATURES.find(([id])=>id===nature)?.[1]??nature;return <span className={`inline-flex rounded px-2 py-1 text-[11px] ${review?"bg-amber-400/10 text-amber-200":nature==="internal_transfer"?"bg-cyan-400/10 text-cyan-200":"bg-zinc-800 text-zinc-300"}`}>{label}</span>}

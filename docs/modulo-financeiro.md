@@ -147,6 +147,9 @@ POST     /api/finance/imports
 GET      /api/finance/imports/:importId/file
 GET      /api/finance/overview?competence=AAAA-MM
 GET      /api/finance/comparison?competence=AAAA-MM&months=3|6|12
+GET|POST /api/finance/indicators?competence=AAAA-MM
+PATCH|DELETE /api/finance/indicators/:indicatorId
+POST     /api/finance/indicators/preview
 PATCH    /api/finance/transactions
 PATCH    /api/finance/transfers/:matchId
 GET|POST /api/finance/rules
@@ -164,9 +167,35 @@ O Excel inclui duas visões dos lançamentos:
   natureza, categoria/subcategoria, indicadores de inclusão, observação e fórmulas de fluxo e resultado;
 - `Lancamentos_Resumo`: visão compacta preservada para leitura rápida.
 
+Também inclui a aba `Indicadores`, com valor final, versão da fórmula, situação da competência e a
+memória de cálculo de cada componente.
+
 Os campos são preenchidos com os dados classificados e com a linha bruta importada sempre que disponíveis.
 Valores sem classificação aparecem como `A classificar`, e as colunas calculadas são entregues com fórmula e
 resultado armazenado no arquivo.
+
+## Resultado operacional e indicadores personalizados
+
+A visão geral apresenta a igualdade auditável `Entradas operacionais - Saídas operacionais = Resultado operacional`.
+Cada parcela abre os lançamentos que formaram o valor, usando o marcador `include_operating_result` já mantido pela
+classificação financeira.
+
+Indicadores personalizados são exclusivos do tenant e usam uma fórmula estruturada. Cada componente pode:
+
+- somar, subtrair, calcular média ou contar lançamentos;
+- filtrar por direção, natureza, categoria/subcategoria, conta, origem e situação da revisão;
+- usar valor absoluto ou manter o sinal original;
+- incluir transferências internas somente quando isso for escolhido explicitamente.
+
+Não são aceitos SQL, JavaScript ou expressões livres. Toda referência de conta, categoria e natureza é validada no
+tenant antes da prévia e do salvamento. Alterações criam uma nova versão válida a partir da competência escolhida.
+Ao concluir uma competência, o resultado e a memória de cálculo são congelados em
+`financial_indicator_results`; reabrir a competência volta a mostrar a prévia atual e um novo fechamento recalcula
+o snapshot com auditoria.
+
+Exemplo para a Ground Shop: crie um indicador monetário `Base de comissão`, adicione `Vendas` filtrando a categoria
+de vendas e acrescente `Fretes` com a operação `Subtrair` e a categoria de frete. A prévia mostra o resultado e a
+quantidade de lançamentos antes do salvamento.
 
 ## Teste de regressão Ground Shop
 

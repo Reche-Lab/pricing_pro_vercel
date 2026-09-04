@@ -34,6 +34,7 @@ export async function buildFinancialWorkbook(data: ExportData) {
   workbook.created = new Date();
   workbook.calcProperties.fullCalcOnLoad = true;
   addDashboard(workbook, data);
+  addCustomIndicators(workbook, data);
   addDetailedTransactions(workbook, data.transactions);
   addTransactionsSummary(workbook, data.transactions);
   addEvolution(workbook, data);
@@ -55,6 +56,7 @@ function addDashboard(workbook: ExcelJS.Workbook, data: ExportData) {
     externalInflowsCents: "Entradas externas", externalOutflowsCents: "Saídas externas",
     externalNetCashFlowCents: "Fluxo líquido externo", operationalRevenueCents: "Receita operacional identificada",
     operationalExpenseCents: "Despesas operacionais identificadas", operatingResultCents: "Resultado operacional identificado",
+    operationalInflowsCents: "Entradas no resultado operacional", operationalOutflowsCents: "Saídas no resultado operacional",
     debtPaymentsCents: "Pagamentos de dívidas", refundsNetCents: "Impacto líquido de estornos",
     unclassifiedOutflowsCents: "Saídas não classificadas", internalTransfersExcludedCents: "Transferências internas excluídas"
   };
@@ -62,10 +64,44 @@ function addDashboard(workbook: ExcelJS.Workbook, data: ExportData) {
     const row = sheet.addRow([label, (metrics[key] ?? 0) / 100]);
     row.getCell(2).numFmt = 'R$ #,##0.00;[Red]-R$ #,##0.00';
   });
+  if ((data.indicators ?? []).length) {
+    sheet.addRow([]);
+    const title = sheet.addRow(["Indicadores personalizados", "Valor"]);
+    title.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    title.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF334155" } };
+    for (const indicator of data.indicators) {
+      const divisor = indicator.unit === "currency" ? 100 : 1;
+      const row = sheet.addRow([safeSpreadsheetText(indicator.name), indicator.value / divisor]);
+      if (indicator.unit === "currency") row.getCell(2).numFmt = 'R$ #,##0.00;[Red]-R$ #,##0.00';
+    }
+  }
   sheet.addRow([]);
   sheet.addRow(["Aviso", "Resultado gerencial. Fluxo de caixa não é necessariamente lucro e não substitui a contabilidade."]);
   styleHeader(sheet, 1);
   sheet.columns = [{ width: 42 }, { width: 72 }];
+}
+
+function addCustomIndicators(workbook: ExcelJS.Workbook, data: ExportData) {
+  const sheet = workbook.addWorksheet("Indicadores");
+  sheet.addRow(["Indicador", "Descrição", "Competência", "Situação", "Versão", "Valor", "Operação", "Componente", "Agregação", "Lançamentos", "Valor do componente"]);
+  for (const indicator of data.indicators ?? []) {
+    const divisor = indicator.unit === "currency" ? 100 : 1;
+    indicator.component_results.forEach((component, index) => {
+      const row = sheet.addRow([
+        safeSpreadsheetText(indicator.name), safeSpreadsheetText(indicator.description ?? ""), data.competence,
+        indicator.is_frozen ? "Fechado" : "Prévia", indicator.version,
+        index === 0 ? indicator.value / divisor : null,
+        component.operation === "subtract" ? "Subtrair" : "Somar", safeSpreadsheetText(component.label),
+        component.aggregation === "average" ? "Média" : component.aggregation === "count" ? "Contagem" : "Soma",
+        component.matchedCount, component.value / divisor
+      ]);
+      if (indicator.unit === "currency") {
+        row.getCell(6).numFmt = CURRENCY_FORMAT;
+        row.getCell(11).numFmt = CURRENCY_FORMAT;
+      }
+    });
+  }
+  styleTable(sheet, [28, 42, 14, 14, 10, 18, 12, 28, 14, 14, 22]);
 }
 
 function addTransactionsSummary(workbook: ExcelJS.Workbook, transactions: FinancialTransactionRow[]) {

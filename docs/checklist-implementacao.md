@@ -214,6 +214,11 @@ Resultado:
 - [x] Implementar manutenção de regras automáticas por tenant com prioridade, origem, conta, condições e ações.
 - [x] Permitir simular regras na competência antes de salvar e aplicá-las sem sobrescrever classificações manuais ou transferências confirmadas.
 - [x] Implementar comparativo de 3, 6 e 12 meses com métricas selecionáveis, variação, gráfico interativo e impacto por categoria.
+- [x] Exibir a composição auditável de entradas menos saídas do resultado operacional.
+- [x] Criar indicadores personalizados multi-tenant com fórmulas estruturadas e prévia por competência.
+- [x] Versionar definições e congelar a memória de cálculo dos indicadores no fechamento mensal.
+- [x] Permitir detalhar os lançamentos de cada componente diretamente pela visão geral.
+- [x] Exportar indicadores personalizados e sua composição no Excel financeiro.
 - [ ] Homologar o adapter com um CSV PayPal real.
 - [ ] Implementar IA opcional para classificação, recorrência e anomalias.
 - [ ] Implementar escrita assistida no Olist somente após homologação contábil e de idempotência.
@@ -249,7 +254,7 @@ Ponto de atencao:
 
 Migration mais recente deste bloco:
 
-- `supabase/migrations/0058_product_search_aliases.sql`
+- `supabase/migrations/0059_financial_custom_indicators.sql`
 
 1. `supabase/migrations/0001_multitenant_core.sql`
 2. `supabase/migrations/0002_rls_policies.sql`

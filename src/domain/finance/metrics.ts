@@ -15,7 +15,10 @@ export function calculateFinancialMetrics(transactions: FinancialMetricTransacti
   const external = transactions.filter((item) => item.includeExternalCashFlow && !item.internalTransferConfirmed);
   const externalInflowsCents = sum(external.filter((item) => item.amountCents > 0).map((item) => item.amountCents));
   const externalOutflowsCents = Math.abs(sum(external.filter((item) => item.amountCents < 0).map((item) => item.amountCents)));
-  const operatingResultCents = sum(transactions.filter((item) => item.includeOperatingResult).map((item) => item.amountCents));
+  const operating = transactions.filter((item) => item.includeOperatingResult);
+  const operationalInflowsCents = sum(operating.filter((item) => item.amountCents > 0).map((item) => item.amountCents));
+  const operationalOutflowsCents = Math.abs(sum(operating.filter((item) => item.amountCents < 0).map((item) => item.amountCents)));
+  const operatingResultCents = operationalInflowsCents - operationalOutflowsCents;
   const operationalRevenueCents = sum(transactions.filter((item) => item.nature === "operating_revenue").map((item) => Math.max(0, item.amountCents)));
   const operationalExpenseCents = Math.abs(sum(transactions.filter((item) => item.nature === "operating_expense").map((item) => Math.min(0, item.amountCents))));
   return {
@@ -23,6 +26,8 @@ export function calculateFinancialMetrics(transactions: FinancialMetricTransacti
     externalInflowsCents,
     externalOutflowsCents,
     externalNetCashFlowCents: externalInflowsCents - externalOutflowsCents,
+    operationalInflowsCents,
+    operationalOutflowsCents,
     operationalRevenueCents,
     operationalExpenseCents,
     operatingResultCents,
@@ -36,4 +41,3 @@ export function calculateFinancialMetrics(transactions: FinancialMetricTransacti
 }
 
 function sum(values: number[]) { return values.reduce((total, value) => total + value, 0); }
-

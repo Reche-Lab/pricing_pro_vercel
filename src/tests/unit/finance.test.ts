@@ -51,6 +51,9 @@ describe("financial metrics and transfers", () => {
     expect(metrics.externalOutflowsCents).toBe(5000);
     expect(metrics.externalNetCashFlowCents).toBe(20000);
     expect(metrics.internalTransfersExcludedCents).toBe(10000);
+    expect(metrics.operationalInflowsCents).toBe(25000);
+    expect(metrics.operationalOutflowsCents).toBe(5000);
+    expect(metrics.operatingResultCents).toBe(20000);
   });
 
   it("suggests equal transfers across company accounts and penalizes personal accounts", () => {

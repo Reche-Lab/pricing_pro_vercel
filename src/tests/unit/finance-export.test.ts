@@ -10,6 +10,7 @@ describe("financial Excel export", () => {
 
     expect(workbook.worksheets.map((sheet) => sheet.name)).toContain("Lancamentos");
     expect(workbook.worksheets.map((sheet) => sheet.name)).toContain("Lancamentos_Resumo");
+    expect(workbook.worksheets.map((sheet) => sheet.name)).toContain("Indicadores");
 
     const sheet = workbook.getWorksheet("Lancamentos");
     expect(sheet).toBeDefined();
@@ -64,6 +65,8 @@ function exportFixture() {
       externalNetCashFlowCents: -18142,
       operationalRevenueCents: 0,
       operationalExpenseCents: 18142,
+      operationalInflowsCents: 0,
+      operationalOutflowsCents: 18142,
       operatingResultCents: -18142,
       debtPaymentsCents: 0,
       refundsNetCents: 0,
@@ -71,6 +74,13 @@ function exportFixture() {
       internalTransfersExcludedCents: 0
     },
     imports: [],
+    indicators: [{
+      id: "indicator-id", name: "Base de comissão", description: "Vendas menos fretes", unit: "currency",
+      sort_order: 10, active: true, version_id: "version-id", version: 1, effective_from: "2026-07-01",
+      formula: { components: [] }, value: 100000, frozen_at: null, is_frozen: false,
+      component_results: [{ componentId: "sales", label: "Vendas", operation: "add", aggregation: "sum",
+        matchedCount: 1, value: 100000, contribution: 100000, transactionIds: [] }]
+    }],
     rules: [],
     rawRows: [],
     transactions: [{
