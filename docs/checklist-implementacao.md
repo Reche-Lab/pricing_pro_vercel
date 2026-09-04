@@ -168,6 +168,8 @@ Status atualizado durante a refatoracao inicial.
 - [x] Pré-visualizar as folhas A4 antes do download.
 - [x] Permitir envio público de arte pronta pelo item do orçamento e pelo estúdio, sem depender do assistente criativo.
 - [x] Editar artes de forma não destrutiva com pincel, conta-gotas, borracha, preenchimento por tolerância, seleção, ajustes, comparação, sangria externa e autosave.
+- [x] Agrupar formatos vetoriais, mover e redimensionar o conjunto proporcionalmente e controlar sua ordem de camadas.
+- [x] Permitir múltiplos formatos sobrepostos, contorno até preenchimento total e preenchimento rápido do fundo externo com a cor ativa.
 - [x] Redimensionar a arte principal e estender fundos com uma camada duplicada ajustável em escala, milímetros e suavização.
 - [x] Unificar as guias de sangria, corte e segurança entre retoque e enquadramento, exibindo suas medidas físicas.
 - [x] Permitir retoques sucessivos sem consumir o limite de dez artes independentes por item.
@@ -188,7 +190,7 @@ Resultado:
 
 - lint passou;
 - typecheck passou;
-- testes passaram: 167 testes em 40 arquivos;
+- testes passaram: 183 testes em 43 arquivos;
 - build Next passou.
 
 ## Acoes Manuais Pendentes

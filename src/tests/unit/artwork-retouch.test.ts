@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateCenteredLayerBounds, createRetouchedArtworkFileName, createRetouchShape, findContiguousColorRegion, moveRetouchShape, normalizeSelection, resizeRetouchShape, sampledRgbToHex } from "@/domain/artwork/retouch";
+import { assignRetouchShapeGroup, calculateCenteredLayerBounds, calculateRetouchShapeGroupBounds, createRetouchedArtworkFileName, createRetouchShape, findContiguousColorRegion, moveRetouchLayers, moveRetouchShape, moveRetouchShapeGroup, normalizeSelection, resizeRetouchShape, resizeRetouchShapeGroup, sampledRgbToHex, ungroupRetouchShapes } from "@/domain/artwork/retouch";
 import { retouchDraftSchema } from "@/services/artwork/retouch-draft";
 import { createRetouchWorkspace } from "@/components/quotes/ArtworkRetouchEditor";
 
@@ -92,5 +92,44 @@ describe("artwork retouch", () => {
     };
     expect(retouchDraftSchema.safeParse(draft).success).toBe(true);
     expect(retouchDraftSchema.safeParse({ ...draft, composition: { ...draft.composition, foregroundScalePercent: 500 } }).success).toBe(false);
+  });
+
+  it("groups, moves and proportionally scales multiple editable shapes", () => {
+    const first = createRetouchShape({ shapeType: "circle", start: { x: 10, y: 10 }, end: { x: 50, y: 50 }, color: "#ffffff", width: 4 });
+    const second = createRetouchShape({ shapeType: "rectangle", start: { x: 70, y: 20 }, end: { x: 110, y: 50 }, color: "#ff0000", width: 6 });
+    const grouped = assignRetouchShapeGroup([first, second], [0, 1], "123e4567-e89b-42d3-a456-426614174000");
+
+    expect(calculateRetouchShapeGroupBounds(grouped, [0, 1])).toEqual({ x: 10, y: 10, width: 100, height: 40 });
+    expect(calculateRetouchShapeGroupBounds(moveRetouchShapeGroup(grouped, [0, 1], 5, 10), [0, 1]))
+      .toEqual({ x: 15, y: 20, width: 100, height: 40 });
+    const scaled = resizeRetouchShapeGroup(grouped, [0, 1], "se", { x: 210, y: 90 });
+    expect(calculateRetouchShapeGroupBounds(scaled, [0, 1])).toEqual({ x: 10, y: 10, width: 200, height: 80 });
+    expect(scaled[0].kind === "shape" ? scaled[0].width : 0).toBe(8);
+    expect(ungroupRetouchShapes(grouped, "123e4567-e89b-42d3-a456-426614174000").every((operation) => operation.kind !== "shape" || !operation.groupId)).toBe(true);
+  });
+
+  it("moves one or several selected layers without changing their internal order", () => {
+    const entries = ["a", "b", "c", "d"].map((color, index) => createRetouchShape({
+      shapeType: "circle", start: { x: index * 10, y: 0 }, end: { x: index * 10 + 5, y: 5 },
+      color: `#${color.charCodeAt(0).toString(16).padStart(2, "0")}0000`, width: 2
+    }));
+    expect(moveRetouchLayers(entries, [1, 2], "front").map((entry) => entry.kind === "shape" ? entry.bounds.x : -1))
+      .toEqual([0, 30, 10, 20]);
+    expect(moveRetouchLayers(entries, [1], "forward").map((entry) => entry.kind === "shape" ? entry.bounds.x : -1))
+      .toEqual([0, 20, 10, 30]);
+    expect(moveRetouchLayers(entries, [2], "backward").map((entry) => entry.kind === "shape" ? entry.bounds.x : -1))
+      .toEqual([0, 20, 10, 30]);
+  });
+
+  it("persists grouped shapes, full-width outlines and outside background fills", () => {
+    const draft = {
+      version: 1,
+      operations: [
+        { kind: "shape", shapeType: "circle", bounds: { x: 10, y: 10, width: 400, height: 400 }, color: "#ffffff", width: 400, groupId: "123e4567-e89b-42d3-a456-426614174000" },
+        { kind: "outside_fill", color: "#102030", innerBounds: { x: 50, y: 50, width: 300, height: 300 } }
+      ],
+      adjustments: { brightness: 100, contrast: 100, saturation: 100, sharpness: 0 }
+    };
+    expect(retouchDraftSchema.safeParse(draft).success).toBe(true);
   });
 });

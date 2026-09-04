@@ -41,9 +41,16 @@ export type RetouchShape = {
   bounds: RetouchSelection;
   color: string;
   width: number;
+  groupId?: string | null;
   selection?: RetouchSelection | null;
 };
-export type RetouchOperation = RetouchStroke | RetouchFill | RetouchShape;
+export type RetouchOutsideFill = {
+  kind: "outside_fill";
+  color: string;
+  innerBounds: RetouchSelection;
+};
+export type RetouchOperation = RetouchStroke | RetouchFill | RetouchShape | RetouchOutsideFill;
+export type RetouchLayerDirection = "front" | "forward" | "backward" | "back";
 export type RetouchAdjustments = { brightness: number; contrast: number; saturation: number; sharpness: number };
 export type RetouchComposition = {
   foregroundScalePercent: number;
@@ -179,6 +186,162 @@ export function resizeRetouchShape(shape: RetouchShape, handle: RetouchShapeHand
   }[handle];
   const resized = createRetouchShape({ shapeType: shape.shapeType, start: opposite, end: point, color: shape.color, width: shape.width, selection: shape.selection });
   return { ...resized, bounds: { ...resized.bounds, width: Math.max(2, resized.bounds.width), height: Math.max(2, resized.bounds.height) } };
+}
+
+export function retouchShapeGroupIndices(operations: RetouchOperation[], selectedIndex: number): number[] {
+  const selected = operations[selectedIndex];
+  if (selected?.kind !== "shape") return [];
+  if (!selected.groupId) return [selectedIndex];
+  return operations.flatMap((operation, index) => operation.kind === "shape" && operation.groupId === selected.groupId ? [index] : []);
+}
+
+export function calculateRetouchShapeGroupBounds(
+  operations: RetouchOperation[],
+  indices: number[]
+): RetouchSelection | null {
+  const shapes = indices
+    .map((index) => operations[index])
+    .filter((operation): operation is RetouchShape => operation?.kind === "shape")
+    .map((shape) => normalizeSelection(shape.bounds));
+  if (!shapes.length) return null;
+  const left = Math.min(...shapes.map((bounds) => bounds.x));
+  const top = Math.min(...shapes.map((bounds) => bounds.y));
+  const right = Math.max(...shapes.map((bounds) => bounds.x + bounds.width));
+  const bottom = Math.max(...shapes.map((bounds) => bounds.y + bounds.height));
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+export function assignRetouchShapeGroup(
+  operations: RetouchOperation[],
+  indices: number[],
+  groupId: string
+): RetouchOperation[] {
+  const selected = new Set(indices);
+  return operations.map((operation, index) => operation.kind === "shape" && selected.has(index)
+    ? { ...operation, groupId }
+    : operation);
+}
+
+export function ungroupRetouchShapes(operations: RetouchOperation[], groupId: string): RetouchOperation[] {
+  return operations.map((operation) => operation.kind === "shape" && operation.groupId === groupId
+    ? { ...operation, groupId: null }
+    : operation);
+}
+
+export function moveRetouchShapeGroup(
+  operations: RetouchOperation[],
+  indices: number[],
+  deltaX: number,
+  deltaY: number
+): RetouchOperation[] {
+  const selected = new Set(indices);
+  return operations.map((operation, index) => operation.kind === "shape" && selected.has(index)
+    ? moveRetouchShape(operation, deltaX, deltaY)
+    : operation);
+}
+
+export function resizeRetouchShapeGroup(
+  operations: RetouchOperation[],
+  indices: number[],
+  handle: RetouchShapeHandle,
+  point: RetouchPoint
+): RetouchOperation[] {
+  if (indices.length === 1) {
+    const index = indices[0];
+    const operation = operations[index];
+    return operation?.kind === "shape" ? replaceAt(operations, index, resizeRetouchShape(operation, handle, point)) : operations;
+  }
+  const source = calculateRetouchShapeGroupBounds(operations, indices);
+  if (!source || source.width <= 0 || source.height <= 0) return operations;
+  const target = proportionalResizeBounds(source, handle, point);
+  return scaleRetouchShapeGroupToBounds(operations, indices, source, target);
+}
+
+export function scaleRetouchShapeGroupToBounds(
+  operations: RetouchOperation[],
+  indices: number[],
+  sourceBounds: RetouchSelection,
+  targetBounds: RetouchSelection
+): RetouchOperation[] {
+  const source = normalizeSelection(sourceBounds);
+  const target = normalizeSelection(targetBounds);
+  if (source.width <= 0 || source.height <= 0) return operations;
+  const scaleX = target.width / source.width;
+  const scaleY = target.height / source.height;
+  const strokeScale = Math.min(Math.abs(scaleX), Math.abs(scaleY));
+  const selected = new Set(indices);
+  return operations.map((operation, index) => {
+    if (operation.kind !== "shape" || !selected.has(index)) return operation;
+    const bounds = normalizeSelection(operation.bounds);
+    return {
+      ...operation,
+      width: Math.max(1, operation.width * strokeScale),
+      bounds: {
+        x: target.x + (bounds.x - source.x) * scaleX,
+        y: target.y + (bounds.y - source.y) * scaleY,
+        width: Math.max(2, bounds.width * scaleX),
+        height: Math.max(2, bounds.height * scaleY)
+      }
+    };
+  });
+}
+
+export function moveRetouchLayers(
+  operations: RetouchOperation[],
+  indices: number[],
+  direction: RetouchLayerDirection
+): RetouchOperation[] {
+  const selected = new Set(indices);
+  if (!selected.size) return operations;
+  if (direction === "front" || direction === "back") {
+    const moving = operations.filter((_, index) => selected.has(index));
+    const remaining = operations.filter((_, index) => !selected.has(index));
+    return direction === "front" ? [...remaining, ...moving] : [...moving, ...remaining];
+  }
+
+  const next = [...operations];
+  if (direction === "forward") {
+    for (let index = next.length - 2; index >= 0; index -= 1) {
+      if (selected.has(index) && !selected.has(index + 1)) {
+        [next[index], next[index + 1]] = [next[index + 1], next[index]];
+        selected.delete(index); selected.add(index + 1);
+      }
+    }
+  } else {
+    for (let index = 1; index < next.length; index += 1) {
+      if (selected.has(index) && !selected.has(index - 1)) {
+        [next[index], next[index - 1]] = [next[index - 1], next[index]];
+        selected.delete(index); selected.add(index - 1);
+      }
+    }
+  }
+  return next;
+}
+
+function proportionalResizeBounds(bounds: RetouchSelection, handle: RetouchShapeHandle, point: RetouchPoint) {
+  const opposite = {
+    nw: { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
+    ne: { x: bounds.x, y: bounds.y + bounds.height },
+    se: { x: bounds.x, y: bounds.y },
+    sw: { x: bounds.x + bounds.width, y: bounds.y }
+  }[handle];
+  const scale = Math.max(
+    Math.abs(point.x - opposite.x) / Math.max(1, bounds.width),
+    Math.abs(point.y - opposite.y) / Math.max(1, bounds.height),
+    2 / Math.max(1, Math.min(bounds.width, bounds.height))
+  );
+  const width = Math.max(2, bounds.width * scale);
+  const height = Math.max(2, bounds.height * scale);
+  return {
+    x: handle === "nw" || handle === "sw" ? opposite.x - width : opposite.x,
+    y: handle === "nw" || handle === "ne" ? opposite.y - height : opposite.y,
+    width,
+    height
+  };
+}
+
+function replaceAt(operations: RetouchOperation[], index: number, operation: RetouchOperation) {
+  return operations.map((current, currentIndex) => currentIndex === index ? operation : current);
 }
 
 function colorWithinTolerance(pixels: Uint8ClampedArray, offset: number, target: number[], tolerance: number) {
