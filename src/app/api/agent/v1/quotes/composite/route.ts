@@ -60,6 +60,7 @@ const compositeSchema = z.object({
     whatsappText: z.boolean().default(true)
   }).optional(),
   validDays: z.number().int().min(1).max(90).default(7),
+  includePixPayment: z.boolean().default(false),
   notes: z.string().trim().max(2000).optional().nullable()
 });
 
@@ -107,6 +108,7 @@ export async function POST(request: Request) {
         customerCity: body.customer.city,
         customerState: body.customer.state,
         shippingTotal: shipping?.selected.price ?? 0,
+        includePixPayment: body.includePixPayment,
         validDays: body.validDays,
         notes: [body.notes, body.externalConversationId ? `Conversa Lia Flow: ${body.externalConversationId}` : null]
           .filter(Boolean)

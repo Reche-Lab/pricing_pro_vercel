@@ -27,6 +27,20 @@ describe("quote PDF", () => {
     expect(Buffer.from(pdf.subarray(0, 4)).toString("ascii")).toBe("%PDF");
     expect(pdf.byteLength).toBeGreaterThan(500);
   });
+
+  it("generates the customer PDF when a Pix payment snapshot is included", async () => {
+    const input = pdfInput("");
+    input.quote.pix_payment_snapshot = {
+      keyType: "email",
+      key: "pagamentos@example.com",
+      beneficiaryName: "Ground Shop"
+    };
+
+    const pdf = await generateQuotePdf(input);
+
+    expect(Buffer.from(pdf.subarray(0, 4)).toString("ascii")).toBe("%PDF");
+    expect(pdf.byteLength).toBeGreaterThan(500);
+  });
 });
 
 function pdfInput(logoUrl: string, artworkDataUrl?: string): {

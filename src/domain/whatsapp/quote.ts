@@ -1,10 +1,12 @@
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 import { quoteDiscountLabel } from "@/domain/quotes/discount";
+import { parsePixPaymentSnapshot, pixKeyTypeLabel } from "@/domain/payments/pix";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 export function buildQuoteWhatsAppText(input: { quote: QuoteDetail; items: QuoteItemRow[] }): string {
   const { quote, items } = input;
+  const pixPayment = parsePixPaymentSnapshot(quote.pix_payment_snapshot);
   const lines = [
     "*ORCAMENTO*",
     quote.customer_name ? `*Cliente:* ${quote.customer_name}` : null,
@@ -29,6 +31,10 @@ export function buildQuoteWhatsAppText(input: { quote: QuoteDetail; items: Quote
     Number(quote.discount_total) > 0 && quote.discount_reason ? `*Motivo do desconto:* ${quote.discount_reason}` : null,
     `*Total:* ${brl.format(Number(quote.grand_total))}`,
     quote.valid_until ? `*Validade:* ${formatDate(quote.valid_until)}` : null,
+    pixPayment ? "" : null,
+    pixPayment ? "*PAGAMENTO VIA PIX*" : null,
+    pixPayment ? `*Chave ${pixKeyTypeLabel(pixPayment.keyType)}:* ${pixPayment.key}` : null,
+    pixPayment?.beneficiaryName ? `*Favorecido:* ${pixPayment.beneficiaryName}` : null,
     "",
     "Valores sujeitos a confirmacao ate o aceite da proposta."
   ];

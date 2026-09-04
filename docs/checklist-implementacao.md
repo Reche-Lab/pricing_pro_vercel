@@ -220,6 +220,10 @@ Resultado:
 - [x] Versionar definições e congelar a memória de cálculo dos indicadores no fechamento mensal.
 - [x] Permitir detalhar os lançamentos de cada componente diretamente pela visão geral.
 - [x] Exportar indicadores personalizados e sua composição no Excel financeiro.
+- [x] Cadastrar e validar chave Pix por tenant em Configurações > Geral.
+- [x] Permitir incluir ou remover a chave Pix por orçamento com snapshot histórico e auditoria.
+- [x] Exibir a chave Pix selecionada no PDF, texto para WhatsApp e link público com ação de copiar.
+- [x] Permitir que o precificador e a API de agentes criem propostas com Pix opcional.
 - [ ] Homologar o adapter com um CSV PayPal real.
 - [ ] Implementar IA opcional para classificação, recorrência e anomalias.
 - [ ] Implementar escrita assistida no Olist somente após homologação contábil e de idempotência.
@@ -255,7 +259,7 @@ Ponto de atencao:
 
 Migration mais recente deste bloco:
 
-- `supabase/migrations/0059_financial_custom_indicators.sql`
+- `supabase/migrations/0060_tenant_pix_quote_payment.sql`
 
 1. `supabase/migrations/0001_multitenant_core.sql`
 2. `supabase/migrations/0002_rls_policies.sql`

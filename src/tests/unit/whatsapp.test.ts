@@ -67,4 +67,31 @@ describe("quote whatsapp text", () => {
     expect(text).toContain("*Motivo do desconto:* Cliente recorrente");
     expect(text).toContain("*Total:* R$ 200,00");
   });
+
+  it("includes the Pix snapshot only when selected for the quote", () => {
+    const quote = {
+      id: "quote-id", status: "draft" as const, valid_until: null,
+      subtotal: "200", shipping_total: "0", discount_total: "0",
+      grand_total: "200", margin_amount: "80", margin_percent: "40", notes: null,
+      created_at: "2026-06-26", customer_id: null, customer_name: "Cliente",
+      customer_document: null, customer_email: null, customer_phone: null,
+      customer_postal_code: null, customer_address_line: null, customer_address_number: null,
+      customer_address_complement: null, customer_district: null, customer_city: null,
+      customer_state: null, customer_external_olist_id: null, external_crm_id: null, created_by_name: null,
+      pix_payment_snapshot: {
+        keyType: "email" as const,
+        key: "pagamentos@example.com",
+        beneficiaryName: "Loja Exemplo"
+      }
+    };
+    const item = { id: "item", description: "Produto", quantity: 1, unit_price: "200", total_price: "200" };
+
+    const withPix = buildQuoteWhatsAppText({ quote, items: [item] });
+    expect(withPix).toContain("*PAGAMENTO VIA PIX*");
+    expect(withPix).toContain("*Chave E-mail:* pagamentos@example.com");
+    expect(withPix).toContain("*Favorecido:* Loja Exemplo");
+
+    const withoutPix = buildQuoteWhatsAppText({ quote: { ...quote, pix_payment_snapshot: null }, items: [item] });
+    expect(withoutPix).not.toContain("PAGAMENTO VIA PIX");
+  });
 });

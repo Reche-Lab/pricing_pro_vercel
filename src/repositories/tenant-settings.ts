@@ -1,4 +1,5 @@
 import { withTenantContext } from "@/lib/db/client";
+import type { PixKeyType } from "@/domain/payments/pix";
 
 export type TenantShippingProfile = {
   id: string;
@@ -15,6 +16,9 @@ export type TenantShippingProfile = {
   district: string | null;
   city: string | null;
   state: string | null;
+  pix_key_type?: PixKeyType | null;
+  pix_key?: string | null;
+  pix_beneficiary_name?: string | null;
 };
 
 export type UpdateTenantShippingProfileInput = {
@@ -30,6 +34,9 @@ export type UpdateTenantShippingProfileInput = {
   district?: string | null;
   city?: string | null;
   state?: string | null;
+  pixKeyType?: PixKeyType | null;
+  pixKey?: string | null;
+  pixBeneficiaryName?: string | null;
 };
 
 export async function getTenantShippingProfile(
@@ -53,7 +60,10 @@ export async function getTenantShippingProfile(
           address_complement,
           district,
           city,
-          state
+          state,
+          pix_key_type,
+          pix_key,
+          pix_beneficiary_name
         from tenants
         where id = $1
         limit 1
@@ -86,6 +96,9 @@ export async function updateTenantShippingProfile(
             district = $11,
             city = $12,
             state = $13,
+            pix_key_type = $14,
+            pix_key = $15,
+            pix_beneficiary_name = $16,
             updated_at = now()
         where id = $1
         returning
@@ -102,7 +115,10 @@ export async function updateTenantShippingProfile(
           address_complement,
           district,
           city,
-          state
+          state,
+          pix_key_type,
+          pix_key,
+          pix_beneficiary_name
       `,
       [
         tenantId,
@@ -117,7 +133,10 @@ export async function updateTenantShippingProfile(
         clean(input.addressComplement),
         clean(input.district),
         clean(input.city),
-        clean(input.state)?.toUpperCase() ?? null
+        clean(input.state)?.toUpperCase() ?? null,
+        input.pixKeyType ?? null,
+        clean(input.pixKey),
+        clean(input.pixBeneficiaryName)
       ]
     );
 

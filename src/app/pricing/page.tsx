@@ -9,6 +9,7 @@ import { listProductVariants } from "@/repositories/products";
 import { getTenantShippingProfile } from "@/repositories/tenant-settings";
 import { getIntegrationConnection } from "@/repositories/integrations";
 import { listOlistPaymentOptions } from "@/repositories/olist-payment-options";
+import { pixKeyTypeLabel } from "@/domain/payments/pix";
 
 export default async function PricingPage() {
   const session = await getCurrentSession();
@@ -64,6 +65,10 @@ export default async function PricingPage() {
           name: option.name,
           groupName: option.group_name
         }))}
+        pixPaymentConfigured={Boolean(tenant?.pix_key_type && tenant.pix_key)}
+        pixPaymentDescription={tenant?.pix_key_type
+          ? `${pixKeyTypeLabel(tenant.pix_key_type)}${tenant.pix_beneficiary_name ? ` · ${tenant.pix_beneficiary_name}` : ""}`
+          : ""}
         variants={mappedVariants}
         platforms={mapPlatforms(platforms)}
       />

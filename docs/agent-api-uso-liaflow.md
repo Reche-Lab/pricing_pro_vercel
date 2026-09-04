@@ -274,6 +274,7 @@ Entrada:
   },
   "platformSlug": "direct",
   "pricingRule": "per_item",
+  "includePixPayment": true,
   "items": [
     {
       "productSku": "BOTTON-25",
@@ -303,6 +304,8 @@ Entrada:
   }
 }
 ```
+
+`includePixPayment` é opcional e inicia como `false`. Use `true` somente após o cliente escolher Pix; o tenant precisa ter uma chave válida cadastrada em `Configurações > Geral`. A API grava uma cópia da chave no orçamento para manter PDFs, texto de WhatsApp e link público consistentes mesmo se a configuração mudar depois.
 
 Resposta esperada:
 

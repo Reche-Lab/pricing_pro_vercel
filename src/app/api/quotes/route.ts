@@ -89,6 +89,7 @@ const quoteSchema = z.object({
       })
     ).min(1).max(24)
   }).optional().nullable(),
+  includePixPayment: z.boolean().optional(),
   notes: z.string().trim().max(2000).optional().nullable()
 });
 

@@ -3,6 +3,7 @@ import { PublicQuoteDecision } from "@/components/quotes/PublicQuoteDecision";
 import { PublicArtworkStudio } from "@/components/quotes/PublicArtworkStudio";
 import { PublicArtworkShortcut } from "@/components/quotes/PublicArtworkShortcut";
 import { PublicQuoteExpiryCountdown } from "@/components/quotes/PublicQuoteExpiryCountdown";
+import { PixPaymentCard } from "@/components/quotes/PixPaymentCard";
 import { getPublicArtworkReviewProgress } from "@/domain/quotes/public-artwork-review";
 import { quoteDiscountLabel } from "@/domain/quotes/discount";
 import { getPublicQuoteByToken } from "@/repositories/quotes";
@@ -150,6 +151,10 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
                 <Detail label="Validade" value={detail.quote.valid_until ? formatDate(detail.quote.valid_until) : "-"} />
               </dl>
             </section>
+
+            {detail.quote.pix_payment_snapshot ? (
+              <PixPaymentCard snapshot={detail.quote.pix_payment_snapshot} />
+            ) : null}
 
             <PublicQuoteDecision
               artworkReviewPending={artworkReviewPending}

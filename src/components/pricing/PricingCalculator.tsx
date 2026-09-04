@@ -55,6 +55,8 @@ type PricingCalculatorProps = {
     name: string;
   };
   olistPaymentOptions?: OlistPaymentOption[];
+  pixPaymentConfigured?: boolean;
+  pixPaymentDescription?: string;
   variants: DemoProductVariant[];
   platforms: Record<string, PricingPlatformOption>;
   demoMode?: boolean;
@@ -157,6 +159,8 @@ export function PricingCalculator({
   defaultOriginPostalCode = "",
   defaultPaymentCategory = { externalId: "", name: "" },
   olistPaymentOptions = [],
+  pixPaymentConfigured = false,
+  pixPaymentDescription = "",
   variants,
   platforms,
   demoMode = false,
@@ -238,6 +242,7 @@ export function PricingCalculator({
   const [paymentNotes, setPaymentNotes] = useState("");
   const [paymentSyncState, setPaymentSyncState] = useState<"idle" | "syncing" | "error">("idle");
   const [paymentMessage, setPaymentMessage] = useState("");
+  const [includePixPayment, setIncludePixPayment] = useState(false);
 
   useEffect(() => {
     if (variant) {
@@ -799,6 +804,7 @@ export function PricingCalculator({
         }),
         validDays: 7,
         paymentTerm,
+        includePixPayment,
         notes: buildQuickQuoteNotes({
           destinationAddress: effectiveDestinationAddress,
           destinationPostalCode: effectiveDestinationPostalCode,
@@ -971,6 +977,7 @@ export function PricingCalculator({
         }),
         validDays: 7,
         paymentTerm,
+        includePixPayment,
         notes: [draftNotes, buildQuickQuoteNotes({
           destinationAddress: effectiveDestinationAddress,
           destinationPostalCode: effectiveDestinationPostalCode,
@@ -1215,6 +1222,27 @@ export function PricingCalculator({
                 {draftItems.length}
               </span>
             </button>
+            {pixPaymentConfigured ? (
+              <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2 text-sm text-emerald-100 sm:col-span-2">
+                <input
+                  checked={includePixPayment}
+                  className="h-4 w-4 shrink-0 accent-emerald-400"
+                  type="checkbox"
+                  onChange={(event) => setIncludePixPayment(event.currentTarget.checked)}
+                />
+                <span className="min-w-0">
+                  <span className="block font-medium">Incluir chave Pix no orçamento</span>
+                  <span className="block truncate text-xs text-zinc-500">{pixPaymentDescription || "Chave configurada em Geral"}</span>
+                </span>
+              </label>
+            ) : (
+              <a
+                className="focus-ring flex min-h-10 items-center justify-center rounded-md border border-zinc-800 px-3 py-2 text-xs text-zinc-500 hover:border-zinc-700 hover:text-zinc-300 sm:col-span-2"
+                href="/settings?section=general"
+              >
+                Cadastre uma chave Pix em Configurações para incluí-la nos orçamentos
+              </a>
+            )}
           </div>
         </div>
 
@@ -1924,8 +1952,10 @@ export function PricingCalculator({
       draftState={draftState}
       draftText={draftText}
       includeShipping={includeShipping}
+      includePixPayment={includePixPayment}
       invalidCustomerFields={customerHasValidationErrors}
       onClose={() => setDraftOpen(false)}
+      onIncludePixPaymentChange={setIncludePixPayment}
       onCopyWhatsApp={copyDraftWhatsAppText}
       onCreateQuote={createDraftOnly}
       onGeneratePdf={generateDraftPdf}
@@ -1946,6 +1976,8 @@ export function PricingCalculator({
       paymentNotes={paymentNotes}
       paymentSelected={paymentSelected}
       paymentSyncState={paymentSyncState}
+      pixPaymentConfigured={pixPaymentConfigured}
+      pixPaymentDescription={pixPaymentDescription}
       showPaymentInstallments={showPaymentInstallments}
       onPaymentFirstDueDaysChange={setPaymentFirstDueDays}
       onPaymentInstallmentsCountChange={setPaymentInstallmentsCount}
@@ -1976,8 +2008,10 @@ function QuoteDraftDrawer({
   draftState,
   draftText,
   includeShipping,
+  includePixPayment,
   invalidCustomerFields,
   onClose,
+  onIncludePixPaymentChange,
   onCopyWhatsApp,
   onCreateQuote,
   onGeneratePdf,
@@ -1998,6 +2032,8 @@ function QuoteDraftDrawer({
   paymentNotes,
   paymentSelected,
   paymentSyncState,
+  pixPaymentConfigured,
+  pixPaymentDescription,
   showPaymentInstallments,
   onPaymentFirstDueDaysChange,
   onPaymentInstallmentsCountChange,
@@ -2016,8 +2052,10 @@ function QuoteDraftDrawer({
   draftState: "idle" | "creating" | "creating_pdf" | "copying_text" | "copied" | "error";
   draftText: string;
   includeShipping: boolean;
+  includePixPayment: boolean;
   invalidCustomerFields: boolean;
   onClose: () => void;
+  onIncludePixPaymentChange: (value: boolean) => void;
   onCopyWhatsApp: () => void;
   onCreateQuote: () => void;
   onGeneratePdf: () => void;
@@ -2038,6 +2076,8 @@ function QuoteDraftDrawer({
   paymentNotes: string;
   paymentSelected: boolean;
   paymentSyncState: "idle" | "syncing" | "error";
+  pixPaymentConfigured: boolean;
+  pixPaymentDescription: string;
   showPaymentInstallments: boolean;
   onPaymentFirstDueDaysChange: (value: number) => void;
   onPaymentInstallmentsCountChange: (value: number) => void;
@@ -2085,6 +2125,29 @@ function QuoteDraftDrawer({
 
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 [overscroll-behavior:contain] sm:px-4 sm:py-4">
           <div className="grid gap-3">
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/45 p-3">
+              {pixPaymentConfigured ? (
+                <label className="flex cursor-pointer items-start gap-3 text-sm text-zinc-300">
+                  <input
+                    checked={includePixPayment}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-400"
+                    type="checkbox"
+                    onChange={(event) => onIncludePixPaymentChange(event.currentTarget.checked)}
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-medium text-zinc-100">Incluir chave Pix neste orçamento</span>
+                    <span className="mt-1 block break-words text-xs text-zinc-500">
+                      {pixPaymentDescription || "A chave configurada no tenant será exibida ao cliente."}
+                    </span>
+                  </span>
+                </label>
+              ) : (
+                <p className="text-xs leading-5 text-zinc-500">
+                  Para oferecer pagamento por Pix, cadastre uma chave em Configurações &gt; Geral.
+                </p>
+              )}
+            </div>
+
             <details className="rounded-lg border border-zinc-800 bg-zinc-900/45">
               <summary className="focus-ring flex min-w-0 cursor-pointer list-none items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-900">
                 <span className="min-w-0 break-words">

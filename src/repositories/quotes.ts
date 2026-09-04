@@ -19,6 +19,7 @@ import {
 } from "@/domain/quotes/public-security";
 import type { QuoteStatus } from "@/domain/quotes/types";
 import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
+import { buildPixPaymentSnapshot, type PixKeyType, type PixPaymentSnapshot } from "@/domain/payments/pix";
 import { getPool, withTenantContext } from "@/lib/db/client";
 import { decryptTenantSecret, encryptTenantSecret } from "@/lib/crypto/secrets";
 import type { QuotePaymentTermInput } from "@/repositories/olist-payment-options";
@@ -87,6 +88,7 @@ export type QuoteDetail = {
   edit_reopened_by_name?: string | null;
   edit_reopened_reason?: string | null;
   edit_relocked_at?: string | null;
+  pix_payment_snapshot?: PixPaymentSnapshot | null;
 };
 
 export type QuoteItemRow = {
@@ -229,6 +231,7 @@ export type CreateQuoteInput = {
   }>;
   validDays?: number;
   paymentTerm?: QuotePaymentTermInput | null;
+  includePixPayment?: boolean;
   notes?: string | null;
 };
 
@@ -357,6 +360,7 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           q.public_accepted_at,
           q.public_rejected_at,
           q.customer_decision_note
+          ,q.pix_payment_snapshot
           ,to_jsonb(q)->>'edit_reopened_at' as edit_reopened_at
           ,to_jsonb(q)->>'edit_reopened_by' as edit_reopened_by
           ,reopen_user.name as edit_reopened_by_name
@@ -670,6 +674,7 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           q.public_accepted_at::text as public_accepted_at,
           q.public_rejected_at::text as public_rejected_at,
           q.customer_decision_note,
+          q.pix_payment_snapshot,
           t.name,
           t.logo_url,
           t.company_document,
@@ -1229,6 +1234,7 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
     const validDays = Math.max(1, Math.min(90, input.validDays ?? 7));
     const shippingTotal = Math.max(0, input.shippingTotal ?? 0);
     const grandTotal = calculation.subtotal + shippingTotal;
+    const pixPaymentSnapshot = await resolveTenantPixPaymentSnapshot(client, tenantId, input.includePixPayment);
     const quoteResult = await client.query<{ id: string }>(
       `
         insert into quotes (
@@ -1243,7 +1249,8 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
           grand_total,
           margin_amount,
           margin_percent,
-          notes
+          notes,
+          pix_payment_snapshot
         )
         values (
           $1,
@@ -1257,7 +1264,8 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
           $7,
           $8,
           $9,
-          $10
+          $10,
+          $11
         )
         returning id
       `,
@@ -1271,7 +1279,8 @@ export async function createQuote(userId: string, tenantId: string, input: Creat
         grandTotal,
         calculation.profit,
         calculation.marginPercent,
-        input.notes || null
+        input.notes || null,
+        pixPaymentSnapshot ? JSON.stringify(pixPaymentSnapshot) : null
       ]
     );
 
@@ -1371,6 +1380,38 @@ export async function updateQuoteShippingTotal(
     );
 
     return quote;
+  });
+}
+
+export async function updateQuotePixPayment(
+  userId: string,
+  tenantId: string,
+  quoteId: string,
+  include: boolean
+): Promise<PixPaymentSnapshot | null> {
+  return withTenantContext(userId, tenantId, async (client) => {
+    const snapshot = await resolveTenantPixPaymentSnapshot(client, tenantId, include);
+    const result = await client.query<{ pix_payment_snapshot: PixPaymentSnapshot | null }>(
+      `
+        update quotes
+        set pix_payment_snapshot = $3::jsonb,
+            updated_at = now()
+        where tenant_id = $1 and id = $2
+        returning pix_payment_snapshot
+      `,
+      [tenantId, quoteId, snapshot ? JSON.stringify(snapshot) : null]
+    );
+    if (!result.rows[0]) throw new Error("Orçamento não encontrado.");
+
+    await client.query(
+      `
+        insert into audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, $2, 'quotes.pix_payment_update', 'quote', $3, $4)
+      `,
+      [tenantId, userId, quoteId, JSON.stringify({ included: Boolean(snapshot), keyType: snapshot?.keyType ?? null })]
+    );
+
+    return result.rows[0].pix_payment_snapshot;
   });
 }
 
@@ -2227,6 +2268,7 @@ async function createCompositeQuoteWithClient(
   const validDays = Math.max(1, Math.min(90, input.validDays ?? 7));
   const shippingTotal = Math.max(0, input.shippingTotal ?? 0);
   const grandTotal = adjustedCalculation.subtotal + shippingTotal;
+  const pixPaymentSnapshot = await resolveTenantPixPaymentSnapshot(client, tenantId, input.includePixPayment);
   const quoteResult = await client.query<{ id: string }>(
     `
       insert into quotes (
@@ -2241,7 +2283,8 @@ async function createCompositeQuoteWithClient(
         grand_total,
         margin_amount,
         margin_percent,
-        notes
+        notes,
+        pix_payment_snapshot
       )
       values (
         $1,
@@ -2255,7 +2298,8 @@ async function createCompositeQuoteWithClient(
         $7,
         $8,
         $9,
-        $10
+        $10,
+        $11
       )
       returning id
     `,
@@ -2269,7 +2313,8 @@ async function createCompositeQuoteWithClient(
       grandTotal,
       adjustedCalculation.profit,
       adjustedCalculation.marginPercent,
-      input.notes || null
+      input.notes || null,
+      pixPaymentSnapshot ? JSON.stringify(pixPaymentSnapshot) : null
     ]
   );
   const quoteId = quoteResult.rows[0].id;
@@ -2417,6 +2462,33 @@ async function createCompositeQuoteWithClient(
   );
 
   return { id: quoteId, calculation: adjustedCalculation };
+}
+
+async function resolveTenantPixPaymentSnapshot(
+  client: pg.PoolClient,
+  tenantId: string,
+  include = false
+): Promise<PixPaymentSnapshot | null> {
+  if (!include) return null;
+
+  const result = await client.query<{
+    pix_key_type: PixKeyType | null;
+    pix_key: string | null;
+    pix_beneficiary_name: string | null;
+  }>(
+    `select pix_key_type, pix_key, pix_beneficiary_name from tenants where id = $1 limit 1`,
+    [tenantId]
+  );
+  const tenant = result.rows[0];
+  if (!tenant?.pix_key_type || !tenant.pix_key) {
+    throw new Error("Cadastre uma chave Pix em Configurações > Geral antes de incluí-la no orçamento.");
+  }
+
+  return buildPixPaymentSnapshot({
+    keyType: tenant.pix_key_type,
+    key: tenant.pix_key,
+    beneficiaryName: tenant.pix_beneficiary_name
+  });
 }
 
 async function insertQuoteItemArtwork(

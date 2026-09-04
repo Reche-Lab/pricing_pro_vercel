@@ -295,6 +295,7 @@ Payload:
   },
   "platformSlug": "direct",
   "pricingRule": "per_item",
+  "includePixPayment": true,
   "items": [
     {
       "productSku": "BOTTON-25",
@@ -324,6 +325,8 @@ Payload:
   }
 }
 ```
+
+O campo opcional `includePixPayment` inclui no orçamento um snapshot da chave Pix configurada no tenant. Se estiver ausente ou `false`, nenhuma chave é exposta no PDF, WhatsApp ou link público.
 
 Resposta:
 

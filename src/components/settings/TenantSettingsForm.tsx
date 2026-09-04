@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ImageUp, Save } from "lucide-react";
+import { ImageUp, KeyRound, Save } from "lucide-react";
+import { PIX_KEY_TYPES, pixKeyTypeLabel } from "@/domain/payments/pix";
 import { fetchCepAddress, formatCep, normalizeCep } from "@/lib/cep";
 import type { TenantShippingProfile } from "@/repositories/tenant-settings";
 
@@ -39,7 +40,10 @@ export function TenantSettingsForm({ tenant }: { tenant: TenantShippingProfile }
         addressComplement: form.get("addressComplement"),
         district: form.get("district"),
         city: form.get("city"),
-        state: form.get("state")
+        state: form.get("state"),
+        pixKeyType: form.get("pixKeyType") || null,
+        pixKey: form.get("pixKey"),
+        pixBeneficiaryName: form.get("pixBeneficiaryName")
       })
     });
 
@@ -155,6 +159,38 @@ export function TenantSettingsForm({ tenant }: { tenant: TenantShippingProfile }
             </div>
           </div>
           {cepMessage ? <p className="mt-3 text-xs text-zinc-400">{cepMessage}</p> : null}
+        </section>
+
+        <section className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
+          <div className="mb-3 flex items-start gap-2">
+            <KeyRound className="mt-0.5 shrink-0 text-emerald-400" size={16} />
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-200">Recebimento por Pix</h3>
+              <p className="mt-1 text-xs leading-5 text-zinc-500">
+                Cadastre uma chave para poder incluí-la, quando desejar, no PDF, WhatsApp e link público de cada orçamento.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-zinc-300">Tipo da chave</span>
+              <select
+                className="focus-ring h-[42px] w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+                defaultValue={tenant.pix_key_type ?? ""}
+                name="pixKeyType"
+              >
+                <option value="">Selecione</option>
+                {PIX_KEY_TYPES.map((type) => <option key={type} value={type}>{pixKeyTypeLabel(type)}</option>)}
+              </select>
+            </label>
+            <Input defaultValue={tenant.pix_key} label="Chave Pix" name="pixKey" />
+            <div className="md:col-span-2">
+              <Input defaultValue={tenant.pix_beneficiary_name} label="Nome do favorecido (opcional)" name="pixBeneficiaryName" />
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-zinc-500">
+            Para remover a configuração, apague a chave e salve. A remoção não altera orçamentos antigos que já possuem o Pix incluído.
+          </p>
         </section>
       </div>
       {message ? <p className="mt-4 rounded-md bg-zinc-950/60 px-3 py-2 text-sm text-zinc-400">{message}</p> : null}

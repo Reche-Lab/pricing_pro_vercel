@@ -200,6 +200,7 @@ Payload recomendado:
   },
   "platformSlug": "direct",
   "pricingRule": "per_item",
+  "includePixPayment": true,
   "items": [
     {
       "productSku": "BOTTON-25",
@@ -236,6 +237,7 @@ Antes de chamar este endpoint, confirme com o usuário:
 - nome de cada arte/lote, quando houver;
 - nome do cliente;
 - CEP, se o orçamento tiver frete;
+- se o cliente deseja receber a chave Pix no orçamento; nesse caso envie `includePixPayment: true`;
 - opção de frete escolhida, quando houver mais de uma.
 
 ### Ler Orçamento

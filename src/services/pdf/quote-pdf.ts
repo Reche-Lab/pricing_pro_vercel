@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import sharp from "sharp";
 import { quoteDiscountLabel } from "@/domain/quotes/discount";
+import { parsePixPaymentSnapshot, pixKeyTypeLabel } from "@/domain/payments/pix";
 import {
   quotePdfArtworkVariantLabel,
   resolveQuotePdfArtworkAsset,
@@ -254,6 +255,16 @@ export async function generateQuotePdf(input: {
 
   if (Number(input.quote.discount_total) > 0 && input.quote.discount_reason) {
     drawText(`Motivo do desconto: ${input.quote.discount_reason}`, { size: 8, color: rgb(0.35, 0.35, 0.38) });
+    y -= 4;
+  }
+
+  const pixPayment = parsePixPaymentSnapshot(input.quote.pix_payment_snapshot);
+  if (pixPayment) {
+    drawSectionTitle("Pagamento via Pix");
+    for (const line of wrapText(`Chave ${pixKeyTypeLabel(pixPayment.keyType)}: ${pixPayment.key}`, 88)) {
+      drawText(line, { size: 10, bold: true });
+    }
+    if (pixPayment.beneficiaryName) drawText(`Favorecido: ${pixPayment.beneficiaryName}`, { size: 9 });
     y -= 4;
   }
 

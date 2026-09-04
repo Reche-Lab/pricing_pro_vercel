@@ -13,6 +13,7 @@ import { QuoteStatusActions } from "@/components/quotes/QuoteStatusActions";
 import { QuoteAdministrativeEditingControl } from "@/components/quotes/QuoteAdministrativeEditingControl";
 import { QuoteWhatsAppButton } from "@/components/quotes/QuoteWhatsAppButton";
 import { QuotePdfDownloadButton } from "@/components/quotes/QuotePdfDownloadButton";
+import { QuotePixPaymentPanel } from "@/components/quotes/QuotePixPaymentPanel";
 import { PublicQuoteLinkButton } from "@/components/quotes/PublicQuoteLinkButton";
 import type { PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
 import { isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
@@ -24,6 +25,7 @@ import { getIntegrationConnection } from "@/repositories/integrations";
 import { listProductVariants } from "@/repositories/products";
 import { listQuoteShipments } from "@/repositories/shipments";
 import { getSessionProfile, listTenantMembers, userHasPermission } from "@/repositories/users";
+import { getTenantShippingProfile } from "@/repositories/tenant-settings";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 type QuoteDetailResult = NonNullable<Awaited<ReturnType<typeof getQuoteDetail>>>;
@@ -36,7 +38,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
   const quoteIdParsed = z.string().uuid().safeParse(quoteId);
   if (!quoteIdParsed.success) notFound();
 
-  const [profile, detail, shipments, members, canDeleteQuotesByPermission, canReopenQuotesByPermission, variants, editLogs, paymentOptions, paymentTerm, olistConnection] = await Promise.all([
+  const [profile, detail, shipments, members, canDeleteQuotesByPermission, canReopenQuotesByPermission, variants, editLogs, paymentOptions, paymentTerm, olistConnection, tenant] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
     getQuoteDetail(session.userId, session.tenantId, quoteId),
     listQuoteShipments(session.userId, session.tenantId, quoteId),
@@ -47,7 +49,8 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
     listQuoteEditLogs(session.userId, session.tenantId, quoteId),
     listOlistPaymentOptions(session.userId, session.tenantId),
     getQuotePaymentTerm(session.userId, session.tenantId, quoteId),
-    getIntegrationConnection(session.userId, session.tenantId, "olist")
+    getIntegrationConnection(session.userId, session.tenantId, "olist"),
+    getTenantShippingProfile(session.userId, session.tenantId)
   ]);
 
   if (!profile) redirect("/login");
@@ -153,6 +156,13 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
             }))}
             quoteId={quoteId}
             total={Number(detail.quote.grand_total)}
+          />
+
+          <QuotePixPaymentPanel
+            configured={Boolean(tenant?.pix_key && tenant.pix_key_type)}
+            disabled={accepted && !administrativeEditingOpen}
+            initialSnapshot={detail.quote.pix_payment_snapshot ?? null}
+            quoteId={quoteId}
           />
 
           <section className="rounded-lg border border-zinc-800 bg-zinc-900/70">
