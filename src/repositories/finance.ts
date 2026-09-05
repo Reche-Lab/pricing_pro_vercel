@@ -4,7 +4,9 @@ import { randomUUID } from "node:crypto";
 import { sha256 } from "@/domain/finance/csv";
 import { calculateFinancialMetrics } from "@/domain/finance/metrics";
 import {
-  evaluateFinancialIndicator,
+  createFinancialIndicatorResolver,
+  validateFinancialIndicatorVersions,
+  FinancialIndicatorError,
   type FinancialIndicatorComponentResult,
   type FinancialIndicatorFormula,
   type FinancialIndicatorUnit
@@ -699,18 +701,29 @@ export async function previewFinancialIndicator(
   tenantId: string,
   competence: string,
   unit: FinancialIndicatorUnit,
-  formula: FinancialIndicatorFormula
+  formula: FinancialIndicatorFormula,
+  indicatorId?: string
 ) {
   return withTenantContext(userId, tenantId, async (client) => {
     await validateIndicatorReferences(client, tenantId, unit, formula);
     const transactions = await listTransactionsWithClient(client, tenantId, competence);
-    return evaluateFinancialIndicator(formula, transactions.map(toIndicatorTransaction));
+    const indicators = await listFinancialIndicatorsWithClient(client, tenantId, competence, transactions, false, true);
+    const previewId = indicatorId ?? "preview";
+    const resolve = createFinancialIndicatorResolver([
+      ...indicators.filter((item) => item.id !== previewId).map((item) => ({
+        id: item.id, name: item.name, unit: item.unit, formula: item.formula, versionId: item.version_id
+      })),
+      { id: previewId, name: "Prévia", unit, formula }
+    ], transactions.map(toIndicatorTransaction));
+    return resolve(previewId);
   });
 }
 
 export async function createFinancialIndicator(userId: string, tenantId: string, input: FinancialIndicatorInput) {
   return withTenantContext(userId, tenantId, async (client) => {
+    await client.query("select pg_advisory_xact_lock(hashtextextended($1, 59))", [tenantId]);
     await validateIndicatorReferences(client, tenantId, input.unit, input.formula);
+    await validateIndicatorDependencies(client, tenantId, input);
     const existing = await client.query(`select id from financial_indicators where tenant_id=$1 and lower(name)=lower($2)`, [tenantId, input.name]);
     if (existing.rows[0]) throw new Error("Já existe um indicador com este nome.");
     const indicator = await client.query<{ id: string }>(
@@ -737,7 +750,9 @@ export async function updateFinancialIndicator(
   input: FinancialIndicatorInput
 ) {
   return withTenantContext(userId, tenantId, async (client) => {
+    await client.query("select pg_advisory_xact_lock(hashtextextended($1, 59))", [tenantId]);
     await validateIndicatorReferences(client, tenantId, input.unit, input.formula);
+    await validateIndicatorDependencies(client, tenantId, input, indicatorId);
     const before = await client.query(
       `select i.*, v.id version_id, v.version, v.effective_from::text, v.formula
        from financial_indicators i join lateral (
@@ -972,7 +987,8 @@ async function listFinancialIndicatorsWithClient(
   tenantId: string,
   competence: string,
   transactions: FinancialTransactionRow[],
-  useFrozenResults: boolean
+  useFrozenResults: boolean,
+  includeInactive = false
 ): Promise<FinancialIndicatorView[]> {
   type IndicatorDatabaseRow = {
     id: string; name: string; description: string | null; unit: FinancialIndicatorUnit;
@@ -998,15 +1014,24 @@ async function listFinancialIndicatorsWithClient(
      ) v on true
      left join financial_indicator_results r on r.tenant_id=i.tenant_id and r.indicator_id=i.id and r.competence=$2
      left join financial_indicator_versions rv on rv.id=r.version_id and rv.tenant_id=r.tenant_id
-     where i.tenant_id=$1 and (i.active or r.id is not null)
+     where i.tenant_id=$1
      order by i.sort_order, i.name`,
     [tenantId, `${competence}-01`]
   );
   const normalized = transactions.map(toIndicatorTransaction);
-  return rows.rows.map((row) => {
+  const resolve = createFinancialIndicatorResolver(rows.rows.map((row) => {
+    const frozen = useFrozenResults && row.result_value !== null && row.result_version_id !== null;
+    return {
+      id: row.id, name: row.name, unit: row.unit,
+      formula: frozen && row.result_formula ? row.result_formula : row.formula,
+      versionId: frozen ? row.result_version_id! : row.version_id,
+      frozen: frozen ? { value: Number(row.result_value), components: row.result_components ?? [] } : undefined
+    };
+  }), normalized);
+  return rows.rows.filter((row) => includeInactive || row.active || row.result_value !== null).map((row) => {
     const frozen = useFrozenResults && row.result_value !== null && row.result_version_id !== null;
     const formula = frozen && row.result_formula ? row.result_formula : row.formula;
-    const calculated = evaluateFinancialIndicator(formula, normalized);
+    const calculated = resolve(row.id);
     return {
       id: row.id,
       name: row.name,
@@ -1049,7 +1074,14 @@ async function validateIndicatorReferences(
   unit: FinancialIndicatorUnit,
   formula: FinancialIndicatorFormula
 ) {
-  if (!formula.components.length) throw new Error("Inclua ao menos um componente no indicador.");
+  if (!formula.components.length && !formula.sourceIndicatorId) throw new FinancialIndicatorError("Inclua ao menos um componente no indicador.");
+  if (formula.sourceIndicatorId) {
+    const source = await client.query<{ unit: FinancialIndicatorUnit }>(
+      "select unit from financial_indicators where tenant_id=$1 and id=$2", [tenantId, formula.sourceIndicatorId]
+    );
+    if (!source.rows[0]) throw new FinancialIndicatorError("O indicador-base não pertence a este tenant ou não está disponível.");
+    if (source.rows[0].unit !== unit) throw new FinancialIndicatorError("O indicador e sua base precisam usar o mesmo formato de valor.");
+  }
   if (unit === "currency" && formula.components.some((component) => component.aggregation === "count")) {
     throw new Error("Indicadores monetários aceitam soma ou média; use a unidade numérica para contagens.");
   }
@@ -1082,6 +1114,19 @@ async function validateIndicatorReferences(
     );
     if (Number(found.rows[0].count) !== natureKeys.length) throw new Error("Uma das naturezas selecionadas não pertence a este tenant.");
   }
+}
+
+async function validateIndicatorDependencies(client: pg.PoolClient, tenantId: string, input: FinancialIndicatorInput, indicatorId = "new") {
+  const versions = await client.query<{
+    id: string; name: string; unit: FinancialIndicatorUnit; version: number;
+    effective_from: string; formula: FinancialIndicatorFormula;
+  }>(`select i.id, i.name, i.unit, v.version, v.effective_from::text, v.formula
+      from financial_indicators i join financial_indicator_versions v on v.indicator_id=i.id and v.tenant_id=i.tenant_id
+      where i.tenant_id=$1`, [tenantId]);
+  const candidates = versions.rows.map((row) => row.id === indicatorId ? { ...row, unit: input.unit } : row);
+  candidates.push({ id: indicatorId, name: input.name, unit: input.unit, version: Number.MAX_SAFE_INTEGER,
+    effective_from: `${input.effectiveFrom}-01`, formula: input.formula });
+  validateFinancialIndicatorVersions(candidates);
 }
 
 function toIndicatorTransaction(row: FinancialTransactionRow) {

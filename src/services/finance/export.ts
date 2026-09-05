@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import type { FinancialTransactionRow } from "@/repositories/finance";
+import { describeIndicatorAdjustment } from "@/domain/finance/indicators";
 
 export type ExportData = Awaited<ReturnType<typeof import("@/repositories/finance").getFinancialExportData>>;
 
@@ -83,7 +84,7 @@ function addDashboard(workbook: ExcelJS.Workbook, data: ExportData) {
 
 function addCustomIndicators(workbook: ExcelJS.Workbook, data: ExportData) {
   const sheet = workbook.addWorksheet("Indicadores");
-  sheet.addRow(["Indicador", "Descrição", "Competência", "Situação", "Versão", "Valor", "Operação", "Componente", "Agregação", "Lançamentos", "Valor do componente"]);
+  sheet.addRow(["Indicador", "Descrição", "Competência", "Situação", "Versão", "Valor", "Operação", "Componente", "Agregação", "Lançamentos", "Valor do componente", "Cálculo aplicado à base", "Valor-base", "Versão da base"]);
   for (const indicator of data.indicators ?? []) {
     const divisor = indicator.unit === "currency" ? 100 : 1;
     indicator.component_results.forEach((component, index) => {
@@ -92,16 +93,20 @@ function addCustomIndicators(workbook: ExcelJS.Workbook, data: ExportData) {
         indicator.is_frozen ? "Fechado" : "Prévia", indicator.version,
         index === 0 ? indicator.value / divisor : null,
         component.operation === "subtract" ? "Subtrair" : "Somar", safeSpreadsheetText(component.label),
-        component.aggregation === "average" ? "Média" : component.aggregation === "count" ? "Contagem" : "Soma",
-        component.matchedCount, component.value / divisor
+        component.sourceIndicatorId ? "Indicador" : component.aggregation === "average" ? "Média" : component.aggregation === "count" ? "Contagem" : "Soma",
+        component.matchedCount, component.value / divisor,
+        describeIndicatorAdjustment(indicator.formula.adjustment) || "Resultado da base",
+        index === 0 ? indicator.component_results.reduce((sum, item) => sum + item.contribution, 0) / divisor : null,
+        component.sourceVersionId ?? ""
       ]);
       if (indicator.unit === "currency") {
         row.getCell(6).numFmt = CURRENCY_FORMAT;
         row.getCell(11).numFmt = CURRENCY_FORMAT;
+        row.getCell(13).numFmt = CURRENCY_FORMAT;
       }
     });
   }
-  styleTable(sheet, [28, 42, 14, 14, 10, 18, 12, 28, 14, 14, 22]);
+  styleTable(sheet, [28, 42, 14, 14, 10, 18, 12, 28, 14, 14, 22, 30, 22, 38]);
 }
 
 function addTransactionsSummary(workbook: ExcelJS.Workbook, transactions: FinancialTransactionRow[]) {

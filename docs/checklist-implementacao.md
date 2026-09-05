@@ -191,7 +191,7 @@ Resultado:
 
 - lint passou;
 - typecheck passou;
-- testes passaram: 184 testes em 43 arquivos;
+- testes passaram: 194 testes em 44 arquivos;
 - build Next passou.
 
 ## Acoes Manuais Pendentes
@@ -220,6 +220,9 @@ Resultado:
 - [x] Implementar comparativo de 3, 6 e 12 meses com métricas selecionáveis, variação, gráfico interativo e impacto por categoria.
 - [x] Exibir a composição auditável de entradas menos saídas do resultado operacional.
 - [x] Criar indicadores personalizados multi-tenant com fórmulas estruturadas e prévia por competência.
+- [x] Aplicar percentual, multiplicação ou divisão ao resultado completo dos componentes ou de outro indicador do tenant, com prévia da expressão.
+- [x] Validar referências entre indicadores por competência, inclusive versões futuras, impedindo ciclos, bases ausentes, unidades incompatíveis e divisão por zero.
+- [x] Preservar os valores-base e a versão referenciada na memória de cálculo e exibir os fatores na visão geral e no Excel, sem alterar resultados congelados.
 - [x] Versionar definições e congelar a memória de cálculo dos indicadores no fechamento mensal.
 - [x] Permitir detalhar os lançamentos de cada componente diretamente pela visão geral.
 - [x] Exportar indicadores personalizados e sua composição no Excel financeiro.

@@ -3,6 +3,17 @@ import { describe, expect, it } from "vitest";
 import { buildFinancialWorkbook, type ExportData } from "@/services/finance/export";
 
 describe("financial Excel export", () => {
+  it("exports the commission amount together with its percentage and unadjusted base", async () => {
+    const data = exportFixture();
+    data.indicators[0].formula.adjustment = { operation: "percentage", factor: 15 };
+    data.indicators[0].value = 15_000;
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(Uint8Array.from(await buildFinancialWorkbook(data)).buffer);
+    const row = workbook.getWorksheet("Indicadores")?.getRow(2);
+    expect(row?.getCell(6).value).toBe(150);
+    expect(row?.getCell(12).value).toBe("15% do resultado-base");
+    expect(row?.getCell(13).value).toBe(1000);
+  });
   it("includes the detailed Lancamentos model and preserves the summary sheet", async () => {
     const buffer = await buildFinancialWorkbook(exportFixture());
     const workbook = new ExcelJS.Workbook();

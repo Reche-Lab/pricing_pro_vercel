@@ -16,7 +16,8 @@ export async function POST(request: Request) {
       auth.session.tenantId,
       parsed.data.competence,
       parsed.data.unit,
-      parsed.data.formula
+      parsed.data.formula,
+      parsed.data.indicatorId
     );
     return NextResponse.json({ ok: true, preview });
   } catch (error) {

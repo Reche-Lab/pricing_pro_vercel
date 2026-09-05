@@ -20,8 +20,17 @@ export const indicatorFormulaSchema = z.object({
       reviewStatuses: z.array(z.enum(["pending", "reviewed", "ignored"])).max(3).optional(),
       includeInternalTransfers: z.boolean().optional()
     }).strict()
-  }).strict()).min(1).max(12)
-}).strict();
+  }).strict()).max(12),
+  sourceIndicatorId: z.string().uuid().optional(),
+  adjustment: z.object({
+    operation: z.enum(["percentage", "multiply", "divide"]),
+    factor: z.number().finite().min(0).max(1_000_000)
+  }).strict().refine((value) => value.operation !== "divide" || value.factor > 0, "O divisor deve ser maior que zero.").optional()
+}).strict().superRefine((formula, context) => {
+  if (formula.sourceIndicatorId ? formula.components.length > 0 : formula.components.length === 0) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Selecione um indicador-base ou inclua os componentes do cálculo." });
+  }
+});
 
 export const indicatorInputSchema = z.object({
   name: z.string().trim().min(2).max(100),
@@ -34,6 +43,7 @@ export const indicatorInputSchema = z.object({
 }).strict();
 
 export const indicatorPreviewSchema = z.object({
+  indicatorId: z.string().uuid().optional(),
   competence: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
   unit: z.enum(["currency", "number"]),
   formula: indicatorFormulaSchema
