@@ -9,6 +9,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:local": "NODE_OPTIONS=--max-old-space-size=768 vitest run --maxWorkers=1 --minWorkers=1 --no-file-parallelism",
+    "build:local": "NODE_OPTIONS=--max-old-space-size=1024 COMMERCE_LOW_MEMORY=true next build",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "check:login": "node --env-file=.env scripts/check-login.mjs",

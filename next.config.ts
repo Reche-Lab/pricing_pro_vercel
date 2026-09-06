@@ -15,6 +15,9 @@ const noStoreHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  ...(process.env.COMMERCE_LOW_MEMORY === "true" ? {
+    experimental: { cpus: 1, webpackMemoryOptimizations: true }
+  } : {}),
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },

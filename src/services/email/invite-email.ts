@@ -167,7 +167,7 @@ export async function sendLegalTermsAcceptanceEmail(
   });
 }
 
-async function sendEmail(input: {
+export async function sendEmail(input: {
   to: string;
   subject: string;
   html: string;

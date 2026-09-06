@@ -17,7 +17,7 @@ export function ArtworkCropEditor({
   onClose,
   onSaved
 }: {
-  artwork: QuoteItemArtworkRow;
+  artwork: Pick<QuoteItemArtworkRow, "id" | "artwork_name" | "file_name" | "crop_scale" | "crop_offset_x" | "crop_offset_y" | "rotation_degrees">;
   geometry: PrintGeometry;
   bleedMm: number;
   safeMarginMm: number;

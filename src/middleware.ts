@@ -52,6 +52,7 @@ function requiresAcceptedTerms(path: string): boolean {
       "/api/access-requests/",
       "/api/legal/",
       "/api/public/",
+      "/api/store/",
       "/api/agent/",
       "/api/billing/mercado-pago/webhook",
       "/api/melhor-envio/oauth/callback",

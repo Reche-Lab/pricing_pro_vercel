@@ -21,6 +21,7 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { getTenantShippingProfile } from "@/repositories/tenant-settings";
 import { getArtworkProductionProfile } from "@/repositories/artwork-production";
 import { getSessionProfile } from "@/repositories/users";
+import { commerceEnabled } from "@/repositories/commerce";
 
 export default async function SettingsPage({
   searchParams
@@ -55,6 +56,7 @@ export default async function SettingsPage({
       <div className="grid min-w-0 gap-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start lg:gap-6">
         <SettingsSubmenu activeSection={activeSection} />
         <div className="min-w-0 max-w-5xl">
+          {activeSection === "general" && commerceEnabled() && (profile.is_super_admin || profile.role === "owner" || profile.role === "admin") ? <Link href="/commerce" className="mb-5 flex items-center justify-between rounded-md border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-200"><span>Loja online · módulo opcional</span><span>Configurar loja →</span></Link> : null}
           {activeSection === "general" ? <TenantSettingsForm tenant={tenant} /> : null}
           {activeSection === "security" ? <ChangePasswordForm /> : null}
           {activeSection === "melhor-envio" ? (
