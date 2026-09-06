@@ -311,6 +311,7 @@ com os responsáveis pelo negócio. Não publique o texto de exemplo dos testes.
 - [x] 245 testes unitários/componentes aprovados, incluindo isolamento e processamento de artes na prévia.
 - [x] TypeScript, lint e build local desta etapa aprovados, com um processo de validação por vez.
 - [x] Home responsiva, carrosséis de banners/produtos, busca por categoria e temas claro/escuro.
+- [x] Fundo próprio para imagens transparentes de produtos em temas claro/escuro, no catálogo, galeria, miniaturas, categorias e carrinho; sem alterar o arquivo original ou o fundo das artes para produção.
 - [x] Upload, edição, enquadramento, aprovação e acesso administrativo à produção.
 - [x] Pagamento manual e implementação de um provedor online por tenant.
 - [x] Testes unitários, de banco e fluxo básico desktop/mobile com dados fictícios.

@@ -370,7 +370,7 @@ export function Storefront({
                             <img
                               alt={product.name}
                               src={product.imageUrl}
-                              className="h-20 w-20 shrink-0 rounded-md border border-zinc-200 bg-white object-contain"
+                              className={`${styles.productThumbnail} h-20 w-20 shrink-0 rounded-md object-contain`}
                             />
                           ) : null}
                           <div className="min-w-0 flex-1">

@@ -2,6 +2,7 @@
   --page: #f8f9fa;
   --surface: #fff;
   --soft: #eef1f2;
+  --product-backdrop: #e8edef;
   --ink: #202629;
   --muted: #606e73;
   --line: #dce2e5;
@@ -16,6 +17,7 @@
   --page: #121516;
   --surface: #1a1e20;
   --soft: #252c2f;
+  --product-backdrop: #30383c;
   --ink: #f2f5f5;
   --muted: #b0bdc2;
   --line: #364045;
@@ -516,7 +518,7 @@
   position: relative;
   aspect-ratio: 1;
   overflow: hidden;
-  background: white;
+  background: var(--product-backdrop);
   border: 1px solid var(--line);
   border-radius: 8px;
 }
@@ -607,7 +609,7 @@
   border-radius: 50%;
   border: 1px solid var(--line);
   object-fit: contain;
-  background: white;
+  background: var(--product-backdrop);
 }
 .categoryRail span {
   font-size: 15px;
@@ -632,7 +634,7 @@
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: white;
+  background: var(--product-backdrop);
   touch-action: pan-y;
 }
 .galleryStage img,
@@ -673,7 +675,7 @@
   overflow: hidden;
   border: 2px solid var(--line);
   border-radius: 6px;
-  background: var(--surface);
+  background: var(--product-backdrop);
   scroll-snap-align: start;
 }
 .galleryThumbnails button[aria-pressed="true"] {
@@ -686,8 +688,12 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: white;
+  background: var(--product-backdrop);
   border-radius: 3px;
+}
+.productThumbnail {
+  background: var(--product-backdrop);
+  border: 1px solid var(--line);
 }
 .galleryThumbnails span {
   display: grid;
