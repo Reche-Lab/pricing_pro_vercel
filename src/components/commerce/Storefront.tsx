@@ -22,6 +22,7 @@ import {
   Truck,
   Moon,
   Sun,
+  RefreshCw,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import type {
@@ -38,6 +39,7 @@ import styles from "./store.module.css";
 import { StoreHome, StoreProductCard } from "./StoreHome";
 import { StoreProductGallery } from "./StoreProductGallery";
 import { useStoreTheme, accentForeground } from "./use-store-theme";
+import { useCommercePreview } from "./CommercePreviewProvider";
 const ArtworkTools = dynamic(
   () => import("./StoreArtworkTools").then((m) => m.StoreArtworkTools),
   { ssr: false },
@@ -66,7 +68,9 @@ export function Storefront({
   const { theme, toggle } = useStoreTheme(slug, settings.theme);
   const base = preview ? `/commerce/${slug}/preview` : `/loja/${slug}`;
   const api = preview ? `/api/commerce/${slug}/preview` : `/api/store/${slug}`;
-  const [cart, setCart] = useState<Cart | null>(null);
+  const [buyerCart, setCart] = useState<Cart | null>(null);
+  const simulation = useCommercePreview();
+  const cart = preview ? (simulation?.cart ?? null) : buyerCart;
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -90,7 +94,7 @@ export function Storefront({
       void refreshOrders().catch((e) => setError(e.message));
   }, [view, cart?.customer?.id, refreshOrders, cart?.customer]);
   async function action(work: () => Promise<void>) {
-    if (busy || preview) return;
+    if (busy) return;
     setBusy(true);
     setError("");
     setMessage("");
@@ -103,7 +107,11 @@ export function Storefront({
     }
   }
   async function update(lines: CartLine[]) {
-    if (preview) return;
+    if (preview) {
+      if (!simulation)
+        throw new Error("Reabra a prévia para iniciar a simulação.");
+      return simulation.update(lines);
+    }
     if (!cart) throw new Error("O carrinho ainda está carregando.");
     await storeRequest(`${api}/cart`, "PUT", {
       revision: cart.revision,
@@ -128,9 +136,23 @@ export function Storefront({
       {preview ? (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           <p>
-            <strong>Pré-visualização privada</strong> · Última versão salva.
-            Compras desativadas.
+            <strong>Pré-visualização privada</strong> · Compra simulada, sem
+            cobrança. Artes e carrinho temporários: serão apagados ao recarregar
+            ou sair da prévia.
           </p>
+          {preview && simulation?.cart.lines.length ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 underline"
+              onClick={() => {
+                simulation.reset();
+                setMessage("");
+                setError("");
+              }}
+            >
+              <Trash2 size={16} /> Limpar simulação
+            </button>
+          ) : null}
           <Link
             href="/commerce"
             className="inline-flex items-center gap-2 underline"
@@ -198,16 +220,16 @@ export function Storefront({
                 >
                   <UserRound size={21} />
                 </Link>
-                <Link
-                  className={styles.cartButton}
-                  href={`${base}/carrinho`}
-                  title="Carrinho"
-                >
-                  <ShoppingBag size={21} />
-                  <span className="text-sm">{cart?.lines.length ?? 0}</span>
-                </Link>
               </>
             ) : null}
+            <Link
+              className={styles.cartButton}
+              href={`${base}/carrinho`}
+              title="Carrinho"
+            >
+              <ShoppingBag size={21} />
+              <span className="text-sm">{cart?.lines.length ?? 0}</span>
+            </Link>
           </nav>
         </div>
         <nav aria-label="Categorias de produtos" className={styles.categoryNav}>
@@ -260,7 +282,7 @@ export function Storefront({
           <p role="status" className={styles.message}>
             {message}{" "}
             <Link className="underline" href={`${base}/carrinho`}>
-              Ver carrinho
+              {preview ? "Abrir carrinho e preparar artes" : "Ver carrinho"}
             </Link>
           </p>
         ) : null}
@@ -278,7 +300,6 @@ export function Storefront({
             base={base}
             api={api}
             disabled={busy || !cart || paused}
-            preview={preview}
             onAdd={(lines) =>
               action(async () => {
                 await update([...(cart?.lines ?? []), ...lines]);
@@ -414,15 +435,18 @@ export function Storefront({
                             />
                           </label>
                           <button
-                            className={styles.secondary}
+                            className={`${styles.secondary} shrink-0`}
                             disabled={busy || paused}
                             type="submit"
+                            title="Atualizar quantidade"
+                            aria-label="Atualizar quantidade"
                           >
-                            Atualizar
+                            <RefreshCw size={18} />
                           </button>
                         </form>
                         {product?.personalized ? (
                           <ArtworkTools
+                            preview={preview}
                             slug={slug}
                             product={product}
                             artwork={cart.artworks.find(
@@ -473,13 +497,20 @@ export function Storefront({
             <h1 className={styles.title}>Finalizar pedido</h1>
             {!cart ? (
               <p>Carregando…</p>
-            ) : !cart.customer ? (
+            ) : !cart.customer && !preview ? (
               <BuyerLogin api={api} onLogged={refresh} disabled={false} />
             ) : !cart.lines.length ? (
               <Empty
                 text="Adicione produtos antes de concluir."
                 href={`${base}/catalogo`}
                 label="Ver produtos"
+              />
+            ) : preview ? (
+              <PreviewCheckout
+                cart={cart}
+                settings={settings}
+                base={base}
+                products={products}
               />
             ) : (
               <Checkout
@@ -682,14 +713,12 @@ function ProductDetail({
   api,
   disabled,
   onAdd,
-  preview = false,
 }: {
   product: Product;
   base: string;
   api: string;
   disabled: boolean;
   onAdd: (lines: CartLine[]) => Promise<void>;
-  preview?: boolean;
 }) {
   const [quantity, setQuantity] = useState(String(product.minQuantity));
   const [groups, setGroups] = useState("1");
@@ -808,15 +837,13 @@ function ProductDetail({
           ) : null}
           <button
             className={`${styles.primary} w-full`}
-            disabled={preview || disabled || !price}
+            disabled={disabled || !price}
             onClick={() => void onAdd(lines)}
           >
             <ShoppingBag size={18} />
-            {preview
-              ? "Compras desativadas na prévia"
-              : "Adicionar ao carrinho"}
+            Adicionar ao carrinho
           </button>
-          {product.personalized && !preview ? (
+          {product.personalized ? (
             <p className="mt-3 text-sm text-zinc-500">
               No carrinho, envie, ajuste e aprove a imagem de cada arte antes de
               concluir.
@@ -942,18 +969,89 @@ function BuyerLogin({
     </form>
   );
 }
+function PreviewCheckout({
+  cart,
+  settings,
+  base,
+  products,
+}: {
+  cart: Cart;
+  settings: StoreSettings;
+  base: string;
+  products: Product[];
+}) {
+  const [complete, setComplete] = useState(false);
+  const [error, setError] = useState("");
+  if (complete)
+    return (
+      <section className="max-w-xl space-y-4" role="status">
+        <Check className="text-emerald-600" size={32} />
+        <h2 className="text-xl font-semibold">Simulação concluída</h2>
+        <p>
+          Nenhum pedido ou cobrança foi criado. As artes aprovadas continuam no
+          carrinho desta prévia.
+        </p>
+        <Link className={styles.primary} href={`${base}/carrinho`}>
+          Voltar às artes <ArrowRight size={17} />
+        </Link>
+      </section>
+    );
+  return (
+    <>
+      {error ? (
+        <p role="alert" className="mb-4 text-sm text-red-600">
+          {error}{" "}
+          <Link className="underline" href={`${base}/carrinho`}>
+            Revisar artes
+          </Link>
+        </p>
+      ) : null}
+      <Checkout
+        cart={cart}
+        settings={settings}
+        base={base}
+        preview
+        disabled={false}
+        onSubmit={async () => {
+          const missing = cart.lines.some(
+            (line) =>
+              products.find((p) => p.id === line.productId)?.personalized &&
+              !cart.artworks.some(
+                (art) =>
+                  art.id === line.artworkId &&
+                  art.product_id === line.productId &&
+                  art.approved_at &&
+                  art.crop,
+              ),
+          );
+          if (missing) {
+            setError(
+              "Envie, enquadre e aprove a arte de cada produto personalizado antes de concluir.",
+            );
+            return;
+          }
+          setError("");
+          setComplete(true);
+        }}
+      />
+    </>
+  );
+}
+
 function Checkout({
   cart,
   settings,
   base,
   disabled,
   onSubmit,
+  preview = false,
 }: {
   cart: Cart;
   settings: StoreSettings;
   base: string;
   disabled: boolean;
   onSubmit: (input: unknown) => Promise<void>;
+  preview?: boolean;
 }) {
   const [delivery, setDelivery] = useState(
     settings.pickupEnabled ? "pickup" : "delivery",
@@ -1036,6 +1134,29 @@ function Checkout({
       }}
     >
       <div className={styles.form}>
+        {preview && delivery === "delivery" ? (
+          <button
+            type="button"
+            className={`${styles.secondary} justify-self-start`}
+            onClick={() =>
+              setAddress({
+                name: "Cliente de teste",
+                phone: "11999990000",
+                document: "",
+                postalCode: "01001000",
+                street: "Praça de teste",
+                number: "100",
+                complement: "",
+                district: "Centro",
+                city: "São Paulo",
+                state: "SP",
+                attention: "",
+              })
+            }
+          >
+            Preencher dados de teste
+          </button>
+        ) : null}
         <h2 className="text-lg font-semibold">1. Como deseja receber?</h2>
         {settings.pickupEnabled ? (
           <label className="!flex items-start gap-3 border-b border-zinc-200 pb-4">
@@ -1121,36 +1242,44 @@ function Checkout({
           </>
         ) : null}
         <h2 className="mt-5 text-lg font-semibold">2. Forma de pagamento</h2>
-        {cart.payments.mp_enabled ? (
-          <label className="!flex items-center gap-3">
-            <input
-              type="radio"
-              checked={provider === "mercado_pago"}
-              onChange={() => setProvider("mercado_pago")}
-            />
-            Mercado Pago · Métodos disponíveis no checkout seguro
-          </label>
-        ) : null}
-        {cart.payments.manual_enabled ? (
-          <label className="!flex items-center gap-3">
-            <input
-              type="radio"
-              checked={provider === "manual"}
-              onChange={() => setProvider("manual")}
-            />
-            Pagamento combinado com a loja
-          </label>
-        ) : null}
-        {!cart.payments.mp_enabled && !cart.payments.manual_enabled ? (
-          <p className="text-sm text-red-700">
-            A loja ainda não habilitou formas de pagamento.
+        {preview ? (
+          <p className="text-sm">
+            Pagamento simulado · Nenhum valor será cobrado.
           </p>
-        ) : null}
-        {provider === "manual" ? (
-          <p className="whitespace-pre-wrap text-sm text-zinc-500">
-            {cart.payments.manual_instructions}
-          </p>
-        ) : null}
+        ) : (
+          <>
+            {cart.payments.mp_enabled ? (
+              <label className="!flex items-center gap-3">
+                <input
+                  type="radio"
+                  checked={provider === "mercado_pago"}
+                  onChange={() => setProvider("mercado_pago")}
+                />
+                Mercado Pago · Métodos disponíveis no checkout seguro
+              </label>
+            ) : null}
+            {cart.payments.manual_enabled ? (
+              <label className="!flex items-center gap-3">
+                <input
+                  type="radio"
+                  checked={provider === "manual"}
+                  onChange={() => setProvider("manual")}
+                />
+                Pagamento combinado com a loja
+              </label>
+            ) : null}
+            {!cart.payments.mp_enabled && !cart.payments.manual_enabled ? (
+              <p className="text-sm text-red-700">
+                A loja ainda não habilitou formas de pagamento.
+              </p>
+            ) : null}
+            {provider === "manual" ? (
+              <p className="whitespace-pre-wrap text-sm text-zinc-500">
+                {cart.payments.manual_instructions}
+              </p>
+            ) : null}
+          </>
+        )}
       </div>
       <aside className={styles.summary}>
         <h2 className="mb-4 text-lg font-semibold">3. Revise seu pedido</h2>
@@ -1199,12 +1328,14 @@ function Checkout({
           }
         >
           <Check size={17} />
-          Confirmar pedido
+          {preview ? "Concluir simulação" : "Confirmar pedido"}
         </button>
         <p className="mt-3 text-sm text-zinc-500">
-          {provider === "mercado_pago"
-            ? "Após confirmar, abra o pagamento seguro no detalhe do pedido."
-            : "A produção começa após a confirmação do pagamento pela loja."}
+          {preview
+            ? "Prévia privada. Nenhum pedido real será criado."
+            : provider === "mercado_pago"
+              ? "Após confirmar, abra o pagamento seguro no detalhe do pedido."
+              : "A produção começa após a confirmação do pagamento pela loja."}
         </p>
       </aside>
     </form>

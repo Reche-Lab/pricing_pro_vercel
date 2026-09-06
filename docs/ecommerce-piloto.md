@@ -83,16 +83,30 @@ Cada tenant possui seu próprio caminho: `/commerce/SLUG_DO_TENANT/preview`.
 A prévia funciona mesmo com a loja desabilitada para visitantes, desde que o
 módulo esteja habilitado no ambiente (`COMMERCE_ENABLED=true`).
 
-É possível navegar no catálogo, pesquisar produtos, abrir um produto, simular
-quantidades/artes e consultar as condições. Não há sessão de comprador, carrinho,
-upload de arte ou checkout nessa rota; nenhuma compra ou pagamento é criado.
+É possível navegar no catálogo, pesquisar produtos e simular uma compra completa:
+
+1. Abra um produto personalizado, escolha quantidade e número de artes e adicione ao carrinho.
+2. Clique em **Abrir carrinho e preparar artes** ou no ícone do carrinho.
+3. Em cada item, use **Enviar arte**, **Retocar**, **Enquadrar** e **Aprovar arte**.
+4. Continue para entrega. Use **Preencher dados de teste**, se necessário, aceite as condições e conclua a simulação.
+
+O produto precisa estar salvo no catálogo da loja como personalizado e com a
+geometria de corte configurada. Os editores usam as mesmas guias e preparação do
+fluxo público. PNG, JPEG e WebP de até 3 MB são aceitos; a prévia limita a 20 versões
+e 24 MB de dados de imagens codificadas em memória para não sobrecarregar o navegador.
+
+O carrinho, arquivos e aprovações são temporários, preservados durante a navegação
+interna da prévia. Recarregar, fechar ou sair da prévia descarta a simulação.
+Não há sessão de comprador, pedido, pagamento ou upload no Storage real. Imagens
+são processadas por uma API administrativa autenticada e devolvidas ao navegador,
+sem persistência. Apenas as consultas e controles de limite de uso acessam o banco.
 
 A prévia mostra **a última versão salva**, não alterações ainda pendentes no
 formulário. Depois de editar, salve e atualize a aba da prévia. Ao publicar,
 o endereço público continua sendo `/loja/SLUG_DO_TENANT`.
 
 O link não é um token público: exige sessão administrativa com permissão no tenant
-ativo. Um administrador de outro tenant não pode usá-lo. Página e API de preços
+ativo. Um administrador de outro tenant não pode usá-lo. Página e APIs de preços/artes
 verificam esse acesso separadamente. As respostas são privadas, sem cache
 compartilhado, e marcadas para não indexar. Imagens do catálogo no bucket público
 continuam sendo imagens públicas, mesmo quando a página está em rascunho.
@@ -291,7 +305,11 @@ com os responsáveis pelo negócio. Não publique o texto de exemplo dos testes.
 ## Planejado x realizado
 
 - [x] Estrutura opcional, isolamento, catálogo, preços, comprador, carrinho e checkout do piloto.
-- [x] Prévia administrativa por tenant, com navegação privada e compras bloqueadas.
+- [x] Prévia administrativa por tenant, com carrinho, envio/retoque/enquadramento/aprovação e checkout simulados, sem pedidos reais.
+- [x] Processamento temporário de imagens autenticado, com limites e geometria obtida no tenant ativo.
+- [x] Simulação no navegador em 1365/390/320 px: envio, retoque, enquadramento, aprovação, checkout, retorno ao carrinho e descarte ao recarregar; sem sessão/pedido/arte gravados no banco.
+- [x] 245 testes unitários/componentes aprovados, incluindo isolamento e processamento de artes na prévia.
+- [x] TypeScript, lint e build local desta etapa aprovados, com um processo de validação por vez.
 - [x] Home responsiva, carrosséis de banners/produtos, busca por categoria e temas claro/escuro.
 - [x] Upload, edição, enquadramento, aprovação e acesso administrativo à produção.
 - [x] Pagamento manual e implementação de um provedor online por tenant.
@@ -312,10 +330,12 @@ O planejamento completo continua em `planejamento-ecommerce-multitenant.md`.
 
 ## Validação local com pouca memória
 
-Resultado desta entrega: 203 testes da suíte e 5 testes de integração com Postgres
-aprovados. Fluxo básico de navegador aprovado em desktop e sem overflow horizontal
-nas telas verificadas de 390/320 pixels. Build, lint e TypeScript aprovados. O fluxo
-de artes com Storage real e o pagamento online não foram homologados pelo navegador.
+Resultado da etapa de prévia simulada: 245 testes da suíte aprovados; os seis testes
+de integração com Postgres não foram reexecutados nessa suíte. O teste de navegador
+usou um banco local isolado e confirmou o fluxo de artes/checkout sem gravação de
+pedidos, artes ou sessões, em desktop e sem overflow horizontal nas telas de
+390/320 pixels. Build, lint e TypeScript aprovados. Storage real e pagamento online
+não foram acionados nem homologados nesta etapa.
 
 Execute **um comando por vez**:
 
@@ -335,3 +355,11 @@ Os testes de banco exigem um Postgres local separado, URL em
 `scripts/setup-commerce-test.mjs` cria esse banco e aplica as migrations. Os testes
 de integração criam fixtures e devem rodar em uma base nova, nunca no Supabase real.
 O script de navegador também exige essa base e Playwright instalado separadamente.
+
+Para repetir a simulação de artes, use `scripts/commerce-preview-browser.mjs` com
+`COMMERCE_TEST_DATABASE_URL`, `COMMERCE_TEST_BASE_URL` e `COMMERCE_PLAYWRIGHT_PATH`.
+Ele exige as fixtures dos testes de integração, recusa bancos/hosts não locais,
+restaura o produto e a publicação alterados para o teste e compara as contagens
+de pedidos, artes e sessões antes/depois. As capturas são salvas em `/tmp`.
+A suíte comum não executa os seis testes de banco sem uma base nova configurada;
+nesta etapa, a verificação com banco foi feita pelo teste de navegador isolado.

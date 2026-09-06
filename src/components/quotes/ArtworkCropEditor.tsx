@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { LocateFixed, Loader2, RotateCcw, X } from "lucide-react";
 import { createPrintGuideLayout, type PrintGeometry } from "@/domain/artwork/geometry";
 import type { QuoteItemArtworkRow } from "@/repositories/quotes";
@@ -14,6 +14,7 @@ export function ArtworkCropEditor({
   itemId,
   quoteId,
   prepareUrl,
+  onPrepare,
   onClose,
   onSaved
 }: {
@@ -25,6 +26,7 @@ export function ArtworkCropEditor({
   itemId: string;
   quoteId: string;
   prepareUrl?: string;
+  onPrepare?: (crop: { scale: number; offsetX: number; offsetY: number; rotationDegrees: number }) => Promise<void>;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -38,18 +40,27 @@ export function ArtworkCropEditor({
   async function prepare() {
     setSaving(true);
     setError("");
-    const response = await fetch(prepareUrl ?? `/api/quotes/${quoteId}/items/${itemId}/artworks/${artwork.id}/prepare`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ scale, offsetX, offsetY, rotationDegrees: rotation })
-    });
-    const data = await response.json().catch(() => null);
-    setSaving(false);
-    if (!response.ok) {
-      setError(data?.error ?? "Não foi possível preparar a arte.");
-      return;
+    try {
+      const crop = { scale, offsetX, offsetY, rotationDegrees: rotation };
+      if (onPrepare) await onPrepare(crop);
+      else {
+        const response = await fetch(prepareUrl ?? `/api/quotes/${quoteId}/items/${itemId}/artworks/${artwork.id}/prepare`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(crop)
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          setError(data?.error ?? "Não foi possível preparar a arte.");
+          return;
+        }
+      }
+      onSaved();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível preparar a arte.");
+    } finally {
+      setSaving(false);
     }
-    onSaved();
   }
 
   function reset() {

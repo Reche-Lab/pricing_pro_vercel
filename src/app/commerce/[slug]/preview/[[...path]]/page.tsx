@@ -21,7 +21,7 @@ export default async function CommercePreviewPage({
   const { slug, path = [] } = await params;
   const valid =
     path.length === 0 ||
-    (path.length === 1 && ["catalogo", "condicoes"].includes(path[0])) ||
+    (path.length === 1 && ["catalogo", "condicoes", "carrinho", "checkout"].includes(path[0])) ||
     (path.length === 2 && path[0] === "produto");
   if (!valid) notFound();
   const store = await requireCommercePreview(slug).catch((error: unknown) => {

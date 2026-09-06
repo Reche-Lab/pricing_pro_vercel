@@ -22,7 +22,7 @@
   --highlight: #f49bc1;
   color-scheme: dark;
 }
-.store input:not([type="checkbox"]):not([type="radio"]),
+.store input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 .store select,
 .store textarea {
   background: var(--surface);

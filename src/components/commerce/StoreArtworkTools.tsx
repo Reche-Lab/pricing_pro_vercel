@@ -1,9 +1,11 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, Crop, Paintbrush, Upload } from "lucide-react";
 import type { publicCommerceProduct } from "@/repositories/commerce";
 import { storeRequest } from "./store-http";
+import { useCommercePreview } from "./CommercePreviewProvider";
 const CropEditor = dynamic(
   () =>
     import("@/components/quotes/ArtworkCropEditor").then(
@@ -37,6 +39,7 @@ export function StoreArtworkTools({
   artworks,
   onSelect,
   onRefresh,
+  preview = false,
 }: {
   slug: string;
   product: ReturnType<typeof publicCommerceProduct>;
@@ -44,21 +47,41 @@ export function StoreArtworkTools({
   artworks: StoreArtwork[];
   onSelect: (id: string) => Promise<void>;
   onRefresh: () => Promise<void>;
+  preview?: boolean;
 }) {
+  const simulation = useCommercePreview();
   const [editor, setEditor] = useState<"crop" | "retouch" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  useEffect(() => {
+    if (!editor) return;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = overflow;
+    };
+  }, [editor]);
   const base = `/api/store/${slug}/artworks`;
+  const temporaryArt = preview
+    ? simulation?.cart.artworks.find((a) => a.id === artwork?.id)
+    : undefined;
+  const sourceUrl = preview
+    ? (temporaryArt?.source.dataUrl ?? "")
+    : `${base}/${artwork?.id}`;
   async function saveFile(file: {
     fileName: string;
     mimeType: string;
     fileSize: number;
     dataUrl: string;
   }) {
-    const result = await storeRequest(base, "POST", {
-      productId: product.id,
-      ...file,
-    });
+    if (preview && !simulation)
+      throw new Error("Reabra a prévia para iniciar a simulação.");
+    const result = preview
+      ? { artwork: { id: await simulation!.upload(product.id, file) } }
+      : await storeRequest(base, "POST", {
+          productId: product.id,
+          ...file,
+        });
     await onSelect(result.artwork.id);
     await onRefresh();
     setEditor(null);
@@ -136,7 +159,11 @@ export function StoreArtworkTools({
             width={80}
             height={80}
             className="h-20 w-20 rounded-md border border-zinc-200 bg-white object-contain"
-            src={`${base}/${artwork.id}?prepared=1&v=${encodeURIComponent(JSON.stringify(artwork.crop))}`}
+            src={
+              preview
+                ? (temporaryArt?.preparedUrl ?? sourceUrl)
+                : `${base}/${artwork.id}?prepared=1&v=${encodeURIComponent(JSON.stringify(artwork.crop))}`
+            }
           />
           <div className="flex flex-wrap gap-2">
             <button
@@ -163,9 +190,11 @@ export function StoreArtworkTools({
                 setBusy(true);
                 setError("");
                 try {
-                  await storeRequest(`${base}/${artwork.id}`, "POST", {
-                    action: "approve",
-                  });
+                  if (preview) await simulation!.approve(artwork.id);
+                  else
+                    await storeRequest(`${base}/${artwork.id}`, "POST", {
+                      action: "approve",
+                    });
                   await onRefresh();
                 } catch (e) {
                   setError(
@@ -187,41 +216,52 @@ export function StoreArtworkTools({
           {error}
         </p>
       ) : null}
-      {artwork && editor === "crop" && product.geometry ? (
-        <CropEditor
-          artwork={{
-            id: artwork.id,
-            file_name: artwork.file_name,
-            artwork_name: product.name,
-            crop_scale: String(artwork.crop?.scale ?? 1),
-            crop_offset_x: String(artwork.crop?.offsetX ?? 0),
-            crop_offset_y: String(artwork.crop?.offsetY ?? 0),
-            rotation_degrees: String(artwork.crop?.rotationDegrees ?? 0),
-          }}
-          geometry={product.geometry}
-          {...product.margins}
-          imageUrl={`${base}/${artwork.id}`}
-          itemId={product.id}
-          quoteId=""
-          prepareUrl={`${base}/${artwork.id}`}
-          onClose={() => setEditor(null)}
-          onSaved={() => {
-            setEditor(null);
-            void onRefresh();
-          }}
-        />
-      ) : null}
-      {artwork && editor === "retouch" ? (
-        <RetouchEditor
-          artworkName={product.name}
-          fileName={artwork.file_name}
-          imageUrl={`${base}/${artwork.id}`}
-          geometry={product.geometry}
-          {...product.margins}
-          onClose={() => setEditor(null)}
-          onSave={saveFile}
-        />
-      ) : null}
+      {artwork && editor === "crop" && product.geometry
+        ? createPortal(
+            <CropEditor
+              artwork={{
+                id: artwork.id,
+                file_name: artwork.file_name,
+                artwork_name: product.name,
+                crop_scale: String(artwork.crop?.scale ?? 1),
+                crop_offset_x: String(artwork.crop?.offsetX ?? 0),
+                crop_offset_y: String(artwork.crop?.offsetY ?? 0),
+                rotation_degrees: String(artwork.crop?.rotationDegrees ?? 0),
+              }}
+              geometry={product.geometry}
+              {...product.margins}
+              imageUrl={sourceUrl}
+              itemId={product.id}
+              quoteId=""
+              prepareUrl={`${base}/${artwork.id}`}
+              onPrepare={
+                preview
+                  ? (crop) => simulation!.prepare(artwork.id, crop)
+                  : undefined
+              }
+              onClose={() => setEditor(null)}
+              onSaved={() => {
+                setEditor(null);
+                void onRefresh();
+              }}
+            />,
+            document.body,
+          )
+        : null}
+      {artwork && editor === "retouch"
+        ? createPortal(
+            <RetouchEditor
+              artworkName={product.name}
+              fileName={artwork.file_name}
+              imageUrl={sourceUrl}
+              geometry={product.geometry}
+              {...product.margins}
+              onClose={() => setEditor(null)}
+              onSave={saveFile}
+            />,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
