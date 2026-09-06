@@ -22,6 +22,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/:path*", headers: securityHeaders },
       { source: "/q/:path*", headers: noStoreHeaders },
+      { source: "/commerce/:slug/preview/:path*", headers: noStoreHeaders },
+      { source: "/api/commerce/:slug/preview/:path*", headers: noStoreHeaders },
       { source: "/api/public/:path*", headers: noStoreHeaders }
     ];
   }

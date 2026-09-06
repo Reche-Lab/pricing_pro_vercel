@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   Check,
   ExternalLink,
+  Eye,
   Plus,
   Save,
   Store,
@@ -177,16 +178,32 @@ export function CommerceAdmin({
             </p>
           </div>
         </div>
-        {data.store?.enabled && data.store.status === "published" ? (
-          <Link
-            className={button}
-            target="_blank"
-            href={`/loja/${data.store.slug}`}
-          >
-            Abrir loja
-            <ExternalLink size={15} />
-          </Link>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {data.store?.tenant_id ? (
+            <Link
+              className={button}
+              target="_blank"
+              rel="noopener"
+              href={`/commerce/${data.store.slug}/preview`}
+            >
+              <Eye size={16} /> Pré-visualizar loja
+            </Link>
+          ) : (
+            <span className="text-xs text-zinc-500">
+              Salve o rascunho para pré-visualizar.
+            </span>
+          )}
+          {data.store?.enabled && data.store.status === "published" ? (
+            <Link
+              className={button}
+              target="_blank"
+              href={`/loja/${data.store.slug}`}
+            >
+              Abrir loja
+              <ExternalLink size={15} />
+            </Link>
+          ) : null}
+        </div>
       </div>
       <nav
         className="flex gap-2 overflow-x-auto"

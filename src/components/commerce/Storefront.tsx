@@ -1,6 +1,6 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
-import {
+import React, {
   useCallback,
   useEffect,
   useMemo,
@@ -46,35 +46,45 @@ type Props = {
   products: Product[];
   path: string[];
   paused: boolean;
+  preview?: boolean;
 };
 
-export function Storefront({ slug, settings, products, path, paused }: Props) {
+export function Storefront({
+  slug,
+  settings,
+  products,
+  path,
+  paused,
+  preview = false,
+}: Props) {
   const router = useRouter();
-  const base = `/loja/${slug}`;
-  const api = `/api/store/${slug}`;
+  const base = preview ? `/commerce/${slug}/preview` : `/loja/${slug}`;
+  const api = preview ? `/api/commerce/${slug}/preview` : `/api/store/${slug}`;
   const [cart, setCart] = useState<Cart | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [orders, setOrders] = useState<Order[]>([]);
   const refresh = useCallback(async () => {
+    if (preview) return;
     const data = await storeRequest(`${api}/cart`);
     setCart(data);
-  }, [api]);
+  }, [api, preview]);
   useEffect(() => {
     void refresh().catch((e) => setError(e.message));
   }, [refresh]);
   const view = path[0] ?? "home";
   const refreshOrders = useCallback(async () => {
+    if (preview) return;
     const data = await storeRequest(`${api}/orders`);
     setOrders(data.orders);
-  }, [api]);
+  }, [api, preview]);
   useEffect(() => {
     if (view === "pedidos" && cart?.customer)
       void refreshOrders().catch((e) => setError(e.message));
   }, [view, cart?.customer?.id, refreshOrders, cart?.customer]);
   async function action(work: () => Promise<void>) {
-    if (busy) return;
+    if (busy || preview) return;
     setBusy(true);
     setError("");
     setMessage("");
@@ -87,6 +97,7 @@ export function Storefront({ slug, settings, products, path, paused }: Props) {
     }
   }
   async function update(lines: CartLine[]) {
+    if (preview) return;
     if (!cart) throw new Error("O carrinho ainda está carregando.");
     await storeRequest(`${api}/cart`, "PUT", {
       revision: cart.revision,
@@ -102,6 +113,20 @@ export function Storefront({ slug, settings, products, path, paused }: Props) {
       className={styles.store}
       style={{ "--accent": settings.accent } as CSSProperties}
     >
+      {preview ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p>
+            <strong>Pré-visualização privada</strong> · Última versão salva.
+            Compras desativadas.
+          </p>
+          <Link
+            href="/commerce"
+            className="inline-flex items-center gap-2 underline"
+          >
+            <ArrowLeft size={16} /> Voltar às configurações
+          </Link>
+        </div>
+      ) : null}
       <header className={styles.header}>
         <div className={styles.headerInner}>
           <Link className={styles.brand} href={base}>
@@ -124,21 +149,25 @@ export function Storefront({ slug, settings, products, path, paused }: Props) {
             >
               <Search size={21} />
             </Link>
-            <Link
-              href={`${base}/conta`}
-              title="Minha conta"
-              aria-label="Minha conta"
-            >
-              <UserRound size={21} />
-            </Link>
-            <Link
-              className="flex items-center gap-2"
-              href={`${base}/carrinho`}
-              title="Carrinho"
-            >
-              <ShoppingBag size={21} />
-              <span className="text-sm">{cart?.lines.length ?? 0}</span>
-            </Link>
+            {!preview ? (
+              <>
+                <Link
+                  href={`${base}/conta`}
+                  title="Minha conta"
+                  aria-label="Minha conta"
+                >
+                  <UserRound size={21} />
+                </Link>
+                <Link
+                  className="flex items-center gap-2"
+                  href={`${base}/carrinho`}
+                  title="Carrinho"
+                >
+                  <ShoppingBag size={21} />
+                  <span className="text-sm">{cart?.lines.length ?? 0}</span>
+                </Link>
+              </>
+            ) : null}
           </nav>
         </div>
       </header>
@@ -156,7 +185,7 @@ export function Storefront({ slug, settings, products, path, paused }: Props) {
         </section>
       ) : null}
       <div className={styles.wrap}>
-        {paused ? (
+        {paused && !preview ? (
           <p className={styles.message}>
             A loja está temporariamente pausada. Seus pedidos continuam
             disponíveis em sua conta.
@@ -197,10 +226,12 @@ export function Storefront({ slug, settings, products, path, paused }: Props) {
         ) : null}
         {selectedProduct ? (
           <ProductDetail
+            key={selectedProduct.id}
             product={selectedProduct}
             base={base}
             api={api}
             disabled={busy || !cart || paused}
+            preview={preview}
             onAdd={(lines) =>
               action(async () => {
                 await update([...(cart?.lines ?? []), ...lines]);
@@ -510,7 +541,9 @@ export function Storefront({ slug, settings, products, path, paused }: Props) {
           </div>
           <div className="flex flex-col gap-2 text-sm">
             <Link href={`${base}/condicoes`}>Condições de compra</Link>
-            <Link href={`${base}/pedidos`}>Acompanhar pedido</Link>
+            {!preview ? (
+              <Link href={`${base}/pedidos`}>Acompanhar pedido</Link>
+            ) : null}
           </div>
         </div>
       </footer>
@@ -618,12 +651,14 @@ function ProductDetail({
   api,
   disabled,
   onAdd,
+  preview = false,
 }: {
   product: Product;
   base: string;
   api: string;
   disabled: boolean;
   onAdd: (lines: CartLine[]) => Promise<void>;
+  preview?: boolean;
 }) {
   const [quantity, setQuantity] = useState(String(product.minQuantity));
   const [groups, setGroups] = useState("1");
@@ -743,13 +778,15 @@ function ProductDetail({
           ) : null}
           <button
             className={`${styles.primary} w-full`}
-            disabled={disabled || !price}
+            disabled={preview || disabled || !price}
             onClick={() => void onAdd(lines)}
           >
             <ShoppingBag size={18} />
-            Adicionar ao carrinho
+            {preview
+              ? "Compras desativadas na prévia"
+              : "Adicionar ao carrinho"}
           </button>
-          {product.personalized ? (
+          {product.personalized && !preview ? (
             <p className="mt-3 text-sm text-zinc-500">
               No carrinho, envie, ajuste e aprove a imagem de cada arte antes de
               concluir.

@@ -70,6 +70,45 @@ A loja do piloto ficará em `/loja/ground-shop`. Outros tenants usam seu própri
 Não é necessário preencher `.env` com credenciais de cada loja: as credenciais de
 pagamento são armazenadas de forma criptografada por tenant no banco.
 
+### Pré-visualizar sem publicar
+
+Mantenha **Publicação: Rascunho**, salve a configuração e clique em
+**Pré-visualizar loja**, no topo da administração. O botão abre uma nova aba em:
+
+```text
+/commerce/ground-shop/preview
+```
+
+Cada tenant possui seu próprio caminho: `/commerce/SLUG_DO_TENANT/preview`.
+A prévia funciona mesmo com a loja desabilitada para visitantes, desde que o
+módulo esteja habilitado no ambiente (`COMMERCE_ENABLED=true`).
+
+É possível navegar no catálogo, pesquisar produtos, abrir um produto, simular
+quantidades/artes e consultar as condições. Não há sessão de comprador, carrinho,
+upload de arte ou checkout nessa rota; nenhuma compra ou pagamento é criado.
+
+A prévia mostra **a última versão salva**, não alterações ainda pendentes no
+formulário. Depois de editar, salve e atualize a aba da prévia. Ao publicar,
+o endereço público continua sendo `/loja/SLUG_DO_TENANT`.
+
+O link não é um token público: exige sessão administrativa com permissão no tenant
+ativo. Um administrador de outro tenant não pode usá-lo. Página e API de preços
+verificam esse acesso separadamente. As respostas são privadas, sem cache
+compartilhado, e marcadas para não indexar. Imagens do catálogo no bucket público
+continuam sendo imagens públicas, mesmo quando a página está em rascunho.
+
+Não há migration nem variável nova para a prévia.
+
+Verificação da prévia (06/09/2026):
+
+- [x] Rota por tenant e botão disponível após o primeiro salvamento.
+- [x] Acesso administrativo e consulta limitada ao tenant ativo.
+- [x] Links de catálogo, produto e condições mantidos na rota privada.
+- [x] Simulação de preços autenticada, sem criar sessão de comprador ou liberar compras.
+- [x] Cabeçalhos de privacidade e bloqueio de indexação.
+- [x] Suíte local: 215 testes aprovados; testes de banco separados não executados nesta alteração.
+- [x] Build de produção, lint e TypeScript aprovados.
+
 `APP_ENCRYPTION_KEY` deve permanecer estável: alterá-la sem migração dos segredos
 impede a leitura das credenciais já salvas. Não use as credenciais da cobrança da
 assinatura do Pricing Pro como credenciais dos vendedores.
@@ -146,6 +185,7 @@ com os responsáveis pelo negócio. Não publique o texto de exemplo dos testes.
 ## Planejado x realizado
 
 - [x] Estrutura opcional, isolamento, catálogo, preços, comprador, carrinho e checkout do piloto.
+- [x] Prévia administrativa por tenant, com navegação privada e compras bloqueadas.
 - [x] Upload, edição, enquadramento, aprovação e acesso administrativo à produção.
 - [x] Pagamento manual e implementação de um provedor online por tenant.
 - [x] Testes unitários, de banco e fluxo básico desktop/mobile com dados fictícios.
