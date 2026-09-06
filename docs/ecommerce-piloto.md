@@ -11,7 +11,7 @@ Nesta versão estão disponíveis:
 
 - Administração em **Configurações > Geral > Loja online**, também acessível em `/commerce`.
 - Identidade da loja, cor, logo, capa, atendimento e condições de compra.
-- Publicação explícita de produtos existentes, foto por URL HTTPS, descrição, categoria e limites de compra.
+- Publicação explícita de produtos existentes, upload de foto, descrição, categoria e limites de compra.
 - Catálogo pesquisável, página de produto e carrinho persistente por sessão.
 - Quantidade por grupo de arte e preço por grupo, total do produto ou média por arte.
 - Cálculo no servidor, centavos e confirmação do total no checkout.
@@ -32,6 +32,39 @@ Nesta versão estão disponíveis:
 6. Entre como owner/admin do tenant e abra `/commerce`. Salve a configuração inicialmente em **Rascunho**.
 7. Escolha o canal de preços, adicione somente os produtos que serão vendidos, informe fotos reais e confira as geometrias dos personalizados.
 8. Configure entrega, condições de compra e ao menos um meio de pagamento. Depois habilite a loja e selecione **Publicada**.
+
+### Upload das imagens da loja
+
+Execute também **`0063_commerce_media_bucket.sql`**. Ela cria o bucket público
+`commerce-media`, destinado somente a logo, capa e fotos do catálogo. As artes dos
+compradores continuam no bucket privado `artwork-production`, sem alteração.
+
+Os controles **Enviar imagem**, **Substituir imagem** e remover estão disponíveis
+em Identidade e atendimento e em cada produto publicado. Há prévia e retorno de
+sucesso/erro. Após o upload, clique em **Salvar loja e catálogo** para aplicar.
+O salvamento fica bloqueado enquanto houver imagens em envio.
+
+São aceitos PNG, JPEG e WebP não animados de até 3 MB. O servidor valida e converte
+para WebP, remove metadados e limita a dimensão maior a 512 px no logo, 2.400 px na
+capa e 1.600 px no produto, sem distorcer proporções ou remover transparência.
+Uploads exigem owner/admin, origem autorizada e são gravados em caminho exclusivo
+do tenant, com nome novo a cada envio. Não conceda escrita pública ao bucket.
+
+As URLs antigas continuam válidas. Remover ou substituir uma seleção não apaga o
+arquivo antigo do Storage, evitando quebrar referências já publicadas. A limpeza
+de arquivos sem referência permanece uma evolução de retenção do módulo.
+
+Nenhuma variável nova é necessária além de `SUPABASE_URL` e
+`SUPABASE_SERVICE_ROLE_KEY` já usadas no projeto. A flag `COMMERCE_ENABLED` não mudou.
+
+Checklist desta melhoria (06/09/2026):
+
+- [x] Upload, prévia, substituição, remoção e bloqueio de salvamento durante envio.
+- [x] Validação do conteúdo, otimização da imagem e caminhos por tenant.
+- [x] Testes de interface, arquivos inválidos, isolamento do caminho e autorização da API.
+- [x] Suíte local: 211 testes aprovados; 5 testes de banco separados não executados nesta alteração.
+- [x] Build de produção, lint e TypeScript aprovados com execução de baixo consumo.
+- [ ] Rodar a migration 0063 no Supabase e confirmar upload no Storage real.
 
 A loja do piloto ficará em `/loja/ground-shop`. Outros tenants usam seu próprio slug.
 Não é necessário preencher `.env` com credenciais de cada loja: as credenciais de
@@ -120,7 +153,8 @@ com os responsáveis pelo negócio. Não publique o texto de exemplo dos testes.
 - [ ] Cotação automática, embalagens e etiquetas Melhor Envio no checkout da loja.
 - [ ] Sincronização opcional dos pedidos da loja com Olist/ERP e financeiro existente.
 - [ ] Assistente criativo público com cotas e consumo de IA por comprador/tenant.
-- [ ] Upload/galeria de fotos do catálogo, endereço salvo e recuperação de carrinho entre dispositivos.
+- [x] Upload de logo, capa e imagem de produto com prévia, substituição e remoção da seleção.
+- [ ] Galeria com múltiplas fotos por produto, endereço salvo e recuperação de carrinho entre dispositivos.
 - [ ] Onboarding OAuth dos vendedores e outros provedores de pagamento.
 - [ ] Domínio próprio, DNS/certificado e resolução segura por host.
 - [ ] Estoque/reservas, cancelamentos/estornos, outbox, reconciliação periódica e retenção de arquivos.

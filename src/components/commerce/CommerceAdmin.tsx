@@ -4,7 +4,6 @@ import Link from "next/link";
 import {
   Check,
   ExternalLink,
-  ImagePlus,
   Plus,
   Save,
   Store,
@@ -14,6 +13,7 @@ import {
 import type { getCommerceAdmin } from "@/repositories/commerce";
 import type { StoreAdminInput, StoreSettings } from "@/domain/commerce/schemas";
 import { storeRequest, storeMoney } from "./store-http";
+import { CommerceImageUpload } from "./CommerceImageUpload";
 type Data = Awaited<ReturnType<typeof getCommerceAdmin>>;
 const field =
   "min-w-0 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100";
@@ -29,6 +29,9 @@ export function CommerceAdmin({
   const [data, setData] = useState(initial);
   const [tab, setTab] = useState("store");
   const [busy, setBusy] = useState(false);
+  const [pendingUploads, setPendingUploads] = useState(0);
+  const imageBusyChanged = (uploading: boolean) =>
+    setPendingUploads((count) => Math.max(0, count + (uploading ? 1 : -1)));
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [enabled, setEnabled] = useState(Boolean(initial.store?.enabled));
@@ -147,6 +150,7 @@ export function CommerceAdmin({
   }
   function save(event: FormEvent) {
     event.preventDefault();
+    if (pendingUploads) return;
     void perform(async () => {
       await storeRequest("/api/commerce/admin", "PUT", {
         enabled,
@@ -195,6 +199,7 @@ export function CommerceAdmin({
         ].map(([id, label]) => (
           <button
             key={id}
+            disabled={pendingUploads > 0}
             onClick={() => setTab(id)}
             className={`${button} whitespace-nowrap ${tab === id ? "border-emerald-500 bg-emerald-500/10 text-emerald-200" : "text-zinc-400"}`}
           >
@@ -268,8 +273,6 @@ export function CommerceAdmin({
                   { key: "name", label: "Nome da loja" },
                   { key: "contactEmail", label: "E-mail de atendimento" },
                   { key: "contactPhone", label: "Telefone / WhatsApp" },
-                  { key: "logoUrl", label: "URL HTTPS do logo" },
-                  { key: "bannerUrl", label: "URL HTTPS da imagem de capa" },
                 ] as const
               ).map(({ key, label }) => (
                 <label key={key} className="grid gap-1 text-sm">
@@ -283,6 +286,20 @@ export function CommerceAdmin({
                   />
                 </label>
               ))}
+              <CommerceImageUpload
+                label="Logo da loja"
+                purpose="logo"
+                value={settings.logoUrl}
+                onChange={(url) => updateSetting("logoUrl", url)}
+                onBusyChange={imageBusyChanged}
+              />
+              <CommerceImageUpload
+                label="Imagem de capa"
+                purpose="cover"
+                value={settings.bannerUrl}
+                onChange={(url) => updateSetting("bannerUrl", url)}
+                onBusyChange={imageBusyChanged}
+              />
               <label className="grid gap-1 text-sm">
                 Cor dos botões
                 <input
@@ -449,22 +466,15 @@ export function CommerceAdmin({
                           onChange={(e) => update({ category: e.target.value })}
                         />
                       </label>
-                      <label className="grid gap-1 text-sm sm:col-span-2">
-                        Imagem do produto (URL HTTPS)
-                        <div className="flex items-center gap-2">
-                          <ImagePlus
-                            size={18}
-                            className="shrink-0 text-zinc-500"
-                          />
-                          <input
-                            className={field}
-                            value={publication.imageUrl}
-                            onChange={(e) =>
-                              update({ imageUrl: e.target.value })
-                            }
-                          />
-                        </div>
-                      </label>
+                      <div className="sm:col-span-2">
+                        <CommerceImageUpload
+                          label="Imagem do produto"
+                          purpose="product"
+                          value={publication.imageUrl}
+                          onChange={(url) => update({ imageUrl: url })}
+                          onBusyChange={imageBusyChanged}
+                        />
+                      </div>
                       <label className="grid gap-1 text-sm sm:col-span-2">
                         Descrição pública
                         <textarea
@@ -536,6 +546,7 @@ export function CommerceAdmin({
                       <button
                         className={`${button} justify-self-start text-rose-300`}
                         type="button"
+                        disabled={pendingUploads > 0}
                         onClick={() =>
                           setPublications(
                             publications.filter((_, i) => i !== index),
@@ -554,10 +565,14 @@ export function CommerceAdmin({
           <div className="sticky bottom-3 flex justify-end">
             <button
               className="inline-flex items-center gap-2 rounded-md bg-emerald-400 px-5 py-3 font-semibold text-emerald-950 shadow-lg disabled:opacity-50"
-              disabled={busy}
+              disabled={busy || pendingUploads > 0}
             >
               <Save size={17} />
-              {busy ? "Salvando…" : "Salvar loja e catálogo"}
+              {pendingUploads
+                ? "Aguarde o envio das imagens…"
+                : busy
+                  ? "Salvando…"
+                  : "Salvar loja e catálogo"}
             </button>
           </div>
           <p className="text-xs text-zinc-500">
