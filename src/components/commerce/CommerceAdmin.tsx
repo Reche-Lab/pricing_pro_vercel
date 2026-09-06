@@ -15,6 +15,8 @@ import type { getCommerceAdmin } from "@/repositories/commerce";
 import type { StoreAdminInput, StoreSettings } from "@/domain/commerce/schemas";
 import { storeRequest, storeMoney } from "./store-http";
 import { CommerceImageUpload } from "./CommerceImageUpload";
+import { StoreBannersEditor } from "./StoreBannersEditor";
+import { CommerceProductMediaEditor } from "./CommerceProductMediaEditor";
 type Data = Awaited<ReturnType<typeof getCommerceAdmin>>;
 const field =
   "min-w-0 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100";
@@ -69,6 +71,7 @@ export function CommerceAdmin({
         description,
         category,
         imageUrl,
+        media,
         minQuantity,
         maxQuantity,
         maxArtworks,
@@ -81,6 +84,7 @@ export function CommerceAdmin({
         description,
         category,
         imageUrl,
+        media,
         minQuantity,
         maxQuantity,
         maxArtworks,
@@ -242,7 +246,10 @@ export function CommerceAdmin({
       ) : null}
       {tab === "store" ? (
         <form onSubmit={save} className="space-y-6">
-          <fieldset disabled={busy} className="min-w-0 space-y-6">
+          <fieldset
+            disabled={busy || pendingUploads > 0}
+            className="min-w-0 space-y-6"
+          >
             <div className="grid gap-4 sm:grid-cols-3">
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -311,12 +318,29 @@ export function CommerceAdmin({
                 onBusyChange={imageBusyChanged}
               />
               <CommerceImageUpload
-                label="Imagem de capa"
+                label="Capa padrão (sem carrossel)"
                 purpose="cover"
                 value={settings.bannerUrl}
                 onChange={(url) => updateSetting("bannerUrl", url)}
                 onBusyChange={imageBusyChanged}
               />
+              <label className="grid gap-1 text-sm">
+                Tema inicial da loja
+                <select
+                  className={field}
+                  value={settings.theme ?? "system"}
+                  onChange={(event) =>
+                    updateSetting(
+                      "theme",
+                      event.target.value as StoreSettings["theme"],
+                    )
+                  }
+                >
+                  <option value="system">Automático (dispositivo)</option>
+                  <option value="light">Claro</option>
+                  <option value="dark">Escuro</option>
+                </select>
+              </label>
               <label className="grid gap-1 text-sm">
                 Cor dos botões
                 <input
@@ -337,6 +361,15 @@ export function CommerceAdmin({
                 />
               </label>
             </section>
+            <StoreBannersEditor
+              banners={settings.banners ?? []}
+              onChange={(banners) => updateSetting("banners", banners)}
+              categories={[
+                ...new Set(publications.map((product) => product.category)),
+              ]}
+              uploading={pendingUploads > 0}
+              onBusyChange={imageBusyChanged}
+            />
             <section className="space-y-4 border-t border-zinc-800 pt-5">
               <h2 className="font-semibold">Entrega do piloto</h2>
               <label className="flex items-center gap-2 text-sm">
@@ -484,11 +517,11 @@ export function CommerceAdmin({
                         />
                       </label>
                       <div className="sm:col-span-2">
-                        <CommerceImageUpload
-                          label="Imagem do produto"
-                          purpose="product"
-                          value={publication.imageUrl}
-                          onChange={(url) => update({ imageUrl: url })}
+                        <CommerceProductMediaEditor
+                          productId={publication.variantId}
+                          media={publication.media}
+                          imageUrl={publication.imageUrl}
+                          onChange={update}
                           onBusyChange={imageBusyChanged}
                         />
                       </div>

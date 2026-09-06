@@ -21,7 +21,11 @@ export async function PUT(request: Request) {
   try {
     checkCommerceOrigin(request);
     const { session } = await requireCommerceAdmin();
-    const input = await readCommerceBody(request, storeAdminSchema);
+    const input = await readCommerceBody(
+      request,
+      storeAdminSchema,
+      2 * 1024 * 1024,
+    );
     await saveCommerceStore(session.userId, session.tenantId, input);
     return commerceJson({ ok: true });
   } catch (error) {

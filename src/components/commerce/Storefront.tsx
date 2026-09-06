@@ -9,7 +9,7 @@ import React, {
   type FormEvent,
 } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -20,6 +20,8 @@ import {
   Trash2,
   UserRound,
   Truck,
+  Moon,
+  Sun,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import type {
@@ -33,6 +35,9 @@ import { normalizeProductSearchTerm } from "@/domain/products/product-search";
 import { fetchCepAddress, normalizeCep } from "@/lib/cep";
 import { storeRequest, storeMoney } from "./store-http";
 import styles from "./store.module.css";
+import { StoreHome, StoreProductCard } from "./StoreHome";
+import { StoreProductGallery } from "./StoreProductGallery";
+import { useStoreTheme, accentForeground } from "./use-store-theme";
 const ArtworkTools = dynamic(
   () => import("./StoreArtworkTools").then((m) => m.StoreArtworkTools),
   { ssr: false },
@@ -58,6 +63,7 @@ export function Storefront({
   preview = false,
 }: Props) {
   const router = useRouter();
+  const { theme, toggle } = useStoreTheme(slug, settings.theme);
   const base = preview ? `/commerce/${slug}/preview` : `/loja/${slug}`;
   const api = preview ? `/api/commerce/${slug}/preview` : `/api/store/${slug}`;
   const [cart, setCart] = useState<Cart | null>(null);
@@ -111,7 +117,13 @@ export function Storefront({
   return (
     <main
       className={styles.store}
-      style={{ "--accent": settings.accent } as CSSProperties}
+      data-theme={theme}
+      style={
+        {
+          "--accent": settings.accent,
+          "--accent-ink": accentForeground(settings.accent),
+        } as CSSProperties
+      }
     >
       {preview ? (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -139,16 +151,44 @@ export function Storefront({
                 className="h-11 w-11 object-contain"
               />
             ) : null}
-            {settings.name}
+            <span>{settings.name}</span>
           </Link>
+          <form
+            className={styles.headerSearch}
+            onSubmit={(event) => {
+              event.preventDefault();
+              const query = String(
+                new FormData(event.currentTarget).get("q") ?? "",
+              ).trim();
+              router.push(
+                `${base}/catalogo${query ? `?q=${encodeURIComponent(query)}` : ""}`,
+              );
+            }}
+          >
+            <input
+              name="q"
+              aria-label="Buscar no catálogo"
+              placeholder="O que vamos criar hoje?"
+              maxLength={100}
+            />
+            <button type="submit" title="Buscar" aria-label="Buscar">
+              <Search size={20} />
+            </button>
+          </form>
           <nav aria-label="Loja" className={styles.navigation}>
-            <Link
-              href={`${base}/catalogo`}
-              title="Pesquisar produtos"
-              aria-label="Pesquisar produtos"
+            <button
+              className={styles.iconButton}
+              type="button"
+              onClick={toggle}
+              title={
+                theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"
+              }
+              aria-label={
+                theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"
+              }
             >
-              <Search size={21} />
-            </Link>
+              {theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
             {!preview ? (
               <>
                 <Link
@@ -159,7 +199,7 @@ export function Storefront({
                   <UserRound size={21} />
                 </Link>
                 <Link
-                  className="flex items-center gap-2"
+                  className={styles.cartButton}
                   href={`${base}/carrinho`}
                   title="Carrinho"
                 >
@@ -170,21 +210,32 @@ export function Storefront({
             ) : null}
           </nav>
         </div>
+        <nav aria-label="Categorias de produtos" className={styles.categoryNav}>
+          <Link href={`${base}/catalogo`} aria-label="Pesquisar produtos">
+            Todos os produtos
+          </Link>
+          {[...new Set(products.map((product) => product.category))].map(
+            (category) => (
+              <Link
+                key={category}
+                href={`${base}/catalogo?categoria=${encodeURIComponent(category)}`}
+              >
+                {category}
+              </Link>
+            ),
+          )}
+        </nav>
       </header>
-      {view === "home" && settings.bannerUrl ? (
-        <section className={styles.hero}>
-          <img alt={`Produtos de ${settings.name}`} src={settings.bannerUrl} />
-          <div className={styles.heroText}>
-            <h1>{settings.name}</h1>
-            <p>{settings.description}</p>
-            <Link className={styles.primary} href={`${base}/catalogo`}>
-              Escolher meus produtos
-              <ArrowRight size={17} />
-            </Link>
-          </div>
-        </section>
+      {view === "home" ? (
+        <StoreHome settings={settings} products={products} base={base} />
       ) : null}
-      <div className={styles.wrap}>
+      <div
+        className={
+          view === "home" && !error && !message && !paused
+            ? styles.emptyWrap
+            : styles.wrap
+        }
+      >
         {paused && !preview ? (
           <p className={styles.message}>
             A loja está temporariamente pausada. Seus pedidos continuam
@@ -213,15 +264,11 @@ export function Storefront({
             </Link>
           </p>
         ) : null}
-        {["home", "catalogo"].includes(view) ? (
+        {view === "catalogo" ? (
           <Catalog
             products={products}
             base={base}
-            title={
-              view === "home" && !settings.bannerUrl
-                ? settings.name
-                : "Escolha o seu próximo personalizado"
-            }
+            title="Encontre a sua próxima ideia"
           />
         ) : null}
         {selectedProduct ? (
@@ -525,7 +572,7 @@ export function Storefront({
           </>
         ) : null}
       </div>
-      <footer className="mt-12 border-t border-zinc-200 bg-white">
+      <footer className={styles.footer}>
         <div className={`${styles.wrap} flex flex-wrap justify-between gap-6`}>
           <div>
             <p className="font-semibold">{settings.name}</p>
@@ -559,8 +606,14 @@ function Catalog({
   base: string;
   title: string;
 }) {
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("");
+  const params = useSearchParams();
+  const [query, setQuery] = useState(params.get("q") ?? "");
+  const [category, setCategory] = useState(params.get("categoria") ?? "");
+  useEffect(() => {
+    setQuery(params.get("q") ?? "");
+    setCategory(params.get("categoria") ?? "");
+    setPage(1);
+  }, [params]);
   const [page, setPage] = useState(1);
   const categories = [...new Set(products.map((p) => p.category))];
   const filtered = products.filter(
@@ -604,29 +657,7 @@ function Catalog({
       </div>
       <div className={styles.grid}>
         {filtered.slice(0, page * 12).map((p) => (
-          <Link
-            className={styles.product}
-            href={`${base}/produto/${p.id}`}
-            key={p.id}
-          >
-            <img
-              src={p.imageUrl}
-              alt={p.name}
-              loading="lazy"
-              width={300}
-              height={300}
-            />
-            <h3>{p.name}</h3>
-            <p className={styles.muted}>
-              {p.personalized ? "Personalize com sua arte" : p.category}
-            </p>
-            <p className="mt-2 font-semibold">
-              {storeMoney(p.unitCents)}{" "}
-              <span className="text-xs font-normal text-zinc-500">
-                / un. em {p.minQuantity} un.
-              </span>
-            </p>
-          </Link>
+          <StoreProductCard key={p.id} product={p} base={base} />
         ))}
       </div>
       {!filtered.length ? (
@@ -712,12 +743,11 @@ function ProductDetail({
         Todos os produtos
       </Link>
       <div className={styles.columns}>
-        <img
-          src={product.imageUrl}
-          alt={product.name}
-          width={600}
-          height={600}
-          className="aspect-square w-full rounded-lg border border-zinc-200 bg-white object-contain"
+        <StoreProductGallery
+          id={product.id}
+          name={product.name}
+          imageUrl={product.imageUrl}
+          media={product.media}
         />
         <section>
           <p className="mb-3 text-sm text-zinc-500">{product.category}</p>

@@ -16,6 +16,13 @@ import {
 } from "@/repositories/commerce";
 import { verifyBuyerCode } from "@/services/commerce/buyer-auth";
 import type { StoreAdminInput } from "@/domain/commerce/schemas";
+import {
+  createVideoUpload,
+  lockVideoUpload,
+  markVideoReady,
+  assertCommerceVideosReady,
+} from "@/repositories/commerce-media";
+import { commerceVideoPath } from "@/domain/commerce/product-media";
 const url = process.env.COMMERCE_TEST_DATABASE_URL;
 describe.skipIf(!url)("commerce isolated Postgres integration", () => {
   let tenantId: string;
@@ -23,6 +30,7 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
   let platformId: string;
   let variantId: string;
   let otherTenant: string;
+  let published: StoreAdminInput;
   beforeAll(async () => {
     if (
       !url ||
@@ -107,6 +115,7 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
       ],
     };
     await saveCommerceStore(actorId, tenantId, input);
+    published = input;
     expect((await getCommerceStore("ground-shop"))?.tenant_id).toBe(tenantId);
     expect(await getCommerceStore("other-store")).toBeNull();
     await expect(
@@ -211,21 +220,101 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
       return id;
     };
     const locked = await insertChallenge();
-    await expect(verifyBuyerCode(store, other.session, locked, "123456")).rejects.toThrow("Código inválido");
+    await expect(
+      verifyBuyerCode(store, other.session, locked, "123456"),
+    ).rejects.toThrow("Código inválido");
     for (let i = 0; i < 5; i++) {
-      await expect(verifyBuyerCode(store, session, locked, "000000")).rejects.toThrow("Código inválido");
+      await expect(
+        verifyBuyerCode(store, session, locked, "000000"),
+      ).rejects.toThrow("Código inválido");
     }
-    await expect(verifyBuyerCode(store, session, locked, "123456")).rejects.toThrow("Código inválido");
+    await expect(
+      verifyBuyerCode(store, session, locked, "123456"),
+    ).rejects.toThrow("Código inválido");
     const valid = await insertChallenge();
     const rotated = await verifyBuyerCode(store, session, valid, "123456");
     expect(await findBuyerSession(tenantId, token)).toBeNull();
-    expect((await findBuyerSession(tenantId, rotated))?.customer_id).toBeTruthy();
-    await expect(verifyBuyerCode(store, session, valid, "123456")).rejects.toThrow("Código inválido");
+    expect(
+      (await findBuyerSession(tenantId, rotated))?.customer_id,
+    ).toBeTruthy();
+    await expect(
+      verifyBuyerCode(store, session, valid, "123456"),
+    ).rejects.toThrow("Código inválido");
   });
   it("keeps signed payment reconciliation addressable when the store is disabled", async () => {
-    await getPool().query("update commerce_stores set enabled=false where tenant_id=$1", [tenantId]);
+    await getPool().query(
+      "update commerce_stores set enabled=false where tenant_id=$1",
+      [tenantId],
+    );
     expect(await getCommerceStore("ground-shop", true)).toBeNull();
     expect(await commercePaymentTenant("ground-shop")).toBe(tenantId);
-    await getPool().query("update commerce_stores set enabled=true where tenant_id=$1", [tenantId]);
+    await getPool().query(
+      "update commerce_stores set enabled=true where tenant_id=$1",
+      [tenantId],
+    );
+  });
+  it("persists galleries and only accepts completed video uploads from the same tenant", async () => {
+    const previousUrl = process.env.SUPABASE_URL;
+    process.env.SUPABASE_URL = "https://storage.example.test";
+    const client = await getPool().connect();
+    try {
+      const upload = await createVideoUpload(tenantId, actorId, {
+        fileName: "demo.mp4",
+        fileSize: 100,
+        mimeType: "video/mp4",
+      });
+      const video = {
+        id: upload.id,
+        kind: "video" as const,
+        url: `https://storage.example.test/storage/v1/object/public/commerce-videos/${commerceVideoPath(tenantId, upload.id, "video/mp4")}`,
+      };
+      await expect(
+        assertCommerceVideosReady(tenantId, [{ media: [video] }]),
+      ).rejects.toThrow("não foi validado");
+      await expect(
+        lockVideoUpload(client, otherTenant, actorId, upload.id),
+      ).rejects.toMatchObject({ status: 404 });
+      await client.query("begin");
+      const locked = await lockVideoUpload(
+        client,
+        tenantId,
+        actorId,
+        upload.id,
+      );
+      await markVideoReady(client, locked);
+      await client.query("commit");
+      await expect(
+        assertCommerceVideosReady(otherTenant, [{ media: [video] }]),
+      ).rejects.toThrow("outra loja");
+      await expect(
+        assertCommerceVideosReady(tenantId, [
+          { media: [{ ...video, url: "https://attacker.test/video.mp4" }] },
+        ]),
+      ).rejects.toThrow();
+      const media = [
+        {
+          id: crypto.randomUUID(),
+          kind: "image" as const,
+          url: published.products[0].imageUrl,
+        },
+        video,
+      ];
+      await saveCommerceStore(actorId, tenantId, {
+        ...published,
+        products: [{ ...published.products[0], media }],
+      });
+      expect((await commerceProducts(tenantId))[0].media).toEqual(media);
+      await client.query("set role anon");
+      await expect(
+        client.query("select * from commerce_video_uploads"),
+      ).rejects.toMatchObject({ code: "42501" });
+      await client.query("reset role");
+    } finally {
+      await client.query("rollback");
+      await client.query("reset role");
+      client.release();
+      if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+      else process.env.SUPABASE_URL = previousUrl;
+    }
   });
 });

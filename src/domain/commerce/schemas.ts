@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isValidCpfOrCnpj } from "@/lib/validation/documents";
+import { productMediaSchema, safeCommerceMediaUrl } from "./product-media";
 
 export const cartLineSchema = z
   .object({
@@ -16,24 +17,31 @@ export const cartSchema = z
     lines: z.array(cartLineSchema).max(40),
   })
   .strict();
-export const safeImageUrl = z
-  .string()
-  .max(2048)
-  .refine((value) => {
-    if (!value) return true;
-    try {
-      const url = new URL(value);
-      return url.protocol === "https:" && !url.username && !url.password;
-    } catch {
-      return false;
-    }
-  }, "Use uma URL HTTPS para a imagem.");
+export const safeImageUrl = safeCommerceMediaUrl;
 export const storeSettingsSchema = z
   .object({
     name: z.string().trim().min(2).max(100),
     description: z.string().trim().max(500),
     logoUrl: safeImageUrl,
     bannerUrl: safeImageUrl,
+    theme: z.enum(["light", "dark", "system"]).optional(),
+    banners: z
+      .array(
+        z
+          .object({
+            id: z.string().uuid(),
+            imageUrl: safeImageUrl.refine(Boolean, "Envie a imagem do banner."),
+            mobileImageUrl: safeImageUrl.optional(),
+            showText: z.boolean().optional(),
+            title: z.string().trim().max(100),
+            description: z.string().trim().max(200),
+            buttonLabel: z.string().trim().max(40),
+            category: z.string().trim().max(100),
+          })
+          .strict(),
+      )
+      .max(5)
+      .optional(),
     accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
     contactEmail: z.string().email(),
     contactPhone: z.string().trim().max(30),
@@ -66,6 +74,7 @@ export const publicationSchema = z
     description: z.string().trim().max(4000),
     category: z.string().trim().min(1).max(100),
     imageUrl: safeImageUrl.refine(Boolean, "Inclua a imagem do produto."),
+    media: productMediaSchema.optional(),
     active: z.boolean(),
     minQuantity: z.number().int().min(1).max(50000),
     maxQuantity: z.number().int().min(1).max(50000),
@@ -74,6 +83,10 @@ export const publicationSchema = z
     pricingRule: z.enum(["per_art", "total", "average"]),
   })
   .strict()
+  .refine(
+    (value) => !value.media || value.media[0]?.url === value.imageUrl,
+    "A capa deve ser a primeira imagem da galeria.",
+  )
   .refine(
     (value) => value.maxQuantity >= value.minQuantity,
     "Quantidade máxima menor que a mínima.",

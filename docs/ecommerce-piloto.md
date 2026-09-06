@@ -113,7 +113,113 @@ Verificação da prévia (06/09/2026):
 impede a leitura das credenciais já salvas. Não use as credenciais da cobrança da
 assinatura do Pricing Pro como credenciais dos vendedores.
 
+### Home, banners e temas
+
+Em **Loja online**, escolha o **Tema inicial da loja**: claro, escuro ou conforme
+o dispositivo. O visitante pode alternar pelo ícone no cabeçalho. A preferência
+fica salva no navegador separadamente para cada loja; não muda o tema administrativo.
+
+Em **Banners da página inicial**, cadastre até cinco banners, ordene pelas setas e
+escolha o destino no catálogo. Cada banner aceita upload de imagem principal e
+uma imagem opcional para celular, título, mensagem e texto do botão. Desative
+**Exibir título, mensagem e botão sobre a imagem** quando a própria imagem já
+contiver os textos. Nesse modo, toda a imagem abre a categoria escolhida.
+Sem carrossel cadastrado, a capa anterior continua funcionando; sem capa, a home
+mostra a identidade da loja e o catálogo, sem imagens fictícias.
+
+Salve as alterações e use **Pré-visualizar loja** para conferir antes de publicar.
+Para banners somente com imagem, as áreas têm proporção 2,6:1 em desktop e 1,15:1
+no celular. A imagem inteira é preservada, podendo haver espaço nas laterais se
+a proporção enviada for diferente. Banners com texto sobreposto usam preenchimento
+da área; uma versão própria para celular evita cortes indesejados.
+
+A home reúne busca no cabeçalho, navegação por categoria, carrossel de produtos,
+coleções e destaque da primeira categoria. Os produtos e preços vêm do catálogo
+publicado, sem regras de preço novas. Carrosséis permitem navegação por toque e
+botões; os banners têm pausa e respeitam a preferência de movimento reduzido.
+
+Checklist desta melhoria (06/09/2026):
+
+- [x] Home responsiva e carrosséis de banners/produtos, com imagens reais do catálogo.
+- [x] Upload e ordenação de até cinco banners, com versão própria para celular.
+- [x] Temas claro, escuro e sistema, com preferência do visitante por tenant.
+- [x] Busca e categorias preservam os caminhos da prévia privada.
+- [x] Navegador: 320, 390, 768 e 1365 px, temas, navegação e ausência de overflow horizontal.
+- [x] Cinco testes de integração passaram em Postgres local isolado.
+- [x] Suíte completa: 220 testes aprovados; TypeScript, lint e build de produção aprovados.
+- [ ] Cadastrar e revisar os banners definitivos de cada loja antes da publicação.
+
+Não há migration nem variável nova: banners e tema são campos opcionais do JSON
+de configurações já existente. A configuração antiga permanece compatível.
+
 ## Preços e artes
+
+### Galeria de fotos e vídeos dos produtos
+
+Em **Loja online > Loja e catálogo**, abra o produto e use **Galeria > Adicionar
+mídias**. É possível selecionar vários arquivos; o envio acontece um por vez,
+com progresso e preservação dos arquivos concluídos caso um dos próximos falhe.
+A foto antiga continua sendo a capa dos produtos já cadastrados.
+
+Limites aplicados na interface e no servidor:
+
+| Mídia | Limite por arquivo              | Formatos                       |
+| ----- | ------------------------------- | ------------------------------ |
+| Foto  | 3 MB e 25 megapixels de entrada | PNG, JPEG e WebP, sem animação |
+| Vídeo | 20 MB                           | MP4 ou WebM                    |
+
+Cada produto aceita **até 10 mídias no total, sendo no máximo 2 vídeos**. Exemplos:
+10 fotos, 9 fotos + 1 vídeo ou 8 fotos + 2 vídeos. A capa conta nesse total e deve
+ser uma imagem. As setas alteram a ordem; a estrela escolhe a capa e a lixeira
+remove a seleção. Depois clique em **Salvar loja e catálogo**.
+
+As fotos são otimizadas para WebP, até 1.600 px no maior lado, sem ampliar arquivos
+menores. Os vídeos não são recomprimidos: recomenda-se MP4/H.264, áudio AAC,
+resolução até 1080p e duração de 30 a 60 segundos. Resolução e duração são
+recomendações, não limites adicionais de validação. O servidor confere tamanho
+real e assinatura do contêiner; a compatibilidade de codecs depende do navegador.
+
+Na página do produto e na prévia privada, há imagem principal, miniaturas, setas
+e navegação por toque nas imagens. Vídeos carregam somente quando selecionados,
+com controles nativos, reprodução inline e sem autoplay. A capa continua sendo
+usada nos carrosséis e no carrinho.
+
+#### Ativação dos vídeos
+
+1. Execute **`0064_commerce_product_videos.sql`** após as migrations anteriores.
+2. Mantenha `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` já configuradas; nenhuma variável nova é necessária.
+3. Confira se o limite global de arquivos do Storage permite pelo menos 20 MB.
+4. Faça o deploy e homologue um upload real de vídeo na galeria.
+
+A migration cria o registro de uploads e dois buckets: `commerce-video-staging`
+**privado** e `commerce-videos` **público**, ambos limitados a 20 MB e aos MIME types
+de MP4/WebM. Não adicione policies públicas de escrita. O bucket de fotos e as
+artes privadas dos compradores não são alterados.
+
+O upload direto usa URL assinada para um caminho exclusivo e sem sobrescrita no
+bucket privado. A conclusão exige novamente administrador, mesmo tenant e mesmo
+usuário que iniciou o envio; só então o servidor valida o arquivo e o publica.
+A publicação do catálogo rejeita vídeos pendentes, URLs alteradas ou vídeos de
+outro tenant. A conclusão é idempotente e registra auditoria. Tokens assinados e
+credenciais do Storage não aparecem nos logs.
+
+O fluxo segue o [upload assinado do Supabase](https://supabase.com/docs/reference/javascript/file-buckets-createsigneduploadurl)
+para não enviar os vídeos pelo corpo das funções da Vercel. As autorizações de
+upload e os registros pendentes expiram em duas horas. A remoção do arquivo
+temporário após concluir é best-effort: periodicamente remova do bucket privado
+arquivos pendentes/abandonados com mais de 24 horas. Remover mídia de um produto
+não apaga o arquivo público, evitando quebrar pedidos e outras referências.
+Retenção automática desses arquivos continua pendente.
+
+Checklist desta melhoria:
+
+- [x] Galeria de até 10 mídias, com no máximo 2 vídeos e imagem de capa obrigatória.
+- [x] Upload múltiplo sequencial, progresso, reordenação, capa e remoção.
+- [x] Upload de vídeo privado, validação antes de publicar e autorização por tenant.
+- [x] Navegador: 1365, 390 e 320 px; seleção e reprodução de vídeo com arquivo local de teste.
+- [x] Seis testes de banco em Postgres local, incluindo persistência e isolamento dos vídeos.
+- [x] Suíte: 235 testes aprovados; TypeScript, lint e build de produção aprovados.
+- [ ] Rodar a migration 0064 e homologar o Storage real. Os testes locais não enviaram arquivos ao Supabase real.
 
 Ao salvar o catálogo, a loja copia a curva e as taxas do canal selecionado. Alterações
 posteriores no precificador não mudam essa publicação até salvá-la novamente.
@@ -186,6 +292,7 @@ com os responsáveis pelo negócio. Não publique o texto de exemplo dos testes.
 
 - [x] Estrutura opcional, isolamento, catálogo, preços, comprador, carrinho e checkout do piloto.
 - [x] Prévia administrativa por tenant, com navegação privada e compras bloqueadas.
+- [x] Home responsiva, carrosséis de banners/produtos, busca por categoria e temas claro/escuro.
 - [x] Upload, edição, enquadramento, aprovação e acesso administrativo à produção.
 - [x] Pagamento manual e implementação de um provedor online por tenant.
 - [x] Testes unitários, de banco e fluxo básico desktop/mobile com dados fictícios.
@@ -194,7 +301,8 @@ com os responsáveis pelo negócio. Não publique o texto de exemplo dos testes.
 - [ ] Sincronização opcional dos pedidos da loja com Olist/ERP e financeiro existente.
 - [ ] Assistente criativo público com cotas e consumo de IA por comprador/tenant.
 - [x] Upload de logo, capa e imagem de produto com prévia, substituição e remoção da seleção.
-- [ ] Galeria com múltiplas fotos por produto, endereço salvo e recuperação de carrinho entre dispositivos.
+- [x] Galeria com até 10 mídias por produto, incluindo até 2 vídeos.
+- [ ] Endereço salvo e recuperação de carrinho entre dispositivos.
 - [ ] Onboarding OAuth dos vendedores e outros provedores de pagamento.
 - [ ] Domínio próprio, DNS/certificado e resolução segura por host.
 - [ ] Estoque/reservas, cancelamentos/estornos, outbox, reconciliação periódica e retenção de arquivos.

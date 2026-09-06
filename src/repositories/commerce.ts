@@ -3,6 +3,8 @@ import type { PoolClient } from "pg";
 import { getPool } from "@/lib/db/client";
 import { listProductVariants } from "@/repositories/products";
 import { listPlatformRules } from "@/repositories/platforms";
+import { assertCommerceVideosReady } from "@/repositories/commerce-media";
+import type { ProductMedia } from "@/domain/commerce/product-media";
 import {
   resolvePrintGeometry,
   resolvePrintMargins,
@@ -30,6 +32,7 @@ export type CommerceProduct = PriceProduct & {
   description: string;
   category: string;
   imageUrl: string;
+  media?: ProductMedia[];
   personalized: boolean;
   geometry: PrintGeometry | null;
   margins: PrintMargins;
@@ -103,8 +106,11 @@ export async function getCommerceStore(
   );
   return result.rows[0] ?? null;
 }
-export async function commercePaymentTenant(slug: string): Promise<string | null> {
-  if (!commerceEnabled() || !/^[a-z0-9][a-z0-9-]{0,99}$/.test(slug)) return null;
+export async function commercePaymentTenant(
+  slug: string,
+): Promise<string | null> {
+  if (!commerceEnabled() || !/^[a-z0-9][a-z0-9-]{0,99}$/.test(slug))
+    return null;
   // Existing orders still need reconciliation after the storefront is disabled.
   const result = await getPool().query<{ tenant_id: string }>(
     "select s.tenant_id from commerce_stores s join tenants t on t.id=s.tenant_id where t.slug=$1",
@@ -158,6 +164,7 @@ export function publicCommerceProduct(product: CommerceProduct) {
     description,
     category,
     imageUrl,
+    ...(product.media ? { media: product.media } : {}),
     minQuantity,
     maxQuantity,
     maxArtworks,
@@ -208,6 +215,7 @@ export async function saveCommerceStore(
   tenantId: string,
   input: StoreAdminInput,
 ) {
+  await assertCommerceVideosReady(tenantId, input.products);
   const [variants, platforms] = await Promise.all([
     listProductVariants(userId, tenantId),
     listPlatformRules(userId, tenantId),
