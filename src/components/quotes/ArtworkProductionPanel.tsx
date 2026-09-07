@@ -4,9 +4,9 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronDown, ChevronUp, Download, Eye, FileText, ImageIcon, Paintbrush, Printer, Scissors, Upload, WandSparkles, X } from "lucide-react";
-import { ArtworkCropEditor } from "@/components/quotes/ArtworkCropEditor";
+import { QuoteArtworkGuidedStudio } from "./QuoteArtworkGuidedStudio";
+import type { ArtworkStudioStep } from "./artwork-studio-types";
 import { ArtworkPdfPreview } from "@/components/quotes/ArtworkPdfPreview";
-import { ArtworkRetouchEditor, type RetouchedArtworkFile } from "@/components/quotes/ArtworkRetouchEditor";
 import { PdfArtworkImportModal } from "@/components/quotes/PdfArtworkImportModal";
 import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
 import { geometryLabel, resolvePrintGeometry, resolvePrintMargins, type PrintGeometry } from "@/domain/artwork/geometry";
@@ -25,8 +25,9 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
   const [aiItemId, setAiItemId] = useState(items[0]?.id ?? "");
   const [aiReferenceArtworkId, setAiReferenceArtworkId] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestions | null>(null);
-  const [editing, setEditing] = useState<ArtworkEntry | null>(null);
-  const [retouching, setRetouching] = useState<ArtworkEntry | null>(null);
+  const [studio, setStudio] = useState<{ entry: ArtworkEntry; step: ArtworkStudioStep } | null>(null);
+  function setEditing(entry: ArtworkEntry) { setStudio({ entry, step: "crop" }); }
+  function setRetouching(entry: ArtworkEntry) { setStudio({ entry, step: "retouch" }); }
   const [pdfImportItem, setPdfImportItem] = useState<QuoteItemRow | null>(null);
   const [versionPreview, setVersionPreview] = useState<{ active: ArtworkEntry; previous: ArtworkEntry } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -100,6 +101,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
 
   async function approve(entry: ArtworkEntry, status: "approved" | "rejected") {
     if (readOnly) return;
+    if (status === "approved") { setStudio({ entry, step: "review" }); return; }
     await runAction(`approval-${entry.artwork.id}`, `/api/quotes/${quoteId}/items/${entry.item.id}/artworks/${entry.artwork.id}/approval`, {
       status,
       productionQuantity: quantities[entry.artwork.id] || entry.item.quantity
@@ -157,25 +159,6 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
     }
   }
 
-  async function saveRetouchedArtwork(file: RetouchedArtworkFile) {
-    if (!retouching) return;
-    const response = await fetch(`/api/quotes/${quoteId}/items/${retouching.item.id}/artworks`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        artworkName: `${retouching.artwork.artwork_name || retouching.artwork.file_name} · retoque`,
-        sourceKind: "retouch",
-        parentArtworkId: retouching.artwork.id,
-        productionQuantity: quantities[retouching.artwork.id] || retouching.artwork.production_quantity || retouching.item.quantity,
-        artworkFile: file
-      })
-    });
-    const data = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(data?.error ?? "Não foi possível salvar a versão retocada.");
-    setRetouching(null);
-    setMessage("Retoque salvo como versão ativa. A original permanece disponível no histórico para consulta ou restauração.");
-    router.refresh();
-  }
 
   async function restorePreviousVersion() {
     if (!versionPreview) return;
@@ -254,18 +237,7 @@ export function ArtworkProductionPanel({ quoteId, items, readOnly = false }: { q
         <div className="flex flex-wrap items-end justify-between gap-3 border-t border-zinc-800 pt-4"><div><p className="text-xs text-zinc-500">A soma das artes aprovadas deve corresponder à quantidade de cada item.</p><button aria-pressed={drawCutLines} className={`focus-ring mt-3 inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${drawCutLines ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-200" : "border-zinc-700 bg-zinc-950 text-zinc-400 hover:bg-zinc-900"}`} type="button" onClick={() => setDrawCutLines((current) => !current)}><Scissors size={14} /> Linhas de corte <span className={`rounded px-1.5 py-0.5 text-[10px] ${drawCutLines ? "bg-cyan-400 text-cyan-950" : "bg-zinc-800 text-zinc-400"}`}>{drawCutLines ? "Incluídas" : "Removidas"}</span></button></div><div className="flex flex-wrap gap-2"><button className={`focus-ring inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium ${readyToPrint ? "border-zinc-700 text-zinc-200 hover:bg-zinc-900" : "cursor-not-allowed border-zinc-800 text-zinc-600"}`} disabled={!readyToPrint} type="button" onClick={() => setPreviewOpen(true)}><Eye size={16} /> Visualizar folhas</button><button className={`focus-ring inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold ${readyToPrint ? "bg-amber-400 text-zinc-950 hover:bg-amber-300" : "cursor-not-allowed bg-zinc-800 text-zinc-500"}`} disabled={!readyToPrint || Boolean(busy)} type="button" onClick={downloadPdf}><Download size={16} /> {busy === "pdf-download" ? "Gerando..." : "Baixar PDF"}</button></div></div>
       </div> : null}
 
-      {editing && inferGeometry(editing.item, editing.artwork) ? <ArtworkCropEditor artwork={editing.artwork} geometry={inferGeometry(editing.item, editing.artwork) as PrintGeometry} {...inferMargins(editing.item, editing.artwork)} imageUrl={artworkImageUrl(quoteId, editing, "original")} itemId={editing.item.id} quoteId={quoteId} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setMessage("Arte preparada. Confira a qualidade e aprove a versão."); router.refresh(); }} /> : null}
-      {retouching ? <ArtworkRetouchEditor
-        artworkName={retouching.artwork.artwork_name || retouching.artwork.file_name}
-        bleedMm={inferMargins(retouching.item, retouching.artwork).bleedMm}
-        draftUrl={`/api/quotes/${quoteId}/items/${retouching.item.id}/artworks/${retouching.artwork.id}/retouch-draft`}
-        fileName={retouching.artwork.file_name}
-        geometry={inferGeometry(retouching.item, retouching.artwork)}
-        imageUrl={artworkImageUrl(quoteId, retouching, "original")}
-        safeMarginMm={inferMargins(retouching.item, retouching.artwork).safeMarginMm}
-        onClose={() => setRetouching(null)}
-        onSave={saveRetouchedArtwork}
-      /> : null}
+      {studio && !readOnly ? <QuoteArtworkGuidedStudio quoteId={quoteId} item={studio.entry.item} artwork={studio.entry.artwork} productionQuantity={quantities[studio.entry.artwork.id] || studio.entry.artwork.production_quantity || studio.entry.item.quantity} initialStep={studio.step} onClose={() => setStudio(null)} onChanged={() => { setMessage("Arte atualizada no estúdio."); router.refresh(); }} /> : null}
       {previewOpen ? <ArtworkPdfPreview drawCutLines={drawCutLines} quoteId={quoteId} onClose={() => setPreviewOpen(false)} /> : null}
       {pdfImportItem ? <PdfArtworkImportModal importBaseUrl={`/api/quotes/${quoteId}/items/${pdfImportItem.id}/artworks/pdf-imports`} itemDescription={pdfImportItem.description} itemQuantity={pdfImportItem.quantity} onClose={() => setPdfImportItem(null)} onImported={(count) => { setPdfImportItem(null); setMessage(`${count} arte(s) importada(s) do PDF. Agora você pode reenquadrar e aprovar cada versão.`); router.refresh(); }} /> : null}
       {versionPreview ? <ArtworkVersionModal active={versionPreview.active} previous={versionPreview.previous} busy={busy === `restore-${versionPreview.active.artwork.id}`} quoteId={quoteId} readOnly={readOnly} onClose={() => setVersionPreview(null)} onRestore={restorePreviousVersion} /> : null}

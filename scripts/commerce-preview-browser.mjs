@@ -117,7 +117,7 @@ try {
     mimeType: "image/png",
     buffer: image,
   });
-  await page.getByRole("button", { name: "Retocar", exact: true }).click();
+  await page.getByRole("button", { name: "Retocar arte", exact: true }).click();
   const canvas = page.locator('canvas[aria-label^="Editor da arte"]');
   await canvas.waitFor();
   await page.waitForFunction(() => {
@@ -143,8 +143,11 @@ try {
     { steps: 8 },
   );
   await page.mouse.up();
+  await page.getByRole("button", { name: "Fechar editor", exact: true }).click();
+  await page.getByRole("alertdialog").waitFor();
+  await page.getByRole("button", { name: "Continuar editando", exact: true }).click();
   for (const width of [1365, 390, 320]) {
-    await page.setViewportSize({ width, height: 900 });
+    await page.setViewportSize({ width, height: width <= 320 ? 740 : width <= 390 ? 844 : 900 });
     if (
       await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth + 1,
@@ -175,15 +178,14 @@ try {
     });
   }
   await page
-    .getByRole("button", { name: "Salvar versão", exact: true })
+    .getByRole("button", { name: "Salvar e enquadrar", exact: true })
     .click();
   await canvas.waitFor({ state: "hidden" });
-  await page.getByRole("button", { name: "Enquadrar", exact: true }).click();
   await page
     .getByText("Centralizar e enquadrar arte", { exact: true })
     .waitFor();
   for (const width of [1365, 390, 320]) {
-    await page.setViewportSize({ width, height: 900 });
+    await page.setViewportSize({ width, height: width <= 320 ? 740 : width <= 390 ? 844 : 900 });
     if (
       await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth + 1,
@@ -196,12 +198,17 @@ try {
     });
   }
   await page
-    .getByRole("button", { name: "Preparar arte", exact: true })
+    .getByRole("button", { name: "Revisar e aprovar", exact: true })
     .click();
   await page
     .getByText("Centralizar e enquadrar arte", { exact: true })
     .waitFor({ state: "hidden" });
+  await page.getByAltText("Arte final para aprovação").waitFor();
+  if (!(await page.getByRole("button", { name: "Aprovar arte", exact: true }).isDisabled())) throw new Error("Approval must require review");
+  await page.getByRole("checkbox").check();
+  await page.screenshot({ path: "/tmp/commerce-preview-review-320.png", fullPage: true });
   await page.getByRole("button", { name: "Aprovar arte", exact: true }).click();
+  await page.getByRole("button", { name: "Concluir", exact: true }).click();
   await page.getByRole("button", { name: "Aprovada", exact: true }).waitFor();
   await page.screenshot({
     path: "/tmp/commerce-preview-approved-320.png",

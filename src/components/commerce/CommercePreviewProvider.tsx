@@ -26,6 +26,7 @@ type PreviewSession = {
   upload: (productId: string, file: PreviewFile) => Promise<string>;
   prepare: (id: string, crop: PreviewCrop) => Promise<void>;
   approve: (id: string) => Promise<void>;
+  getArtwork: (id: string) => PreviewArtwork;
   reset: () => void;
 };
 const Context = createContext<PreviewSession | null>(null);
@@ -84,6 +85,7 @@ export function CommercePreviewProvider({
     <Context.Provider
       value={{
         cart,
+        getArtwork: getArt,
         reset() {
           epoch.current++;
           commit(emptyCart());

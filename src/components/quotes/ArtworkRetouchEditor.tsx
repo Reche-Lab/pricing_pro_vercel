@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useArtworkExitGuard } from "./useArtworkExitGuard";
 import {
-  ArrowDown, ArrowUp, BringToFront, Brush, Check, Circle, Eraser, Eye, EyeOff, Grab, Group, Layers3, Loader2, MousePointer2, PaintBucket, Pipette, Plus,
+  ArrowDown, ArrowLeft, ArrowUp, BringToFront, Brush, Check, Circle, Eraser, Eye, EyeOff, Grab, Group, Layers3, Loader2, MousePointer2, PaintBucket, Pipette, Plus,
   RectangleHorizontal, Redo2, RotateCcw, Save, Shapes, SlidersHorizontal, Square, Trash2, Triangle,
   Undo2, Ungroup, SendToBack, X, ZoomIn, ZoomOut
 } from "lucide-react";
@@ -55,7 +56,7 @@ const MAX_WORKSPACE_PIXELS = 30_000_000;
 export type RetouchedArtworkFile = { fileName: string; mimeType: "image/webp"; fileSize: number; dataUrl: string };
 
 export function ArtworkRetouchEditor({
-  artworkName, fileName, imageUrl, geometry, bleedMm = 2, safeMarginMm = 2, draftUrl, onClose, onSave
+  artworkName, fileName, imageUrl, geometry, bleedMm = 2, safeMarginMm = 2, draftUrl, onClose, onSave, navigation, onContinue
 }: {
   artworkName: string;
   fileName: string;
@@ -66,6 +67,8 @@ export function ArtworkRetouchEditor({
   draftUrl?: string;
   onClose: () => void;
   onSave: (file: RetouchedArtworkFile) => Promise<void>;
+  navigation?: ReactNode;
+  onContinue?: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -82,6 +85,9 @@ export function ArtworkRetouchEditor({
   const toolBeforeSpaceRef = useRef<Tool | null>(null);
   const toolBeforeEyedropperRef = useRef<Tool>("brush");
   const draftLoadedRef = useRef(false);
+  const draftTimer = useRef<number | null>(null);
+  const draftWrite = useRef<Promise<unknown>>(Promise.resolve());
+  const draftPaused = useRef(false);
   const visibleOperationsRef = useRef<RetouchOperation[]>([]);
   const comparisonRef = useRef<number | null>(null);
   const [tool, setTool] = useState<Tool>("brush");
@@ -213,19 +219,21 @@ export function ArtworkRetouchEditor({
   }, [draftUrl]);
 
   useEffect(() => {
-    if (!draftUrl || !draftLoadedRef.current) return;
+    if (!draftUrl || !draftLoadedRef.current || draftPaused.current) return;
     const timeout = window.setTimeout(() => {
       setDraftStatus("saving");
       const draft: RetouchDraft = { version: 1, operations, adjustments, composition };
-      void fetch(draftUrl, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ draft }) })
+      draftWrite.current = draftWrite.current.then(() => fetch(draftUrl, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ draft }) }))
         .then((response) => { if (!response.ok) throw new Error(); setDraftStatus("saved"); })
         .catch(() => setDraftStatus("error"));
     }, 900);
+    draftTimer.current = timeout;
     return () => window.clearTimeout(timeout);
   }, [adjustments, composition, draftUrl, operations]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (document.querySelector('[role="alertdialog"]')) return;
       const target = event.target as HTMLElement | null;
       if (target?.matches("input, textarea, select") && event.key !== "Escape") return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
@@ -482,7 +490,8 @@ export function ArtworkRetouchEditor({
 
   async function save() {
     const adjusted = adjustedSourceRef.current; const editLayer = editLayerRef.current;
-    if (!hasChanges || !adjusted || !editLayer) { setError("Faça ao menos um retoque ou ajuste antes de salvar uma nova versão."); return; }
+    if (pendingFill) { setError("Confirme ou descarte o preenchimento antes de salvar."); return false; }
+    if (!hasChanges || !adjusted || !editLayer) { setError("Faça ao menos um retoque ou ajuste antes de salvar uma nova versão."); return false; }
     setSaving(true); setError("");
     try {
       const output = document.createElement("canvas"); output.width = adjusted.width; output.height = adjusted.height;
@@ -491,8 +500,25 @@ export function ArtworkRetouchEditor({
       const blob = await exportWebp(output);
       if (blob.size > MAX_UPLOAD_BYTES) throw new Error("A versão editada excedeu 3 MB. Reduza a imagem original antes de tentar novamente.");
       await onSave({ fileName: createRetouchedArtworkFileName(fileName, Date.now()), mimeType: "image/webp", fileSize: blob.size, dataUrl: await blobToDataUrl(blob) });
-      if (draftUrl) void fetch(draftUrl, { method: "DELETE" });
-    } catch (saveError) { setError(saveError instanceof Error ? saveError.message : "Não foi possível salvar o retoque."); setSaving(false); }
+      await clearDraft().catch(() => undefined);
+      return true;
+    } catch (saveError) { setError(saveError instanceof Error ? saveError.message : "Não foi possível salvar o retoque."); return false; }
+    finally { setSaving(false); }
+  }
+
+  async function clearDraft() {
+    if (!draftUrl) return;
+    draftPaused.current = true;
+    if (draftTimer.current) window.clearTimeout(draftTimer.current);
+    await draftWrite.current;
+    const response = await fetch(draftUrl, { method: "DELETE" });
+    if (!response.ok) { draftPaused.current = false; throw new Error("Não foi possível descartar o rascunho. Tente novamente."); }
+  }
+  const exit = useArtworkExitGuard({ dirty: hasChanges || Boolean(pendingFill), busy: saving || loading, save, discard: clearDraft });
+  async function continueToCrop() {
+    if (!onContinue) return;
+    if (!hasChanges) onContinue();
+    else if (await save()) onContinue();
   }
 
   const guides = useMemo(() => {
@@ -525,9 +551,9 @@ export function ArtworkRetouchEditor({
   return <div className="fixed inset-0 z-[80] grid place-items-center overflow-hidden bg-black/85 p-0 backdrop-blur-sm sm:p-5">
     {cursor ? <span className="pointer-events-none fixed z-[100] rounded-full border border-white shadow-[0_0_0_1px_rgba(0,0,0,.75)]" style={{ left: cursor.x, top: cursor.y, width: cursor.size, height: cursor.size, transform: "translate(-50%,-50%)", background: tool === "brush" ? `${color}33` : "transparent" }} /> : null}
     <div className="grid h-dvh w-full max-w-7xl grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden border border-zinc-700 bg-zinc-950 shadow-2xl sm:h-[96dvh] sm:rounded-lg">
-      <header className="flex min-w-0 flex-wrap items-start justify-between gap-2 border-b border-zinc-800 px-3 py-2.5 sm:gap-3 sm:px-5 sm:py-3"><div className="min-w-0"><h2 className="text-base font-semibold text-white">Retocar imagem</h2><p className="mt-0.5 max-w-full truncate text-xs text-zinc-500">{artworkName} · original preservado · molde completo até o corte efetivo</p></div><div className="flex shrink-0 items-center gap-2 sm:gap-3"><DraftStatus status={draftStatus} /><button aria-label="Fechar editor" className="focus-ring grid h-9 w-9 place-items-center rounded-md border border-transparent text-zinc-400 transition hover:border-zinc-700 hover:bg-zinc-800 hover:text-white" disabled={saving} title="Fechar editor" type="button" onClick={onClose}><X size={18} /></button></div></header>
+      <header className="flex min-w-0 flex-wrap items-start justify-between gap-2 border-b border-zinc-800 px-3 py-2.5 sm:gap-3 sm:px-5 sm:py-3"><div className="min-w-0 flex-1"><h2 className="text-base font-semibold text-white">Retocar imagem</h2><p className="mt-0.5 max-w-full truncate text-xs text-zinc-500">{artworkName} · original preservado · molde completo até o corte efetivo</p>{navigation}</div><div className="flex shrink-0 items-center gap-2 sm:gap-3"><DraftStatus status={draftStatus} /><button aria-label="Fechar editor" className="focus-ring grid h-9 w-9 place-items-center rounded-md border border-transparent text-zinc-400 transition hover:border-zinc-700 hover:bg-zinc-800 hover:text-white" disabled={saving} title="Fechar editor" type="button" onClick={() => exit.request(onClose)}><X size={18} /></button></div></header>
       {geometry && guides ? <PrintGuideMeasurements geometry={geometry} bleedMm={bleedMm} guides={guides} safeMarginMm={safeMarginMm} /> : <div className="border-b border-zinc-800 bg-amber-950/20 px-4 py-2 text-xs text-amber-200">Configure as medidas de impressão do produto para visualizar as linhas de produção.</div>}
-      <div className="grid min-h-0 grid-rows-[minmax(230px,1fr)_minmax(190px,42dvh)] lg:grid-cols-[272px_minmax(0,1fr)] lg:grid-rows-1">
+      <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_minmax(120px,32dvh)] lg:grid-cols-[272px_minmax(0,1fr)] lg:grid-rows-1">
         <aside className="order-2 min-h-0 overflow-y-auto overscroll-contain border-t border-zinc-800 p-3 lg:order-1 lg:border-r lg:border-t-0 lg:p-4">
           <div className="rounded-md border border-zinc-800 bg-zinc-900/45 p-2.5 shadow-inner shadow-black/20"><div className="mb-2 flex items-center justify-between px-0.5"><p className="text-[11px] font-semibold uppercase text-zinc-400">Ferramentas</p><span className="text-[10px] text-zinc-600">Escolha uma ação</span></div><div className="grid grid-cols-4 gap-1.5"><ToolButton active={tool === "brush"} description="Pintar livremente sobre a imagem" icon={<Brush size={18} strokeWidth={1.8} />} label="Pincel" shortcut="B" onClick={() => chooseTool("brush")} /><ToolButton active={tool === "eyedropper"} description="Capturar uma cor da imagem" icon={<Pipette size={18} strokeWidth={1.8} />} label="Cor" shortcut="I" onClick={activateEyedropper} /><ToolButton active={tool === "eraser"} description="Apagar partes do retoque" icon={<Eraser size={18} strokeWidth={1.8} />} label="Apagar" shortcut="E" onClick={() => chooseTool("eraser")} /><ToolButton active={tool === "fill"} description="Preencher uma área de cor contínua" icon={<PaintBucket size={18} strokeWidth={1.8} />} label="Preencher" shortcut="G" onClick={() => chooseTool("fill")} /><ToolButton active={tool === "shape"} description="Inserir um novo formato ou editar os existentes" icon={<Shapes size={18} strokeWidth={1.8} />} label="Formato" shortcut="S" onClick={() => beginNewShape()} /><ToolButton active={tool === "select"} description="Limitar os retoques a uma área" icon={<MousePointer2 size={18} strokeWidth={1.8} />} label="Selecionar" shortcut="R" onClick={() => chooseTool("select")} /><ToolButton active={tool === "compose"} description="Redimensionar a arte e estender seu fundo" icon={<Layers3 size={18} strokeWidth={1.8} />} label="Expandir" shortcut="T" onClick={() => chooseTool("compose")} /><ToolButton active={tool === "pan"} description="Mover a área de trabalho" icon={<Grab size={18} strokeWidth={1.8} />} label="Navegar" shortcut="Espaço" onClick={() => chooseTool("pan")} /></div></div>
           <div className="mt-5 grid gap-4">
@@ -564,8 +590,9 @@ export function ArtworkRetouchEditor({
         </aside>
         <main className="relative order-1 grid min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-zinc-900 lg:order-2"><div className="flex min-w-0 flex-wrap items-center justify-between gap-1 border-b border-zinc-800 px-2.5 py-1.5 text-[10px] text-zinc-400 sm:gap-2 sm:px-3 sm:py-2 sm:text-[11px]"><span className="min-w-0 break-words">A linha amarela limita a área visível. Continue o fundo além dela, por toda a faixa oculta, até a linha vermelha de corte.</span><span className="shrink-0">{workspace ? `${workspace.width} × ${workspace.height}px · ${geometry ? geometryLabel(geometry) : "sem molde"}` : "Carregando..."}</span></div><div ref={viewportRef} className="relative min-h-0 overflow-auto overscroll-contain p-2 sm:p-7"><div className="relative mx-auto" style={{ width: `${zoom * 100}%`, minWidth: zoom > 1 ? `${zoom * 100}%` : undefined, ...checkerboard }}><canvas ref={canvasRef} aria-label={`Editor da arte ${artworkName}`} className="block h-auto w-full touch-none shadow-[0_12px_40px_rgba(0,0,0,.45)]" style={{ cursor: cursorStyle }} onPointerCancel={finishPointer} onPointerDown={onPointerDown} onPointerEnter={updateCursor} onPointerLeave={() => setCursor(null)} onPointerMove={onPointerMove} onPointerUp={finishPointer} />{workspace ? <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${workspace.width} ${workspace.height}`}>{foregroundBounds ? <rect fill="none" height={foregroundBounds.height} stroke="rgba(255,255,255,.55)" strokeDasharray="12 8" strokeWidth="2" width={foregroundBounds.width} x={foregroundBounds.x} y={foregroundBounds.y} /> : null}{showGuides && guides ? <><RetouchGuidePath color="rgba(244,63,94,1)" dash="14 9" d={guides.cut.path} haloWidth={9} transform={`translate(${guides.cut.x} ${guides.cut.y})`} width={4.5} /><RetouchGuidePath color="rgba(251,191,36,1)" dash="12 7" d={guides.bleed.path} haloWidth={8} transform={`translate(${guides.bleed.x} ${guides.bleed.y})`} width={4} /><RetouchGuidePath color="rgba(103,232,249,1)" dash="10 6" d={guides.safe.path} haloWidth={7} transform={`translate(${guides.safe.x} ${guides.safe.y})`} width={3.5} /></> : null}{selection ? <rect fill="rgba(34,211,238,.08)" height={selection.height} stroke="rgba(34,211,238,.95)" strokeDasharray="8 6" strokeWidth="2" width={selection.width} x={selection.x} y={selection.y} /> : null}{tool === "shape" && selectedShapeBounds ? <ShapeSelectionOverlay bounds={selectedShapeBounds} workspace={workspace} /> : null}{comparison !== null ? <line stroke="white" strokeWidth="3" x1={workspace.width * comparison / 100} x2={workspace.width * comparison / 100} y1="0" y2={workspace.height} /> : null}</svg> : null}</div>{showGuides && geometry ? <div className="mt-2 flex gap-3 overflow-x-auto pb-1 text-[10px] text-zinc-400 sm:mt-3 sm:flex-wrap sm:justify-center sm:gap-4 sm:text-[11px]"><span className="shrink-0 text-cyan-300">--- segurança (menor)</span><span className="shrink-0 text-amber-300">--- limite visível / sangria</span><span className="shrink-0 text-rose-300">--- corte efetivo (fundo até aqui)</span><span className="shrink-0 text-zinc-300">--- limite da arte principal</span></div> : null}{loading ? <div className="absolute inset-0 grid place-items-center bg-zinc-900/80 text-sm text-zinc-300"><span className="inline-flex items-center gap-2"><Loader2 className="animate-spin" size={18} /> Carregando imagem...</span></div> : null}</div></main>
       </div>
-      <footer className="grid shrink-0 gap-2 border-t border-zinc-800 bg-zinc-950/95 px-3 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:px-5 sm:py-3"><div className="min-w-0">{error ? <p className="text-xs text-red-300 sm:text-sm">{error}</p> : <p className="hidden text-xs text-zinc-500 sm:block">Os retoques só substituem a versão ativa depois de salvar.</p>}</div><div className="grid grid-cols-2 gap-2 sm:flex"><button className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm font-medium text-zinc-300 transition hover:bg-zinc-800 disabled:opacity-50 sm:px-4" disabled={saving} type="button" onClick={onClose}><X size={15} /> Fechar</button><button className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-cyan-400 px-3 py-2 text-center text-sm font-semibold text-cyan-950 shadow-[0_0_24px_rgba(34,211,238,.16)] transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400 disabled:shadow-none sm:px-4" disabled={saving || loading || !hasChanges || Boolean(pendingFill)} type="button" onClick={save}>{saving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} Salvar versão</button></div></footer>
+      <footer className="grid shrink-0 gap-2 border-t border-zinc-800 bg-zinc-950/95 px-3 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:px-5 sm:py-3"><div className="min-w-0">{error ? <p role="alert" className="text-xs text-red-300 sm:text-sm">{error}</p> : <p className="hidden text-xs text-zinc-500 sm:block">Os retoques só substituem a versão ativa depois de salvar.</p>}</div><div className="grid grid-cols-2 gap-2 sm:flex"><button className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm font-medium text-zinc-300 transition hover:bg-zinc-800 disabled:opacity-50 sm:px-4" disabled={saving} type="button" onClick={() => exit.request(onContinue ?? onClose)}>{onContinue ? <ArrowLeft size={15} /> : <X size={15} />} {onContinue ? "Voltar ao enquadramento" : "Fechar"}</button><button className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-cyan-400 px-3 py-2 text-center text-sm font-semibold text-cyan-950 shadow-[0_0_24px_rgba(34,211,238,.16)] transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400 disabled:shadow-none sm:px-4" disabled={saving || loading || (!hasChanges && !onContinue) || Boolean(pendingFill)} type="button" onClick={onContinue ? continueToCrop : save}>{saving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} {onContinue ? hasChanges ? "Salvar e enquadrar" : "Ir para enquadramento" : "Salvar versão"}</button></div></footer>
     </div>
+    {exit.prompt}
   </div>;
 }
 

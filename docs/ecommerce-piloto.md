@@ -87,7 +87,7 @@ módulo esteja habilitado no ambiente (`COMMERCE_ENABLED=true`).
 
 1. Abra um produto personalizado, escolha quantidade e número de artes e adicione ao carrinho.
 2. Clique em **Abrir carrinho e preparar artes** ou no ícone do carrinho.
-3. Em cada item, use **Enviar arte**, **Retocar**, **Enquadrar** e **Aprovar arte**.
+3. Em cada item, **Enviar arte** abre o estúdio guiado. Use **Retocar arte** se precisar ajustar a imagem, **Salvar e enquadrar** para continuar e **Revisar e aprovar** para conferir o resultado. A aprovação exige confirmação explícita da versão exibida. Os atalhos **Retocar**, **Enquadrar** e **Aprovar arte** continuam disponíveis no carrinho.
 4. Continue para entrega. Use **Preencher dados de teste**, se necessário, aceite as condições e conclua a simulação.
 
 O produto precisa estar salvo no catálogo da loja como personalizado e com a

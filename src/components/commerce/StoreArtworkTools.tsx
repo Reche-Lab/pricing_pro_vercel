@@ -1,23 +1,14 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { useState } from "react";
+import type { ArtworkStudioAsset } from "../quotes/artwork-studio-types";
 import { Check, Crop, Paintbrush, Upload } from "lucide-react";
 import type { publicCommerceProduct } from "@/repositories/commerce";
 import { storeRequest } from "./store-http";
 import { useCommercePreview } from "./CommercePreviewProvider";
-const CropEditor = dynamic(
+const GuidedStudio = dynamic(
   () =>
-    import("@/components/quotes/ArtworkCropEditor").then(
-      (m) => m.ArtworkCropEditor,
-    ),
-  { ssr: false },
-);
-const RetouchEditor = dynamic(
-  () =>
-    import("@/components/quotes/ArtworkRetouchEditor").then(
-      (m) => m.ArtworkRetouchEditor,
-    ),
+    import("../quotes/ArtworkGuidedStudio").then((m) => m.ArtworkGuidedStudio),
   { ssr: false },
 );
 export type StoreArtwork = {
@@ -50,17 +41,11 @@ export function StoreArtworkTools({
   preview?: boolean;
 }) {
   const simulation = useCommercePreview();
-  const [editor, setEditor] = useState<"crop" | "retouch" | null>(null);
+  const [editor, setEditor] = useState<"crop" | "retouch" | "review" | null>(
+    null,
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  useEffect(() => {
-    if (!editor) return;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = overflow;
-    };
-  }, [editor]);
   const base = `/api/store/${slug}/artworks`;
   const temporaryArt = preview
     ? simulation?.cart.artworks.find((a) => a.id === artwork?.id)
@@ -68,6 +53,29 @@ export function StoreArtworkTools({
   const sourceUrl = preview
     ? (temporaryArt?.source.dataUrl ?? "")
     : `${base}/${artwork?.id}`;
+  function studioAsset(art: StoreArtwork): ArtworkStudioAsset {
+    const temporary = preview ? simulation!.getArtwork(art.id) : undefined;
+    return {
+      id: art.id,
+      name: product.name,
+      fileName: art.file_name,
+      sourceUrl: preview ? temporary!.source.dataUrl : `${base}/${art.id}`,
+      preparedUrl: preview
+        ? temporary?.preparedUrl
+        : art.crop
+          ? `${base}/${art.id}?prepared=1&v=${encodeURIComponent(JSON.stringify(art.crop))}`
+          : undefined,
+      geometry: product.geometry,
+      margins: product.margins,
+      crop: art.crop ?? {
+        scale: 1,
+        offsetX: 0,
+        offsetY: 0,
+        rotationDegrees: 0,
+      },
+      approved: Boolean(art.approved_at),
+    };
+  }
   async function saveFile(file: {
     fileName: string;
     mimeType: string;
@@ -84,7 +92,7 @@ export function StoreArtworkTools({
         });
     await onSelect(result.artwork.id);
     await onRefresh();
-    setEditor(null);
+    return result.artwork.id as string;
   }
   async function upload(file?: File) {
     if (!file) return;
@@ -104,6 +112,7 @@ export function StoreArtworkTools({
         fileSize: file.size,
         dataUrl,
       });
+      setEditor("crop");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha no envio.");
     } finally {
@@ -186,24 +195,7 @@ export function StoreArtworkTools({
               type="button"
               disabled={busy || !artwork.crop || Boolean(artwork.approved_at)}
               className="inline-flex items-center gap-1 rounded-md border border-emerald-600 px-3 py-2 text-sm text-emerald-800 disabled:opacity-50"
-              onClick={async () => {
-                setBusy(true);
-                setError("");
-                try {
-                  if (preview) await simulation!.approve(artwork.id);
-                  else
-                    await storeRequest(`${base}/${artwork.id}`, "POST", {
-                      action: "approve",
-                    });
-                  await onRefresh();
-                } catch (e) {
-                  setError(
-                    e instanceof Error ? e.message : "Falha ao aprovar.",
-                  );
-                } finally {
-                  setBusy(false);
-                }
-              }}
+              onClick={() => setEditor("review")}
             >
               <Check size={15} />
               {artwork.approved_at ? "Aprovada" : "Aprovar arte"}
@@ -216,52 +208,48 @@ export function StoreArtworkTools({
           {error}
         </p>
       ) : null}
-      {artwork && editor === "crop" && product.geometry
-        ? createPortal(
-            <CropEditor
-              artwork={{
-                id: artwork.id,
-                file_name: artwork.file_name,
-                artwork_name: product.name,
-                crop_scale: String(artwork.crop?.scale ?? 1),
-                crop_offset_x: String(artwork.crop?.offsetX ?? 0),
-                crop_offset_y: String(artwork.crop?.offsetY ?? 0),
-                rotation_degrees: String(artwork.crop?.rotationDegrees ?? 0),
-              }}
-              geometry={product.geometry}
-              {...product.margins}
-              imageUrl={sourceUrl}
-              itemId={product.id}
-              quoteId=""
-              prepareUrl={`${base}/${artwork.id}`}
-              onPrepare={
-                preview
-                  ? (crop) => simulation!.prepare(artwork.id, crop)
-                  : undefined
-              }
-              onClose={() => setEditor(null)}
-              onSaved={() => {
-                setEditor(null);
-                void onRefresh();
-              }}
-            />,
-            document.body,
-          )
-        : null}
-      {artwork && editor === "retouch"
-        ? createPortal(
-            <RetouchEditor
-              artworkName={product.name}
-              fileName={artwork.file_name}
-              imageUrl={sourceUrl}
-              geometry={product.geometry}
-              {...product.margins}
-              onClose={() => setEditor(null)}
-              onSave={saveFile}
-            />,
-            document.body,
-          )
-        : null}
+      {artwork && editor ? (
+        <GuidedStudio
+          initialAsset={studioAsset(artwork)}
+          initialStep={editor}
+          onClose={() => setEditor(null)}
+          onRetouch={async (_asset, file) => {
+            const id = await saveFile(file);
+            return studioAsset({
+              id,
+              product_id: product.id,
+              file_name: file.fileName,
+              crop: null,
+              approved_at: null,
+            });
+          }}
+          onPrepare={async (asset, crop) => {
+            if (preview) await simulation!.prepare(asset.id, crop);
+            else
+              await storeRequest(`${base}/${asset.id}`, "POST", {
+                action: "prepare",
+                ...crop,
+              });
+            await onRefresh();
+            return {
+              ...asset,
+              crop,
+              approved: false,
+              preparedUrl: preview
+                ? simulation!.getArtwork(asset.id).preparedUrl
+                : `${base}/${asset.id}?prepared=1&v=${Date.now()}`,
+            };
+          }}
+          onApprove={async (asset) => {
+            if (preview) await simulation!.approve(asset.id);
+            else
+              await storeRequest(`${base}/${asset.id}`, "POST", {
+                action: "approve",
+              });
+            await onRefresh();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

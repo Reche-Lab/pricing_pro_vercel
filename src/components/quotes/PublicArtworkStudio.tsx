@@ -4,11 +4,11 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Download, Eye, FileText, ImageIcon, Loader2, Paintbrush, Sparkles, Upload, WandSparkles, X } from "lucide-react";
-import { ArtworkCropEditor } from "@/components/quotes/ArtworkCropEditor";
-import { ArtworkRetouchEditor, type RetouchedArtworkFile } from "@/components/quotes/ArtworkRetouchEditor";
+import { QuoteArtworkGuidedStudio } from "./QuoteArtworkGuidedStudio";
+import type { ArtworkStudioStep } from "./artwork-studio-types";
 import { PdfArtworkImportModal } from "@/components/quotes/PdfArtworkImportModal";
 import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
-import { resolvePrintGeometry, resolvePrintMargins, type PrintGeometry } from "@/domain/artwork/geometry";
+import { resolvePrintGeometry } from "@/domain/artwork/geometry";
 import { sortActiveArtworkVersions } from "@/domain/artwork/versions";
 import { getPublicArtworkReviewProgress } from "@/domain/quotes/public-artwork-review";
 import type { QuoteItemArtworkRow, QuoteItemRow } from "@/repositories/quotes";
@@ -24,8 +24,9 @@ export function PublicArtworkStudio({ token, quoteId, items, disabled }: { token
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestions | null>(null);
-  const [editing, setEditing] = useState<Entry | null>(null);
-  const [retouching, setRetouching] = useState<Entry | null>(null);
+  const [studio, setStudio] = useState<{ entry: Entry; step: ArtworkStudioStep } | null>(null);
+  function setEditing(entry: Entry) { setStudio({ entry, step: "crop" }); }
+  function setRetouching(entry: Entry) { setStudio({ entry, step: "retouch" }); }
   const [pdfImportOpen, setPdfImportOpen] = useState(false);
   const [versionPreview, setVersionPreview] = useState<{ active: QuoteItemArtworkRow; previous: QuoteItemArtworkRow } | null>(null);
   const item = items.find((candidate) => candidate.id === itemId) ?? items[0];
@@ -68,6 +69,7 @@ export function PublicArtworkStudio({ token, quoteId, items, disabled }: { token
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error ?? "Não foi possível enviar a imagem.");
       setReferenceId(data.artwork.id);
+      if (purpose === "ready") setStudio({ entry: { item, artwork: data.artwork }, step: "crop" });
       setMessage(purpose === "ready"
         ? "Arte pronta adicionada. Reenquadre e aprove esta versão para substituir a anterior."
         : "Imagem adicionada. Você pode reenquadrá-la ou usá-la como base no assistente.");
@@ -96,36 +98,8 @@ export function PublicArtworkStudio({ token, quoteId, items, disabled }: { token
     finally { setBusy(""); }
   }
 
-  async function approve(artwork: QuoteItemArtworkRow) {
-    if (!item) return;
-    setBusy(`approve-${artwork.id}`); setMessage("");
-    const response = await fetch(`/api/public/quotes/${token}/items/${item.id}/artworks/${artwork.id}/approval`, { method: "POST" });
-    const data = await response.json().catch(() => null);
-    setBusy("");
-    if (!response.ok) { setMessage(data?.error ?? "Não foi possível aprovar esta arte."); return; }
-    setMessage("Arte selecionada e aprovada para este produto.");
-    router.refresh();
-  }
-
-  async function saveRetouchedArtwork(file: RetouchedArtworkFile) {
-    if (!retouching) return;
-    const response = await fetch(`/api/public/quotes/${token}/items/${retouching.item.id}/artworks`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        artworkName: `${retouching.artwork.artwork_name || retouching.artwork.file_name} · retoque`,
-        sourceKind: "retouch",
-        parentArtworkId: retouching.artwork.id,
-        productionQuantity: retouching.artwork.production_quantity || retouching.item.quantity,
-        artworkFile: file
-      })
-    });
-    const data = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(data?.error ?? "Não foi possível salvar a versão retocada.");
-    setRetouching(null);
-    setReferenceId(data.artwork.id);
-    setMessage("Retoque salvo como versão ativa. A original permanece disponível para consulta ou restauração.");
-    router.refresh();
+  function approve(artwork: QuoteItemArtworkRow) {
+    if (item && !disabled) setStudio({ entry: { item, artwork }, step: "review" });
   }
 
   async function restorePreviousVersion() {
@@ -189,18 +163,7 @@ export function PublicArtworkStudio({ token, quoteId, items, disabled }: { token
       {message ? <p className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-300">{message}</p> : null}
     </div>
 
-    {editing && inferGeometry(editing.item, editing.artwork) ? <ArtworkCropEditor artwork={editing.artwork} geometry={inferGeometry(editing.item, editing.artwork) as PrintGeometry} {...inferMargins(editing.item, editing.artwork)} imageUrl={publicArtworkUrl(token, editing.artwork.id, false)} itemId={editing.item.id} quoteId={quoteId} prepareUrl={`/api/public/quotes/${token}/items/${editing.item.id}/artworks/${editing.artwork.id}/prepare`} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setMessage("Enquadramento salvo. Agora você pode aprovar esta versão."); router.refresh(); }} /> : null}
-    {retouching ? <ArtworkRetouchEditor
-      artworkName={retouching.artwork.artwork_name || retouching.artwork.file_name}
-      bleedMm={inferMargins(retouching.item, retouching.artwork).bleedMm}
-      draftUrl={`/api/public/quotes/${token}/items/${retouching.item.id}/artworks/${retouching.artwork.id}/retouch-draft`}
-      fileName={retouching.artwork.file_name}
-      geometry={inferGeometry(retouching.item, retouching.artwork)}
-      imageUrl={publicArtworkUrl(token, retouching.artwork.id, false)}
-      safeMarginMm={inferMargins(retouching.item, retouching.artwork).safeMarginMm}
-      onClose={() => setRetouching(null)}
-      onSave={saveRetouchedArtwork}
-    /> : null}
+    {studio && !disabled ? <QuoteArtworkGuidedStudio quoteId={quoteId} token={token} item={studio.entry.item} artwork={studio.entry.artwork} productionQuantity={studio.entry.artwork.production_quantity || studio.entry.item.quantity} initialStep={studio.step} onClose={() => setStudio(null)} onChanged={() => { setMessage("Arte atualizada no estúdio."); router.refresh(); }} /> : null}
     {pdfImportOpen ? <PdfArtworkImportModal importBaseUrl={`/api/public/quotes/${token}/items/${item.id}/artworks/pdf-imports`} itemDescription={item.description} itemQuantity={item.quantity} onClose={() => setPdfImportOpen(false)} onImported={(count) => { setPdfImportOpen(false); setMessage(`${count} arte(s) importada(s). Reenquadre e aprove as versões escolhidas.`); router.refresh(); }} /> : null}
     {versionPreview ? <div className="fixed inset-0 z-[110] grid place-items-center overflow-hidden bg-black/80 p-0 backdrop-blur-sm sm:p-3" role="dialog" aria-modal="true"><div className="flex h-dvh w-full max-w-4xl flex-col overflow-hidden border border-violet-400/25 bg-zinc-950 sm:h-auto sm:max-h-[92dvh] sm:rounded-lg"><header className="flex shrink-0 items-start justify-between gap-3 border-b border-zinc-800 p-4"><div className="min-w-0"><p className="font-semibold text-white">Comparar versões</p><p className="mt-1 text-xs text-zinc-400">O retoque está ativo; a original está guardada no histórico.</p></div><button className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-zinc-400 hover:bg-zinc-800" type="button" onClick={() => setVersionPreview(null)}><X size={17} /></button></header><div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-3 sm:grid-cols-2 sm:p-4"><PublicVersionImage artwork={versionPreview.active} label="Versão ativa" token={token} /><PublicVersionImage artwork={versionPreview.previous} label="Original" token={token} /></div><footer className="grid shrink-0 grid-cols-2 gap-2 border-t border-zinc-800 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex sm:flex-wrap sm:justify-end sm:p-4"><button className="min-h-10 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300 sm:px-4" type="button" onClick={() => setVersionPreview(null)}>Manter retoque</button><button className="min-h-10 rounded-md bg-amber-400 px-3 py-2 text-center text-sm font-semibold text-zinc-950 disabled:opacity-40 sm:px-4" disabled={Boolean(busy)} type="button" onClick={restorePreviousVersion}>{busy === `restore-${versionPreview.active.id}` ? "Restaurando..." : "Descartar e restaurar"}</button></footer></div></div> : null}
   </section>;
@@ -210,6 +173,5 @@ function publicArtworkUrl(token: string, artworkId: string, prepared: boolean, d
 function PublicArtworkDownloads({ artwork, original, prepared, token }: { artwork: QuoteItemArtworkRow; original: QuoteItemArtworkRow | null; prepared: boolean; token: string }) { return <details><summary className="focus-ring flex min-h-9 cursor-pointer list-none items-center justify-center gap-2 rounded-md border border-zinc-700 px-2 text-xs text-zinc-200 hover:bg-zinc-800"><Download size={13} /> Baixar versões</summary><div className="mt-1 grid gap-1 rounded-md bg-zinc-900 p-1"><a className="rounded px-2 py-2 text-xs text-zinc-300 hover:bg-zinc-800" href={publicArtworkUrl(token, artwork.id, false, true)}>{artwork.source_kind === "retouch" ? "Arte retocada" : "Arte original"}</a>{original ? <a className="rounded px-2 py-2 text-xs text-zinc-300 hover:bg-zinc-800" href={publicArtworkUrl(token, original.id, false, true)}>Arte original enviada</a> : null}{prepared ? <a className="rounded px-2 py-2 text-xs text-zinc-300 hover:bg-zinc-800" href={publicArtworkUrl(token, artwork.id, true, true)}>Arte preparada e recortada</a> : null}</div></details>; }
 function PublicVersionImage({ artwork, label, token }: { artwork: QuoteItemArtworkRow; label: string; token: string }) { return <article className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-900/50"><div className="border-b border-zinc-800 px-3 py-2 text-xs font-semibold text-zinc-200">{label}</div><div className="aspect-square bg-white p-2"><img alt={artwork.artwork_name || artwork.file_name} className="h-full w-full object-contain" src={publicArtworkUrl(token, artwork.id, false)} /></div><div className="grid gap-2 p-3"><p className="break-words text-sm text-white">{artwork.artwork_name || artwork.file_name}</p><a className="focus-ring inline-flex h-9 items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-800" href={publicArtworkUrl(token, artwork.id, false, true)}><Download size={13} /> Baixar esta versão</a></div></article>; }
 function inferGeometry(item: QuoteItemRow, artwork: QuoteItemArtworkRow) { return resolvePrintGeometry({ ...item, ...artwork }); }
-function inferMargins(item: QuoteItemRow, artwork: QuoteItemArtworkRow) { return resolvePrintMargins({ ...item, ...artwork }); }
 function findOriginalArtwork(artwork: QuoteItemArtworkRow, all: QuoteItemArtworkRow[]) { let current = artwork; const visited = new Set<string>(); while (current.parent_artwork_id && !visited.has(current.id)) { visited.add(current.id); const parent = all.find((candidate) => candidate.id === current.parent_artwork_id); if (!parent) break; current = parent; } return current; }
 function fileToDataUrl(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Não foi possível ler a imagem.")); reader.onerror = () => reject(new Error("Não foi possível ler a imagem.")); reader.readAsDataURL(file); }); }

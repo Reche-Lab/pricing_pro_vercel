@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { LocateFixed, Loader2, RotateCcw, X } from "lucide-react";
+import { LocateFixed, Loader2, Paintbrush, RotateCcw, X } from "lucide-react";
+import { useArtworkExitGuard } from "./useArtworkExitGuard";
 import { createPrintGuideLayout, type PrintGeometry } from "@/domain/artwork/geometry";
 import type { QuoteItemArtworkRow } from "@/repositories/quotes";
 
@@ -15,6 +16,8 @@ export function ArtworkCropEditor({
   quoteId,
   prepareUrl,
   onPrepare,
+  navigation,
+  onRetouch,
   onClose,
   onSaved
 }: {
@@ -27,6 +30,8 @@ export function ArtworkCropEditor({
   quoteId: string;
   prepareUrl?: string;
   onPrepare?: (crop: { scale: number; offsetX: number; offsetY: number; rotationDegrees: number }) => Promise<void>;
+  navigation?: React.ReactNode;
+  onRetouch?: () => void;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -52,16 +57,20 @@ export function ArtworkCropEditor({
         const data = await response.json().catch(() => null);
         if (!response.ok) {
           setError(data?.error ?? "Não foi possível preparar a arte.");
-          return;
+          return false;
         }
       }
-      onSaved();
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível preparar a arte.");
+      return false;
     } finally {
       setSaving(false);
     }
   }
+
+  const dirty = scale !== Number(artwork.crop_scale || 1) || offsetX !== Number(artwork.crop_offset_x || 0) || offsetY !== Number(artwork.crop_offset_y || 0) || rotation !== Number(artwork.rotation_degrees || 0);
+  const exit = useArtworkExitGuard({ dirty, busy: saving, save: prepare });
 
   function reset() {
     setScale(1); setOffsetX(0); setOffsetY(0); setRotation(0);
@@ -110,8 +119,10 @@ export function ArtworkCropEditor({
         <div className="min-h-0 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5">
           <div className="flex items-start justify-between gap-4">
             <div><h3 className="font-semibold text-white">Centralizar e enquadrar arte</h3><p className="mt-1 text-sm text-zinc-500">Posicione a composição usando as três guias de produção abaixo.</p></div>
-            <button className="focus-ring rounded-md p-2 text-zinc-500 hover:bg-zinc-900 hover:text-white" type="button" onClick={onClose}><X size={18} /></button>
+            <button aria-label="Fechar enquadramento" disabled={saving} className="focus-ring rounded-md p-2 text-zinc-500 hover:bg-zinc-900 hover:text-white" type="button" onClick={() => exit.request(onClose)}><X size={18} /></button>
           </div>
+          {navigation}
+          {onRetouch ? <button className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900 disabled:opacity-40" disabled={saving} type="button" onClick={() => exit.request(onRetouch)}><Paintbrush size={15} /> Retocar arte</button> : null}
           <div className="mt-4 grid gap-2 rounded-md border border-zinc-800 bg-zinc-900/55 p-3 text-xs leading-5">
             <p className="mb-1 font-semibold text-zinc-200">Geometria de impressão e corte</p>
             <GuideHelp color="cyan" title={`1. Segurança · ${safeAbsolute}`}>Mantenha textos, logos, rostos e outros elementos importantes dentro desta área.</GuideHelp>
@@ -131,11 +142,12 @@ export function ArtworkCropEditor({
           </div>
           {error ? <p className="mt-4 rounded-md bg-red-400/10 p-3 text-sm text-red-300">{error}</p> : null}
           <div className="sticky bottom-0 mt-6 grid grid-cols-2 gap-2 border-t border-zinc-800 bg-zinc-950/95 pt-4 backdrop-blur sm:flex sm:justify-end">
-            <button className="focus-ring min-h-10 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300 sm:px-4" type="button" onClick={onClose}>Cancelar</button>
-            <button className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-cyan-400 px-3 py-2 text-center text-sm font-semibold text-cyan-950 disabled:opacity-50 sm:px-4" disabled={saving} type="button" onClick={prepare}>{saving ? <Loader2 className="animate-spin" size={15} /> : null} Preparar arte</button>
+            <button className="focus-ring min-h-10 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300 sm:px-4" disabled={saving} type="button" onClick={() => exit.request(onClose)}>Fechar</button>
+            <button className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-cyan-400 px-3 py-2 text-center text-sm font-semibold text-cyan-950 disabled:opacity-50 sm:px-4" disabled={saving} type="button" onClick={async () => { if (await prepare()) onSaved(); }}>{saving ? <Loader2 className="animate-spin" size={15} /> : null} {navigation ? "Revisar e aprovar" : "Preparar arte"}</button>
           </div>
         </div>
       </div>
+      {exit.prompt}
     </div>
   );
 }
