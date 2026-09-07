@@ -39,7 +39,7 @@ import {
   ungroupRetouchShapes
 } from "@/domain/artwork/retouch";
 import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
-import { extendArtworkEdges } from "@/domain/artwork/edge-extension";
+import { extendArtworkEdges, requiredArtworkEdgePadding } from "@/domain/artwork/edge-extension";
 import type { RetouchStage } from "@/domain/artwork/retouch";
 
 type Tool = "brush" | "eyedropper" | "eraser" | "fill" | "shape" | "select" | "compose" | "pan";
@@ -600,10 +600,26 @@ export function ArtworkRetouchEditor({
   function extendToCut() {
     if (!workspace || !geometry || !guides) return;
     const bounds = foregroundBounds;
-    if (!bounds) return;
-    const mm = Math.ceil(Math.max(0, (guides.cut.width - bounds.width) / 2, (guides.cut.height - bounds.height) / 2) / guides.unitsPerMm * 10) / 10;
-    setComposition(current => ({ ...current, backgroundEnabled: true, backgroundMode: "extend", backgroundExpansionMm: Math.min(50, mm) }));
-    setNotice("Continuidade ajustada até o corte. Confira as cores e as bordas antes de salvar.");
+    const source = baseCache.current?.source ?? sourceRef.current;
+    if (!bounds || !source || !compositionReady.current) return;
+    try {
+      const ratio = Math.min(1, 256 / Math.max(workspace.width, workspace.height));
+      const sample = document.createElement("canvas"), target = document.createElement("canvas");
+      sample.width = target.width = Math.max(1, Math.round(workspace.width * ratio));
+      sample.height = target.height = Math.max(1, Math.round(workspace.height * ratio));
+      const context = sample.getContext("2d"), mask = target.getContext("2d");
+      if (!context || !mask) throw new Error("Não foi possível medir o contorno da arte.");
+      const sx = sample.width / workspace.width, sy = sample.height / workspace.height;
+      context.drawImage(source, bounds.x * sx, bounds.y * sy, bounds.width * sx, bounds.height * sy);
+      mask.scale(sx, sy); mask.translate(guides.cut.x, guides.cut.y); mask.fill(new Path2D(guides.cut.path));
+      const pixels = requiredArtworkEdgePadding(context.getImageData(0, 0, sample.width, sample.height).data,
+        sample.width, sample.height, mask.getImageData(0, 0, target.width, target.height).data);
+      // One sample pixel covers antialiasing and differences between preview resolutions.
+      const mm = pixels ? Math.ceil((pixels + 1) / Math.min(sx, sy) / guides.unitsPerMm * 10) / 10 : 0;
+      setComposition(current => ({ ...current, backgroundEnabled: true, backgroundMode: "extend", backgroundExpansionMm: Math.min(50, mm) }));
+      setError("");
+      setNotice(mm > 50 ? "A extensão necessária ultrapassa 50 mm. Aumente a arte principal e confira o corte." : "Continuidade ajustada pelo contorno visível até o corte. Confira as cores e as bordas antes de salvar.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível medir a expansão."); }
   }
   const cursorStyle = tool === "eyedropper" || tool === "fill" || tool === "shape" ? "crosshair" : tool === "pan" ? "grab" : tool === "select" ? "crosshair" : "none";
   const checkerboard = { backgroundColor: "#f4f4f5", backgroundImage: "linear-gradient(45deg,#d4d4d8 25%,transparent 25%),linear-gradient(-45deg,#d4d4d8 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#d4d4d8 75%),linear-gradient(-45deg,transparent 75%,#d4d4d8 75%)", backgroundSize: "24px 24px", backgroundPosition: "0 0,0 12px,12px -12px,-12px 0" };
@@ -634,7 +650,7 @@ export function ArtworkRetouchEditor({
               <div className="grid grid-cols-2 gap-1" role="group" aria-label="Modo de expansão">
                 {(["copy", "extend"] as const).map(mode => <button key={mode} type="button"
                   aria-pressed={(composition.backgroundMode ?? "copy") === mode}
-                  title={mode === "copy" ? "Amplia uma cópia atrás da imagem. Incorpore tudo antes para duplicar também os retoques." : "Continua as cores das bordas sem ampliar a arte da frente. Indicado para fundos lisos e degradês simples, antes do recorte."}
+                  title={mode === "copy" ? "Amplia uma cópia atrás da imagem. Incorpore tudo antes para duplicar também os retoques." : "Continua as cores ao redor de todo o contorno visível, inclusive após um recorte redondo, sem ampliar a arte da frente."}
                   className={`min-h-11 rounded-md border px-2 py-2 text-xs ${(composition.backgroundMode ?? "copy") === mode ? "border-cyan-500 text-cyan-200" : "border-zinc-700 text-zinc-400"}`}
                   onClick={() => setComposition(current => ({ ...current, backgroundMode: mode, backgroundEnabled: true }))}>
                   {mode === "copy" ? "Cópia ampliada" : "Continuar bordas"}
@@ -649,7 +665,7 @@ export function ArtworkRetouchEditor({
                 {composition.backgroundMode === "extend" ? <>
                   <button type="button" disabled={!geometry} onClick={extendToCut} title="Calcula a extensão necessária para alcançar o limite de corte cadastrado no produto."
                     className="min-h-10 rounded-md border border-cyan-800 px-2 text-xs text-cyan-200 disabled:opacity-40">Estender até o corte</button>
-                  <p className="text-[11px] text-zinc-400">Confira a prévia: detalhes e texturas podem exigir retoque. Bordas transparentes não geram novas cores.</p>
+                  <p className="text-[11px] text-zinc-400">A expansão segue o contorno visível, inclusive em artes redondas. Confira a prévia: detalhes e texturas podem exigir retoque.</p>
                 </> : <>
                   <RangeControl label="Tamanho da cópia" min={50} max={250} step={1} suffix="%" value={composition.backgroundScalePercent} onChange={value => setComposition(current => ({ ...current, backgroundScalePercent: value }))} />
                   <RangeControl label="Suavização do fundo" min={0} max={40} step={1} suffix=" px" value={composition.backgroundBlurPx} onChange={value => setComposition(current => ({ ...current, backgroundBlurPx: value }))} />
@@ -821,7 +837,8 @@ function drawEdgeContinuation(context: CanvasRenderingContext2D, source: CanvasI
   if (!sampleContext) return;
   sampleContext.drawImage(source, 0, 0, sample.width, sample.height);
   const padding = Math.ceil(expansionPx * ratio);
-  const result = extendArtworkEdges(sampleContext.getImageData(0, 0, sample.width, sample.height).data, sample.width, sample.height, padding);
+  const original = sampleContext.getImageData(0, 0, sample.width, sample.height);
+  const result = extendArtworkEdges(original.data, sample.width, sample.height, padding, { backgroundOnly: true });
   sample.width = result.width; sample.height = result.height;
   sampleContext.putImageData(new ImageData(result.pixels, result.width, result.height), 0, 0);
   context.drawImage(sample, bounds.x - padding / ratio, bounds.y - padding / ratio, result.width / ratio, result.height / ratio);

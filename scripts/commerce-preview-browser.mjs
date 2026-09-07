@@ -108,8 +108,9 @@ try {
     .click();
   await page.getByRole("heading", { name: "Seu carrinho" }).waitFor();
   const image = await sharp({
-    create: { width: 400, height: 400, channels: 3, background: "#19ad82" },
+    create: { width: 400, height: 350, channels: 4, background: "#19ad82" },
   })
+    .extend({ bottom: 35, background: "#00000000" })
     .png()
     .toBuffer();
   await page.locator('input[type="file"]').setInputFiles({
@@ -154,18 +155,35 @@ try {
   await page.getByRole("button", { name: "Estender até o corte", exact: true }).click();
   await page.waitForFunction(() => {
     const c = document.querySelector('canvas[aria-label^="Editor da arte"]');
-    return c.getContext("2d").getImageData(1, 1, 1, 1).data[3] > 0;
+    return c.getContext("2d").getImageData(c.width / 2, c.height - 2, 1, 1).data[3] > 0;
   });
+  const beforeCut = await canvas.evaluate(el => el.toDataURL());
   await page.getByRole("button", { name: /^Recortar no molde:/ }).click();
   await page.waitForFunction(() => {
     const c = document.querySelector('canvas[aria-label^="Editor da arte"]');
     return c.getContext("2d").getImageData(1, 1, 1, 1).data[3] === 0;
   });
   await page.getByRole("button", { name: /^Restaura os elementos anteriores/ }).click();
+  if (await canvas.evaluate(el => el.toDataURL()) !== beforeCut) throw new Error("Undo cut changed the preceding composition");
+  await page.getByRole("button", { name: /^Recortar no molde:/ }).click();
+  const size = page.getByRole("slider", { name: /Tamanho da arte principal/ });
+  await size.focus();
+  await page.keyboard.press("Home");
+  for (let i = 0; i < 45; i++) await page.keyboard.press("ArrowRight");
+  if (await size.inputValue() !== "70") throw new Error("Artwork scale was not adjusted");
+  await page.getByRole("button", { name: "Continuar bordas", exact: true }).click();
+  await page.getByRole("button", { name: "Estender até o corte", exact: true }).click();
   await page.waitForFunction(() => {
     const c = document.querySelector('canvas[aria-label^="Editor da arte"]');
-    return c.getContext("2d").getImageData(1, 1, 1, 1).data[3] > 0;
+    const ctx = c.getContext("2d");
+    for (let angle = 0; angle < 360; angle += 15) {
+      const x = c.width / 2 + Math.cos(angle * Math.PI / 180) * c.width * .46;
+      const y = c.height / 2 + Math.sin(angle * Math.PI / 180) * c.height * .46;
+      if (ctx.getImageData(x, y, 1, 1).data[3] < 220) return false;
+    }
+    return true;
   });
+  await page.screenshot({ path: "/tmp/commerce-retouch-round-extension.png", fullPage: true });
   await page.getByRole("button", { name: /^Recortar no molde:/ }).click();
   await page.getByRole("button", { name: "Fechar editor", exact: true }).click();
   await page.getByRole("alertdialog").waitFor();

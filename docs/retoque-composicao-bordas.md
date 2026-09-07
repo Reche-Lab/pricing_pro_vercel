@@ -17,11 +17,18 @@ estágios desta sessão/rascunho. As ações possuem instruções no atributo `t
 
 ## Limites
 
-A continuidade usa a variação de cor nas bordas, sem ampliar a arte principal.
-Degradês lineares são extrapolados; canais são limitados a 0–255. Texturas, objetos,
-transparências e degradês complexos não têm reconstrução garantida: confira a
-prévia, principalmente nos cantos. Use a extensão antes do recorte e incorpore
-primeiro os retoques que deverão influenciar as cores da borda.
+A continuidade usa a variação de cor no contorno visível, sem ampliar a arte
+principal. Funciona também após recortes redondos e com margens transparentes
+desiguais no arquivo. Vazios transparentes fechados dentro da arte são preservados.
+O fundo completa a transição dos pixels semitransparentes da borda sem redesenhar
+a frente opaca da imagem. Fundos brancos opacos continuam sendo parte da arte.
+
+Degradês lineares são extrapolados; canais são limitados a 0–255. Texturas, objetos
+e degradês complexos não têm reconstrução garantida: confira a prévia.
+Incorpore primeiro os retoques que deverão influenciar as cores da borda.
+
+**Estender até o corte** mede a distância entre o contorno visível e o molde,
+incluindo diagonais, em vez de comparar apenas os tamanhos dos retângulos.
 
 Somente o fundo sintetizado é amostrado em resolução reduzida para limitar o
 processamento; a arte principal mantém sua resolução. A extensão é limitada à
@@ -46,6 +53,17 @@ anterior ao acrescentar estágios para evitar reprocessamento desnecessário.
   continuidade, recorte/desfazer, aprovação e checkout simulado, em desktop/mobile.
 - [x] Suíte: 254 testes aprovados; seis testes de integração de banco separados não executados nesta etapa.
 - [x] TypeScript, lint e build de produção aprovados, com limite de memória.
+
+### Correção do contorno externo
+
+- [x] Regressões para arte retangular com margem inferior transparente e expansão circular em 24 direções.
+- [x] Preservação de furos internos, arte translúcida, pixels originais e tratamento de imagem vazia.
+- [x] Distância euclidiana conferida contra pontos de referência e cálculo automático pelo molde.
+- [x] Transição de antialiasing e ajuste local do degradê sem usar a transparência como cor de referência.
+- [x] Navegador: fluxo de retoque, recorte e aprovação em 1365, 390 e 320 px, com banco isolado e conferência visual da expansão circular.
+- [x] Suíte: 260 testes aprovados; seis testes de integração de banco não executados nesta rodada.
+- [x] TypeScript e lint aprovados.
+- [x] Build de produção aprovado com limite de memória.
 
 Sem migration ou variável de ambiente nova. As permissões e os bloqueios de
 orçamentos aprovados continuam nas APIs existentes.
