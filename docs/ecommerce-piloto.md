@@ -372,6 +372,9 @@ Referência local: `GroundShop_NuvemShop/static/css/style-async.scss` e
 artes de produção ou o tema administrativo.
 
 - [x] Fundos com iluminação em degradê, distintos nos modos claro e escuro.
+- [x] Refinamento: degradês e sombras reproduzem os valores exatos de
+  `GroundShop_NuvemShop/static/css/style-tokens.tpl`, sem a adaptação verde anterior.
+  O teste de navegador compara os estilos calculados da vitrine e galeria com a referência.
 - [x] Sombra no contorno das imagens transparentes e mais respiro na galeria.
 - [x] Cards com superfície própria, elevação no hover, foco visível e preço destacado.
 - [x] Miniaturas e categorias com o mesmo tratamento de fundo.

@@ -49,8 +49,20 @@ try {
         background: getComputedStyle(el).backgroundImage,
         filter: getComputedStyle(el.querySelector("img")).filter,
       }));
-      assert.match(css.background, /linear-gradient/);
-      assert.match(css.filter, /drop-shadow/);
+      const expected = await page.evaluate(value => {
+        const reference = document.createElement("div");
+        reference.style.background = value === "light"
+          ? "radial-gradient(circle at 50% 38%, #ffffff 0%, #f4f6f5 58%, #e9eeec 100%)"
+          : "radial-gradient(circle at 50% 38%, rgba(111,208,201,0.13) 0%, rgba(111,208,201,0.03) 38%, transparent 62%), linear-gradient(145deg, #19232d 0%, #10161e 100%)";
+        reference.style.filter = value === "light"
+          ? "drop-shadow(0 14px 18px rgba(29,38,48,0.12))"
+          : "drop-shadow(0 16px 20px rgba(0,0,0,0.34))";
+        document.body.append(reference);
+        const result = { background: getComputedStyle(reference).backgroundImage, filter: getComputedStyle(reference).filter };
+        reference.remove();
+        return result;
+      }, theme);
+      assert.deepEqual(css, expected, "Product backdrop and shadow must match GroundShop_NuvemShop tokens");
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
       await card.screenshot({ path: `/tmp/commerce-product-${theme}-${width}.png` });
       await page.screenshot({ path: `/tmp/commerce-catalog-${theme}-${width}.png`, fullPage: true });
@@ -65,7 +77,7 @@ try {
       await page.goto(`${base}/loja/ground-shop/produto/${product.id}`, { waitUntil: "networkidle" });
       const stage = page.locator('[class*="galleryStage"]');
       await stage.locator("img").evaluate(img => img.decode());
-      assert.match(await stage.evaluate(el => getComputedStyle(el).backgroundImage), /linear-gradient/);
+      assert.equal(await stage.evaluate(el => getComputedStyle(el).backgroundImage), expected.background);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
       await page.screenshot({ path: `/tmp/commerce-gallery-${theme}-${width}.png`, fullPage: true });
     }

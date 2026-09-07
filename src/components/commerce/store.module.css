@@ -2,11 +2,11 @@
   --page: #f8f9fa;
   --surface: #fff;
   --soft: #eef1f2;
-  --product-backdrop: linear-gradient(145deg, #ffffff 0%, #f0f6f3 48%, #dce7e3 100%);
-  --product-shadow: drop-shadow(0 12px 12px rgb(29 48 41 / 18%));
-  --product-card-shadow: 0 8px 24px -16px rgb(29 48 41 / 22%);
-  --product-hover-shadow: 0 18px 32px -18px rgb(29 48 41 / 32%);
-  --product-rim: rgb(255 255 255 / 80%);
+  --product-backdrop: radial-gradient(circle at 50% 38%, #ffffff 0%, #f4f6f5 58%, #e9eeec 100%);
+  --product-shadow: drop-shadow(0 14px 18px rgba(29, 38, 48, 0.12));
+  --product-card-shadow: 0 18px 50px -28px rgba(29, 38, 48, 0.35);
+  --product-hover-shadow: 0 24px 60px -30px rgba(29, 38, 48, 0.5);
+  --product-rim: rgba(29, 38, 48, 0.1);
   --ink: #202629;
   --muted: #606e73;
   --line: #dce2e5;
@@ -21,10 +21,12 @@
   --page: #121516;
   --surface: #1a1e20;
   --soft: #252c2f;
-  --product-backdrop: linear-gradient(145deg, #344640 0%, #242e2c 48%, #171c1b 100%);
-  --product-shadow: drop-shadow(0 16px 16px rgb(0 0 0 / 42%));
-  --product-card-shadow: 0 10px 28px -16px rgb(0 0 0 / 60%);
-  --product-hover-shadow: 0 20px 36px -18px rgb(0 0 0 / 80%);
+  --product-backdrop:
+    radial-gradient(circle at 50% 38%, rgba(111, 208, 201, 0.13) 0%, rgba(111, 208, 201, 0.03) 38%, transparent 62%),
+    linear-gradient(145deg, #19232d 0%, #10161e 100%);
+  --product-shadow: drop-shadow(0 16px 20px rgba(0, 0, 0, 0.34));
+  --product-card-shadow: 0 22px 60px -32px rgba(0, 0, 0, 0.85);
+  --product-hover-shadow: 0 30px 72px -32px rgba(0, 0, 0, 0.95);
   --product-rim: rgb(255 255 255 / 9%);
   --ink: #f2f5f5;
   --muted: #b0bdc2;
