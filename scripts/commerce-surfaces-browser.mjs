@@ -1,0 +1,78 @@
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+import pg from "pg";
+import sharp from "sharp";
+
+const require = createRequire(import.meta.url);
+const { chromium } = require(process.env.COMMERCE_PLAYWRIGHT_PATH || "playwright");
+const url = process.env.COMMERCE_TEST_DATABASE_URL;
+const base = process.env.COMMERCE_TEST_BASE_URL || "http://127.0.0.1:3011";
+if (!url || new URL(url).hostname !== "127.0.0.1" ||
+    !new URL(url).pathname.startsWith("/commerce_test_") ||
+    new URL(base).hostname !== "127.0.0.1") {
+  throw new Error("Use isolated local commerce test fixtures only.");
+}
+const db = new pg.Client({ connectionString: url });
+await db.connect();
+const browser = await chromium.launch({
+  headless: true,
+  executablePath: process.env.COMMERCE_BROWSER_EXECUTABLE || undefined,
+});
+try {
+  const { rows: [product] } = await db.query(
+    "select p.* from commerce_products p join tenants t on t.id=p.tenant_id where t.slug='ground-shop' limit 1",
+  );
+  // Transparent padding exercises the backdrop without changing stored product media.
+  const fixture = await sharp("public/brands/ground-shop.jpeg")
+    .resize(260, 260, { fit: "contain" }).ensureAlpha()
+    .extend({ top: 40, bottom: 40, left: 40, right: 40, background: "#00000000" })
+    .png().toBuffer();
+  const page = await browser.newPage();
+  const errors = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.route("https://liaflow-calcula.vercel.app/brands/ground-shop.jpeg",
+    route => route.fulfill({ contentType: "image/png", body: fixture }));
+  for (const theme of ["light", "dark"]) {
+    for (const width of [1365, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`${base}/loja/ground-shop`, { waitUntil: "networkidle" });
+      await page.evaluate(value => {
+        localStorage.setItem("commerce-theme:ground-shop", value);
+        window.dispatchEvent(new Event("storage"));
+      }, theme);
+      await page.locator(`[data-theme="${theme}"]`).waitFor();
+      const card = page.locator('a[class*="_product_"]').first();
+      await card.scrollIntoViewIfNeeded();
+      const photo = card.locator('[class*="productPhoto"]');
+      await photo.locator("img").evaluate(img => img.decode());
+      const css = await photo.evaluate(el => ({
+        background: getComputedStyle(el).backgroundImage,
+        filter: getComputedStyle(el.querySelector("img")).filter,
+      }));
+      assert.match(css.background, /linear-gradient/);
+      assert.match(css.filter, /drop-shadow/);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+      await card.screenshot({ path: `/tmp/commerce-product-${theme}-${width}.png` });
+      await page.screenshot({ path: `/tmp/commerce-catalog-${theme}-${width}.png`, fullPage: true });
+      if (width === 1365) {
+        await card.hover();
+        await page.waitForTimeout(450);
+        assert.notEqual(await card.evaluate(el => getComputedStyle(el).transform), "none");
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        assert.equal(await card.evaluate(el => getComputedStyle(el).transform), "none");
+        await page.emulateMedia({ reducedMotion: "no-preference" });
+      }
+      await page.goto(`${base}/loja/ground-shop/produto/${product.id}`, { waitUntil: "networkidle" });
+      const stage = page.locator('[class*="galleryStage"]');
+      await stage.locator("img").evaluate(img => img.decode());
+      assert.match(await stage.evaluate(el => getComputedStyle(el).backgroundImage), /linear-gradient/);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+      await page.screenshot({ path: `/tmp/commerce-gallery-${theme}-${width}.png`, fullPage: true });
+    }
+  }
+  assert.deepEqual(errors, []);
+  console.log("Product surfaces passed: light/dark, 1365/390/320px, transparent media, gallery, hover and reduced motion. No product edits or purchases.");
+} finally {
+  await browser.close();
+  await db.end();
+}

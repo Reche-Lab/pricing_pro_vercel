@@ -364,3 +364,23 @@ restaura o produto e a publicação alterados para o teste e compara as contagen
 de pedidos, artes e sessões antes/depois. As capturas são salvas em `/tmp`.
 A suíte comum não executa os seis testes de banco sem uma base nova configurada;
 nesta etapa, a verificação com banco foi feita pelo teste de navegador isolado.
+
+## Apresentação dos produtos (07/09/2026)
+
+Referência local: `GroundShop_NuvemShop/static/css/style-async.scss` e
+`style-tokens.tpl`. Tratamento aplicado apenas à loja, sem alterar imagens originais,
+artes de produção ou o tema administrativo.
+
+- [x] Fundos com iluminação em degradê, distintos nos modos claro e escuro.
+- [x] Sombra no contorno das imagens transparentes e mais respiro na galeria.
+- [x] Cards com superfície própria, elevação no hover, foco visível e preço destacado.
+- [x] Miniaturas e categorias com o mesmo tratamento de fundo.
+- [x] Navegador em 1365, 390 e 320 px: ambos os temas, galeria, transparência,
+  ausência de overflow e respeito à preferência por movimento reduzido.
+- [x] 14 testes direcionados aprovados, incluindo os seis de integração em banco local novo.
+- [x] Lint e build de produção aprovados, incluindo verificação TypeScript.
+
+Regressão visual: `scripts/commerce-surfaces-browser.mjs`, com as mesmas variáveis
+de banco/base/Playwright dos scripts acima. Opcionalmente,
+`COMMERCE_BROWSER_EXECUTABLE` aponta para um Chromium já instalado.
+Não requer migration nem novas configurações para a aplicação.
