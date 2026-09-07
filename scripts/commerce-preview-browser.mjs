@@ -18,7 +18,7 @@ if (
   throw new Error("Isolated local test environment required.");
 const db = new pg.Client({ connectionString: databaseUrl });
 await db.connect();
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, executablePath: process.env.COMMERCE_BROWSER_EXECUTABLE || undefined });
 let product, store;
 const errors = [];
 try {
@@ -143,6 +143,30 @@ try {
     { steps: 8 },
   );
   await page.mouse.up();
+  const beforeMerge = await canvas.evaluate(el => el.toDataURL());
+  await page.getByRole("button", { name: /^Incorporar tudo:/ }).click();
+  await page.getByText("Composição incorporada.", { exact: false }).waitFor();
+  if (await canvas.evaluate(el => el.toDataURL()) !== beforeMerge) throw new Error("Incorporation changed visible pixels");
+  await page.getByRole("button", { name: /^Expandir:/ }).click();
+  await page.getByRole("button", { name: "Cópia ampliada", exact: true }).click();
+  await page.getByRole("button", { name: /^Incorporar tudo:/ }).click();
+  await page.getByRole("button", { name: "Continuar bordas", exact: true }).click();
+  await page.getByRole("button", { name: "Estender até o corte", exact: true }).click();
+  await page.waitForFunction(() => {
+    const c = document.querySelector('canvas[aria-label^="Editor da arte"]');
+    return c.getContext("2d").getImageData(1, 1, 1, 1).data[3] > 0;
+  });
+  await page.getByRole("button", { name: /^Recortar no molde:/ }).click();
+  await page.waitForFunction(() => {
+    const c = document.querySelector('canvas[aria-label^="Editor da arte"]');
+    return c.getContext("2d").getImageData(1, 1, 1, 1).data[3] === 0;
+  });
+  await page.getByRole("button", { name: /^Restaura os elementos anteriores/ }).click();
+  await page.waitForFunction(() => {
+    const c = document.querySelector('canvas[aria-label^="Editor da arte"]');
+    return c.getContext("2d").getImageData(1, 1, 1, 1).data[3] > 0;
+  });
+  await page.getByRole("button", { name: /^Recortar no molde:/ }).click();
   await page.getByRole("button", { name: "Fechar editor", exact: true }).click();
   await page.getByRole("alertdialog").waitFor();
   await page.getByRole("button", { name: "Continuar editando", exact: true }).click();

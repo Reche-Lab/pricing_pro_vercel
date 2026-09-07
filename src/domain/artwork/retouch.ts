@@ -58,12 +58,20 @@ export type RetouchComposition = {
   backgroundExpansionMm: number;
   backgroundScalePercent: number;
   backgroundBlurPx: number;
+  backgroundMode?: "copy" | "extend";
+};
+export type RetouchStage = {
+  operations: RetouchOperation[];
+  adjustments: RetouchAdjustments;
+  composition: RetouchComposition;
+  cut: boolean;
 };
 export type RetouchDraft = {
   version: 1;
   operations: RetouchOperation[];
   adjustments: RetouchAdjustments;
   composition?: RetouchComposition;
+  stages?: RetouchStage[];
 };
 
 export const DEFAULT_RETOUCH_ADJUSTMENTS: RetouchAdjustments = {

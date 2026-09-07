@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useArtworkExitGuard } from "./useArtworkExitGuard";
 import {
-  ArrowDown, ArrowLeft, ArrowUp, BringToFront, Brush, Check, Circle, Eraser, Eye, EyeOff, Grab, Group, Layers3, Loader2, MousePointer2, PaintBucket, Pipette, Plus,
+  ArrowDown, ArrowLeft, ArrowUp, BringToFront, Brush, Check, Circle, Crop, Eraser, Eye, EyeOff, Grab, Group, Layers3, Loader2, Merge, MousePointer2, PaintBucket, Pipette, Plus,
   RectangleHorizontal, Redo2, RotateCcw, Save, Shapes, SlidersHorizontal, Square, Trash2, Triangle,
   Undo2, Ungroup, SendToBack, X, ZoomIn, ZoomOut
 } from "lucide-react";
@@ -39,6 +39,8 @@ import {
   ungroupRetouchShapes
 } from "@/domain/artwork/retouch";
 import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
+import { extendArtworkEdges } from "@/domain/artwork/edge-extension";
+import type { RetouchStage } from "@/domain/artwork/retouch";
 
 type Tool = "brush" | "eyedropper" | "eraser" | "fill" | "shape" | "select" | "compose" | "pan";
 type Workspace = { width: number; height: number; sourceWidth: number; sourceHeight: number; offsetX: number; offsetY: number };
@@ -73,7 +75,9 @@ export function ArtworkRetouchEditor({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const sourceRef = useRef<ImageBitmap | null>(null);
+  const baseCache = useRef<{ stages: RetouchStage[]; workspace: Workspace; source: ImageBitmap | HTMLCanvasElement; area: Workspace } | null>(null);
   const adjustedSourceRef = useRef<HTMLCanvasElement | null>(null);
+  const compositionReady = useRef(false);
   const editLayerRef = useRef<HTMLCanvasElement | null>(null);
   const currentStrokeRef = useRef<RetouchStroke | null>(null);
   const currentShapeRef = useRef<RetouchShape | null>(null);
@@ -100,6 +104,9 @@ export function ArtworkRetouchEditor({
   const [groupSelection, setGroupSelection] = useState<number[]>([]);
   const [zoom, setZoom] = useState(1);
   const [operations, setOperations] = useState<RetouchOperation[]>([]);
+  const [stages, setStages] = useState<RetouchStage[]>([]);
+  const [baseDimensions, setBaseDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [notice, setNotice] = useState("");
   const [redoStack, setRedoStack] = useState<RetouchOperation[]>([]);
   const [pendingFill, setPendingFill] = useState<RetouchFill | null>(null);
   const [selection, setSelection] = useState<RetouchSelection | null>(null);
@@ -117,7 +124,7 @@ export function ArtworkRetouchEditor({
   const visibleOperations = useMemo(() => pendingFill ? [...operations, pendingFill] : operations, [operations, pendingFill]);
   const hasAdjustments = !sameAdjustments(adjustments, DEFAULT_RETOUCH_ADJUSTMENTS);
   const hasCompositionChanges = !sameComposition(composition, DEFAULT_RETOUCH_COMPOSITION);
-  const hasChanges = operations.length > 0 || hasAdjustments || hasCompositionChanges;
+  const hasChanges = stages.length > 0 || operations.length > 0 || hasAdjustments || hasCompositionChanges;
   const selectedShape = selectedShapeIndex === null ? null : operations[selectedShapeIndex]?.kind === "shape" ? operations[selectedShapeIndex] as RetouchShape : null;
   const selectedShapeIndices = useMemo(
     () => selectedShapeIndex === null ? [] : retouchShapeGroupIndices(operations, selectedShapeIndex),
@@ -191,10 +198,37 @@ export function ArtworkRetouchEditor({
   useEffect(() => {
     const source = sourceRef.current;
     if (!source || !workspace) return;
-    const adjusted = buildAdjustedSource(source, workspace, adjustments, composition, geometry);
-    adjustedSourceRef.current = adjusted;
-    redraw(visibleOperationsRef.current, comparisonRef.current);
-  }, [adjustments, composition, geometry, redraw, workspace]);
+    compositionReady.current = false;
+    try {
+      let cached = baseCache.current;
+      if (!cached || cached.workspace !== workspace || cached.stages.length > stages.length ||
+          !cached.stages.every((entry, index) => entry === stages[index])) {
+        cached = { stages: [], workspace, source, area: workspace };
+      }
+      for (let index = cached.stages.length; index < stages.length; index++) {
+        const stage = stages[index];
+        const combined = buildAdjustedSource(cached.source, cached.area, stage.adjustments, stage.composition, geometry, bleedMm, safeMarginMm);
+        const layer = document.createElement("canvas"); layer.width = workspace.width; layer.height = workspace.height;
+        const layerContext = layer.getContext("2d");
+        const context = combined.getContext("2d");
+        if (!layerContext || !context) throw new Error("Não foi possível incorporar a composição.");
+        rebuildEditLayer(layerContext, stage.operations, combined);
+        context.drawImage(layer, 0, 0);
+        if (stage.cut && geometry) clipAtProductCut(combined, geometry, bleedMm, safeMarginMm);
+        const trimmed = trimSymmetricTransparency(combined);
+        cached = { stages: stages.slice(0, index + 1), workspace, source: trimmed,
+          area: { ...workspace, sourceWidth: trimmed.width, sourceHeight: trimmed.height,
+            offsetX: (workspace.width - trimmed.width) / 2, offsetY: (workspace.height - trimmed.height) / 2 } };
+      }
+      baseCache.current = cached;
+      setBaseDimensions(current => current?.width === cached.area.sourceWidth && current?.height === cached.area.sourceHeight
+        ? current : { width: cached.area.sourceWidth, height: cached.area.sourceHeight });
+      const adjusted = buildAdjustedSource(cached.source, cached.area, adjustments, composition, geometry, bleedMm, safeMarginMm);
+      adjustedSourceRef.current = adjusted;
+      redraw(visibleOperationsRef.current, comparisonRef.current);
+      compositionReady.current = true;
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Falha ao preparar a composição."); }
+  }, [adjustments, composition, geometry, redraw, workspace, stages, bleedMm, safeMarginMm]);
 
   useEffect(() => redraw(visibleOperations, comparison), [comparison, redraw, visibleOperations]);
 
@@ -210,6 +244,7 @@ export function ArtworkRetouchEditor({
           setOperations(draft.operations ?? []);
           setAdjustments(draft.adjustments ?? DEFAULT_RETOUCH_ADJUSTMENTS);
           setComposition(draft.composition ?? DEFAULT_RETOUCH_COMPOSITION);
+          setStages((draft.stages ?? []).map(stage => ({ ...stage, composition: stage.composition ?? DEFAULT_RETOUCH_COMPOSITION })));
           setDraftStatus("saved");
         } else if (active) setDraftStatus("idle");
       })
@@ -222,14 +257,14 @@ export function ArtworkRetouchEditor({
     if (!draftUrl || !draftLoadedRef.current || draftPaused.current) return;
     const timeout = window.setTimeout(() => {
       setDraftStatus("saving");
-      const draft: RetouchDraft = { version: 1, operations, adjustments, composition };
+      const draft: RetouchDraft = { version: 1, operations, adjustments, composition, stages };
       draftWrite.current = draftWrite.current.then(() => fetch(draftUrl, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ draft }) }))
         .then((response) => { if (!response.ok) throw new Error(); setDraftStatus("saved"); })
         .catch(() => setDraftStatus("error"));
     }, 900);
     draftTimer.current = timeout;
     return () => window.clearTimeout(timeout);
-  }, [adjustments, composition, draftUrl, operations]);
+  }, [adjustments, composition, draftUrl, operations, stages]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -401,7 +436,7 @@ export function ArtworkRetouchEditor({
   function applyPendingFill() { if (!pendingFill) return; setOperations((current) => [...current, pendingFill]); setRedoStack([]); setPendingFill(null); }
   function undo() { setPendingFill(null); setSelectedShapeIndex(null); setGroupSelection([]); setOperations((current) => { const last = current.at(-1); if (!last) return current; setRedoStack((redoEntries) => [...redoEntries, last]); return current.slice(0, -1); }); }
   function redo() { setPendingFill(null); setSelectedShapeIndex(null); setGroupSelection([]); setRedoStack((current) => { const last = current.at(-1); if (!last) return current; setOperations((entries) => [...entries, last]); return current.slice(0, -1); }); }
-  function reset() { setOperations([]); setRedoStack([]); setPendingFill(null); setSelection(null); setSelectedShapeIndex(null); setGroupSelection([]); setShapeCreationArmed(true); setAdjustments(DEFAULT_RETOUCH_ADJUSTMENTS); setComposition(DEFAULT_RETOUCH_COMPOSITION); setError(""); }
+  function reset() { setStages([]); setNotice(""); setOperations([]); setRedoStack([]); setPendingFill(null); setSelection(null); setSelectedShapeIndex(null); setGroupSelection([]); setShapeCreationArmed(true); setAdjustments(DEFAULT_RETOUCH_ADJUSTMENTS); setComposition(DEFAULT_RETOUCH_COMPOSITION); setError(""); }
 
   function setShapeControls(shape: RetouchShape) { setShapeType(shape.shapeType); setColor(shape.color); setBrushWidth(shape.width); }
   function updateSelectedShape(patch: Partial<Pick<RetouchShape, "shapeType" | "color" | "width" | "bounds">>) {
@@ -490,6 +525,7 @@ export function ArtworkRetouchEditor({
 
   async function save() {
     const adjusted = adjustedSourceRef.current; const editLayer = editLayerRef.current;
+    if (!compositionReady.current) { setError("A composição não pôde ser preparada. Desfaça o último ajuste ou restaure o original antes de salvar."); return false; }
     if (pendingFill) { setError("Confirme ou descarte o preenchimento antes de salvar."); return false; }
     if (!hasChanges || !adjusted || !editLayer) { setError("Faça ao menos um retoque ou ajuste antes de salvar uma nova versão."); return false; }
     setSaving(true); setError("");
@@ -535,15 +571,39 @@ export function ArtworkRetouchEditor({
   const foregroundBounds = useMemo(() => workspace ? calculateCenteredLayerBounds({
     canvasWidth: workspace.width,
     canvasHeight: workspace.height,
-    sourceWidth: workspace.sourceWidth,
-    sourceHeight: workspace.sourceHeight,
+    sourceWidth: baseDimensions?.width ?? workspace.sourceWidth,
+    sourceHeight: baseDimensions?.height ?? workspace.sourceHeight,
     scalePercent: composition.foregroundScalePercent
-  }) : null, [composition.foregroundScalePercent, workspace]);
+  }) : null, [baseDimensions, composition.foregroundScalePercent, workspace]);
   function fillOutsideArtwork() {
     if (!foregroundBounds) return;
     const outsideFill: RetouchOperation = { kind: "outside_fill", color, innerBounds: normalizeSelection(foregroundBounds) };
     setOperations((current) => [...current.filter((operation) => operation.kind !== "outside_fill"), outsideFill]);
     setPendingFill(null); setSelectedShapeIndex(null); setGroupSelection([]); setRedoStack([]);
+  }
+  function incorporate(cut: boolean) {
+    if (loading || saving || !workspace || pendingFill || !compositionReady.current || (cut && !geometry)) return;
+    if (stages.length >= 32) { setError("Salve esta versão e abra o retoque novamente para continuar incorporando."); return; }
+    setStages(current => [...current, { operations, adjustments, composition, cut }]);
+    setOperations([]); setRedoStack([]); setPendingFill(null); setSelection(null);
+    setSelectedShapeIndex(null); setGroupSelection([]); setShapeCreationArmed(true);
+    setAdjustments(DEFAULT_RETOUCH_ADJUSTMENTS); setComposition(DEFAULT_RETOUCH_COMPOSITION);
+    setComparison(null); setError("");
+    setNotice(cut ? "Composição recortada na linha de corte. O exterior ficou transparente." : "Composição incorporada. Agora você pode duplicar a imagem completa ou adicionar novos elementos.");
+  }
+  function undoIncorporation() {
+    const last = stages.at(-1); if (!last) return;
+    setStages(current => current.slice(0, -1));
+    setOperations(last.operations); setAdjustments(last.adjustments); setComposition(last.composition);
+    setRedoStack([]); setNotice("Incorporação desfeita. Os elementos voltaram a ser editáveis.");
+  }
+  function extendToCut() {
+    if (!workspace || !geometry || !guides) return;
+    const bounds = foregroundBounds;
+    if (!bounds) return;
+    const mm = Math.ceil(Math.max(0, (guides.cut.width - bounds.width) / 2, (guides.cut.height - bounds.height) / 2) / guides.unitsPerMm * 10) / 10;
+    setComposition(current => ({ ...current, backgroundEnabled: true, backgroundMode: "extend", backgroundExpansionMm: Math.min(50, mm) }));
+    setNotice("Continuidade ajustada até o corte. Confira as cores e as bordas antes de salvar.");
   }
   const cursorStyle = tool === "eyedropper" || tool === "fill" || tool === "shape" ? "crosshair" : tool === "pan" ? "grab" : tool === "select" ? "crosshair" : "none";
   const checkerboard = { backgroundColor: "#f4f4f5", backgroundImage: "linear-gradient(45deg,#d4d4d8 25%,transparent 25%),linear-gradient(-45deg,#d4d4d8 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#d4d4d8 75%),linear-gradient(-45deg,transparent 75%,#d4d4d8 75%)", backgroundSize: "24px 24px", backgroundPosition: "0 0,0 12px,12px -12px,-12px 0" };
@@ -557,12 +617,45 @@ export function ArtworkRetouchEditor({
         <aside className="order-2 min-h-0 overflow-y-auto overscroll-contain border-t border-zinc-800 p-3 lg:order-1 lg:border-r lg:border-t-0 lg:p-4">
           <div className="rounded-md border border-zinc-800 bg-zinc-900/45 p-2.5 shadow-inner shadow-black/20"><div className="mb-2 flex items-center justify-between px-0.5"><p className="text-[11px] font-semibold uppercase text-zinc-400">Ferramentas</p><span className="text-[10px] text-zinc-600">Escolha uma ação</span></div><div className="grid grid-cols-4 gap-1.5"><ToolButton active={tool === "brush"} description="Pintar livremente sobre a imagem" icon={<Brush size={18} strokeWidth={1.8} />} label="Pincel" shortcut="B" onClick={() => chooseTool("brush")} /><ToolButton active={tool === "eyedropper"} description="Capturar uma cor da imagem" icon={<Pipette size={18} strokeWidth={1.8} />} label="Cor" shortcut="I" onClick={activateEyedropper} /><ToolButton active={tool === "eraser"} description="Apagar partes do retoque" icon={<Eraser size={18} strokeWidth={1.8} />} label="Apagar" shortcut="E" onClick={() => chooseTool("eraser")} /><ToolButton active={tool === "fill"} description="Preencher uma área de cor contínua" icon={<PaintBucket size={18} strokeWidth={1.8} />} label="Preencher" shortcut="G" onClick={() => chooseTool("fill")} /><ToolButton active={tool === "shape"} description="Inserir um novo formato ou editar os existentes" icon={<Shapes size={18} strokeWidth={1.8} />} label="Formato" shortcut="S" onClick={() => beginNewShape()} /><ToolButton active={tool === "select"} description="Limitar os retoques a uma área" icon={<MousePointer2 size={18} strokeWidth={1.8} />} label="Selecionar" shortcut="R" onClick={() => chooseTool("select")} /><ToolButton active={tool === "compose"} description="Redimensionar a arte e estender seu fundo" icon={<Layers3 size={18} strokeWidth={1.8} />} label="Expandir" shortcut="T" onClick={() => chooseTool("compose")} /><ToolButton active={tool === "pan"} description="Mover a área de trabalho" icon={<Grab size={18} strokeWidth={1.8} />} label="Navegar" shortcut="Espaço" onClick={() => chooseTool("pan")} /></div></div>
           <div className="mt-5 grid gap-4">
+            <div className="grid grid-cols-2 gap-2">
+              <ActionButton disabled={loading || saving || Boolean(pendingFill) || !hasChanges} icon={<Merge size={15} />} label="Incorporar" title="Incorporar tudo: une a arte, a cópia de fundo, formas e pincel em uma imagem que pode ser duplicada novamente. O original é preservado." onClick={() => incorporate(false)} />
+              <ActionButton disabled={loading || saving || Boolean(pendingFill) || !geometry} icon={<Crop size={15} />} label="Recortar" title="Recortar no molde: incorpora a composição e deixa transparente tudo o que estiver fora da linha de corte do produto, sem imprimir as guias." onClick={() => incorporate(true)} />
+            </div>
+            {notice ? <p role="status" className="text-xs leading-5 text-cyan-200">{notice}</p> : null}
+            {stages.length ? <ActionButton disabled={loading || saving || Boolean(pendingFill) || operations.length > 0 || hasAdjustments || hasCompositionChanges} icon={<Undo2 size={15} />} label="Desfazer incorporação" title="Restaura os elementos anteriores ao último recorte ou incorporação. Desfaça primeiro os novos retoques, se houver." onClick={undoIncorporation} /> : null}
             <div className="grid gap-2">
               <label><span className="mb-2 block text-xs font-medium text-zinc-300">Cor ativa</span><span className="flex h-11 items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-2 shadow-inner shadow-black/20 transition focus-within:border-cyan-500/70"><input aria-label="Selecionar cor" className="h-7 w-9 cursor-pointer rounded border-0 bg-transparent p-0" title="Abrir seletor de cores" type="color" value={color} onChange={(event) => { setColor(event.target.value); updateSelectedShape({ color: event.target.value }); }} /><span className="font-mono text-xs uppercase text-zinc-300">{color}</span><button aria-label="Capturar cor da imagem" className="focus-ring ml-auto grid h-8 w-8 place-items-center rounded-md border border-zinc-700 bg-zinc-950 text-zinc-400 transition hover:border-cyan-500/50 hover:bg-cyan-950/35 hover:text-cyan-200" title="Capturar cor diretamente da imagem" type="button" onClick={activateEyedropper}><Pipette size={15} /></button></span></label>
               <button className="focus-ring flex min-h-10 items-center justify-center gap-2 rounded-md border border-zinc-700 bg-zinc-900/45 px-3 text-xs font-medium text-zinc-300 transition hover:border-cyan-600/60 hover:bg-cyan-950/25 hover:text-cyan-100 disabled:opacity-40" disabled={!foregroundBounds} title="Colorir toda a área entre a borda da arte principal e o limite do canvas" type="button" onClick={fillOutsideArtwork}><PaintBucket size={15} /> Preencher fundo externo</button>
               <span className="text-[10px] leading-4 text-zinc-600">Aplica a cor fora da arte principal para facilitar a continuidade antes do recorte.</span>
             </div>
-            {tool === "compose" ? <div className="grid gap-4 rounded-md border border-cyan-900/70 bg-cyan-950/15 p-3"><div><p className="text-xs font-semibold text-cyan-100">Tamanho e continuidade</p><p className="mt-1 text-[11px] leading-4 text-zinc-500">A arte principal permanece acima. A cópia ampliada preenche o fundo sem substituir o original.</p></div><RangeControl label="Tamanho da arte principal" min={25} max={250} step={1} suffix="%" value={composition.foregroundScalePercent} onChange={(value) => setComposition((current) => ({ ...current, foregroundScalePercent: value }))} /><button aria-pressed={composition.backgroundEnabled} className={`focus-ring flex min-h-11 items-center justify-between gap-3 rounded-md border px-3 text-left transition ${composition.backgroundEnabled ? "border-cyan-600/60 bg-cyan-950/40 text-cyan-100" : "border-zinc-700 bg-zinc-950/50 text-zinc-300 hover:border-zinc-600"}`} type="button" onClick={() => setComposition((current) => ({ ...current, backgroundEnabled: !current.backgroundEnabled }))}><span><strong className="block text-xs">Duplicar atrás da arte</strong><span className="mt-0.5 block text-[10px] text-zinc-500">Útil para fundos, texturas e degradês</span></span><span className={`h-5 w-9 rounded-full p-0.5 transition ${composition.backgroundEnabled ? "bg-cyan-400" : "bg-zinc-700"}`}><span className={`block h-4 w-4 rounded-full bg-zinc-950 transition-transform ${composition.backgroundEnabled ? "translate-x-4" : "translate-x-0"}`} /></span></button>{composition.backgroundEnabled ? <div className="grid gap-3 border-l-2 border-cyan-800/60 pl-3"><RangeControl label="Expansão ao redor" min={0} max={20} step={0.5} suffix=" mm" value={composition.backgroundExpansionMm} onChange={(value) => setComposition((current) => ({ ...current, backgroundExpansionMm: value }))} /><RangeControl label="Tamanho da cópia" min={50} max={250} step={1} suffix="%" value={composition.backgroundScalePercent} onChange={(value) => setComposition((current) => ({ ...current, backgroundScalePercent: value }))} /><RangeControl label="Suavização do fundo" min={0} max={40} step={1} suffix=" px" value={composition.backgroundBlurPx} onChange={(value) => setComposition((current) => ({ ...current, backgroundBlurPx: value }))} /></div> : null}</div> : null}
+            {tool === "compose" ? <div className="grid gap-4 rounded-md border border-cyan-900/70 bg-cyan-950/15 p-3">
+              <p className="text-xs font-semibold text-cyan-100">Tamanho e continuidade</p>
+              <RangeControl label="Tamanho da arte principal" min={25} max={250} step={1} suffix="%" value={composition.foregroundScalePercent} onChange={(value) => setComposition((current) => ({ ...current, foregroundScalePercent: value }))} />
+              <div className="grid grid-cols-2 gap-1" role="group" aria-label="Modo de expansão">
+                {(["copy", "extend"] as const).map(mode => <button key={mode} type="button"
+                  aria-pressed={(composition.backgroundMode ?? "copy") === mode}
+                  title={mode === "copy" ? "Amplia uma cópia atrás da imagem. Incorpore tudo antes para duplicar também os retoques." : "Continua as cores das bordas sem ampliar a arte da frente. Indicado para fundos lisos e degradês simples, antes do recorte."}
+                  className={`min-h-11 rounded-md border px-2 py-2 text-xs ${(composition.backgroundMode ?? "copy") === mode ? "border-cyan-500 text-cyan-200" : "border-zinc-700 text-zinc-400"}`}
+                  onClick={() => setComposition(current => ({ ...current, backgroundMode: mode, backgroundEnabled: true }))}>
+                  {mode === "copy" ? "Cópia ampliada" : "Continuar bordas"}
+                </button>)}
+              </div>
+              <label className="flex items-center gap-2 text-xs text-zinc-300" title="Ativa ou oculta o fundo sem apagar os ajustes.">
+                <input type="checkbox" className="accent-cyan-400" checked={composition.backgroundEnabled} onChange={event => setComposition(current => ({ ...current, backgroundEnabled: event.target.checked }))} />
+                Fundo expandido
+              </label>
+              {composition.backgroundEnabled ? <div className="grid gap-3 border-l-2 border-cyan-800/60 pl-3">
+                <RangeControl label="Expansão ao redor" min={0} max={50} step={0.5} suffix=" mm" value={composition.backgroundExpansionMm} onChange={value => setComposition(current => ({ ...current, backgroundExpansionMm: value }))} />
+                {composition.backgroundMode === "extend" ? <>
+                  <button type="button" disabled={!geometry} onClick={extendToCut} title="Calcula a extensão necessária para alcançar o limite de corte cadastrado no produto."
+                    className="min-h-10 rounded-md border border-cyan-800 px-2 text-xs text-cyan-200 disabled:opacity-40">Estender até o corte</button>
+                  <p className="text-[11px] text-zinc-400">Confira a prévia: detalhes e texturas podem exigir retoque. Bordas transparentes não geram novas cores.</p>
+                </> : <>
+                  <RangeControl label="Tamanho da cópia" min={50} max={250} step={1} suffix="%" value={composition.backgroundScalePercent} onChange={value => setComposition(current => ({ ...current, backgroundScalePercent: value }))} />
+                  <RangeControl label="Suavização do fundo" min={0} max={40} step={1} suffix=" px" value={composition.backgroundBlurPx} onChange={value => setComposition(current => ({ ...current, backgroundBlurPx: value }))} />
+                </>}
+              </div> : null}
+            </div> : null}
             {tool === "shape" ? <div className="grid gap-2.5 rounded-md border border-zinc-800 bg-zinc-900/35 p-2.5">
               <div className="flex items-center justify-between gap-2"><span className="text-xs font-medium text-zinc-300">Formatos editáveis</span><button className={`focus-ring inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-semibold transition ${shapeCreationArmed ? "border-cyan-500/60 bg-cyan-400/10 text-cyan-100" : "border-zinc-700 text-zinc-300 hover:border-cyan-700 hover:text-cyan-200"}`} type="button" onClick={() => beginNewShape()}><Plus size={13} /> Novo formato</button></div>
               <div className="grid grid-cols-4 gap-1.5"><ShapeButton active={shapeType === "circle"} icon={<Circle size={18} strokeWidth={1.8} />} label="Círculo" onClick={() => shapeCreationArmed ? beginNewShape("circle") : changeShapeType("circle")} /><ShapeButton active={shapeType === "square"} icon={<Square size={18} strokeWidth={1.8} />} label="Quadrado" onClick={() => shapeCreationArmed ? beginNewShape("square") : changeShapeType("square")} /><ShapeButton active={shapeType === "rectangle"} icon={<RectangleHorizontal size={19} strokeWidth={1.8} />} label="Retângulo" onClick={() => shapeCreationArmed ? beginNewShape("rectangle") : changeShapeType("rectangle")} /><ShapeButton active={shapeType === "triangle"} icon={<Triangle size={18} strokeWidth={1.8} />} label="Triângulo" onClick={() => shapeCreationArmed ? beginNewShape("triangle") : changeShapeType("triangle")} /></div>
@@ -694,22 +787,71 @@ export function createRetouchWorkspace(width: number, height: number, targetAspe
   const offsetY = Math.round((normalizedHeight - height) / 2);
   return { width: normalizedWidth, height: normalizedHeight, sourceWidth: width, sourceHeight: height, offsetX, offsetY };
 }
-function buildAdjustedSource(source: ImageBitmap, workspace: Workspace, adjustments: RetouchAdjustments, composition: RetouchComposition, geometry?: PrintGeometry | null) {
+function buildAdjustedSource(source: ImageBitmap | HTMLCanvasElement, workspace: Workspace, adjustments: RetouchAdjustments, composition: RetouchComposition, geometry?: PrintGeometry | null, bleedMm = 2, safeMarginMm = 2) {
   const canvas = document.createElement("canvas"); canvas.width = workspace.width; canvas.height = workspace.height;
   const context = canvas.getContext("2d", { willReadFrequently: adjustments.sharpness > 0 }); if (!context) return canvas;
   const colorFilter = `brightness(${adjustments.brightness}%) contrast(${adjustments.contrast}%) saturate(${adjustments.saturation}%)`;
   context.imageSmoothingEnabled = true; context.imageSmoothingQuality = "high";
+  const foreground = calculateCenteredLayerBounds({ canvasWidth: workspace.width, canvasHeight: workspace.height, sourceWidth: workspace.sourceWidth, sourceHeight: workspace.sourceHeight, scalePercent: composition.foregroundScalePercent });
   if (composition.backgroundEnabled) {
-    const expansionPx = millimetersToWorkspacePixels(workspace, geometry, composition.backgroundExpansionMm);
+    const expansionPx = geometry ? createPrintGuideLayout({ geometry, margins: { bleedMm, safeMarginMm }, viewportWidth: workspace.width, viewportHeight: workspace.height, paddingRatio: 0 }).unitsPerMm * composition.backgroundExpansionMm : millimetersToWorkspacePixels(workspace, geometry, composition.backgroundExpansionMm);
+    if (composition.backgroundMode === "extend") {
+      context.filter = colorFilter;
+      drawEdgeContinuation(context, source, foreground, expansionPx);
+    } else {
     const background = calculateCenteredLayerBounds({ canvasWidth: workspace.width, canvasHeight: workspace.height, sourceWidth: workspace.sourceWidth, sourceHeight: workspace.sourceHeight, scalePercent: composition.backgroundScalePercent, expansionPx });
     context.filter = `${colorFilter} blur(${composition.backgroundBlurPx}px)`;
     context.drawImage(source, background.x, background.y, background.width, background.height);
+    }
   }
-  const foreground = calculateCenteredLayerBounds({ canvasWidth: workspace.width, canvasHeight: workspace.height, sourceWidth: workspace.sourceWidth, sourceHeight: workspace.sourceHeight, scalePercent: composition.foregroundScalePercent });
   context.filter = colorFilter;
   context.drawImage(source, foreground.x, foreground.y, foreground.width, foreground.height); context.filter = "none";
   if (adjustments.sharpness > 0) sharpenRegion(context, foreground, adjustments.sharpness / 100);
   return canvas;
+}
+
+function drawEdgeContinuation(context: CanvasRenderingContext2D, source: CanvasImageSource, bounds: RetouchSelection, expansionPx: number) {
+  if (expansionPx <= 0) return;
+  // Only the synthesized background is sampled at lower resolution; the foreground stays intact.
+  const ratio = Math.min(1, 512 / Math.max(bounds.width, bounds.height, expansionPx));
+  const sample = document.createElement("canvas");
+  sample.width = Math.max(1, Math.round(bounds.width * ratio));
+  sample.height = Math.max(1, Math.round(bounds.height * ratio));
+  const sampleContext = sample.getContext("2d", { willReadFrequently: true });
+  if (!sampleContext) return;
+  sampleContext.drawImage(source, 0, 0, sample.width, sample.height);
+  const padding = Math.ceil(expansionPx * ratio);
+  const result = extendArtworkEdges(sampleContext.getImageData(0, 0, sample.width, sample.height).data, sample.width, sample.height, padding);
+  sample.width = result.width; sample.height = result.height;
+  sampleContext.putImageData(new ImageData(result.pixels, result.width, result.height), 0, 0);
+  context.drawImage(sample, bounds.x - padding / ratio, bounds.y - padding / ratio, result.width / ratio, result.height / ratio);
+}
+
+function clipAtProductCut(canvas: HTMLCanvasElement, geometry: PrintGeometry, bleedMm: number, safeMarginMm: number) {
+  const { cut } = createPrintGuideLayout({ geometry, margins: { bleedMm, safeMarginMm }, viewportWidth: canvas.width, viewportHeight: canvas.height, paddingRatio: 0 });
+  const mask = document.createElement("canvas"); mask.width = canvas.width; mask.height = canvas.height;
+  const maskContext = mask.getContext("2d"), context = canvas.getContext("2d");
+  if (!maskContext || !context) return;
+  maskContext.translate(cut.x, cut.y); maskContext.fill(new Path2D(cut.path));
+  context.save(); context.globalCompositeOperation = "destination-in"; context.drawImage(mask, 0, 0); context.restore();
+}
+
+function trimSymmetricTransparency(canvas: HTMLCanvasElement) {
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return canvas;
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  let left = canvas.width, top = canvas.height, right = -1, bottom = -1;
+  for (let y = 0; y < canvas.height; y++) for (let x = 0; x < canvas.width; x++) {
+    if (pixels[(y * canvas.width + x) * 4 + 3] > 0) {
+      left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y);
+    }
+  }
+  if (right < 0) return canvas;
+  const insetX = Math.min(left, canvas.width - 1 - right), insetY = Math.min(top, canvas.height - 1 - bottom);
+  if (!insetX && !insetY) return canvas;
+  const trimmed = document.createElement("canvas"); trimmed.width = canvas.width - insetX * 2; trimmed.height = canvas.height - insetY * 2;
+  trimmed.getContext("2d")?.drawImage(canvas, -insetX, -insetY);
+  return trimmed;
 }
 function sharpenRegion(context: CanvasRenderingContext2D, bounds: { x: number; y: number; width: number; height: number }, amount: number) {
   const x = Math.max(0, Math.floor(bounds.x)); const y = Math.max(0, Math.floor(bounds.y));
@@ -779,6 +921,6 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) 
 function blobToDataUrl(blob: Blob) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Não foi possível ler a versão editada.")); reader.onerror = () => reject(new Error("Não foi possível ler a versão editada.")); reader.readAsDataURL(blob); }); }
 function hexToRgb(value: string) { const normalized = value.replace("#", ""); return [Number.parseInt(normalized.slice(0, 2), 16), Number.parseInt(normalized.slice(2, 4), 16), Number.parseInt(normalized.slice(4, 6), 16)]; }
 function sameAdjustments(left: RetouchAdjustments, right: RetouchAdjustments) { return left.brightness === right.brightness && left.contrast === right.contrast && left.saturation === right.saturation && left.sharpness === right.sharpness; }
-function sameComposition(left: RetouchComposition, right: RetouchComposition) { return left.foregroundScalePercent === right.foregroundScalePercent && left.backgroundEnabled === right.backgroundEnabled && left.backgroundExpansionMm === right.backgroundExpansionMm && left.backgroundScalePercent === right.backgroundScalePercent && left.backgroundBlurPx === right.backgroundBlurPx; }
+function sameComposition(left: RetouchComposition, right: RetouchComposition) { return (left.backgroundMode ?? "copy") === (right.backgroundMode ?? "copy") && left.foregroundScalePercent === right.foregroundScalePercent && left.backgroundEnabled === right.backgroundEnabled && left.backgroundExpansionMm === right.backgroundExpansionMm && left.backgroundScalePercent === right.backgroundScalePercent && left.backgroundBlurPx === right.backgroundBlurPx; }
 function formatMeasurement(value: number) { return Number(value.toFixed(2)).toLocaleString("pt-BR"); }
 function clamp(value: number, minimum: number, maximum: number) { return Math.min(maximum, Math.max(minimum, value)); }

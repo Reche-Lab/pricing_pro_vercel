@@ -24,8 +24,7 @@ const outsideFill = z.object({
   })
 });
 
-export const retouchDraftSchema = z.object({
-  version: z.literal(1),
+const stage = z.object({
   operations: z.array(z.discriminatedUnion("kind", [stroke, fill, shape, outsideFill])).max(300),
   adjustments: z.object({
     brightness: z.number().int().min(50).max(150), contrast: z.number().int().min(50).max(150),
@@ -36,8 +35,15 @@ export const retouchDraftSchema = z.object({
     backgroundEnabled: z.boolean(),
     backgroundExpansionMm: z.number().finite().min(0).max(50),
     backgroundScalePercent: z.number().int().min(50).max(250),
-    backgroundBlurPx: z.number().int().min(0).max(80)
+    backgroundBlurPx: z.number().int().min(0).max(80),
+    backgroundMode: z.enum(["copy", "extend"]).optional()
   }).optional()
 });
+
+export const retouchDraftSchema = stage.extend({
+  version: z.literal(1),
+  stages: z.array(stage.extend({ cut: z.boolean() })).max(32).optional()
+}).refine((draft) => (draft.stages ?? []).reduce((sum, entry) => sum + entry.operations.length, draft.operations.length) <= 1500,
+  "Rascunho muito complexo. Salve uma versão para continuar.");
 
 export const retouchDraftBodySchema = z.object({ draft: retouchDraftSchema });
