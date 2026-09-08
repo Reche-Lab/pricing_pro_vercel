@@ -130,8 +130,8 @@ export function Storefront({
       data-theme={theme}
       style={
         {
-          "--accent": settings.accent,
-          "--accent-ink": accentForeground(settings.accent),
+          "--accent": theme === "dark" ? "#79d8d0" : settings.accent,
+          "--accent-ink": theme === "dark" ? "#081311" : accentForeground(settings.accent),
         } as CSSProperties
       }
     >
@@ -638,6 +638,7 @@ function Catalog({
   const params = useSearchParams();
   const [query, setQuery] = useState(params.get("q") ?? "");
   const [category, setCategory] = useState(params.get("categoria") ?? "");
+  const [sort, setSort] = useState("featured");
   useEffect(() => {
     setQuery(params.get("q") ?? "");
     setCategory(params.get("categoria") ?? "");
@@ -652,13 +653,14 @@ function Catalog({
         normalizeProductSearchTerm(query),
       ),
   );
+  const sorted = [...filtered].sort((a, b) => sort === "price_asc" ? a.unitCents - b.unitCents : sort === "price_desc" ? b.unitCents - a.unitCents : sort === "name" ? a.name.localeCompare(b.name, "pt-BR") : 0);
   return (
     <>
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <h1 className={`${styles.title} !mb-0`}>{title}</h1>
         <p className={styles.muted}>{filtered.length} produtos</p>
       </div>
-      <div className="mb-7 grid gap-3 sm:grid-cols-[minmax(0,1fr)_240px]">
+      <div className={styles.catalogToolbar}>
         <label className="relative">
           <span className="sr-only">Pesquisar produtos</span>
           <input
@@ -683,9 +685,15 @@ function Catalog({
             <option key={c}>{c}</option>
           ))}
         </select>
+        <select aria-label="Ordenar produtos" value={sort} onChange={event => { setSort(event.target.value); setPage(1); }}>
+          <option value="featured">Destaques</option>
+          <option value="price_asc">Menor preço unitário</option>
+          <option value="price_desc">Maior preço unitário</option>
+          <option value="name">Nome: A a Z</option>
+        </select>
       </div>
       <div className={styles.grid}>
-        {filtered.slice(0, page * 12).map((p) => (
+        {sorted.slice(0, page * 12).map((p) => (
           <StoreProductCard key={p.id} product={p} base={base} />
         ))}
       </div>

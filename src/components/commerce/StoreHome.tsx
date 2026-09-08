@@ -25,9 +25,10 @@ export function StoreProductCard({
   product: StoreProduct;
   base: string;
 }) {
+  const alternate = product.media?.find(media => media.kind === "image" && media.url !== product.imageUrl);
   return (
     <Link className={styles.product} href={`${base}/produto/${product.id}`}>
-      <div className={styles.productPhoto}>
+      <div className={`${styles.productPhoto} ${alternate ? styles.hasAlternate : ""}`}>
         <img
           src={product.imageUrl}
           alt={product.name}
@@ -35,6 +36,7 @@ export function StoreProductCard({
           width={400}
           height={400}
         />
+        {alternate ? <img className={styles.alternatePhoto} src={alternate.url} alt="" aria-hidden="true" loading="lazy" width={400} height={400} /> : null}
         {product.personalized ? (
           <span className={styles.productTag}>
             <Paintbrush size={12} /> Personalizável
@@ -359,6 +361,27 @@ export function StoreHome({
   return (
     <>
       <BannerCarousel settings={settings} base={base} />
+      <div className={styles.homeContent}>
+        {categories.length ? (
+          <section className={styles.categorySection} aria-label="Coleções">
+            <div className={styles.sectionHeading}><h2>Explore por categoria</h2></div>
+            <div className={styles.categoryRail}>
+              {categories.map(category => (
+                <Link key={category} href={`${base}/catalogo?categoria=${encodeURIComponent(category)}`}>
+                  <img src={products.find(product => product.category === category)!.imageUrl} alt="" loading="lazy" width={96} height={96} />
+                  <span>{category}</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        {products.length ? (
+          <ProductCarousel products={products} base={base} title="Encontre o seu próximo favorito" />
+        ) : (
+          <section className={styles.collection}><h2>Novidades em breve</h2><p className={styles.muted}>Estamos preparando os produtos desta loja.</p></section>
+        )}
+        {categories.length > 1 ? <ProductCarousel products={products.filter(product => product.category === categories[0])} base={base} title={categories[0]} category={categories[0]} /> : null}
+      </div>
       {personalized ? (
         <div className={styles.benefits}>
           <div>
@@ -393,62 +416,6 @@ export function StoreHome({
           ) : null}
         </div>
       ) : null}
-      <div className={styles.homeContent}>
-        {products.length ? (
-          <ProductCarousel
-            products={products}
-            base={base}
-            title="Encontre o seu próximo favorito"
-          />
-        ) : (
-          <section className={styles.collection}>
-            <h2>Novidades em breve</h2>
-            <p className={styles.muted}>
-              Estamos preparando os produtos desta loja.
-            </p>
-          </section>
-        )}
-        {categories.length > 1 ? (
-          <section className={styles.categorySection} aria-label="Coleções">
-            <div className={styles.sectionHeading}>
-              <div>
-                <p className={styles.eyebrow}>
-                  ENCONTRE O QUE COMBINA COM VOCÊ
-                </p>
-                <h2>Explore por categoria</h2>
-              </div>
-            </div>
-            <div className={styles.categoryRail}>
-              {categories.map((category) => (
-                <Link
-                  key={category}
-                  href={`${base}/catalogo?categoria=${encodeURIComponent(category)}`}
-                >
-                  <img
-                    src={
-                      products.find((p) => p.category === category)!.imageUrl
-                    }
-                    alt=""
-                    loading="lazy"
-                    width={96}
-                    height={96}
-                  />
-                  <span>{category}</span>
-                  <ArrowRight size={18} />
-                </Link>
-              ))}
-            </div>
-          </section>
-        ) : null}
-        {categories.length > 1 ? (
-          <ProductCarousel
-            products={products.filter((p) => p.category === categories[0])}
-            base={base}
-            title={categories[0]}
-            category={categories[0]}
-          />
-        ) : null}
-      </div>
     </>
   );
 }

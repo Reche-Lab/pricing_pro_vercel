@@ -1,7 +1,7 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BannerCarousel } from "@/components/commerce/StoreHome";
+import { BannerCarousel, StoreHome, StoreProductCard, type StoreProduct } from "@/components/commerce/StoreHome";
 import {
   useStoreTheme,
   accentForeground,
@@ -61,6 +61,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("storefront merchandising", () => {
+  const product = { id: "product", name: "Botton", imageUrl: "https://example.test/product.png", category: "Bottons", personalized: true, unitCents: 1000, minQuantity: 1, offer: { originalUnitCents: 1000, maxDiscountPercent: 0 }, media: [{ id: "second", kind: "image", url: "https://example.test/back.png" }] } as StoreProduct;
+  it("places categories before featured products and benefits after the catalog", () => {
+    render(<StoreHome settings={settings} products={[product]} base="/commerce/ground-shop/preview" />);
+    const categories = screen.getByRole("region", { name: "Coleções" });
+    const featured = screen.getByRole("region", { name: "Encontre o seu próximo favorito" });
+    expect(categories.compareDocumentPosition(featured) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(featured.compareDocumentPosition(screen.getByText("Você aprova primeiro")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Bottons" })).toHaveAttribute("href", "/commerce/ground-shop/preview/catalogo?categoria=Bottons");
+  });
+  it("provides a second product image for hover without extra navigation or video autoplay", () => {
+    const { container } = render(<StoreProductCard product={product} base="/loja/ground-shop" />);
+    expect(container.querySelectorAll("img")).toHaveLength(2);
+    expect(container.querySelector('img[alt=""]')).toHaveAttribute("src", "https://example.test/back.png");
+    expect(container.querySelectorAll("a")).toHaveLength(1);
+    expect(container.querySelector("video")).toBeNull();
+  });
   it("moves banners and preserves preview navigation without autoplay for reduced motion", () => {
     render(
       <BannerCarousel

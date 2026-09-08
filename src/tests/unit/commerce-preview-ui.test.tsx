@@ -14,7 +14,8 @@ import {
   CommercePreviewProvider,
   useCommercePreview,
 } from "@/components/commerce/CommercePreviewProvider";
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+const searchParams = vi.hoisted(() => new URLSearchParams());
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => searchParams }));
 vi.mock("next/dynamic", () => ({ default: () => () => null }));
 vi.mock("@/components/commerce/store-http", () => ({
   storeRequest: vi.fn(),
@@ -56,6 +57,21 @@ const product = {
   offer: { originalUnitCents: 100, minimumUnitCents: 100, maxDiscountPercent: 0, discountQuantity: 1 },
 };
 describe("preview storefront navigation", () => {
+  it("sorts the catalog by unit price or name and preserves search filtering without API mutations", () => {
+    render(<Storefront slug="ground-shop" settings={settings} products={[
+      { ...product, id: "b", name: "Produto B", unitCents: 200 }, { ...product, id: "a", name: "Produto A", unitCents: 500 },
+    ]} path={["catalogo"]} paused={false} preview />);
+    const names = () => screen.getAllByRole("heading", { level: 3 }).map(heading => heading.textContent);
+    fireEvent.change(screen.getByLabelText("Ordenar produtos"), { target: { value: "price_asc" } });
+    expect(names()).toEqual(["Produto B", "Produto A"]);
+    fireEvent.change(screen.getByLabelText("Ordenar produtos"), { target: { value: "price_desc" } });
+    expect(names()).toEqual(["Produto A", "Produto B"]);
+    fireEvent.change(screen.getByLabelText("Ordenar produtos"), { target: { value: "name" } });
+    expect(names()).toEqual(["Produto A", "Produto B"]);
+    fireEvent.change(screen.getByPlaceholderText("Qual produto você procura?"), { target: { value: "Produto B" } });
+    expect(names()).toEqual(["Produto B"]);
+    expect(storeRequest).not.toHaveBeenCalled();
+  });
   it("allows delivery consultation even if the independent price request fails", async () => {
     vi.mocked(storeRequest).mockImplementation(async url => {
       if (url.endsWith("/price")) throw new Error("Não foi possível calcular o preço.");
