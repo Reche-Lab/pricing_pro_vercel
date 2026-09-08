@@ -36,6 +36,21 @@ export function distributeQuantity(total: number, groups: number) {
     (_, index) => Math.floor(total / groups) + (index < total % groups ? 1 : 0),
   );
 }
+export function commerceSelectionError(
+  lines: CartLine[],
+  product: Pick<PriceProduct, "id" | "minQuantity" | "maxQuantity" | "maxArtworks">,
+): string | null {
+  if (!lines.length || lines.some(line => !Number.isInteger(line.quantity) || line.quantity < 1))
+    return "Informe quantidades válidas de produtos e artes para consultar a entrega.";
+  if (lines.some(line => line.productId !== product.id) || new Set(lines.map(line => line.id)).size !== lines.length)
+    return "Revise os itens do produto antes de consultar a entrega.";
+  const quantity = lines.reduce((sum, line) => sum + line.quantity, 0);
+  if (quantity < product.minQuantity || quantity > product.maxQuantity)
+    return `Selecione de ${product.minQuantity} a ${product.maxQuantity} unidades para consultar a entrega.`;
+  if (lines.length > Math.min(20, product.maxArtworks))
+    return `Este produto permite até ${product.maxArtworks} artes. Ajuste a quantidade de artes.`;
+  return null;
+}
 export function calculateCart(lines: CartLine[], products: PriceProduct[]) {
   if (
     new Set(lines.map((line) => line.id)).size !== lines.length ||

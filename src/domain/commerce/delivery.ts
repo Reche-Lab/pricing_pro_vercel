@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { cartLineSchema, type StoreSettings, type CartLine } from "./schemas";
-import { calculateCart, CommerceError, type PriceProduct } from "./commerce";
+import { commerceSelectionError, CommerceError, type PriceProduct } from "./commerce";
 
 export const productDeliverySchema = z.object({
   postalCode: z.string().trim().regex(/^\d{5}-?\d{3}$/, "Informe um CEP com oito números.")
@@ -17,7 +17,10 @@ export function commerceDeliveryEstimate(
     throw new CommerceError("Informe um CEP válido.");
   if (!lines.length || new Set(lines.map(line => line.productId)).size !== 1)
     throw new CommerceError("Consulte um produto de cada vez.");
-  calculateCart(lines, products);
+  const product = products.find(candidate => candidate.id === lines[0].productId);
+  if (!product) throw new CommerceError("Produto indisponível. Atualize a página.", 409);
+  const selectionError = commerceSelectionError(lines, product);
+  if (selectionError) throw new CommerceError(selectionError);
   const options: { id: string; name: string; priceCents: number; description?: string }[] = [];
   if (settings.deliveryEnabled) options.push({ id: "delivery", name: settings.deliveryDescription || "Entrega", priceCents: settings.deliveryCents });
   if (settings.pickupEnabled) options.push({ id: "pickup", name: "Retirada na loja", priceCents: 0, description: settings.pickupAddress });

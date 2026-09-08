@@ -31,7 +31,7 @@ import type {
   buyerOrders,
 } from "@/repositories/commerce";
 import type { CartLine, StoreSettings } from "@/domain/commerce/schemas";
-import { distributeQuantity } from "@/domain/commerce/commerce";
+import { commerceSelectionError, distributeQuantity } from "@/domain/commerce/commerce";
 import { normalizeProductSearchTerm } from "@/domain/products/product-search";
 import { fetchCepAddress, normalizeCep } from "@/lib/cep";
 import { storeRequest, storeMoney } from "./store-http";
@@ -742,6 +742,7 @@ function ProductDetail({
     }
   }, [quantity, groups, product.id, product.personalized]);
   const price = priced?.lines === lines ? priced.calculation : null;
+  const deliveryIssue = commerceSelectionError(lines, product);
   useEffect(() => {
     let active = true;
     setPrice(null);
@@ -845,7 +846,7 @@ function ProductDetail({
               concluir.
             </p>
           ) : null}
-          <StoreDeliveryInquiry api={api} lines={lines} disabled={!price} />
+          <StoreDeliveryInquiry api={api} lines={lines} disabled={Boolean(deliveryIssue)} disabledReason={deliveryIssue ?? undefined} />
         </section>
       </div>
     </>

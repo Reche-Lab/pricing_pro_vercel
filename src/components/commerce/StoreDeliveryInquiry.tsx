@@ -7,7 +7,7 @@ import { formatCep } from "@/lib/cep";
 import { storeMoney, storeRequest } from "./store-http";
 import styles from "./store.module.css";
 
-export function StoreDeliveryInquiry({ api, lines, disabled }: { api: string; lines: CartLine[]; disabled: boolean }) {
+export function StoreDeliveryInquiry({ api, lines, disabled, disabledReason }: { api: string; lines: CartLine[]; disabled: boolean; disabledReason?: string }) {
   const [cep, setCep] = useState("");
   const [result, setResult] = useState<ReturnType<typeof commerceDeliveryEstimate> | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,9 +39,10 @@ export function StoreDeliveryInquiry({ api, lines, disabled }: { api: string; li
         {busy ? <LoaderCircle size={17} className="animate-spin" /> : <Truck size={17} />} {busy ? "Consultando…" : "Consultar"}
       </button>
     </form>
+    {disabled ? <p role="status" className={styles.deliveryError}>{disabledReason || "Revise a quantidade de produtos e artes para consultar a entrega."}</p> : null}
     {error ? <p role="alert" className={styles.deliveryError}>{error}</p> : null}
     {result ? <div role="status" className={styles.deliveryResults}>
-      {!result.options.length ? <p>Entrega indisponível no momento. Consulte a loja.</p> : result.options.map(option => <div key={option.id}>
+      {!result.options.length ? <p>Nenhuma opção de entrega ou retirada foi configurada para esta loja. Entre em contato com a loja.</p> : result.options.map(option => <div key={option.id}>
         <span>{option.name}<small>{option.id === "delivery" ? "Tarifa de entrega da loja" : option.description}</small></span>
         <strong>{option.priceCents === 0 ? "Grátis" : storeMoney(option.priceCents)}</strong>
       </div>)}

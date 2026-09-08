@@ -9,6 +9,11 @@ vi.mock("@/components/commerce/store-http", () => ({ storeRequest: vi.fn(), stor
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 const lines = [{ id: "item", productId: "product", quantity: 50, artworkName: "Arte 1", artworkId: null }];
 describe("product offers UI", () => {
+  it("explains why an invalid product selection blocks delivery", () => {
+    render(<StoreDeliveryInquiry api="/api/store/shop" lines={[]} disabled disabledReason="Selecione de 10 a 100 unidades para consultar a entrega." />);
+    expect(screen.getByRole("status")).toHaveTextContent("Selecione de 10 a 100 unidades");
+    expect(screen.getByRole("button", { name: "Consultar" })).toBeDisabled();
+  });
   it("shows original and current unit and total prices only for genuine savings", () => {
     const { container, rerender } = render(<StorePriceBreakdown originalUnitCents={1000} quantity={50} price={{ totalCents: 30000, items: [{ unitCents: 600 }] }} />);
     expect(container.querySelectorAll("del")).toHaveLength(2);

@@ -56,6 +56,21 @@ const product = {
   offer: { originalUnitCents: 100, minimumUnitCents: 100, maxDiscountPercent: 0, discountQuantity: 1 },
 };
 describe("preview storefront navigation", () => {
+  it("allows delivery consultation even if the independent price request fails", async () => {
+    vi.mocked(storeRequest).mockImplementation(async url => {
+      if (url.endsWith("/price")) throw new Error("Não foi possível calcular o preço.");
+      return { options: [{ id: "delivery", name: "Entrega local", priceCents: 1500 }] };
+    });
+    render(<CommercePreviewProvider slug="ground-shop"><Storefront slug="ground-shop" settings={settings}
+      products={[product]} path={["produto", product.id]} paused={false} preview /></CommercePreviewProvider>);
+    await screen.findByText("Não foi possível calcular o preço.");
+    fireEvent.change(screen.getByLabelText("CEP de destino"), { target: { value: "12345678" } });
+    const button = screen.getByRole("button", { name: "Consultar" });
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    await screen.findByText("Entrega local");
+    expect(screen.getByRole("button", { name: "Adicionar ao carrinho" })).toBeDisabled();
+  });
   it("exposes a private cart without creating buyer sessions", () => {
     render(
       <Storefront

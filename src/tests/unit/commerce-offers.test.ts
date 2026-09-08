@@ -31,6 +31,15 @@ describe("store price references", () => {
 describe("product delivery consultation", () => {
   const settings = { deliveryEnabled: true, deliveryCents: 1500, deliveryDescription: "Entrega local", pickupEnabled: true, pickupAddress: "Rua da loja, 10" };
   const lines = [{ id: "line", productId: product.id, quantity: 10, artworkName: "", artworkId: null }];
+  it("does not require a working price curve to consult a configured delivery tariff", () => {
+    expect(commerceDeliveryEstimate(settings, "12345678", lines, [{ ...product, curve: { mode: "step", points: [] } }]).options[0].priceCents).toBe(1500);
+  });
+  it("still validates quantities and artwork groups without calculating the price", () => {
+    for (const quantity of [0, 9, 101, 1.5])
+      expect(() => commerceDeliveryEstimate(settings, "12345678", [{ ...lines[0], quantity }], [product])).toThrow();
+    expect(() => commerceDeliveryEstimate(settings, "12345678", [lines[0], lines[0]], [product])).toThrow();
+    expect(() => commerceDeliveryEstimate(settings, "12345678", [lines[0], { ...lines[0], id: "other" }], [{ ...product, maxArtworks: 1 }])).toThrow();
+  });
   it("uses the configured tariff and pickup without changing cart or promising transit time", () => {
     expect(commerceDeliveryEstimate(settings, "12345-678", lines, [product])).toEqual({
       postalCode: "12345678", estimated: true,

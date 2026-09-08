@@ -41,3 +41,13 @@ Cotação dinâmica por Melhor Envio/Correios na loja exige integrar a seleção
 - [x] Build de produção aprovado com limite de memória.
 
 Sem migration ou variável de ambiente nova.
+
+## Correção da consulta no produto
+
+- [x] Removida a dependência da consulta de entrega em relação ao resultado da API de preço. Uma falha de preço continua impedindo a compra, mas não a consulta da tarifa de entrega.
+- [x] Validação de disponibilidade, limites de quantidade e grupos mantida no servidor, sem executar a curva de preços para consultar uma tarifa fixa.
+- [x] Mensagem junto ao botão quando a seleção é inválida; mensagem específica para loja sem opções de entrega/retirada configuradas.
+- [x] Testes reproduziram o bloqueio antes da correção e passaram após o ajuste.
+- [x] Navegador: falha de preço simulada com consulta real à API local de entrega, sem liberar compra sem preço; fluxo normal até checkout simulado aprovado.
+- [x] Suíte: 277 testes aprovados; seis testes de integração separados não executados nesta rodada. Lint sem avisos.
+- [x] Build de produção e checagem de tipos aprovados.

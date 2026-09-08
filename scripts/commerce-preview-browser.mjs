@@ -103,6 +103,18 @@ try {
       errors.push("Public commerce API called in preview: " + request.url());
   });
   const prefix = `${base}/commerce/ground-shop/preview`;
+  await page.route("**/api/commerce/ground-shop/preview/price", route => route.fulfill({
+    status: 503, contentType: "application/json", body: JSON.stringify({ error: "Preço temporariamente indisponível." }),
+  }));
+  await page.goto(`${prefix}/produto/${product.id}`, { waitUntil: "networkidle" });
+  await page.getByText("Preço temporariamente indisponível.", { exact: true }).waitFor();
+  await page.getByLabel("CEP de destino").fill("12345678");
+  await page.getByRole("button", { name: "Consultar", exact: true }).click();
+  await page.getByText("Tarifa de entrega da loja").waitFor();
+  if (await page.getByRole("button", { name: "Adicionar ao carrinho" }).isEnabled())
+    throw new Error("Price failure must still prevent adding unpriced products");
+  await page.screenshot({ path: "/tmp/commerce-delivery-price-failure.png", fullPage: true });
+  await page.unroute("**/api/commerce/ground-shop/preview/price");
   await page.goto(`${prefix}/produto/${product.id}`, {
     waitUntil: "networkidle",
   });
