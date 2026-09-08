@@ -103,6 +103,25 @@ try {
       errors.push("Public commerce API called in preview: " + request.url());
   });
   const prefix = `${base}/commerce/ground-shop/preview`;
+  // Provider responses are simulated here; payload and tenant authorization have server unit coverage.
+  await page.route("**/api/commerce/ground-shop/preview/delivery", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({
+      postalCode: "12345678", estimated: true, previewCarrier: true,
+      options: [{ id: "melhor_envio:1", name: "Correios - PAC", priceCents: 1850, description: "Melhor Envio · Prazo estimado: 5 dias úteis" }],
+    }),
+  }));
+  await page.goto(`${prefix}/produto/${product.id}`, { waitUntil: "networkidle" });
+  await page.getByLabel("CEP de destino").fill("12345678");
+  await page.getByRole("button", { name: "Consultar", exact: true }).click();
+  await page.getByText("Correios - PAC", { exact: false }).waitFor();
+  await page.getByText("Estes serviços ainda não estão habilitados", { exact: false }).waitFor();
+  for (const width of [1365, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.screenshot({ path: `/tmp/commerce-preview-carrier-${width}.png`, fullPage: true });
+    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) throw new Error(`Carrier preview overflow at ${width}`);
+  }
+  await page.unroute("**/api/commerce/ground-shop/preview/delivery");
+  await page.setViewportSize({ width: 1365, height: 900 });
   await page.route("**/api/commerce/ground-shop/preview/price", route => route.fulfill({
     status: 503, contentType: "application/json", body: JSON.stringify({ error: "Preço temporariamente indisponível." }),
   }));

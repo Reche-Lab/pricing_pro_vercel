@@ -9,6 +9,15 @@ vi.mock("@/components/commerce/store-http", () => ({ storeRequest: vi.fn(), stor
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 const lines = [{ id: "item", productId: "product", quantity: 50, artworkName: "Arte 1", artworkId: null }];
 describe("product offers UI", () => {
+  it("identifies carrier estimates in preview and offers configuration links", async () => {
+    vi.mocked(storeRequest).mockResolvedValue({ previewCarrier: true, options: [{ id: "melhor_envio:1", name: "Correios - PAC", priceCents: 1250, description: "Melhor Envio · Prazo estimado: 5 dias úteis" }] });
+    render(<StoreDeliveryInquiry api="/api/commerce/shop/preview" lines={lines} disabled={false} />);
+    fireEvent.change(screen.getByLabelText("CEP de destino"), { target: { value: "12345678" } });
+    fireEvent.click(screen.getByRole("button", { name: "Consultar" }));
+    await screen.findByText("Correios - PAC");
+    expect(screen.getByText(/ainda não estão habilitados no checkout/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Configurar Melhor Envio" })).toHaveAttribute("href", "/settings?section=melhor-envio");
+  });
   it("explains why an invalid product selection blocks delivery", () => {
     render(<StoreDeliveryInquiry api="/api/store/shop" lines={[]} disabled disabledReason="Selecione de 10 a 100 unidades para consultar a entrega." />);
     expect(screen.getByRole("status")).toHaveTextContent("Selecione de 10 a 100 unidades");

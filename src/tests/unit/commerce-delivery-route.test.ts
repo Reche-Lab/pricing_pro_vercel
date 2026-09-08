@@ -5,6 +5,11 @@ import { POST as previewPOST } from "@/app/api/commerce/[slug]/preview/delivery/
 import { getCommerceStore, commerceProducts } from "@/repositories/commerce";
 import { requireCommercePreview } from "@/services/commerce/preview";
 import { enforcePublicRateLimit } from "@/lib/security/public-rate-limit";
+import { getCurrentSession } from "@/lib/auth/session";
+import { previewCarrierDelivery } from "@/services/commerce/preview-delivery";
+import { CommerceError } from "@/domain/commerce/commerce";
+vi.mock("@/lib/auth/session", () => ({ getCurrentSession: vi.fn() }));
+vi.mock("@/services/commerce/preview-delivery", () => ({ previewCarrierDelivery: vi.fn() }));
 vi.mock("@/repositories/commerce", () => ({ getCommerceStore: vi.fn(), commerceProducts: vi.fn() }));
 vi.mock("@/services/commerce/preview", () => ({ requireCommercePreview: vi.fn() }));
 vi.mock("@/lib/security/public-rate-limit", () => ({ enforcePublicRateLimit: vi.fn() }));
@@ -22,6 +27,8 @@ beforeEach(() => {
   vi.mocked(requireCommercePreview).mockResolvedValue(store as never);
   vi.mocked(commerceProducts).mockResolvedValue([product] as never);
   vi.mocked(enforcePublicRateLimit).mockResolvedValue(null);
+  vi.mocked(getCurrentSession).mockResolvedValue({ userId: "admin", tenantId: "tenant-a" } as never);
+  vi.mocked(previewCarrierDelivery).mockResolvedValue(null);
 });
 describe("product delivery boundary", () => {
   it("isolates store products and returns only delivery details without issuing a buyer session", async () => {
@@ -30,6 +37,22 @@ describe("product delivery boundary", () => {
     expect(commerceProducts).toHaveBeenCalledWith("tenant-a");
     expect(response.headers.get("set-cookie")).toBeNull();
     expect(await response.json()).toMatchObject({ options: [{ priceCents: 0 }] });
+    expect(previewCarrierDelivery).not.toHaveBeenCalled();
+  });
+  it("quotes an active tenant carrier in preview even with fixed delivery and pickup disabled", async () => {
+    vi.mocked(requireCommercePreview).mockResolvedValue({ ...store, settings: { ...store.settings, deliveryEnabled: false } } as never);
+    vi.mocked(previewCarrierDelivery).mockResolvedValue({ options: [{ id: "melhor_envio:1", name: "Correios - PAC", priceCents: 1250, description: "Melhor Envio" }] });
+    const response = await previewPOST(request(), context);
+    expect(await response.json()).toMatchObject({ previewCarrier: true, options: [{ priceCents: 1250 }] });
+    expect(previewCarrierDelivery).toHaveBeenCalledWith("admin", "tenant-a", "12345678", body.lines, [product]);
+  });
+  it("does not use another tenant's identity and explains failures without hiding existing pickup/delivery", async () => {
+    vi.mocked(getCurrentSession).mockResolvedValue({ userId: "admin", tenantId: "other" } as never);
+    expect((await previewPOST(request(), context)).status).toBe(401);
+    expect(previewCarrierDelivery).not.toHaveBeenCalled();
+    vi.mocked(getCurrentSession).mockResolvedValue({ userId: "admin", tenantId: "tenant-a" } as never);
+    vi.mocked(previewCarrierDelivery).mockRejectedValue(new CommerceError("Cadastre uma embalagem.", 409));
+    expect(await (await previewPOST(request(), context)).json()).toMatchObject({ options: [{ id: "delivery" }], warnings: ["Cadastre uma embalagem."] });
   });
   it("rejects foreign origins, unavailable stores and client supplied prices", async () => {
     expect((await POST(request(body, "https://evil.test"), context)).status).toBe(403);

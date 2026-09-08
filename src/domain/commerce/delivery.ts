@@ -2,6 +2,14 @@ import { z } from "zod";
 import { cartLineSchema, type StoreSettings, type CartLine } from "./schemas";
 import { commerceSelectionError, CommerceError, type PriceProduct } from "./commerce";
 
+export type CommerceDeliveryResult = {
+  postalCode: string;
+  estimated: true;
+  options: { id: string; name: string; priceCents: number; description?: string }[];
+  previewCarrier?: boolean;
+  warnings?: string[];
+};
+
 export const productDeliverySchema = z.object({
   postalCode: z.string().trim().regex(/^\d{5}-?\d{3}$/, "Informe um CEP com oito números.")
     .transform(value => value.replace("-", "")).refine(value => value !== "00000000", "Informe um CEP válido."),

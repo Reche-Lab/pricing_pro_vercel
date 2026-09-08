@@ -28,6 +28,7 @@ export type MelhorEnvioQuoteInput = {
 };
 
 export type MelhorEnvioRequestOptions = {
+  signal?: AbortSignal;
   method?: "GET" | "POST";
   path: string;
   body?: unknown;

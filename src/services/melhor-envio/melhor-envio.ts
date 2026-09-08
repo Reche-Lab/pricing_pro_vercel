@@ -269,6 +269,7 @@ export function melhorEnvioOrderFlowStatus(order: MelhorEnvioOrder): string {
 }
 
 export async function melhorEnvioRequest<T = unknown>({
+  signal,
   method = "POST",
   path,
   body,
@@ -287,6 +288,7 @@ export async function melhorEnvioRequest<T = unknown>({
   });
 
   const response = await fetch(endpoint, {
+    signal,
     method,
     headers: {
       accept: "application/json",

@@ -15,14 +15,16 @@ O checkout do piloto utiliza a tarifa fixa configurada em Loja online e a retira
 
 O valor definitivo continua sendo recalculado no servidor para o carrinho ao criar o pedido. A consulta do produto não é enviada como preço de frete ao checkout.
 
-Cotação dinâmica por Melhor Envio/Correios na loja exige integrar a seleção e a validação da cotação também ao checkout; não foi introduzida nesta alteração.
+O preview administrativo também consulta o Melhor Envio quando a integração do tenant está ativa. Usa o CEP de origem cadastrado, as dimensões e pesos dos produtos, as embalagens disponíveis e o valor calculado no servidor como seguro, distribuído entre os volumes. Prioriza os valores e prazos personalizados retornados pela conta. [Contrato da API Melhor Envio](https://docs.melhorenvio.com.br/reference/calculo-de-fretes-por-produtos).
+
+Essa consulta real é exclusiva do preview autenticado. Cotação dinâmica na loja pública exige integrar a seleção e a validação também ao checkout e continua pendente. O preview informa essa limitação: consultar não seleciona frete, não compra etiqueta e não modifica o carrinho.
 
 ## Endpoints
 
 - `POST /api/store/[slug]/delivery`: loja publicada.
 - `POST /api/commerce/[slug]/preview/delivery`: administrador autorizado, inclusive rascunhos.
 - Corpo: `{ postalCode, lines }`, usando as mesmas linhas e quantidades do cálculo de preço, de um único produto.
-- Resposta: `{ postalCode, estimated: true, options: [{ id, name, priceCents, description? }] }`.
+- Resposta: `{ postalCode, estimated: true, options: [{ id, name, priceCents, description? }], previewCarrier?, warnings? }`.
 - Validação de origem, limite de corpo, schema estrito, produtos restritos ao tenant e rate limit de 20 consultas/minuto por loja e endereço de acesso. Não cria cookie nem sessão de comprador.
 - Logs registram tenant, contexto de prévia e número de opções, sem CEP ou informações pessoais.
 
@@ -41,6 +43,18 @@ Cotação dinâmica por Melhor Envio/Correios na loja exige integrar a seleção
 - [x] Build de produção aprovado com limite de memória.
 
 Sem migration ou variável de ambiente nova.
+
+## Melhor Envio no preview
+
+- [x] Corrigida a causa do retorno vazio: o preview consultava somente tarifa fixa e retirada, mesmo com Melhor Envio configurado.
+- [x] Cotação com produtos do tenant, quantidade de todas as artes, embalagem, peso bruto e seguro.
+- [x] Opções e prazos retornados pela transportadora, sem inventar serviços disponíveis.
+- [x] Mensagens para configuração ausente, credenciais indisponíveis, embalagem incompatível e falha do provedor; atalhos para configurações.
+- [x] Autorização administrativa e isolamento por tenant; nenhuma chamada ao provedor no endpoint público.
+- [x] Testes com provedor simulado e checagem de tipos.
+- [x] Regressão: 284 testes aprovados; seis testes de integração separados não executados nesta rodada. TypeScript, lint e build de produção aprovados com limite de memória.
+- [x] Navegador em 1365, 390 e 320 px: retorno de transportadora simulado exibido sem overflow; fluxo de compra simulada, arte e aprovação preservado, sem pedidos persistidos. Tarifa fixa também consultada pela API local com banco isolado.
+- [ ] Homologação com a conta real do tenant após o deploy.
 
 ## Correção da consulta no produto
 
