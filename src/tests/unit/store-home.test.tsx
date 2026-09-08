@@ -1,5 +1,5 @@
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BannerCarousel, StoreHome, StoreProductCard, type StoreProduct } from "@/components/commerce/StoreHome";
 import {
@@ -58,6 +58,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 describe("storefront merchandising", () => {
@@ -85,8 +86,9 @@ describe("storefront merchandising", () => {
       />,
     );
     expect(
-      screen.getByRole("button", { name: "Reproduzir banners" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /Reproduzir banners|Pausar banners/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("01 / 02")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Ver coleção" })).toHaveAttribute(
       "href",
       "/commerce/ground-shop/preview/catalogo?categoria=Bottons",
@@ -102,6 +104,17 @@ describe("storefront merchandising", () => {
     expect(
       screen.getByRole("heading", { name: "Primeira coleção" }),
     ).toBeInTheDocument();
+  });
+  it("autoplays without playback controls and stops after manual navigation", () => {
+    vi.useFakeTimers();
+    vi.mocked(window.matchMedia).mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() } as never);
+    render(<BannerCarousel settings={settings} base="/loja/ground-shop" />);
+    act(() => vi.advanceTimersByTime(6500));
+    expect(screen.getByRole("button", { name: "Mostrar banner 2" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Banner anterior" }));
+    act(() => vi.advanceTimersByTime(6500));
+    expect(screen.getByRole("button", { name: "Mostrar banner 1" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: /Reproduzir banners|Pausar banners/ })).not.toBeInTheDocument();
   });
   it("accepts legacy settings while rejecting unsafe banners and excessive slides", () => {
     expect(

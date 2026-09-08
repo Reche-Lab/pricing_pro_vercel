@@ -34,7 +34,9 @@ try {
         const hero = page.getByRole("region", { name: "Destaques da loja" });
         const bounds = await hero.boundingBox();
         const next = await page.getByRole("region", { name: "Coleções" }).boundingBox();
-        if (!bounds || bounds.width > width - 24 || bounds.height > 361 || !next || next.y > height - 16) throw new Error(`Banner hides next section: ${prefix} ${width}x${height} ${JSON.stringify({ bounds, next })}`);
+        if (!bounds || bounds.width > width - 24 || bounds.height > 481 || !next || next.y < bounds.y + bounds.height) throw new Error(`Invalid banner layout: ${prefix} ${width}x${height} ${JSON.stringify({ bounds, next })}`);
+        if (width >= 1440 && bounds.height < 479) throw new Error("Desktop banner must use its increased height");
+        if (await hero.getByRole("button", { name: /Reproduzir banners|Pausar banners/ }).count() || await hero.getByText("01 / 02", { exact: true }).count()) throw new Error("Removed carousel controls are still visible");
         if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) throw new Error(`Overflow at ${width}`);
         const copy = await hero.locator('[class*="heroText"]').boundingBox();
         const cta = await hero.getByRole("link").boundingBox();
@@ -54,7 +56,7 @@ try {
     await page.screenshot({ path: `/tmp/commerce-home-catalog-${prefix.includes("preview") ? "preview" : "public"}.png`, fullPage: true });
   }
   if (errors.length) throw new Error(errors.join("\n"));
-  console.log("Home passed: public/preview, light/dark, desktop/mobile/landscape, next section visible, stable carousel height, no text overlap, catalog sorting.");
+  console.log("Home passed: public/preview, light/dark, desktop/mobile/landscape, taller banner, no counter/play controls, stable carousel height, no text overlap, catalog sorting.");
 } finally {
   await browser.close();
   if (store) await db.query("update commerce_stores set settings=$2,enabled=$3,status=$4 where tenant_id=$1", [store.tenant_id, store.settings, store.enabled, store.status]);

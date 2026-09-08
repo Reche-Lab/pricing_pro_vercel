@@ -8,7 +8,7 @@ O tema de referência permite reordenar diversas seções. Esta adaptação util
 
 ## Planejado x realizado
 
-- [x] Banner centralizado, largura máxima de 1216 px, altura máxima de 360 px e margens laterais.
+- [x] Banner centralizado, largura máxima de 1216 px e margens laterais. Altura ampliada para até 480 px no desktop e 380 px no celular, para reduzir as sobras laterais de imagens exibidas inteiras.
 - [x] Banner menor no celular e em orientação paisagem, sem mudar de altura ao alternar imagem com/sem texto.
 - [x] Categorias com miniaturas circulares antes dos produtos; benefícios após as coleções.
 - [x] Dark mode com fundo `#0d1117`, superfícies `#151b23`, destaque `#6fd0c9` e botões `#79d8d0`, conforme a referência. Light mode preserva a cor de botão configurada pelo tenant.
@@ -16,8 +16,15 @@ O tema de referência permite reordenar diversas seções. Esta adaptação util
 - [x] Carrosséis e catálogo com quatro colunas no desktop e duas no celular; navegação por toque, botões e respeito à redução de movimento.
 - [x] Ordenação por destaque, preço unitário e nome no catálogo, combinada com busca e categoria.
 - [x] Testes da sequência da home, segunda imagem e preservação dos links privados; testes de ordenação e filtragem.
-- [x] Navegador: loja pública e preview, claro/escuro, 1440/1920/390/320 px e paisagem 844 x 390. Próximo bloco visível, banner sem salto de altura e sem sobreposição dos controles.
+- [x] Navegador da versão compacta: loja pública e preview, claro/escuro, 1440/1920/390/320 px e paisagem 844 x 390.
 - [x] Galeria e superfícies com transparência, hover e redução de movimento aprovadas. Compra simulada com upload, retoque, recorte, aprovação e checkout aprovada sem gravar pedidos ou criar sessão de comprador no preview.
 - [x] 290 testes aprovados; seis testes de integração separados não executados nesta rodada. Lint, tipos e build de produção aprovados com limite de memória.
 
 Não há migration, variável de ambiente nova ou alteração de dados de produção. As imagens usadas nas verificações são fixtures locais, e as configurações do banco de testes são restauradas ao final.
+
+## Ajuste de altura e controles
+
+- [x] Ampliar a altura preservando a proporção da arte e a largura do componente.
+- [x] Remover contador numérico e botão de reproduzir/pausar; manter setas, indicadores e gesto de deslizar.
+- [x] Interromper a rotação automática após navegação manual, além das pausas por hover/foco e redução de movimento.
+- [x] 291 testes aprovados; seis testes de integração separados não executados nesta rodada. Build, lint e tipos aprovados. Navegador validado na loja pública e no preview, claro/escuro, desktop/celular/paisagem, sem contador ou controle de reprodução e sem sobreposição.

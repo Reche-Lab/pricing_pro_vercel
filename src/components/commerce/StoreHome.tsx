@@ -8,8 +8,6 @@ import {
   CheckCheck,
   Layers3,
   Paintbrush,
-  Pause,
-  Play,
   Store,
 } from "lucide-react";
 import type { publicCommerceProduct } from "@/repositories/commerce";
@@ -207,6 +205,7 @@ export function BannerCarousel({
   }, [playing, interacting, visible, slides.length]);
   const current = index % Math.max(slides.length, 1);
   function move(direction: number) {
+    setPlaying(false);
     setIndex((old) => (old + direction + slides.length) % slides.length);
   }
   if (!slides.length)
@@ -233,6 +232,7 @@ export function BannerCarousel({
           setInteracting(false);
       }}
       onTouchStart={(event) => {
+        setPlaying(false);
         const touch = event.touches[0];
         touchStart.current = { x: touch.clientX, y: touch.clientY };
       }}
@@ -305,7 +305,7 @@ export function BannerCarousel({
               <button
                 type="button"
                 key={slide.id}
-                onClick={() => setIndex(i)}
+                onClick={() => { setPlaying(false); setIndex(i); }}
                 aria-label={`Mostrar banner ${i + 1}`}
                 aria-pressed={current === i}
               >
@@ -313,18 +313,6 @@ export function BannerCarousel({
               </button>
             ))}
           </div>
-          <span className={styles.slideCount}>
-            {String(current + 1).padStart(2, "0")} /{" "}
-            {String(slides.length).padStart(2, "0")}
-          </span>
-          <button
-            type="button"
-            title={playing ? "Pausar banners" : "Reproduzir banners"}
-            aria-label={playing ? "Pausar banners" : "Reproduzir banners"}
-            onClick={() => setPlaying(!playing)}
-          >
-            {playing ? <Pause size={17} /> : <Play size={17} />}
-          </button>
           <button
             type="button"
             title="Banner anterior"

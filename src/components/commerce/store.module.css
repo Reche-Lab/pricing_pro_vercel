@@ -257,8 +257,8 @@
   width: calc(100% - 64px);
   max-width: 1216px;
   margin: 20px auto 0;
-  height: min(360px, 46svh);
-  min-height: 280px;
+  height: min(480px, 58svh);
+  min-height: 340px;
   background: #323b3e;
   color: white;
   overflow: hidden;
@@ -393,11 +393,6 @@
   padding-inline: 6px;
   border-radius: 24px;
 }
-.imageOnlyHero .slideCount {
-  background: #0009;
-  padding: 4px 6px;
-  border-radius: 4px;
-}
 .bannerDots button {
   width: 28px;
   height: 36px;
@@ -415,11 +410,6 @@
   width: 22px;
   border-radius: 4px;
   background: white;
-}
-.slideCount {
-  font-size: 11px;
-  margin-right: 10px;
-  font-variant-numeric: tabular-nums;
 }
 .homeIntro {
   max-width: 1280px;
@@ -917,7 +907,7 @@
     width: calc(100% - 32px);
     margin-top: 12px;
     min-height: 0;
-    height: min(300px, 36svh);
+    height: min(380px, 48svh);
   }
   .imageOnlyHero {
     min-height: 0;
@@ -1037,9 +1027,6 @@
   .heroText h1 {
     font-size: 26px;
   }
-  .slideCount {
-    display: none;
-  }
   .heroCopy h2 {
     font-size: 18px;
   }
@@ -1048,7 +1035,7 @@
 }
 @media (max-height: 600px) and (min-width: 540px) {
   .hero {
-    height: 30svh;
+    height: 38svh;
     min-height: 0;
     margin-top: 10px;
   }
