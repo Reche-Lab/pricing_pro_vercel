@@ -53,6 +53,7 @@ const product = {
   geometry: null,
   margins: { bleedMm: 0, safeMarginMm: 0 },
   unitCents: 100,
+  offer: { originalUnitCents: 100, minimumUnitCents: 100, maxDiscountPercent: 0, discountQuantity: 1 },
 };
 describe("preview storefront navigation", () => {
   it("exposes a private cart without creating buyer sessions", () => {

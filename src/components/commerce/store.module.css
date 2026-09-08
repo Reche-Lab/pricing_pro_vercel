@@ -769,6 +769,36 @@
   color: var(--muted);
   font-size: 13px;
 }
+.referencePrice { display: block; color: var(--muted); font-size: 13px; margin-top: 8px; }
+.discountBadge { margin-top: 10px; font-size: 13px; font-weight: 650; color: var(--highlight); line-height: 1.5; overflow-wrap: anywhere; }
+.discountBadge small { display: block; color: var(--muted); font-size: 11px; font-weight: 400; }
+.priceBreakdown { display: grid; gap: 12px; min-width: 0; font-variant-numeric: tabular-nums; }
+.priceAmounts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.priceAmounts > div { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.priceAmounts strong { font-size: 25px; line-height: 1.2; overflow-wrap: anywhere; }
+.priceAmounts del { font-size: 13px; color: var(--muted); }
+.savings { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--highlight); font-size: 13px; font-weight: 600; }
+.savings svg { flex-shrink: 0; }
+.compactPrice { margin-top: 12px; gap: 8px; }
+.compactPrice .priceAmounts strong { font-size: 16px; }
+.priceByArt { font-size: 13px; }
+.priceByArt summary { cursor: pointer; padding-block: 6px; }
+.priceByArt p { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; padding-block: 6px; }
+.deliveryInquiry { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); min-width: 0; }
+.deliveryInquiry h2 { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 16px; }
+.deliveryInquiry form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: 14px 0 10px; }
+.deliveryInquiry label { flex: 1 1 140px; min-width: 0; font-size: 13px; display: grid; gap: 6px; }
+.deliveryInquiry button { flex: 0 0 auto; }
+.deliveryResults { display: grid; gap: 12px; margin-block: 16px; font-size: 14px; }
+.deliveryResults > div { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.deliveryResults span { min-width: 0; overflow-wrap: anywhere; }
+.deliveryResults small { display: block; font-size: 12px; color: var(--muted); }
+.deliveryResults strong { flex-shrink: 0; }
+.deliveryError { color: var(--highlight); margin-block: 12px; font-size: 13px; }
+@media (max-width: 430px) {
+  .priceAmounts strong { font-size: 21px; }
+  .compactPrice .priceAmounts { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}
 .title {
   font-size: 28px;
   font-weight: 700;

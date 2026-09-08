@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 import { getPool } from "@/lib/db/client";
 import { listProductVariants } from "@/repositories/products";
 import { listPlatformRules } from "@/repositories/platforms";
+import { commercePriceSummary } from "@/domain/commerce/offers";
 import { assertCommerceVideosReady } from "@/repositories/commerce-media";
 import type { ProductMedia } from "@/domain/commerce/product-media";
 import {
@@ -173,6 +174,7 @@ export function publicCommerceProduct(product: CommerceProduct) {
     geometry,
     margins,
     unitCents: price.items[0].unitCents,
+    offer: commercePriceSummary(product),
   };
 }
 export async function getCommerceAdmin(userId: string, tenantId: string) {

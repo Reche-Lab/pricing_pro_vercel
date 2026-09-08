@@ -46,14 +46,18 @@ try {
     ).rows[0];
   const before = await counts();
   await db.query(
-    "update commerce_stores set enabled=false,status='draft' where tenant_id=$1",
-    [store.tenant_id],
+    "update commerce_stores set enabled=false,status='draft',settings=$2 where tenant_id=$1",
+    [store.tenant_id, { ...store.settings, deliveryEnabled: true, deliveryCents: 1500, deliveryDescription: "Entrega local" }],
   );
   await db.query("update commerce_products set snapshot=$2 where id=$1", [
     product.id,
     {
       ...product.snapshot,
       personalized: true,
+      minQuantity: 1,
+      maxQuantity: 100,
+      curve: { mode: "step", points: [{ quantity: 1, unitPrice: 10 }, { quantity: 50, unitPrice: 6 }] },
+      platform: { commissionRate: 0, fixedFee: 0, sellerShippingCost: 0, sellerShippingThreshold: 0 },
       geometry: {
         shape: "circle",
         widthMm: 35,
@@ -102,6 +106,24 @@ try {
   await page.goto(`${prefix}/produto/${product.id}`, {
     waitUntil: "networkidle",
   });
+  await page.getByRole("textbox", { name: "Quantidade de produtos" }).fill("50");
+  await page.getByText("Economia de", { exact: false }).waitFor();
+  if (await page.locator("del").count() !== 2) throw new Error("Product reference unit/total missing");
+  await page.getByLabel("CEP de destino").fill("12345678");
+  await page.getByRole("button", { name: "Consultar", exact: true }).click();
+  await page.getByText("Tarifa de entrega da loja").waitFor();
+  for (const width of [1365, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(theme => {
+        const store = document.querySelector("main[data-theme]");
+        store.setAttribute("data-theme", theme);
+      }, theme);
+      await page.screenshot({ path: `/tmp/commerce-offer-${width}-${theme}.png`, fullPage: true });
+      if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) throw new Error(`Product overflow at ${width} ${theme}`);
+    }
+  }
+  await page.setViewportSize({ width: 1365, height: 900 });
   await page.getByRole("button", { name: "Adicionar ao carrinho" }).click();
   await page
     .getByRole("link", { name: "Abrir carrinho e preparar artes" })
@@ -291,8 +313,8 @@ try {
     ]);
   if (store)
     await db.query(
-      "update commerce_stores set enabled=$2,status=$3 where tenant_id=$1",
-      [store.tenant_id, store.enabled, store.status],
+      "update commerce_stores set enabled=$2,status=$3,settings=$4 where tenant_id=$1",
+      [store.tenant_id, store.enabled, store.status, store.settings],
     );
   await db.end();
 }

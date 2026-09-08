@@ -38,6 +38,8 @@ import { storeRequest, storeMoney } from "./store-http";
 import styles from "./store.module.css";
 import { StoreHome, StoreProductCard } from "./StoreHome";
 import { StoreProductGallery } from "./StoreProductGallery";
+import { StorePriceBreakdown } from "./StorePriceBreakdown";
+import { StoreDeliveryInquiry } from "./StoreDeliveryInquiry";
 import { useStoreTheme, accentForeground } from "./use-store-theme";
 import { useCommercePreview } from "./CommercePreviewProvider";
 const ArtworkTools = dynamic(
@@ -380,11 +382,7 @@ export function Storefront({
                             <p className={styles.muted}>
                               {line.artworkName || "Sem personalização"}
                             </p>
-                            <p className="mt-1">
-                              {priced
-                                ? `${storeMoney(priced.unitCents)} / un. · ${storeMoney(priced.totalCents)}`
-                                : "Remova o item indisponível para continuar."}
-                            </p>
+                            {priced && product ? <StorePriceBreakdown compact quantity={line.quantity} originalUnitCents={product.offer.originalUnitCents} price={{ totalCents: priced.totalCents, items: [priced] }} /> : <p>Remova o item indisponível para continuar.</p>}
                           </div>
                           <button
                             aria-label="Remover item"
@@ -722,10 +720,10 @@ function ProductDetail({
 }) {
   const [quantity, setQuantity] = useState(String(product.minQuantity));
   const [groups, setGroups] = useState("1");
-  const [price, setPrice] = useState<{
+  const [priced, setPrice] = useState<{ lines: CartLine[]; calculation: {
     totalCents: number;
-    items: { unitCents: number }[];
-  } | null>(null);
+    items: { unitCents: number; quantity?: number; artworkName?: string }[];
+  } } | null>(null);
   const [error, setError] = useState("");
   const lines = useMemo(() => {
     try {
@@ -743,6 +741,7 @@ function ProductDetail({
       return [];
     }
   }, [quantity, groups, product.id, product.personalized]);
+  const price = priced?.lines === lines ? priced.calculation : null;
   useEffect(() => {
     let active = true;
     setPrice(null);
@@ -751,7 +750,7 @@ function ProductDetail({
     const timer = setTimeout(() => {
       void storeRequest(`${api}/price`, "POST", { lines })
         .then((result) => {
-          if (active) setPrice(result);
+          if (active) setPrice({ lines, calculation: result });
         })
         .catch((e) => {
           if (active) setError(e.message);
@@ -806,7 +805,7 @@ function ProductDetail({
           </div>
           <p className="mt-3 text-sm text-zinc-500">
             De {product.minQuantity} a {product.maxQuantity} unidades
-            {product.personalized ? ` · Até ${product.maxArtworks} artes` : ""}
+            {product.personalized ? ` · Até ${product.maxArtworks} ${product.maxArtworks === 1 ? "arte" : "artes"}` : ""}
           </p>
           {product.personalized && lines.length ? (
             <p className="mt-3 text-sm">
@@ -816,10 +815,7 @@ function ProductDetail({
             </p>
           ) : null}
           <div className="my-6 border-y border-zinc-200 py-5">
-            <p className="text-sm text-zinc-500">Total dos produtos</p>
-            <p aria-live="polite" className="mt-1 text-3xl font-bold">
-              {price ? storeMoney(price.totalCents) : "—"}
-            </p>
+            <StorePriceBreakdown originalUnitCents={product.offer.originalUnitCents} quantity={Number(quantity) || 0} price={price} pending={lines.length > 0 && !error} />
             {price ? (
               <p className="mt-2 text-sm text-zinc-500">
                 {product.pricingRule === "per_art"
@@ -849,6 +845,7 @@ function ProductDetail({
               concluir.
             </p>
           ) : null}
+          <StoreDeliveryInquiry api={api} lines={lines} disabled={!price} />
         </section>
       </div>
     </>

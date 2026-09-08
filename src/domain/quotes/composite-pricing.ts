@@ -128,7 +128,7 @@ function getReferenceQuantity(
   return Math.max(1, Math.round(totalQuantity / Math.max(artworkCount, 1)));
 }
 
-function calculateFinalSubtotal(baseSubtotal: number, platform: PlatformRule) {
+export function calculateFinalSubtotal(baseSubtotal: number, platform: PlatformRule) {
   const commission = Math.max(0, platform.commissionRate);
   const fixedFee = Math.max(0, platform.fixedFee);
   const sellerShippingCost = Math.max(0, platform.sellerShippingCost);

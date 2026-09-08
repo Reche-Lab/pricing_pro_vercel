@@ -46,6 +46,7 @@ export function StoreProductCard({
       </div>
       <p className={styles.productCategory}>{product.category}</p>
       <h3>{product.name}</h3>
+      {product.offer.originalUnitCents > product.unitCents ? <del className={styles.referencePrice} aria-label="Preço de uma unidade">{storeMoney(product.offer.originalUnitCents)}</del> : null}
       <p className={styles.priceLine}>
         {storeMoney(product.unitCents)} <span>/ un.</span>
       </p>
@@ -53,6 +54,11 @@ export function StoreProductCard({
         em {product.minQuantity}{" "}
         {product.minQuantity === 1 ? "unidade" : "unidades"}
       </p>
+      {product.offer.maxDiscountPercent > 0 ? <p className={styles.discountBadge}
+        title={`Desconto de ${product.offer.maxDiscountPercent}% em ${product.offer.discountQuantity} unidades${product.personalized ? " com uma arte" : ""}, em relação ao preço de uma unidade.`}>
+        Até {product.offer.maxDiscountPercent}% de desconto
+        <small>em {product.offer.discountQuantity.toLocaleString("pt-BR")} un.{product.personalized ? " · 1 arte" : ""}</small>
+      </p> : null}
     </Link>
   );
 }
