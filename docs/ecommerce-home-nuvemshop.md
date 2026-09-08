@@ -28,3 +28,8 @@ Não há migration, variável de ambiente nova ou alteração de dados de produ�
 - [x] Remover contador numérico e botão de reproduzir/pausar; manter setas, indicadores e gesto de deslizar.
 - [x] Interromper a rotação automática após navegação manual, além das pausas por hover/foco e redução de movimento.
 - [x] 291 testes aprovados; seis testes de integração separados não executados nesta rodada. Build, lint e tipos aprovados. Navegador validado na loja pública e no preview, claro/escuro, desktop/celular/paisagem, sem contador ou controle de reprodução e sem sobreposição.
+
+## Fundo do carrossel
+
+- [x] Fundo transparente, incluindo banners exibidos por inteiro, sem faixas do componente contrastando com a loja. As imagens e suas proporções permanecem intactas.
+- [x] Playwright validado na loja pública e no preview, claro/escuro, desktop/celular/paisagem, com verificação de transparência, ausência de overlay em banners sem texto e estabilidade de altura. Capturas de tela conferidas. Sem migration.

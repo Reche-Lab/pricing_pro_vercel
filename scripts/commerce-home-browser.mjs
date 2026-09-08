@@ -47,6 +47,9 @@ try {
         await page.getByRole("button", { name: "Próximo banner", exact: true }).click();
         const imageOnly = await hero.boundingBox();
         if (Math.abs(imageOnly.height - bounds.height) > 1) throw new Error("Carousel layout shifted");
+        if (await hero.evaluate(el => getComputedStyle(el).backgroundColor) !== "rgba(0, 0, 0, 0)") throw new Error(`Carousel background must be transparent: ${prefix} ${width} ${theme}`);
+        if (await hero.evaluate(el => getComputedStyle(el, "::after").display) !== "none") throw new Error("Image-only banner must not have a background overlay");
+        await page.screenshot({ path: `/tmp/commerce-home-image-only-${prefix.includes("preview") ? "preview" : "public"}-${width}-${theme}.png` });
         await page.getByRole("button", { name: "Banner anterior", exact: true }).click();
       }
     }
