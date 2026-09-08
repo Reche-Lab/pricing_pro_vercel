@@ -3,6 +3,7 @@ import React from "react";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import type { StoreSettings } from "@/domain/commerce/schemas";
 import { CommerceImageUpload } from "./CommerceImageUpload";
+import { CommerceCaption } from "./CommerceAdminControls";
 type Banners = NonNullable<StoreSettings["banners"]>;
 const input =
   "min-w-0 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm";
@@ -135,9 +136,10 @@ export function StoreBannersEditor({
                 }
               />
             </label>
-            <label className="grid gap-1 text-sm">
-              Destino do botão
+            <label htmlFor={`banner-destination-${banner.id}`} className="grid gap-1 text-sm">
+              <CommerceCaption label="Destino do botão" help="Abre o catálogo com a categoria selecionada. Todos os produtos abre o catálogo completo." />
               <select
+                id={`banner-destination-${banner.id}`}
                 className={input}
                 value={banner.category}
                 onChange={(event) =>
@@ -152,7 +154,7 @@ export function StoreBannersEditor({
                 ))}
               </select>
             </label>
-            <div className="flex flex-wrap items-end gap-2">
+            <div className="flex flex-wrap items-center self-end gap-2">
               <button
                 type="button"
                 className={button}

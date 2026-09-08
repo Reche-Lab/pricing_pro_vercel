@@ -109,6 +109,7 @@ export function CommerceImageUpload({
           />
           <button
             type="button"
+            title={`Selecionar ${label.toLowerCase()}: PNG, JPEG ou WebP de até 3 MB`}
             disabled={busy}
             onClick={() => input.current?.click()}
             className="inline-flex min-h-10 items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm hover:bg-zinc-800 disabled:opacity-50"

@@ -135,6 +135,7 @@ export function CommerceProductMediaEditor({
         />
         <button
           type="button"
+          title="Adicionar fotos de até 3 MB ou vídeos de até 20 MB. Até 10 mídias, incluindo no máximo 2 vídeos."
           disabled={busy || items.length >= 10}
           onClick={() => input.current?.click()}
           className="inline-flex min-h-10 items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm hover:bg-zinc-800 disabled:opacity-40"

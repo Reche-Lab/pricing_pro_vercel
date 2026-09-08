@@ -1,0 +1,50 @@
+import { createRequire } from "node:module";
+import { SignJWT } from "jose";
+import pg from "pg";
+const require = createRequire(import.meta.url);
+const { chromium } = require(process.env.COMMERCE_PLAYWRIGHT_PATH || "playwright");
+const databaseUrl = process.env.COMMERCE_TEST_DATABASE_URL;
+const base = process.env.COMMERCE_TEST_BASE_URL || "http://127.0.0.1:3011";
+if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1" || !new URL(databaseUrl).pathname.startsWith("/commerce_test_") || new URL(base).hostname !== "127.0.0.1") throw new Error("Isolated test environment required.");
+const db = new pg.Client({ connectionString: databaseUrl });
+await db.connect();
+const browser = await chromium.launch({ headless: true, executablePath: process.env.COMMERCE_BROWSER_EXECUTABLE || undefined });
+try {
+  const { rows: [admin] } = await db.query("select u.id, tm.tenant_id from app_users u join tenant_members tm on tm.user_id=u.id join tenants t on t.id=tm.tenant_id where u.email='commerce-admin@example.test' and t.slug='ground-shop'");
+  const token = await new SignJWT({ userId: admin.id, tenantId: admin.tenant_id, email: "commerce-admin@example.test", role: "owner" }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("1h").sign(new TextEncoder().encode("commerce-local-test-secret-at-least-32-characters"));
+  const context = await browser.newContext({ reducedMotion: "reduce" });
+  await context.addCookies([{ name: "pricing_session", value: token, url: base, httpOnly: true, sameSite: "Lax" }]);
+  const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("request", request => { if (request.method() !== "GET" && new URL(request.url()).pathname.startsWith("/api/commerce")) errors.push("Unexpected mutation"); });
+  await page.goto(`${base}/commerce`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Adicionar banner", exact: true }).click();
+  const catalog = page.locator("details").filter({ hasText: "Visível ao publicar" }).first();
+  if (await catalog.count()) await catalog.locator("summary").click();
+  for (const width of [1365, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.getByLabel("Nome da loja", { exact: true }).scrollIntoViewIfNeeded();
+    await page.getByLabel("Nome da loja", { exact: true }).focus();
+    const invalid = await page.locator('main input:not([type="file"]):not([type="checkbox"]):not([type="hidden"]), main select').evaluateAll(inputs => inputs.filter(input => input.getBoundingClientRect().height > 0 && Math.abs(input.getBoundingClientRect().height - 44) > 1).map(input => ({ name: input.outerHTML.slice(0, 100), height: input.getBoundingClientRect().height })));
+    if (invalid.length) throw new Error(`Unstable input sizes at ${width}: ${JSON.stringify(invalid)}`);
+    if (await page.getByRole("navigation", { name: "Administração da loja" }).locator("button").evaluateAll(buttons => buttons.some(button => button.scrollWidth > button.clientWidth + 1))) throw new Error(`Tab text overflow at ${width}`);
+    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) throw new Error(`Overflow at ${width}`);
+    await page.screenshot({ path: `/tmp/commerce-admin-${width}.png`, fullPage: true });
+    const help = page.getByRole("button", { name: "Ajuda: Canal de preços" });
+    await help.scrollIntoViewIfNeeded();
+    await help.focus();
+    await page.getByRole("tooltip").waitFor();
+    const bounds = await page.getByRole("tooltip").boundingBox();
+    if (!bounds || bounds.x < 0 || bounds.x + bounds.width > width) throw new Error("Tooltip outside viewport");
+    await page.screenshot({ path: `/tmp/commerce-admin-help-${width}.png` });
+    await page.keyboard.press("Escape");
+    await page.getByRole("tooltip").waitFor({ state: "detached" });
+  }
+  await page.getByRole("button", { name: "Pagamentos", exact: true }).click();
+  await page.getByRole("button", { name: "Ajuda: Access token do vendedor" }).click();
+  await page.getByRole("tooltip").waitFor();
+  await page.screenshot({ path: "/tmp/commerce-admin-payments-320.png", fullPage: true });
+  if (errors.length) throw new Error(errors.join("\n"));
+  console.log("Commerce admin passed: 44px inputs, 1365/768/390/320px, keyboard/touch tooltips, banners/catalog/payments, no overflow, no mutations.");
+} finally { await browser.close(); await db.end(); }

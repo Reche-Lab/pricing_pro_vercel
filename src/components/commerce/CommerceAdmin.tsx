@@ -1,5 +1,5 @@
 "use client";
-import { useState, type FormEvent } from "react";
+import React, { useState, type FormEvent } from "react";
 import Link from "next/link";
 import {
   Check,
@@ -10,6 +10,9 @@ import {
   Store,
   Trash2,
   X,
+  CreditCard,
+  Package,
+  Loader2,
 } from "lucide-react";
 import type { getCommerceAdmin } from "@/repositories/commerce";
 import type { StoreAdminInput, StoreSettings } from "@/domain/commerce/schemas";
@@ -17,11 +20,13 @@ import { storeRequest, storeMoney } from "./store-http";
 import { CommerceImageUpload } from "./CommerceImageUpload";
 import { StoreBannersEditor } from "./StoreBannersEditor";
 import { CommerceProductMediaEditor } from "./CommerceProductMediaEditor";
+import { CommerceCaption, CommerceThemePicker } from "./CommerceAdminControls";
+import styles from "./commerce-admin.module.css";
 type Data = Awaited<ReturnType<typeof getCommerceAdmin>>;
 const field =
   "min-w-0 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100";
 const button =
-  "inline-flex items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm hover:bg-zinc-800 disabled:opacity-40";
+  "inline-flex min-h-11 self-start items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm hover:bg-zinc-800 hover:border-zinc-500 disabled:opacity-40";
 export function CommerceAdmin({
   initial,
   tenantName,
@@ -167,7 +172,7 @@ export function CommerceAdmin({
     });
   }
   return (
-    <div className="min-w-0 space-y-5">
+    <div className={`${styles.root} min-w-0 space-y-5`}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-4">
         <div className="flex items-center gap-3">
           <Store className="text-emerald-300" size={25} />
@@ -189,6 +194,7 @@ export function CommerceAdmin({
               target="_blank"
               rel="noopener"
               href={`/commerce/${data.store.slug}/preview`}
+              title="Abrir a prévia privada com as últimas configurações salvas"
             >
               <Eye size={16} /> Pré-visualizar loja
             </Link>
@@ -220,10 +226,13 @@ export function CommerceAdmin({
         ].map(([id, label]) => (
           <button
             key={id}
+            type="button"
+            aria-pressed={tab === id}
             disabled={pendingUploads > 0}
             onClick={() => setTab(id)}
-            className={`${button} whitespace-nowrap ${tab === id ? "border-emerald-500 bg-emerald-500/10 text-emerald-200" : "text-zinc-400"}`}
+            className={`${button} shrink-0 whitespace-nowrap ${tab === id ? "border-emerald-500 bg-emerald-500/10 text-emerald-200" : "text-zinc-400"}`}
           >
+            {id === "store" ? <Store size={16} /> : id === "payments" ? <CreditCard size={16} /> : <Package size={16} />}
             {label}
           </button>
         ))}
@@ -259,9 +268,10 @@ export function CommerceAdmin({
                 />
                 Habilitar loja deste tenant
               </label>
-              <label className="grid gap-1 text-sm">
-                Publicação
+              <label htmlFor="commerce-status" className="grid gap-1 text-sm">
+                <CommerceCaption label="Publicação" help="Rascunho e Pausada não permitem vendas públicas. Publicada libera a loja quando o módulo estiver habilitado. Salve para aplicar." />
                 <select
+                  id="commerce-status"
                   className={field}
                   value={status}
                   onChange={(e) => setStatus(e.target.value as typeof status)}
@@ -271,9 +281,10 @@ export function CommerceAdmin({
                   <option value="paused">Pausada</option>
                 </select>
               </label>
-              <label className="grid gap-1 text-sm">
-                Canal de preços
+              <label htmlFor="commerce-platform" className="grid gap-1 text-sm">
+                <CommerceCaption label="Canal de preços" help="Os preços e curvas deste canal são copiados para o catálogo ao salvar a loja. Salve novamente após alterar os preços no precificador." />
                 <select
+                  id="commerce-platform"
                   className={field}
                   value={platformId}
                   onChange={(e) => setPlatformId(e.target.value)}
@@ -288,10 +299,11 @@ export function CommerceAdmin({
                 </select>
               </label>
             </div>
-            <section className="grid gap-4 border-t border-zinc-800 pt-5 sm:grid-cols-2">
-              <h2 className="font-semibold sm:col-span-2">
+            <section className="grid items-start gap-5 border-t border-zinc-800 pt-5 lg:grid-cols-2">
+              <h2 className="font-semibold lg:col-span-2">
                 Identidade e atendimento
               </h2>
+              <div className="grid min-w-0 content-start gap-4">
               {(
                 [
                   { key: "name", label: "Nome da loja" },
@@ -310,6 +322,8 @@ export function CommerceAdmin({
                   />
                 </label>
               ))}
+              </div>
+              <div className="grid min-w-0 content-start gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
               <CommerceImageUpload
                 label="Logo da loja"
                 purpose="logo"
@@ -324,34 +338,26 @@ export function CommerceAdmin({
                 onChange={(url) => updateSetting("bannerUrl", url)}
                 onBusyChange={imageBusyChanged}
               />
-              <label className="grid gap-1 text-sm">
-                Tema inicial da loja
-                <select
-                  className={field}
-                  value={settings.theme ?? "system"}
-                  onChange={(event) =>
-                    updateSetting(
-                      "theme",
-                      event.target.value as StoreSettings["theme"],
-                    )
-                  }
-                >
-                  <option value="system">Automático (dispositivo)</option>
-                  <option value="light">Claro</option>
-                  <option value="dark">Escuro</option>
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm">
-                Cor dos botões
+              </div>
+              <div className="grid min-w-0 gap-2 text-sm">
+                <CommerceCaption label="Tema inicial da loja" help="Define o tema ao abrir a loja. Automático acompanha o dispositivo. O cliente pode alternar entre claro e escuro." />
+                <CommerceThemePicker value={settings.theme ?? "system"} onChange={value => updateSetting("theme", value)} />
+              </div>
+              <label htmlFor="commerce-accent" className="grid gap-1 text-sm">
+                <CommerceCaption label="Cor dos botões" help="Cor de destaque dos botões da loja. Confira a legibilidade na prévia nos temas claro e escuro." />
+                <span className="flex items-center gap-3">
                 <input
                   aria-label="Cor dos botões"
+                  id="commerce-accent"
                   type="color"
                   className="h-10 w-16 rounded-md border border-zinc-700"
                   value={settings.accent}
                   onChange={(e) => updateSetting("accent", e.target.value)}
                 />
+                <span className="font-mono text-xs text-zinc-400">{settings.accent.toUpperCase()}</span>
+                </span>
               </label>
-              <label className="grid gap-1 text-sm sm:col-span-2">
+              <label className="grid gap-1 text-sm lg:col-span-2">
                 Descrição da loja
                 <textarea
                   className={field}
@@ -371,7 +377,7 @@ export function CommerceAdmin({
               onBusyChange={imageBusyChanged}
             />
             <section className="space-y-4 border-t border-zinc-800 pt-5">
-              <h2 className="font-semibold">Entrega do piloto</h2>
+              <h2 className="font-semibold"><CommerceCaption label="Entrega e retirada" help="Estas opções são usadas no checkout. A cotação do Melhor Envio disponível na prévia é apenas uma consulta e ainda não se aplica ao checkout." /></h2>
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -454,6 +460,7 @@ export function CommerceAdmin({
                 </h2>
                 <div className="flex min-w-0 gap-2">
                   <select
+                    aria-label="Produto para adicionar ao catálogo"
                     className={field}
                     value={variantId}
                     onChange={(e) => setVariantId(e.target.value)}
@@ -572,9 +579,10 @@ export function CommerceAdmin({
                           />
                         </label>
                       ))}
-                      <label className="grid gap-1 text-sm">
-                        Base do preço
+                      <label htmlFor={`commerce-pricing-${publication.variantId}`} className="grid gap-1 text-sm">
+                        <CommerceCaption label="Base do preço" help="Por arte: aplica a curva à quantidade de cada arte. Total: aplica à soma das unidades do produto. Média: divide o total pelo número de artes para calcular o preço." />
                         <select
+                          id={`commerce-pricing-${publication.variantId}`}
                           className={field}
                           value={publication.pricingRule}
                           onChange={(e) =>
@@ -597,6 +605,7 @@ export function CommerceAdmin({
                         className={`${button} justify-self-start text-rose-300`}
                         type="button"
                         disabled={pendingUploads > 0}
+                        title="Remove somente da loja online, sem excluir o produto cadastrado"
                         onClick={() =>
                           setPublications(
                             publications.filter((_, i) => i !== index),
@@ -612,12 +621,12 @@ export function CommerceAdmin({
               })}
             </section>
           </fieldset>
-          <div className="sticky bottom-3 flex justify-end">
+          <div className="sticky bottom-0 z-20 flex justify-end border-t border-zinc-800 bg-zinc-950/95 py-3 backdrop-blur-sm">
             <button
               className="inline-flex items-center gap-2 rounded-md bg-emerald-400 px-5 py-3 font-semibold text-emerald-950 shadow-lg disabled:opacity-50"
               disabled={busy || pendingUploads > 0}
             >
-              <Save size={17} />
+              {busy ? <Loader2 size={17} className="animate-spin" /> : <Save size={17} />}
               {pendingUploads
                 ? "Aguarde o envio das imagens…"
                 : busy
@@ -685,9 +694,10 @@ export function CommerceAdmin({
                 ? "Credenciais armazenadas. Deixe os campos vazios para mantê-las."
                 : "Piloto por credencial do vendedor. OAuth será uma etapa posterior."}
             </p>
-            <label className="grid gap-1 text-sm">
-              Access token do vendedor
+            <label htmlFor="commerce-payment-token" className="grid gap-1 text-sm">
+              <CommerceCaption label="Access token do vendedor" help="Credencial da conta Mercado Pago que receberá as vendas deste tenant. Deixe vazio para manter a credencial já armazenada." />
               <input
+                id="commerce-payment-token"
                 type="password"
                 autoComplete="new-password"
                 className={field}
@@ -695,9 +705,10 @@ export function CommerceAdmin({
                 onChange={(e) => setToken(e.target.value)}
               />
             </label>
-            <label className="grid gap-1 text-sm">
-              Chave secreta de assinatura dos webhooks
+            <label htmlFor="commerce-payment-secret" className="grid gap-1 text-sm">
+              <CommerceCaption label="Chave secreta de assinatura dos webhooks" help="Valida a autenticidade das notificações de pagamento recebidas do Mercado Pago. Deixe vazio para manter a chave armazenada." />
               <input
+                id="commerce-payment-secret"
                 type="password"
                 autoComplete="new-password"
                 className={field}

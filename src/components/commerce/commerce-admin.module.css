@@ -1,0 +1,41 @@
+.root { min-width: 0; }
+.root label { min-width: 0; align-self: start; align-content: start; }
+.root label[class~="grid"] { grid-template-rows: minmax(28px, auto) auto; }
+.root input:not([type="checkbox"]):not([type="file"]), .root select {
+  height: 44px;
+  align-self: start;
+  max-width: 100%;
+}
+.root textarea { min-height: 96px; resize: vertical; align-self: start; }
+.root input[type="checkbox"] { width: 18px; height: 18px; flex-shrink: 0; accent-color: #34d399; }
+.root button, .root a { max-width: 100%; transition: background-color 150ms, border-color 150ms; }
+.root button > svg, .root a > svg { flex-shrink: 0; }
+.root :is(input, select, textarea, button, a, summary):focus-visible {
+  outline: 2px solid #34d399; outline-offset: 3px;
+}
+.root :is(input, select, textarea):hover:not(:disabled) { border-color: #71717a; }
+.root summary { overflow-wrap: anywhere; border-radius: 6px; }
+.root summary:hover { background: #27272a; }
+.root details[open] > summary { color: #a7f3d0; background: #18181b; }
+.root button:disabled { cursor: not-allowed; }
+.tooltip {
+  position: fixed; z-index: 150; width: 280px; max-width: calc(100vw - 24px);
+  padding: 10px 12px; border: 1px solid #52525b; border-radius: 6px;
+  background: #18181b; color: #f4f4f5; box-shadow: 0 8px 24px #0006;
+  font-size: 13px; line-height: 1.5; overflow-wrap: anywhere;
+}
+.help { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.helpButton {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; color: #a1a1aa;
+}
+.helpButton:hover, .helpButton[aria-expanded="true"] { color: #6ee7b7; background: #064e3b; }
+.theme { display: flex; flex-wrap: wrap; gap: 4px; }
+.theme button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; flex: 1 1 90px; padding: 8px; border-radius: 6px;
+  border: 1px solid #3f3f46; color: #a1a1aa; font-size: 14px;
+}
+.theme button[aria-pressed="true"] { border-color: #34d399; color: #a7f3d0; background: #064e3b66; }
+.theme button:hover:not(:disabled) { background: #27272a; }
+@media (prefers-reduced-motion: reduce) { .root button, .root a { transition: none; } }
