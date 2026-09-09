@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Edit3, History, ImagePlus, Lock, Save, Trash2, Upload } from "lucide-react";
+import { CheckCircle2, Edit3, History, ImagePlus, Lock, Plus, Save, Trash2, Upload, X } from "lucide-react";
 import { calculateQuote, roundMoney } from "@/domain/pricing/pricing";
 import { isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
 import { calculateQuoteDiscount, quoteDiscountLabel, type QuoteDiscountType } from "@/domain/quotes/discount";
@@ -91,6 +91,7 @@ export function QuoteEditPanel({
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        expectedItemIds: items.map(item => item.id),
         validUntil,
         shippingTotal,
         discountType,
@@ -268,6 +269,8 @@ export function QuoteItemEditPanel({
   const router = useRouter();
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [draft, setDraft] = useState<EditableItem | null>(null);
+  const [addingItem, setAddingItem] = useState(false);
+  const [removingItem, setRemovingItem] = useState<QuoteItemRow | null>(null);
   const [reason, setReason] = useState("");
   const [state, setState] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -279,16 +282,20 @@ export function QuoteItemEditPanel({
 
   const blockedReason = editBlockedReason(quote);
   const original = draft ? items.find((item) => item.id === draft.id) ?? null : null;
-  const changedPrice = Boolean(original && draft && Math.abs(Number(original.unit_price) - draft.unitPrice) >= 0.0001);
+  const changedPrice = addingItem || Boolean(original && draft && Math.abs(Number(original.unit_price) - draft.unitPrice) >= 0.0001);
   const selectedVariant = draft ? variants.find((variant) => variant.id === draft.productVariantId) : null;
   const suggestedPrice = draft ? calculateSuggestedUnitPrice(draft, selectedVariant, pricingContext) : null;
-  const priceDiffersFromCurve = Boolean(suggestedPrice !== null && draft && Math.abs(draft.unitPrice - suggestedPrice) >= 0.0001);
+  const priceDiffersFromCurve = Boolean(draft && (suggestedPrice === null || Math.abs(draft.unitPrice - suggestedPrice) >= 0.0001));
+  const visibleItems: QuoteItemRow[] = addingItem && draft
+    ? [{ id: draft.id, product_variant_id: draft.productVariantId, description: "Novo produto", quantity: draft.quantity, unit_price: String(draft.unitPrice), total_price: String(roundMoney(draft.quantity * draft.unitPrice)) }, ...items]
+    : items;
 
   async function saveItem() {
     if (!draft || blockedReason || state === "saving") return;
     const manuallyOverriddenCurvePrice = changedPrice && priceDiffersFromCurve;
     const effectiveReason = manuallyOverriddenCurvePrice
       ? reason.trim()
+      : addingItem ? "Produto adicionado com preço calculado pela curva."
       : changedPrice
         ? "Preço recalculado automaticamente pela curva ao alterar quantidade/produto."
         : reason.trim();
@@ -299,34 +306,51 @@ export function QuoteItemEditPanel({
       return;
     }
 
+    const payloadItems = addingItem
+      ? [...items.map(toEditableItem), { ...draft, id: undefined, priceManuallyEdited: priceDiffersFromCurve }]
+      : items.map((item) => item.id === draft.id ? draft : toEditableItem(item));
+    await persistItems(payloadItems, effectiveReason, addingItem ? "Produto adicionado." : "Item atualizado.");
+  }
+
+  async function persistItems(payloadItems: Array<Omit<EditableItem, "id"> & { id?: string }>, changeReason: string, successMessage: string) {
+    if (blockedReason || state === "saving") return;
     setState("saving");
     setMessage("");
-    const payloadItems = items.map((item) => item.id === draft.id ? draft : toEditableItem(item));
-    const response = await fetch(`/api/quotes/${quote.id}/edit`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        validUntil: formatDateInput(quote.valid_until),
-        shippingTotal: Number(quote.shipping_total),
-        discountType: quote.discount_type ?? (Number(quote.discount_total) > 0 ? "fixed" : "none"),
-        discountValue: Number(quote.discount_value ?? quote.discount_total),
-        discountReason: quote.discount_reason ?? null,
-        notes: quote.notes ?? "",
-        reason: effectiveReason,
-        items: payloadItems
-      })
-    });
-    const data = await response.json().catch(() => null);
+    try {
+      const response = await fetch(`/api/quotes/${quote.id}/edit`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          expectedItemIds: items.map(item => item.id),
+          validUntil: formatDateInput(quote.valid_until),
+          shippingTotal: Number(quote.shipping_total),
+          discountType: quote.discount_type ?? (Number(quote.discount_total) > 0 ? "fixed" : "none"),
+          discountValue: Number(quote.discount_value ?? quote.discount_total),
+          discountReason: quote.discount_reason ?? null,
+          notes: quote.notes ?? "",
+          reason: changeReason,
+          items: payloadItems
+        })
+      });
+      const data = await response.json().catch(() => null);
 
-    if (!response.ok || !data?.ok) {
+      if (!response.ok || !data?.ok) {
+        setState("error");
+        setMessage(typeof data?.error === "string" ? data.error : "Confira os campos e tente salvar novamente.");
+        return;
+      }
+
+      setState("success");
+      setMessage(`${successMessage}${quote.external_olist_order_id ? " Pedido Olist sincronizado." : ""}`);
+      setAddingItem(false);
+      setEditingItemId(null);
+      setDraft(null);
+      setRemovingItem(null);
+      router.refresh();
+    } catch {
       setState("error");
-      setMessage(data?.error ?? "Não foi possível editar o item.");
-      return;
+      setMessage("Não foi possível confirmar o salvamento. Verifique sua conexão e recarregue o orçamento antes de tentar novamente.");
     }
-
-    setState("success");
-    setMessage(quote.external_olist_order_id ? "Item atualizado e pedido Olist sincronizado." : "Item atualizado.");
-    router.refresh();
   }
 
   async function selectArtworkFile(file: File | null) {
@@ -408,31 +432,68 @@ export function QuoteItemEditPanel({
     <section className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="font-semibold text-white">Editar item individual</h2>
-          <p className="text-xs text-zinc-500">Altere um produto, quantidade, preço ou arte sem abrir a edição completa.</p>
+          <h2 className="font-semibold text-white">Produtos do orçamento</h2>
+          <p className="text-xs text-zinc-500">{items.length} de 50 itens</p>
         </div>
         {blockedReason ? <Lock className="text-amber-300" size={17} /> : null}
+        {!blockedReason ? <button
+          className="focus-ring inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-cyan-400/30 px-3 text-sm text-cyan-200 hover:bg-cyan-400/10 disabled:opacity-50"
+          disabled={addingItem || state === "saving" || items.length >= 50 || !variants.length}
+          onClick={() => {
+            const variant = variants[0];
+            const next: EditableItem = { id: crypto.randomUUID(), productVariantId: variant.id, quantity: 1, unitPrice: 0, artworkName: "" };
+            next.unitPrice = calculateSuggestedUnitPrice(next, variant, pricingContext) ?? 0;
+            setDraft(next);
+            setEditingItemId(next.id);
+            setAddingItem(true);
+            setRemovingItem(null);
+            setReason("");
+            resetMessage();
+          }}
+          type="button"
+        ><Plus size={16} />Adicionar produto</button> : null}
       </div>
+      {message ? <p role={state === "error" ? "alert" : "status"} className={`mt-3 rounded-md border p-3 text-sm ${state === "error" ? "border-rose-400/30 text-rose-200" : "border-emerald-400/30 text-emerald-200"}`}>{message}</p> : null}
+      {!blockedReason && Number(quote.shipping_total) > 0 ? <p className="mt-3 text-xs text-amber-200">Ao mudar os produtos, revise o frete e a embalagem. O frete atual será mantido.</p> : null}
+      {removingItem ? <div className="mt-3 rounded-md border border-rose-400/30 bg-rose-400/5 p-3" role="group" aria-label="Confirmar exclusão do produto">
+        <p className="break-words text-sm text-white">Remover {removingItem.description}?</p>
+        <p className="mt-1 text-xs text-zinc-400">As artes vinculadas a este item também serão removidas do orçamento. O histórico da alteração será mantido.{quote.external_olist_order_id ? " O pedido Olist também será atualizado." : ""}</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" disabled={state === "saving"} className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-md bg-rose-400 px-3 text-sm font-semibold text-zinc-950 disabled:opacity-50" onClick={() => persistItems(items.filter(item => item.id !== removingItem.id).map(toEditableItem), `Produto removido: ${removingItem.description}.`, "Produto removido.")}><Trash2 size={15} />{state === "saving" ? "Removendo..." : "Confirmar remoção"}</button>
+          <button type="button" disabled={state === "saving"} className="focus-ring min-h-10 rounded-md border border-zinc-700 px-3 text-sm text-zinc-300" onClick={() => { setRemovingItem(null); resetMessage(); }}>Cancelar</button>
+        </div>
+      </div> : null}
       {blockedReason ? (
         <p className="mt-3 rounded-md border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
           {blockedReason}
         </p>
       ) : (
         <div className="mt-3 grid gap-2">
-          {items.map((item, index) => (
+          {visibleItems.map((item, index) => (
             <div className="rounded-md border border-zinc-800 bg-zinc-950/45 p-3" key={item.id}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-white">{index + 1}. {item.description}</p>
+                  <p className="break-words text-sm font-medium text-white">{addingItem && item.id === draft?.id ? "" : `${index + (addingItem ? 0 : 1)}. `}{item.description}</p>
                   <p className="mt-1 text-xs text-zinc-500">
                     {item.quantity} x {brl.format(Number(item.unit_price))} · {brl.format(Number(item.total_price))}
                   </p>
                   {item.manual_unit_price ? <p className="mt-1 text-xs text-amber-200">Preço manual registrado</p> : null}
                 </div>
+                <div className="flex shrink-0 gap-1">
                 <button
+                  disabled={state === "saving"}
                   className="focus-ring inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-zinc-700 px-2 text-xs text-zinc-300 hover:bg-zinc-900"
                   type="button"
                   onClick={() => {
+                    if (addingItem && item.id === draft?.id) {
+                      setAddingItem(false);
+                      setEditingItemId(null);
+                      setDraft(null);
+                      resetMessage();
+                      return;
+                    }
+                    setAddingItem(false);
+                    setRemovingItem(null);
                     setEditingItemId(editingItemId === item.id ? null : item.id);
                     setDraft(createDraftFromItem(item, variants, pricingContext));
                     setReason("");
@@ -445,9 +506,18 @@ export function QuoteItemEditPanel({
                     setFileInputKey((current) => current + 1);
                   }}
                 >
-                  <Edit3 size={13} />
-                  Editar
+                  {addingItem && item.id === draft?.id ? <X size={13} /> : <Edit3 size={13} />}
+                  {addingItem && item.id === draft?.id ? "Cancelar" : "Editar"}
                 </button>
+                {items.some(existing => existing.id === item.id) ? <button
+                  aria-label={`Remover produto ${item.description}`}
+                  title={items.length === 1 ? "Mantenha ao menos um produto no orçamento" : "Remover produto"}
+                  disabled={state === "saving" || items.length === 1}
+                  className="focus-ring grid h-8 w-8 place-items-center rounded-md border border-rose-400/25 text-rose-300 hover:bg-rose-400/10 disabled:opacity-40"
+                  type="button"
+                  onClick={() => { setAddingItem(false); setEditingItemId(null); setDraft(null); setRemovingItem(item); resetMessage(); }}
+                ><Trash2 size={14} /></button> : null}
+                </div>
               </div>
 
               {editingItemId === item.id && draft ? (
@@ -481,7 +551,7 @@ export function QuoteItemEditPanel({
                       />
                     </label>
                   </div>
-                  <section className="rounded-md border border-zinc-800 bg-zinc-950/55 p-3">
+                  {!addingItem ? <section className="rounded-md border border-zinc-800 bg-zinc-950/55 p-3">
                     <div className="flex items-start gap-2">
                       <ImagePlus className="mt-0.5 shrink-0 text-cyan-300" size={16} />
                       <div>
@@ -590,7 +660,7 @@ export function QuoteItemEditPanel({
                         {artworkMessage}
                       </p>
                     ) : null}
-                  </section>
+                  </section> : <p className="text-xs text-zinc-400">Depois de salvar o produto, você poderá anexar as artes.</p>}
                   <p className="text-right text-sm font-semibold text-white">
                     Novo total: {brl.format(roundMoney(draft.quantity * draft.unitPrice))}
                   </p>
@@ -629,7 +699,7 @@ export function QuoteItemEditPanel({
                       />
                     </label>
                   ) : null}
-                  <SaveFooter message={message} state={state} onSave={saveItem} />
+                  <SaveFooter message="" state={state} onSave={saveItem} />
                 </div>
               ) : null}
             </div>

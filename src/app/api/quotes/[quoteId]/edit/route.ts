@@ -4,6 +4,7 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { requireWritableBilling } from "@/lib/billing/guard";
 import { isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
 import { calculateQuoteDiscount } from "@/domain/quotes/discount";
+import { QuoteItemEditError, validateQuoteItemEdit } from "@/domain/quotes/item-edit";
 import { getQuoteDetail, updateQuoteEditable, type QuoteItemRow } from "@/repositories/quotes";
 import { listProductVariants } from "@/repositories/products";
 import { OLIST_DEFAULT_PATHS } from "@/services/olist/defaults";
@@ -14,6 +15,7 @@ import {
 import { loadQuoteOlistContext, olistOperationErrorResponse, sendOlistQuoteOperation } from "../olist/_shared";
 
 const editSchema = z.object({
+  expectedItemIds: z.array(z.string().uuid()).max(50).optional(),
   validUntil: z.string().trim().optional().nullable(),
   shippingTotal: z.number().min(0).max(100000),
   discountType: z.enum(["none", "fixed", "percent"]),
@@ -23,7 +25,8 @@ const editSchema = z.object({
   reason: z.string().trim().max(500).optional().nullable(),
   items: z.array(
     z.object({
-      id: z.string().uuid(),
+      id: z.string().uuid().optional(),
+      priceManuallyEdited: z.boolean().optional(),
       productVariantId: z.string().uuid(),
       quantity: z.number().int().min(1).max(50000),
       unitPrice: z.number().min(0).max(100000),
@@ -91,6 +94,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ quote
   }
 
   try {
+    // Validate ownership and the complete item list before any external write.
+    validateQuoteItemEdit(detail.items, parsed.data.items, parsed.data.expectedItemIds);
+    const olistItems = await buildUpdatedOlistItems(session.userId, session.tenantId, parsed.data.items);
     if (detail.quote.external_olist_order_id) {
       const loaded = await loadQuoteOlistContext(quoteId, "olist");
       if ("error" in loaded && loaded.error) {
@@ -107,7 +113,6 @@ export async function PATCH(request: Request, context: { params: Promise<{ quote
       });
       if (!editable.ok) return NextResponse.json({ ok: false, error: editable.error }, { status: 409 });
 
-      const olistItems = await buildUpdatedOlistItems(session.userId, session.tenantId, parsed.data.items);
       const missingSkus = missingOlistSkus(olistItems);
       if (missingSkus.length > 0) {
         return NextResponse.json(
@@ -142,8 +147,20 @@ export async function PATCH(request: Request, context: { params: Promise<{ quote
       ...parsed.data,
       syncedOlistOrderId: detail.quote.external_olist_order_id ?? null
     });
+    console.info("Quote items and conditions saved.", {
+      tenantId: session.tenantId,
+      quoteId,
+      previousItemCount: detail.items.length,
+      itemCount: parsed.data.items.length,
+      addedCount: parsed.data.items.filter(item => !item.id).length,
+      removedCount: detail.items.filter(item => !parsed.data.items.some(next => next.id === item.id)).length,
+      syncedOlistOrderId: detail.quote.external_olist_order_id ?? null
+    });
     return NextResponse.json({ ok: true, quote: result });
   } catch (error) {
+    if (error instanceof QuoteItemEditError) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 409 });
+    }
     console.error("Quote edit route failed.", {
       quoteId,
       message: error instanceof Error ? error.message : "Unknown quote edit error",
@@ -168,9 +185,9 @@ async function buildUpdatedOlistItems(
   const variantMap = new Map(variants.map((variant) => [variant.variant_id, variant]));
   return items.map((item) => {
     const variant = variantMap.get(item.productVariantId);
-    if (!variant) throw new Error("Produto selecionado não encontrado.");
+    if (!variant) throw new QuoteItemEditError("Produto selecionado não encontrado ou inativo neste tenant.");
     return {
-      id: item.id,
+      id: item.id ?? "",
       product_variant_id: variant.variant_id,
       sku: variant.sku,
       external_olist_product_id: variant.external_olist_product_id,

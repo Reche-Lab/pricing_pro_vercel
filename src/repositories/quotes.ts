@@ -9,6 +9,7 @@ import {
 } from "@/domain/quotes/composite-pricing";
 import { canTransitionQuoteStatus, createQuoteCalculationSnapshot, isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
 import { calculateQuoteDiscount, type QuoteDiscountType } from "@/domain/quotes/discount";
+import { validateQuoteItemEdit } from "@/domain/quotes/item-edit";
 import {
   hashPublicQuoteOtp,
   maskPublicEmail,
@@ -236,6 +237,7 @@ export type CreateQuoteInput = {
 };
 
 export type UpdateQuoteInput = {
+  expectedItemIds?: string[];
   validUntil?: string | null;
   shippingTotal: number;
   discountType: QuoteDiscountType;
@@ -250,6 +252,7 @@ export type UpdateQuoteInput = {
     quantity: number;
     unitPrice: number;
     artworkName?: string | null;
+    priceManuallyEdited?: boolean;
   }>;
 };
 
@@ -1522,15 +1525,8 @@ export async function updateQuoteEditable(
         [tenantId, quoteId]
       );
       const currentItems = currentItemsResult.rows;
-      if (input.items.length !== currentItems.length) {
-        throw new Error("Esta edição suporta alterar os itens existentes. Inclusão/remoção será tratada em uma etapa dedicada.");
-      }
-
+      const itemChanges = validateQuoteItemEdit(currentItems, input.items, input.expectedItemIds);
       const currentItemMap = new Map(currentItems.map((item) => [item.id, item]));
-      const itemIds = input.items.map((item) => item.id).filter((id): id is string => Boolean(id));
-      if (itemIds.length !== currentItems.length || itemIds.some((id) => !currentItemMap.has(id))) {
-        throw new Error("Todos os itens atuais do orçamento devem ser enviados para edição.");
-      }
 
       const variants = await findQuoteEditVariants(client, tenantId, input.items.map((item) => item.productVariantId));
       const variantMap = new Map(variants.map((variant) => [variant.variant_id, variant]));
@@ -1548,17 +1544,30 @@ export async function updateQuoteEditable(
       for (const item of input.items) {
         const current = currentItemMap.get(item.id as string);
         const variant = variantMap.get(item.productVariantId);
-        if (!current) throw new Error("Item do orçamento não encontrado.");
         if (!variant) throw new Error("Produto selecionado não encontrado.");
 
         const quantity = Math.max(1, Math.trunc(item.quantity));
-        const unitPrice = roundMoney(clampNumber(item.unitPrice, 0, 100000, Number(current.unit_price)));
+        const unitPrice = roundMoney(clampNumber(item.unitPrice, 0, 100000, Number(current?.unit_price ?? 0)));
         const totalPrice = roundMoney(quantity * unitPrice);
-        const itemChangedPrice = Math.abs(Number(current.unit_price) - unitPrice) >= 0.0001;
-        const manualUnitPrice = Boolean(current.manual_unit_price) || itemChangedPrice;
-        const manualReason = itemChangedPrice ? reason : current.manual_price_reason ?? null;
-        const description = clean(item.description) ?? `${variant.product_name} - ${variant.variant_name}`;
-
+        const itemChangedPrice = !current || Math.abs(Number(current.unit_price) - unitPrice) >= 0.0001;
+        const manualUnitPrice = current ? Boolean(current.manual_unit_price) || itemChangedPrice : Boolean(item.priceManuallyEdited);
+        const manualReason = itemChangedPrice ? reason : current?.manual_price_reason ?? null;
+        const description = clean(item.description)
+          ?? (current?.product_variant_id === variant.variant_id ? current.description : `${variant.product_name} - ${variant.variant_name}`);
+        let savedItemId = current?.id;
+        if (!current) {
+          const inserted = await client.query<{ id: string }>(
+            `insert into quote_items (
+              tenant_id, quote_id, product_variant_id, description, quantity, unit_price,
+              total_price, artwork_name, pricing_rule, reference_quantity,
+              manual_unit_price, manual_price_reason, manual_price_changed_by, manual_price_changed_at
+            ) values ($1, $2, $3, $4, $5, $6, $7, $8, 'per_item', $5, $9, $10, $11::uuid, now())
+            returning id`,
+            [tenantId, quoteId, variant.variant_id, description, quantity, unitPrice, totalPrice,
+              clean(item.artworkName), manualUnitPrice, manualReason, userId]
+          );
+          savedItemId = inserted.rows[0].id;
+        } else {
         await client.query(
           `
             update quote_items
@@ -1570,7 +1579,7 @@ export async function updateQuoteEditable(
                 artwork_name = $9,
                 manual_unit_price = $10,
                 manual_price_reason = $11,
-                manual_price_changed_by = case when $12::boolean then $13 else manual_price_changed_by end,
+                manual_price_changed_by = case when $12::boolean then $13::uuid else manual_price_changed_by end,
                 manual_price_changed_at = case when $12::boolean then now() else manual_price_changed_at end
             where tenant_id = $1 and quote_id = $2 and id = $3
           `,
@@ -1590,6 +1599,7 @@ export async function updateQuoteEditable(
             userId
           ]
         );
+        }
 
         await client.query(
           `
@@ -1597,13 +1607,13 @@ export async function updateQuoteEditable(
             set artwork_name = $4
             where tenant_id = $1 and quote_id = $2 and quote_item_id = $3
           `,
-          [tenantId, quoteId, current.id, clean(item.artworkName)]
+          [tenantId, quoteId, savedItemId, clean(item.artworkName)]
         );
 
-        subtotal += totalPrice;
+        subtotal = roundMoney(subtotal + totalPrice);
         totalCost += quantity * Number(variant.unit_cost);
         updatedItems.push({
-          id: current.id,
+          id: savedItemId,
           productVariantId: variant.variant_id,
           description,
           quantity,
@@ -1615,6 +1625,13 @@ export async function updateQuoteEditable(
         });
       }
 
+      if (itemChanges.removedIds.length) {
+        await client.query(
+          "delete from quote_items where tenant_id = $1 and quote_id = $2 and id = any($3::uuid[])",
+          [tenantId, quoteId, itemChanges.removedIds]
+        );
+      }
+
       const shippingTotal = clampNumber(input.shippingTotal, 0, 100000, Number(quote.shipping_total));
       const discount = calculateQuoteDiscount(subtotal, input.discountType, input.discountValue);
       const discountTotal = discount.total;
@@ -1622,8 +1639,11 @@ export async function updateQuoteEditable(
         || discount.type !== (quote.discount_type ?? (Number(quote.discount_total) > 0 ? "fixed" : "none"));
       const discountReason = discountTotal > 0 ? clean(input.discountReason) : null;
       if (discountTotal > 0 && !discountReason) throw new Error("Informe o motivo do desconto.");
-      const editLogReason = reason ?? (discountChanged ? discountReason : null);
-      const grandTotal = subtotal + shippingTotal - discountTotal;
+      const itemChangeSummary = itemChanges.addedCount || itemChanges.removedIds.length
+        ? `Produtos adicionados: ${itemChanges.addedCount}; removidos: ${itemChanges.removedIds.length}.`
+        : null;
+      const editLogReason = [itemChangeSummary, reason ?? (discountChanged ? discountReason : null)].filter(Boolean).join(" ") || null;
+      const grandTotal = roundMoney(subtotal + shippingTotal - discountTotal);
       const netProductRevenue = subtotal - discountTotal;
       const marginAmount = netProductRevenue - totalCost;
       const marginPercent = netProductRevenue > 0 ? (marginAmount / netProductRevenue) * 100 : 0;
