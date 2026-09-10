@@ -302,6 +302,17 @@ node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 
 ## Observacoes
 
+### Extrato e fatura de cartão
+
+- [x] Importação de fatura Nubank em conta de cartão separada, com competência/vencimento confirmado.
+- [x] Compras, estornos e pagamentos identificados por lançamento, compatíveis com categorias e regras.
+- [x] Aba Faturas com sugestões, conferência de diferenças, pagamentos parciais e vínculos auditados.
+- [x] Proteção contra dupla contagem no resultado e caixa, isolamento por tenant e testes locais.
+- [x] Teste visual/funcional em desktop e celular, inclusive persistência após recarregar a página.
+- [ ] Aplicar `0065_credit_card_statements.sql` no Supabase de destino e homologar com o administrador.
+
+Uso e limites documentados em `docs/modulo-financeiro.md`.
+
 - O demo usa apenas dados ficticios.
 - A area autenticada ja espera dados no Supabase.
 - As curvas reais ja ficam no banco depois da migration de seed.

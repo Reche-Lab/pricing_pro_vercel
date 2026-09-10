@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getSessionProfile, userHasPermission } from "@/repositories/users";
 import { FinancialIndicatorError } from "@/domain/finance/indicators";
+import { CardStatementError } from "@/domain/finance/card-statements";
 
 export async function requireFinancePermission(permission: string) {
   const session = await getCurrentSession();
@@ -21,5 +22,5 @@ export function financeError(error: unknown, operation: string) {
   const debugId = crypto.randomUUID();
   const message = error instanceof Error ? error.message : "Erro financeiro inesperado.";
   console.error("Financial API request failed.", { debugId, operation, message, stack: error instanceof Error ? error.stack : undefined });
-  return NextResponse.json({ ok: false, debugId, error: message }, { status: error instanceof FinancialIndicatorError ? 400 : 500 });
+  return NextResponse.json({ ok: false, debugId, error: message }, { status: error instanceof FinancialIndicatorError || error instanceof CardStatementError ? 400 : 500 });
 }

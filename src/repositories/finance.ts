@@ -1,5 +1,6 @@
 import type pg from "pg";
 import { classifyTransactions, ruleMatchesTransaction } from "@/domain/finance/classification";
+import { CardStatementError } from "@/domain/finance/card-statements";
 import { randomUUID } from "node:crypto";
 import { sha256 } from "@/domain/finance/csv";
 import { calculateFinancialMetrics } from "@/domain/finance/metrics";
@@ -13,7 +14,7 @@ import {
 } from "@/domain/finance/indicators";
 import { calculateFinancialHealth } from "@/domain/finance/health";
 import { suggestInternalTransfers } from "@/domain/finance/transfers";
-import type { ClassificationRule, ParsedStatement } from "@/domain/finance/types";
+import type { ClassificationRule, NormalizedFinancialTransaction, ParsedStatement } from "@/domain/finance/types";
 import { withTenantContext } from "@/lib/db/client";
 
 export type FinancialAccountRow = {
@@ -31,6 +32,7 @@ export type FinancialAccountRow = {
 
 export type FinancialTransactionRow = {
   id: string;
+  entry_kind?: NormalizedFinancialTransaction["entryKind"];
   transaction_date: string;
   competence: string;
   original_description: string;
@@ -478,6 +480,22 @@ export async function upsertFinancialAccount(userId: string, tenantId: string, i
 }
 
 async function ensureDefaultCategories(client: pg.PoolClient, tenantId: string) {
+  // Tenants created after the initial migration also need the classification catalog.
+  await client.query(`with defaults(key,name,type,external_cash_flow,operating_result,protected) as (values
+    ('operating_revenue','Receita operacional','income',true,true,false),
+    ('operating_expense','Despesa operacional','expense',true,true,false),
+    ('refund','Estorno e devolução','neutral',true,true,false),
+    ('debt','Dívidas e financiamentos','neutral',true,false,false),
+    ('internal_transfer','Transferência interna','neutral',false,false,true),
+    ('owner_contribution','Aporte do titular ou sócio','neutral',true,false,false),
+    ('owner_withdrawal','Retirada do titular ou sócio','neutral',true,false,false),
+    ('owner_loan','Empréstimo do titular','neutral',true,false,false),
+    ('reimbursement','Reembolso','neutral',true,false,false),
+    ('personal','Movimentação pessoal','neutral',true,false,false),
+    ('unclassified','Não classificado','neutral',true,false,true),
+    ('informative','Informativo','neutral',false,false,true))
+    insert into financial_natures(tenant_id,key,name,type,default_include_external_cash_flow,default_include_operating_result,protected)
+    select $1,key,name,type,external_cash_flow,operating_result,protected from defaults on conflict do nothing`, [tenantId]);
   await client.query(
     `with defaults(name, type, affects) as (
        values
@@ -507,11 +525,20 @@ export async function importFinancialStatement(input: {
     );
     if (existing.rows[0]) return { duplicate: true, importId: existing.rows[0].id, status: existing.rows[0].status };
 
-    const account = await client.query<{ id: string }>(
-      "select id from financial_accounts where tenant_id = $1 and id = $2 and active = true",
+    const account = await client.query<{ id: string; account_type: string; currency: string }>(
+      "select id, account_type, currency from financial_accounts where tenant_id = $1 and id = $2 and active = true for update",
       [input.tenantId, input.accountId]
     );
     if (!account.rows[0]) throw new Error("Conta financeira não encontrada para este tenant.");
+    const card = input.parsed.statementKind === "card";
+    if ((account.rows[0].account_type === "credit_card") !== card) throw new CardStatementError(card
+      ? "Selecione uma conta do tipo Cartão de crédito para esta fatura."
+      : "Selecione uma conta bancária para este extrato, não um cartão de crédito.");
+    if (account.rows[0].currency.trim() !== input.parsed.currency) throw new Error("A moeda do arquivo difere da conta selecionada.");
+    if (card && (!input.parsed.dueDate || input.parsed.dueDate.slice(0, 7) !== input.competence)) throw new CardStatementError("Informe o vencimento da fatura dentro da competência selecionada.");
+    if (card && (await client.query("select id from credit_card_statements where tenant_id=$1 and financial_account_id=$2 and due_date=$3", [input.tenantId, input.accountId, input.parsed.dueDate])).rowCount) throw new CardStatementError("Este cartão já possui uma fatura neste vencimento. Não importe outra versão para evitar duplicidade.");
+    const closed = await client.query("select id from financial_months where tenant_id=$1 and competence=$2 and status='completed'", [input.tenantId, `${input.competence}-01`]);
+    if (closed.rowCount) throw new Error("Reabra a competência antes de importar novos lançamentos.");
 
     const rules = await loadRules(client, input.tenantId, input.accountId);
     const classified = classifyTransactions(input.parsed.transactions, rules);
@@ -558,8 +585,8 @@ export async function importFinancialStatement(input: {
            source_identifier, source_type, original_description, normalized_description, counterparty,
            amount_cents, currency, gross_amount_cents, fee_amount_cents, net_amount_cents, direction,
            nature, category_id, include_external_cash_flow, include_operating_result, review_required,
-           review_status, classification_confidence, classification_source, classification_rule_id, raw_metadata
-         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
+           review_status, classification_confidence, classification_source, classification_rule_id, raw_metadata, entry_kind
+         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)`,
         [input.tenantId, importId, input.accountId, rawRowId, transaction.transactionDate, transaction.competence,
           transaction.sourceIdentifier ?? null, transaction.sourceType, transaction.originalDescription,
           transaction.normalizedDescription, transaction.counterparty ?? null, transaction.amountCents,
@@ -568,7 +595,7 @@ export async function importFinancialStatement(input: {
           transaction.categoryId ?? null, transaction.includeExternalCashFlow, transaction.includeOperatingResult,
           transaction.reviewRequired, transaction.reviewRequired ? "pending" : "reviewed",
           transaction.classificationConfidence, transaction.classificationSource,
-          transaction.classificationRuleId ?? null, JSON.stringify(transaction.rawData)]
+          transaction.classificationRuleId ?? null, JSON.stringify(transaction.rawData), transaction.entryKind ?? "bank_movement"]
       );
     }
 
@@ -579,6 +606,8 @@ export async function importFinancialStatement(input: {
            updated_at = now()`,
       [input.tenantId, `${input.competence}-01`]
     );
+    if (card) await client.query(`insert into credit_card_statements(tenant_id,import_id,financial_account_id,due_date,total_cents)
+      values($1,$2,$3,$4,$5)`, [input.tenantId, importId, input.accountId, input.parsed.dueDate, input.parsed.invoiceTotalCents]);
     await refreshTransferSuggestions(client, input.tenantId, `${input.competence}-01`);
     await audit(client, input.tenantId, input.userId, "financial_import.completed", "bank_statement_import", importId, null,
       { filename: input.filename, sourceType: input.parsed.sourceType, transactions: classified.length, reviewCount });
@@ -805,22 +834,26 @@ export async function classifyFinancialTransactions(userId: string, tenantId: st
   return withTenantContext(userId, tenantId, async (client) => {
     const nature = await client.query(`select id from financial_natures where tenant_id = $1 and key = $2 and active limit 1`, [tenantId, input.nature]);
     if (!nature.rows[0]) throw new Error("Natureza financeira não encontrada ou inativa.");
-    const before = await client.query(`select id, nature, category_id, include_external_cash_flow, include_operating_result
+    const before = await client.query(`select id, financial_account_id, entry_kind, nature, category_id, include_external_cash_flow, include_operating_result
       from financial_transactions where tenant_id = $1 and id = any($2::uuid[])`, [tenantId, input.transactionIds]);
     if (before.rowCount !== input.transactionIds.length) throw new Error("Um ou mais lançamentos não pertencem a este tenant.");
     let ruleId: string | null = null;
     if (input.createRule) {
+      const accountIds = [...new Set(before.rows.map(row => row.financial_account_id as string))];
+      if (accountIds.length !== 1) throw new CardStatementError("Selecione lançamentos de uma única conta para criar uma regra por este atalho. Para regras entre contas, use a aba Regras.");
       const rule = await client.query<{ id: string }>(
         `insert into financial_classification_rules (
-           tenant_id, priority, name, conditions, actions, created_from_transaction_id, created_by
-         ) values ($1, 100, $2, $3, $4, $5, $6)
+           tenant_id, priority, name, conditions, actions, created_from_transaction_id, created_by, financial_account_id
+         ) values ($1, 100, $2, $3, $4, $5, $6, $7)
          on conflict (tenant_id, name) do update set conditions = excluded.conditions, actions = excluded.actions, updated_at = now()
+         where financial_classification_rules.financial_account_id = excluded.financial_account_id
          returning id`,
         [tenantId, input.createRule.name, JSON.stringify({ descriptionContains: input.createRule.descriptionContains }),
           JSON.stringify({ nature: input.nature, categoryId: input.categoryId ?? null,
             includeExternalCashFlow: input.includeExternalCashFlow, includeOperatingResult: input.includeOperatingResult,
-            reviewRequired: false }), input.transactionIds[0], userId]
+            reviewRequired: false }), input.transactionIds[0], userId, accountIds[0]]
       );
+      if (!rule.rows[0]) throw new CardStatementError("Já existe uma regra com esse nome em outro escopo. Crie a regra com outro nome na aba Regras.");
       ruleId = rule.rows[0].id;
     }
     await client.query(
@@ -849,6 +882,11 @@ export async function setTransferStatus(userId: string, tenantId: string, matchI
     if (!match.rows[0]) throw new Error("Sugestão de transferência não encontrada.");
     const ids = [match.rows[0].outgoing_transaction_id, match.rows[0].incoming_transaction_id];
     if (status === "confirmed") {
+      const entries = await client.query<{ entry_kind: string }>(
+        "select entry_kind from financial_transactions where tenant_id=$1 and id=any($2::uuid[]) order by id for update", [tenantId, ids]);
+      if (entries.rows.some(entry => entry.entry_kind !== "bank_movement")) {
+        throw new Error("Lançamentos de cartão e pagamentos de fatura não podem ser tratados como transferência interna.");
+      }
       await client.query(`update financial_transactions set internal_transfer_pair_id = $3, nature = 'internal_transfer',
         include_external_cash_flow = false, include_operating_result = false, review_required = false,
         review_status = 'reviewed', classification_source = 'transfer_match', updated_at = now()
@@ -955,7 +993,7 @@ async function getOverviewWithClient(client: pg.PoolClient, tenantId: string, co
 
 async function listTransactionsWithClient(client: pg.PoolClient, tenantId: string, competence: string) {
   const result = await client.query<FinancialTransactionRow>(
-    `select t.id, t.transaction_date::text, t.competence::text, t.original_description, t.normalized_description,
+    `select t.id, t.entry_kind, t.transaction_date::text, t.competence::text, t.original_description, t.normalized_description,
       t.counterparty, t.amount_cents::text, t.direction, t.nature, t.include_external_cash_flow,
       t.include_operating_result, t.review_required, t.review_status, t.classification_confidence::text,
       t.classification_source, t.source_type, a.name account_name, a.id account_id,
@@ -1168,7 +1206,8 @@ async function refreshTransferSuggestions(client: pg.PoolClient, tenantId: strin
   }>(`select t.id, t.financial_account_id account_id, t.transaction_date::text, t.amount_cents::text,
        t.currency, t.original_description description, t.counterparty, a.same_economic_entity, a.ownership_type
       from financial_transactions t join financial_accounts a on a.id = t.financial_account_id
-      where t.tenant_id = $1 and t.competence = $2 and t.direction <> 'neutral' and t.internal_transfer_pair_id is null`,
+      where t.tenant_id = $1 and t.competence = $2 and t.direction <> 'neutral' and t.internal_transfer_pair_id is null
+        and t.entry_kind = 'bank_movement' and a.account_type <> 'credit_card'`,
     [tenantId, competence]
   );
   const suggestions = suggestInternalTransfers(result.rows.map((row) => ({ ...row, accountId: row.account_id,
@@ -1234,6 +1273,7 @@ function toClassificationRule(id: string, input: FinancialRuleInput): Classifica
 
 function toNormalizedTransaction(row: FinancialTransactionRow) {
   return {
+    entryKind: row.entry_kind,
     sourceLineNumber: 0, transactionDate: row.transaction_date, competence: row.competence.slice(0, 7),
     originalDescription: row.original_description, normalizedDescription: row.normalized_description,
     counterparty: row.counterparty ?? undefined, amountCents: Number(row.amount_cents), currency: "BRL",

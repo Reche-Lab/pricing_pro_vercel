@@ -15,6 +15,7 @@ import type {
   RawCsvRow,
   ValidationResult
 } from "@/domain/finance/types";
+import { asCardStatement, isCardPaymentDescription } from "@/domain/finance/card-statements";
 
 abstract class CsvAdapter implements BankStatementAdapter {
   abstract canHandle(input: FileMetadata, sampleRows: RawCsvRow[]): Promise<number>;
@@ -28,6 +29,20 @@ abstract class CsvAdapter implements BankStatementAdapter {
       errors.push("Há datas inválidas no extrato.");
     }
     return { valid: errors.length === 0, errors, warnings: statement.warnings };
+  }
+}
+
+// Card CSV uses the opposite sign convention to a bank statement.
+export class NubankCardAdapter extends CsvAdapter {
+  getSourceType() { return "nubank" as const; }
+  async canHandle(input: FileMetadata) {
+    return hasHeaders(input.headers, ["date", "title", "amount"]) ? 1 : 0;
+  }
+  async parse(input: ImportInput): Promise<ParsedStatement> {
+    const { headers, records } = tabularRows(input.text);
+    return statement("Nubank Fatura CSV", "nubank", headers, records, records.map(row => normalizeRow({
+      row, input, sourceType: "nubank", date: row.values.date, description: row.values.title, amount: row.values.amount
+    })));
   }
 }
 
@@ -143,6 +158,7 @@ export class GenericStatementAdapter extends CsvAdapter {
 }
 
 export const statementAdapters: BankStatementAdapter[] = [
+  new NubankCardAdapter(),
   new NubankStatementAdapter(), new OlistStatementAdapter(), new MercadoPagoStatementAdapter(),
   new PayPalStatementAdapter(), new GenericStatementAdapter()
 ];
@@ -161,7 +177,13 @@ export async function detectAndParseStatement(input: ImportInput) {
     if (!input.mapping) return { status: "needs_mapping" as const, confidence: winner?.score ?? 0, headers: candidateHeaders };
   }
   const adapter = input.mapping ? new GenericStatementAdapter() : winner.adapter;
-  const statement = await adapter.parse(input);
+  let statement = await adapter.parse(input);
+  const card = input.statementKind === "card" || winner.adapter instanceof NubankCardAdapter;
+  if (card) statement = asCardStatement(statement, input.competence, input.dueDate);
+  else statement = { ...statement, statementKind: "bank", transactions: statement.transactions.map(transaction =>
+    transaction.amountCents < 0 && isCardPaymentDescription(transaction.originalDescription)
+      ? { ...transaction, entryKind: "bill_payment", nature: "debt", includeOperatingResult: false }
+      : { ...transaction, entryKind: "bank_movement" }) };
   const validation = adapter.validate(statement);
   if (!validation.valid) throw new Error(validation.errors.join(" "));
   return { status: "parsed" as const, confidence: winner?.score ?? 1, statement };

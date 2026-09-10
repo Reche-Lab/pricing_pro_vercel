@@ -14,6 +14,7 @@ export type FileMetadata = {
 };
 
 export type NormalizedFinancialTransaction = {
+  entryKind?: "bank_movement" | "bill_payment" | "card_purchase" | "card_refund" | "card_payment";
   sourceIdentifier?: string;
   sourceLineNumber: number;
   transactionDate: string;
@@ -36,6 +37,9 @@ export type NormalizedFinancialTransaction = {
 };
 
 export type ParsedStatement = {
+  statementKind?: "bank" | "card";
+  dueDate?: string;
+  invoiceTotalCents?: number;
   sourceType: FinancialSourceType;
   adapterName: string;
   adapterVersion: string;
@@ -69,6 +73,8 @@ export type GenericColumnMapping = {
 };
 
 export type ImportInput = {
+  statementKind?: "auto" | "bank" | "card";
+  dueDate?: string;
   filename: string;
   contentType: string;
   bytes: Uint8Array;

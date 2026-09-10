@@ -9,6 +9,8 @@ import { financeError, requireFinancePermission } from "@/app/api/finance/_share
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const metadataSchema = z.object({
+  statementKind: z.enum(["auto", "bank", "card"]).default("auto"),
+  dueDate: z.string().date().optional(),
   accountId: z.string().uuid(), competence: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
   action: z.enum(["preview", "import"]).default("preview")
 });
@@ -22,6 +24,7 @@ export async function POST(request: Request) {
     const form = await request.formData();
     const file = form.get("file");
     const metadata = metadataSchema.safeParse({
+      statementKind: form.get("statementKind") || "auto", dueDate: form.get("dueDate") || undefined,
       accountId: form.get("accountId"), competence: form.get("competence"), action: form.get("action") || "preview"
     });
     if (!(file instanceof File) || !metadata.success) {
@@ -34,7 +37,7 @@ export async function POST(request: Request) {
     const mapping = parseMapping(form.get("mapping"));
     const parsed = await detectAndParseStatement({
       filename: file.name, contentType: file.type || "text/csv", bytes, text: readStatementText(bytes),
-      competence: metadata.data.competence, mapping
+      competence: metadata.data.competence, mapping, statementKind: metadata.data.statementKind, dueDate: metadata.data.dueDate
     });
     if (parsed.status === "needs_mapping") {
       return NextResponse.json({ ok: false, needsMapping: true, confidence: parsed.confidence, headers: parsed.headers,
@@ -64,8 +67,9 @@ function parseMapping(value: FormDataEntryValue | null): GenericColumnMapping | 
 
 function summarize(statement: ParsedStatement, competence: string) {
   const transactions = statement.transactions;
-  const mismatched = transactions.filter((item) => !item.transactionDate.startsWith(competence)).length;
+  const mismatched = statement.statementKind === "card" ? 0 : transactions.filter((item) => !item.transactionDate.startsWith(competence)).length;
   return {
+    statementKind: statement.statementKind ?? "bank", invoiceTotalCents: statement.invoiceTotalCents,
     institution: statement.sourceType, adapterName: statement.adapterName,
     rows: statement.rawRows.length, transactions: transactions.length, ignoredRows: statement.ignoredRows,
     inflowsCents: transactions.filter((item) => item.amountCents > 0 && item.direction !== "neutral").reduce((sum, item) => sum + item.amountCents, 0),

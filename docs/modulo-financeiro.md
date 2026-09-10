@@ -213,6 +213,78 @@ Saldo final Mercado Pago: R$ 27,84
 
 O teste comprova que `Saldo de fechamento` não é receita e que pares de alta confiança entre contas empresariais não inflam o consolidado.
 
+## Extrato bancário e fatura de cartão
+
+Migration necessária: `0065_credit_card_statements.sql`, após as migrations anteriores.
+Não são necessárias novas variáveis de ambiente. O Financeiro continua restrito aos administradores.
+
+1. Em **Contas**, cadastre a conta bancária e outra conta do tipo **Cartão de crédito**. Para finanças
+   pessoais, selecione a titularidade **Pessoal**. Cada tenant mantém suas próprias contas e regras.
+2. Selecione a competência do vencimento. Em **Importações**, envie os CSVs do extrato e da fatura.
+   O formato Nubank `date,title,amount` é detectado automaticamente; confirme o cartão e o vencimento
+   sugerido pelo nome do arquivo. O nome do arquivo não é uma fonte definitiva da data de vencimento.
+3. Confira a prévia e confirme cada importação. As datas originais das compras são preservadas,
+   mas a competência dos lançamentos do cartão é a do vencimento informado.
+4. Em **Lançamentos**, classifique compras e estornos, individualmente ou em lote. Em **Regras**,
+   é possível filtrar pela conta do cartão para não aplicar a regra às outras contas.
+   O atalho de criar regra durante a classificação fica restrito à conta dos lançamentos selecionados;
+   seleções de várias contas precisam de uma regra criada explicitamente na aba Regras.
+5. Em **Faturas**, confira as sugestões e selecione o débito bancário que pagou a fatura.
+   O vínculo só é gravado após confirmação no modal e pode ser desfeito com auditoria.
+
+Tratamento dos valores:
+
+- Compras do cartão entram como despesas; estornos entram como créditos, sem movimentar o caixa bancário.
+- O `Pagamento recebido` da fatura é informativo. Pode se referir à fatura anterior e não reduz as compras
+  da fatura atual. Não é conciliado automaticamente com o extrato.
+- Débitos identificados como `Pagamento de fatura` movimentam o caixa, mas não entram novamente no resultado.
+  Um débito com outra descrição recebe esse tratamento ao ser vinculado manualmente.
+- O total da fatura é a soma das compras menos estornos do CSV, excluindo pagamentos recebidos. Ele não
+  substitui o saldo oficial do banco quando há saldo anterior, financiamento ou ajustes ausentes do CSV.
+- Sugestões exigem mesma moeda, diferença de até um centavo e distância de até dez dias do vencimento.
+  Vários candidatos podem aparecer; nenhum é escolhido automaticamente. Diferenças nunca são zeradas
+  silenciosamente. Também é possível selecionar outro débito na janela de datas apresentada.
+- Vários débitos podem pagar uma fatura parcialmente. Um débito não pode ser usado em duas faturas.
+- Compras idênticas em linhas distintas são preservadas. O mesmo arquivo é deduplicado por checksum;
+  uma segunda versão de fatura para o mesmo cartão/vencimento é bloqueada para evitar duplicidade.
+- Não há reconstrução automática de parcelas futuras: cada parcela exportada pelo banco é um lançamento.
+- Regras e classificações não podem fazer lançamentos do cartão movimentarem o caixa nem fazer pagamentos
+  de fatura entrarem novamente no resultado. Essas proteções também existem no banco.
+- Competências concluídas precisam ser reabertas para importar ou alterar vínculos de pagamento.
+
+Outros layouts podem usar o mapeamento CSV com **Fatura de outro cartão**, desde que compras estejam
+positivas e estornos/pagamentos negativos no arquivo. A nomenclatura de pagamentos de outros bancos
+precisa ser homologada antes de usá-los. Não há importação de PDF, OCR ou conexão direta ao banco nesta etapa.
+
+Novos endpoints autenticados: `GET /api/finance/cards?competence=AAAA-MM` e `PATCH /api/finance/cards`
+com `{ statementId, transactionId, action: "link" | "unlink" }`. IDs são validados no tenant da sessão.
+
+### Checklist deste bloco
+
+- [x] Conta de cartão separada da conta bancária, incluindo titularidade pessoal.
+- [x] Naturezas padrão também inicializadas ao cadastrar contas em tenants criados depois das migrations.
+- [x] Detecção de fatura Nubank, prévia e confirmação de vencimento.
+- [x] Identificação de compras, estornos e pagamentos por lançamento.
+- [x] Reutilização de categorias, naturezas e regras por tenant/conta.
+- [x] Atalho de regras restrito à conta selecionada, sem sobrescrever regras de outro escopo.
+- [x] Vínculo de pagamento sugerido por data/valor, confirmação, saldo e desvinculação auditada.
+- [x] Proteção de caixa/resultado contra dupla contagem, inclusive após reclassificação.
+- [x] Testes de domínio e banco isolado, incluindo compras repetidas e isolamento entre tenants.
+- [x] Fluxo no navegador em 1440, 390 e 320 px: cadastro, upload, prévia, confirmação, persistência e desvinculação.
+- [ ] Aplicar migration e homologar os arquivos no tenant de destino (ação do administrador).
+
+Testes locais: `src/tests/unit/card-statements.test.ts`,
+`src/tests/integration/finance-cards-database.test.ts` (exige `FINANCE_TEST_DATABASE_URL` local),
+`src/tests/integration/finance-cards-files.test.ts` (fixtures privadas opcionais via
+`FINANCE_CARD_SAMPLE` e `FINANCE_BANK_SAMPLE`) e `scripts/finance-cards-browser.mjs`.
+O teste de navegador exige Playwright disponível via `FINANCE_PLAYWRIGHT_PATH`, banco local isolado
+`commerce_test_*` e servidor em `FINANCE_TEST_BASE_URL`; usa somente CSVs fictícios.
+
+Validação deste bloco: 313 testes passaram na suíte local (11 condicionais ignorados); o teste com os
+dois arquivos privados fornecidos passou separadamente, sem importá-los no banco. Build de produção,
+checagem TypeScript, lint e fluxo no navegador também concluídos. Nenhuma migration foi aplicada ao
+Supabase remoto durante o desenvolvimento.
+
 ## Limites e próximas fases
 
 - O arquivo PayPal real ainda não foi fornecido; o adapter precisa ser homologado com a exportação real antes de uso produtivo.
