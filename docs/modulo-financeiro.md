@@ -213,6 +213,31 @@ Saldo final Mercado Pago: R$ 27,84
 
 O teste comprova que `Saldo de fechamento` não é receita e que pares de alta confiança entre contas empresariais não inflam o consolidado.
 
+## Saldo filtrado e evolução mensal
+
+- Em **Lançamentos**, a faixa acima da tabela apresenta entradas, saídas e saldo de todos os registros
+  do filtro atual (busca, natureza e memória de cálculo aberta pela visão geral). Marcar checkboxes não
+  muda esse total: eles servem para classificação. Linhas informativas são contadas, mas ficam fora da soma.
+- Esse saldo é uma soma dos movimentos visíveis, não um saldo bancário com saldo inicial nem o resultado
+  consolidado. Compras de cartão e pagamentos podem estar presentes simultaneamente na lista.
+- Em **Evolução**, escolha **Consolidado**, **Por categoria** ou **Por natureza**, em períodos de 3, 6 ou 12 meses.
+- O seletor de indicador permite saldo dos lançamentos, resultado operacional, entradas ou saídas de caixa.
+  Caixa e resultado respeitam suas flags de inclusão e o tratamento das transferências/faturas já existente.
+- Cada grupo possui gráfico e valores mensais. A tabela compara todos os grupos com movimentação no período;
+  clicar no nome de uma linha seleciona o grupo no gráfico. Meses sem movimentação aparecem com zero.
+- Categorias são separadas por ID, incluindo `Sem categoria`; subcategorias utilizadas como categoria
+  aparecem com o nome do grupo pai para diferenciar nomes iguais. Naturezas mantêm seus nomes cadastrados.
+- A média inclui os meses zerados. Quando o mês anterior era zero e o atual não é, a variação mostra
+  `Sem base anterior`, em vez de inventar um percentual.
+
+Checklist: saldo filtrado, agrupamentos, meses zerados, isolamento por tenant e testes de interface/banco
+implementados; fluxo de busca e evolução validado em navegador a 1440, 390 e 320 px.
+**Nenhuma nova migration ou variável de ambiente é necessária para este bloco.**
+
+Validação: 319 testes passaram (11 condicionais ignorados), incluindo os testes de agrupamento no
+PostgreSQL local. Checagem TypeScript e build com lint concluídos. Teste de navegador disponível em
+`scripts/finance-analysis-browser.mjs`, usando somente dados fictícios em banco isolado.
+
 ## Extrato bancário e fatura de cartão
 
 Migration necessária: `0065_credit_card_statements.sql`, após as migrations anteriores.

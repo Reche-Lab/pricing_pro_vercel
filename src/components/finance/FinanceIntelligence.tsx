@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  AlertCircle, ArrowRight, BarChart3, Check, ChevronDown, CircleGauge, Loader2,
+  AlertCircle, ArrowRight, Check, ChevronDown, CircleGauge, Loader2,
   Pencil, Play, Plus, Power, Save, Sparkles, WandSparkles, X
 } from "lucide-react";
 import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 import type { FinanceOverview, FinanceTab } from "@/components/finance/FinanceWorkspace";
+export { ComparisonWorkspace } from "@/components/finance/FinancialComparison";
+
+function monthLabel(value: string) {
+  const [year, month] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1));
+}
 
 type Message = { tone: "success" | "error" | "info"; text: string };
 type Rule = {
@@ -23,9 +29,6 @@ type RuleDraft = {
     includeOperatingResult: boolean; reviewRequired: boolean };
   enabled: boolean; autoApply: boolean;
 };
-type Comparison = { months: number; series: Array<{ competence: string; externalInflowsCents: number;
-  externalOutflowsCents: number; operatingResultCents: number; transactionCount: number; pendingCount: number }>;
-  categories: Array<{ name: string; amountCents: number }> };
 
 export function PendingCenter({ overview, onNavigate, compact = false }: {
   overview: FinanceOverview; onNavigate: (tab: FinanceTab) => void; compact?: boolean;
@@ -56,28 +59,6 @@ export function PendingCenter({ overview, onNavigate, compact = false }: {
   </div>;
 }
 
-export function ComparisonWorkspace({ competence, onMessage }: { competence: string; onMessage: (message: Message) => void }) {
-  const [months, setMonths] = useState(6); const [data, setData] = useState<Comparison | null>(null);
-  const [metric, setMetric] = useState<"operatingResultCents" | "externalInflowsCents" | "externalOutflowsCents">("operatingResultCents");
-  const [loading, setLoading] = useState(true); const [hovered, setHovered] = useState<number | null>(null);
-  useEffect(() => { let active = true; setLoading(true); fetch(`/api/finance/comparison?competence=${competence}&months=${months}`, { cache: "no-store" })
-    .then(async (response) => { const payload = await response.json(); if (!response.ok) throw new Error(errorText(payload.error)); if (active) setData(payload.comparison); })
-    .catch((error) => { if (active) onMessage({ tone: "error", text: error instanceof Error ? error.message : "Falha ao carregar evolução." }); })
-    .finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [competence, months, onMessage]);
-  const summary = useMemo(() => comparisonSummary(data?.series ?? [], metric), [data, metric]);
-  return <div className="space-y-4">
-    <section className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="flex items-center gap-2 font-semibold text-white"><BarChart3 className="text-cyan-300" size={18}/> Evolução financeira</h2><p className="text-xs text-zinc-500">Compare competências sem misturar transferências internas ao caixa consolidado.</p></div>
-      <div className="flex rounded-md border border-zinc-700 bg-zinc-950 p-1">{[3,6,12].map((value) => <button className={`rounded px-3 py-1.5 text-xs ${months === value ? "bg-zinc-700 text-white" : "text-zinc-500 hover:text-white"}`} key={value} onClick={() => setMonths(value)}>{value} meses</button>)}</div></div>
-      <div className="mt-4 flex gap-1 overflow-x-auto">{([['operatingResultCents','Resultado'],['externalInflowsCents','Entradas'],['externalOutflowsCents','Saídas']] as const).map(([id,label]) => <button className={`shrink-0 rounded-md px-3 py-2 text-xs font-medium ${metric === id ? "bg-cyan-400/10 text-cyan-200 ring-1 ring-cyan-400/30" : "bg-zinc-950 text-zinc-500 hover:text-zinc-200"}`} key={id} onClick={() => setMetric(id)}>{label}</button>)}</div>
-      {loading ? <div className="flex h-72 items-center justify-center"><Loader2 className="animate-spin text-cyan-300"/></div> : data ? <>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3"><SmallStat label="Competência atual" value={money(summary.current)}/><SmallStat label="Média do período" value={money(summary.average)}/><SmallStat label="Variação mensal" value={percent(summary.change)} tone={summary.change >= 0 ? "positive" : "negative"}/></div>
-        <LineChart series={data.series} metric={metric} hovered={hovered} onHover={setHovered}/>
-      </> : null}
-    </section>
-    {data ? <section className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4"><details><summary className="flex cursor-pointer list-none items-center justify-between"><span><strong className="block text-sm text-white">Categorias com maior impacto</strong><span className="text-xs text-zinc-500">Detalhamento acumulado no período selecionado</span></span><ChevronDown className="text-zinc-500" size={17}/></summary><div className="mt-5 space-y-3">{data.categories.map((category) => { const max = Math.max(1,...data.categories.map((item) => Math.abs(item.amountCents))); return <div key={category.name}><div className="mb-1.5 flex justify-between gap-3 text-xs"><span className="truncate text-zinc-300">{category.name}</span><strong className={category.amountCents < 0 ? "text-rose-300" : "text-emerald-300"}>{money(category.amountCents)}</strong></div><div className="h-1.5 overflow-hidden rounded-full bg-zinc-800"><div className={`h-full rounded-full ${category.amountCents < 0 ? "bg-rose-400" : "bg-emerald-400"}`} style={{ width: `${Math.abs(category.amountCents) / max * 100}%` }}/></div></div>})}</div></details></section> : null}
-  </div>;
-}
 
 export function RulesWorkspace({ overview, onRefresh, onMessage }: { overview: FinanceOverview; onRefresh: () => Promise<void>; onMessage: (message: Message) => void }) {
   const [rules, setRules] = useState<Rule[]>([]); const [loading, setLoading] = useState(true);
@@ -108,7 +89,6 @@ function RuleModal({overview,rule,onClose,onDone}:{overview:FinanceOverview;rule
     {error?<p className="rounded-md border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-100">{error}</p>:null}<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button className="rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300" onClick={()=>void request("simulate")} disabled={busy}><Play className="mr-1.5 inline" size={14}/>Simular no mês</button><button className="rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50" onClick={()=>void request("save")} disabled={busy}>{busy?<Loader2 className="mr-1.5 inline animate-spin" size={14}/>:<Save className="mr-1.5 inline" size={14}/>}Salvar regra</button></div></div></Modal>;
 }
 
-function LineChart({series,metric,hovered,onHover}:{series:Comparison["series"];metric:keyof Comparison["series"][number];hovered:number|null;onHover:(index:number|null)=>void}) { const values=series.map(item=>Number(item[metric]));const min=Math.min(0,...values),max=Math.max(1,...values),range=max-min;const width=760,height=230,pad=28;const points=values.map((value,index)=>({x:pad+(series.length===1?0:index/(series.length-1))*(width-pad*2),y:pad+(1-(value-min)/range)*(height-pad*2)}));const path=points.map((point,index)=>`${index?"L":"M"}${point.x},${point.y}`).join(" ");return <div className="relative mt-5 overflow-x-auto"><svg aria-label="Gráfico de evolução financeira" className="h-[250px] min-w-[620px] w-full" preserveAspectRatio="none" viewBox={`0 0 ${width} ${height}`} onMouseLeave={()=>onHover(null)} role="img"><line stroke="#3f3f46" strokeDasharray="4 6" x1={pad} x2={width-pad} y1={pad} y2={pad}/><line stroke="#3f3f46" x1={pad} x2={width-pad} y1={height-pad} y2={height-pad}/>{min<0&&max>0?<line stroke="#52525b" strokeDasharray="3 4" x1={pad} x2={width-pad} y1={pad+(1-(0-min)/range)*(height-pad*2)} y2={pad+(1-(0-min)/range)*(height-pad*2)}/>:null}<path d={path} fill="none" stroke="#22d3ee" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" vectorEffect="non-scaling-stroke"/>{points.map((point,index)=><g key={series[index].competence} onMouseEnter={()=>onHover(index)}><circle cx={point.x} cy={point.y} fill={hovered===index?"#f4f4f5":"#18181b"} r={hovered===index?6:4} stroke="#22d3ee" strokeWidth="2" vectorEffect="non-scaling-stroke"/><circle cx={point.x} cy={point.y} fill="transparent" r="18"/></g>)}</svg><div className="flex min-w-[620px] justify-between px-3 text-[10px] text-zinc-600">{series.map(item=><span key={item.competence}>{monthShort(item.competence)}</span>)}</div>{hovered!==null?<div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md border border-zinc-700 bg-zinc-950/95 px-3 py-2 text-xs shadow-xl"><strong className="text-white">{monthLabel(series[hovered].competence)}</strong><p className="mt-1 text-cyan-200">{money(Number(series[hovered][metric]))}</p><p className="text-zinc-500">{series[hovered].transactionCount} lançamentos · {series[hovered].pendingCount} pendências</p></div>:null}</div> }
 function ScoreRing({score,color,large=false}:{score:number;color:string;large?:boolean}){const tone=color==="emerald"?"text-emerald-300":color==="cyan"?"text-cyan-300":"text-amber-300";return <span className={`relative flex shrink-0 items-center justify-center rounded-full ${tone} ${large?"h-16 w-16":"h-11 w-11"}`} style={{background:`conic-gradient(currentColor ${score*3.6}deg,#27272a 0)`}}><span className={`absolute rounded-full bg-zinc-900 ${large?"inset-[5px]":"inset-1"}`}/><strong className={`relative ${large?"text-sm":"text-[10px]"}`}>{score}%</strong></span>}
 function SmallStat({label,value,danger=false,tone}:{label:string;value:string|number;danger?:boolean;tone?:"positive"|"negative"}){return <div className="rounded-md bg-zinc-950/60 p-3"><p className="text-[11px] text-zinc-600">{label}</p><strong className={`mt-1 block text-sm ${danger||tone==="negative"?"text-rose-300":tone==="positive"?"text-emerald-300":"text-zinc-200"}`}>{value}</strong></div>}
 function IconButton({icon:Icon,label,onClick}:{icon:typeof Pencil;label:string;onClick:()=>void}){return <button aria-label={label} className="flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white" onClick={onClick} title={label} type="button"><Icon size={14}/></button>}
@@ -118,10 +98,8 @@ function Field({label,children}:{label:string;children:React.ReactNode}){return 
 function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}){return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-3" onMouseDown={e=>{if(e.currentTarget===e.target)onClose()}}><div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 shadow-2xl"><header className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-4 py-3"><h2 className="font-semibold text-white">{title}</h2><button aria-label="Fechar" onClick={onClose}><X size={18}/></button></header><div className="p-4">{children}</div></div></div>}
 function ConfirmModal({title,description,confirm,onClose,onConfirm}:{title:string;description:string;confirm:string;onClose:()=>void;onConfirm:()=>void}){return <Modal title={title} onClose={onClose}><AlertCircle className="text-amber-300"/><p className="mt-3 text-sm leading-6 text-zinc-400">{description}</p><div className="mt-5 flex justify-end gap-2"><button className="rounded-md border border-zinc-700 px-3 py-2 text-sm" onClick={onClose}>Cancelar</button><button className="rounded-md bg-cyan-500 px-3 py-2 text-sm font-semibold text-zinc-950" onClick={onConfirm}>{confirm}</button></div></Modal>}
 function emptyRule(overview:FinanceOverview):RuleDraft{return{name:"",priority:100,sourceType:null,financialAccountId:null,conditions:{descriptionContains:""},actions:{nature:overview.natures.find(n=>n.key==="operating_expense")?.key??overview.natures[0]?.key??"unclassified",categoryId:null,includeExternalCashFlow:true,includeOperatingResult:true,reviewRequired:false},enabled:true,autoApply:true}}
-function comparisonSummary(series:Comparison["series"],metric:keyof Comparison["series"][number]){const values=series.map(item=>Number(item[metric]));const current=values.at(-1)??0,previous=values.at(-2)??0;return{current,average:values.length?Math.round(values.reduce((a,b)=>a+b,0)/values.length):0,change:previous===0?(current===0?0:100):(current-previous)/Math.abs(previous)*100}}
 function conditionLabel(conditions:Rule["conditions"]){if(conditions.descriptionContains)return `Contém “${conditions.descriptionContains}”`;if(conditions.descriptionStartsWith)return `Começa com “${conditions.descriptionStartsWith}”`;if(conditions.regex)return "Expressão avançada";return "Critério combinado"}
 function sourceLabel(value:string|null){return value?({nubank:"Nubank",olist:"Olist",mercado_pago:"Mercado Pago",paypal:"PayPal",generic:"CSV genérico"} as Record<string,string>)[value]??value:"Todas"}
 function natureLabel(key:string,overview:FinanceOverview){return overview.natures.find(n=>n.key===key)?.name??key}function categoryLabel(id:string|null|undefined,overview:FinanceOverview){return overview.categories.find(c=>c.id===id)?.name??"Sem categoria"}
-function money(cents:number){return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(cents/100)}function percent(value:number){return new Intl.NumberFormat("pt-BR",{style:"percent",maximumFractionDigits:1}).format(value/100)}
-function monthLabel(value:string){const [year,month]=value.split("-").map(Number);return new Intl.DateTimeFormat("pt-BR",{month:"long",year:"numeric"}).format(new Date(year,month-1,1))}function monthShort(value:string){const [year,month]=value.split("-").map(Number);return new Intl.DateTimeFormat("pt-BR",{month:"short"}).format(new Date(year,month-1,1)).replace(".","")}
+function money(cents:number){return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(cents/100)}
 function shortDate(value:string){return new Intl.DateTimeFormat("pt-BR",{timeZone:"UTC"}).format(new Date(`${value.slice(0,10)}T12:00:00Z`))}function errorText(error:unknown){if(typeof error==="string")return error;if(error&&typeof error==="object"){const candidate=error as {formErrors?:unknown;fieldErrors?:Record<string,unknown>;message?:unknown};const messages=[...(Array.isArray(candidate.formErrors)?candidate.formErrors:[]),...Object.values(candidate.fieldErrors??{}).flatMap(value=>Array.isArray(value)?value:[])].filter(value=>typeof value==="string");if(messages.length)return messages.join(" ");if(typeof candidate.message==="string")return candidate.message;}return"Revise os campos informados."}

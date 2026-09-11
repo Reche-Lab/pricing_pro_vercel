@@ -302,6 +302,14 @@ node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 
 ## Observacoes
 
+### Saldo filtrado e evolução mensal
+
+- [x] Entradas, saídas e saldo dos lançamentos filtrados, excluindo linhas informativas.
+- [x] Evolução mensal por categoria e natureza, com gráfico, tabela e períodos de 3/6/12 meses.
+- [x] Indicadores separados de movimentação, caixa e resultado; meses sem atividade preenchidos com zero.
+- [x] Testes de domínio, UI e banco isolado; navegação/filtros verificados em desktop e celular.
+- [x] Sem nova migration ou variável de ambiente.
+
 ### Extrato e fatura de cartão
 
 - [x] Importação de fatura Nubank em conta de cartão separada, com competência/vencimento confirmado.

@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getPool } from "@/lib/db/client";
 import { detectAndParseStatement } from "@/domain/finance/adapters";
 import { sha256 } from "@/domain/finance/csv";
-import { classifyFinancialTransactions, getFinancialOverview, importFinancialStatement, upsertFinancialAccount } from "@/repositories/finance";
+import { classifyFinancialTransactions, getFinancialComparison, getFinancialOverview, importFinancialStatement, upsertFinancialAccount } from "@/repositories/finance";
 import { listCardStatements, setCardPayment } from "@/repositories/card-statements";
 
 const url = process.env.FINANCE_TEST_DATABASE_URL;
@@ -63,6 +63,19 @@ describe.skipIf(!url)("credit card finance isolated database", () => {
     const overview = await getFinancialOverview(user, tenant, "2026-05");
     expect(overview.metrics).toMatchObject({ externalOutflowsCents: 2001, operationalOutflowsCents: 2000 });
     expect(overview.transfers).toHaveLength(0);
+  });
+  it("compares monthly categories and natures with zero periods and tenant isolation", async () => {
+    const category = (await getPool().query("select id from financial_categories where tenant_id=$1 and name='Despesas operacionais'", [tenant])).rows[0].id;
+    await getPool().query("update financial_transactions set category_id=$2 where tenant_id=$1 and entry_kind='card_purchase'", [tenant, category]);
+    const comparison = await getFinancialComparison(user, tenant, "2026-05", 3);
+    expect(comparison.series.map(item => item.balanceCents)).toEqual([0, 0, -4001]);
+    expect(comparison.groups.categories.find(item => item.id === category)?.series.map(item => item.balanceCents)).toEqual([0, 0, -2000]);
+    expect(comparison.groups.categories.find(item => item.id === "uncategorized")?.series[2].balanceCents).toBe(-2001);
+    expect(comparison.groups.natures.find(item => item.id === "informative")?.series[2].balanceCents).toBe(0);
+    expect(comparison.groups.natures.find(item => item.id === "debt")?.series[2]).toMatchObject({ operatingResultCents: 0, externalOutflowsCents: 2001 });
+    const other = await getFinancialComparison(user, randomUUID(), "2026-05", 3);
+    expect(other.groups).toEqual({ categories: [], natures: [] });
+    expect(other.series.every(item => item.balanceCents === 0)).toBe(true);
   });
   it("scopes quick classification rules to the card account, preserving bank cash flow", async () => {
     const purchases = (await getPool().query("select id from financial_transactions where tenant_id=$1 and entry_kind='card_purchase'", [tenant])).rows.map(row => row.id);

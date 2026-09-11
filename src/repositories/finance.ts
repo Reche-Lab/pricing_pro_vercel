@@ -1,6 +1,7 @@
 import type pg from "pg";
 import { classifyTransactions, ruleMatchesTransaction } from "@/domain/finance/classification";
 import { CardStatementError } from "@/domain/finance/card-statements";
+import { buildMonthlyGroups, type MonthlyGroupRow } from "@/domain/finance/analysis";
 import { randomUUID } from "node:crypto";
 import { sha256 } from "@/domain/finance/csv";
 import { calculateFinancialMetrics } from "@/domain/finance/metrics";
@@ -678,10 +679,11 @@ export async function getFinancialComparison(userId: string, tenantId: string, e
     const end = `${endCompetence}-01`;
     const series = await client.query<{
       competence: string; external_inflows_cents: string; external_outflows_cents: string;
-      operating_result_cents: string; transaction_count: string; pending_count: string;
+      balance_cents: string; operating_result_cents: string; transaction_count: string; pending_count: string;
     }>(`with periods as (
         select generate_series($2::date - (($3::int - 1) * interval '1 month'), $2::date, interval '1 month')::date competence
       ) select p.competence::text,
+        coalesce(sum(case when t.direction <> 'neutral' then t.amount_cents else 0 end),0)::text balance_cents,
         coalesce(sum(case when t.include_external_cash_flow and t.amount_cents > 0 and coalesce(m.status,'') <> 'confirmed' then t.amount_cents else 0 end),0)::text external_inflows_cents,
         coalesce(abs(sum(case when t.include_external_cash_flow and t.amount_cents < 0 and coalesce(m.status,'') <> 'confirmed' then t.amount_cents else 0 end)),0)::text external_outflows_cents,
         coalesce(sum(case when t.include_operating_result then t.amount_cents else 0 end),0)::text operating_result_cents,
@@ -697,9 +699,30 @@ export async function getFinancialComparison(userId: string, tenantId: string, e
        where t.tenant_id=$1 and t.competence between ($2::date - (($3::int - 1) * interval '1 month')) and $2::date
          and t.include_operating_result
        group by coalesce(c.name,'Sem categoria') order by abs(sum(t.amount_cents)) desc limit 8`, [tenantId, end, months]);
+    const groupRows = await client.query<MonthlyGroupRow>(`
+      select g.dimension,g.group_id,g.group_name,t.competence::text,
+        coalesce(sum(case when t.direction<>'neutral' then t.amount_cents else 0 end),0)::text balance_cents,
+        coalesce(sum(case when t.include_external_cash_flow and t.amount_cents>0 and coalesce(m.status,'')<>'confirmed' then t.amount_cents else 0 end),0)::text external_inflows_cents,
+        coalesce(abs(sum(case when t.include_external_cash_flow and t.amount_cents<0 and coalesce(m.status,'')<>'confirmed' then t.amount_cents else 0 end)),0)::text external_outflows_cents,
+        coalesce(sum(case when t.include_operating_result then t.amount_cents else 0 end),0)::text operating_result_cents,
+        count(*) filter (where t.direction<>'neutral')::text transaction_count,
+        count(*) filter (where (t.review_required and t.review_status='pending') or t.nature='unclassified')::text pending_count
+      from financial_transactions t
+      left join financial_categories c on c.id=t.category_id and c.tenant_id=t.tenant_id
+      left join financial_categories parent on parent.id=c.parent_id and parent.tenant_id=t.tenant_id
+      left join financial_natures n on n.key=t.nature and n.tenant_id=t.tenant_id
+      left join internal_transfer_matches m on m.id=t.internal_transfer_pair_id and m.tenant_id=t.tenant_id
+      cross join lateral (values
+        ('category',coalesce(t.category_id::text,'uncategorized'),coalesce(case when parent.id is not null then parent.name || ' / ' || c.name else c.name end,'Sem categoria')),
+        ('nature',t.nature,coalesce(n.name,t.nature))
+      ) g(dimension,group_id,group_name)
+      where t.tenant_id=$1 and t.competence between ($2::date - (($3::int - 1) * interval '1 month')) and $2::date
+      group by g.dimension,g.group_id,g.group_name,t.competence`, [tenantId, end, months]);
     return {
       endCompetence, months,
+      groups: buildMonthlyGroups(series.rows.map(row => row.competence.slice(0, 7)), groupRows.rows),
       series: series.rows.map((row) => ({ competence: row.competence.slice(0, 7),
+        balanceCents: Number(row.balance_cents),
         externalInflowsCents: Number(row.external_inflows_cents), externalOutflowsCents: Number(row.external_outflows_cents),
         operatingResultCents: Number(row.operating_result_cents), transactionCount: Number(row.transaction_count),
         pendingCount: Number(row.pending_count) })),
