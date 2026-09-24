@@ -3,6 +3,8 @@
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { olistAwareFetch, requestOlistReconnect, OLIST_CONNECTED_EVENT, OLIST_RECONNECT_EVENT } from "@/lib/olist/browser-request";
+import { isOlistReconnectRequired } from "@/lib/olist/oauth-errors";
 import type { ShipmentRow } from "@/repositories/shipments";
 import {
   CalendarPlus,
@@ -262,7 +264,6 @@ export function OlistQuoteActions({
   const [usingCustomer, setUsingCustomer] = useState(false);
   const [olistConnection, setOlistConnection] = useState<OlistConnectionStatus | null>(null);
   const [olistStatusMessage, setOlistStatusMessage] = useState("");
-  const [oauthLoading, setOauthLoading] = useState(false);
 
   const customerReady = Boolean(customerExternalId);
   const crmReady = Boolean(crmExternalId);
@@ -319,10 +320,27 @@ export function OlistQuoteActions({
 
   useEffect(() => {
     void loadOlistConnectionStatus();
+    const disconnected = () => {
+      setOlistConnection((current) => current ? { ...current, connected: false } : current);
+    };
+    const connected = () => {
+      setOlistStatusMessage("");
+      setActionResult(null);
+      setMessage("");
+      setOlistConnection((current) => current ? { ...current, connected: true, status: "active" } : current);
+      void loadOlistConnectionStatus();
+    };
+    window.addEventListener(OLIST_RECONNECT_EVENT, disconnected);
+    window.addEventListener(OLIST_CONNECTED_EVENT, connected);
+    return () => {
+      window.removeEventListener(OLIST_RECONNECT_EVENT, disconnected);
+      window.removeEventListener(OLIST_CONNECTED_EVENT, connected);
+    };
   }, []);
 
   async function loadOlistConnectionStatus() {
-    const response = await fetch("/api/integrations/olist");
+    const response = await fetch("/api/integrations/olist").catch(() => null);
+    if (!response) return;
     const data = await response.json().catch(() => null);
     if (response.ok && data?.ok && data.integrations?.olist) {
       setOlistConnection(data.integrations.olist as OlistConnectionStatus);
@@ -330,19 +348,7 @@ export function OlistQuoteActions({
   }
 
   async function reconnectOlist() {
-    setOauthLoading(true);
-    setOlistStatusMessage("");
-    const response = await fetch("/api/olist/auth-url");
-    const data = await response.json().catch(() => null);
-    setOauthLoading(false);
-
-    if (!response.ok || !data?.authUrl) {
-      setOlistStatusMessage(data?.error ?? "Não foi possível iniciar a reconexão OAuth do Olist.");
-      setOlistConnection((current) => current ? { ...current, connected: false } : current);
-      return;
-    }
-
-    window.location.href = data.authUrl;
+    requestOlistReconnect();
   }
 
   async function execute(action: ActionKey, formData?: FormData) {
@@ -356,7 +362,7 @@ export function OlistQuoteActions({
     setMessage("");
     setActionResult(null);
     setLoading(action);
-    const response = await fetch(`/api/quotes/${quoteId}/olist/${config.url}`, {
+    const response = await olistAwareFetch(`/api/quotes/${quoteId}/olist/${config.url}`, {
       method: "POST",
       headers: payload.body ? { "content-type": "application/json" } : undefined,
       body: payload.body ? JSON.stringify(payload.body) : undefined
@@ -366,7 +372,7 @@ export function OlistQuoteActions({
 
     if (!response.ok || !data?.ok) {
       const errorMessage = data?.error ?? "Falha na integração.";
-      if (isOlistOAuthFailure(data, response.status)) {
+      if (isOlistReconnectRequired(data)) {
         setOlistConnection((current) => current ? { ...current, connected: false } : {
           configured: true,
           connected: false,
@@ -453,7 +459,7 @@ export function OlistQuoteActions({
   async function useFoundCustomer(externalId: string, raw?: unknown) {
     setMessage("");
     setUsingCustomer(true);
-    const response = await fetch(`/api/quotes/${quoteId}/olist/customer/use`, {
+    const response = await olistAwareFetch(`/api/quotes/${quoteId}/olist/customer/use`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ externalId, raw })
@@ -489,7 +495,7 @@ export function OlistQuoteActions({
 
       <OlistConnectionBanner
         connection={olistConnection}
-        loading={oauthLoading}
+        loading={false}
         message={olistStatusMessage}
         onReconnect={reconnectOlist}
       />
@@ -832,6 +838,16 @@ function ActionModal({
   const [paymentSyncState, setPaymentSyncState] = useState<"idle" | "syncing" | "success" | "error">("idle");
   const [paymentSyncMessage, setPaymentSyncMessage] = useState("");
   const [paymentRequiresReauthorization, setPaymentRequiresReauthorization] = useState(false);
+  const [previewRetry, setPreviewRetry] = useState(0);
+  useEffect(() => {
+    const connected = () => {
+      setPaymentRequiresReauthorization(false);
+      setPaymentSyncMessage("");
+      if (salesOrderPreview.error || invoicePreview.error) setPreviewRetry((value) => value + 1);
+    };
+    window.addEventListener(OLIST_CONNECTED_EVENT, connected);
+    return () => window.removeEventListener(OLIST_CONNECTED_EVENT, connected);
+  }, [salesOrderPreview.error, invoicePreview.error]);
   const melhorEnvioShipment = useMemo(() => selectBestMelhorEnvioShipment(shipments), [shipments]);
   const defaultResponsibleUser = useMemo(
     () => responsibleUsers.find((user) => user.id === defaultResponsibleExternalId) ?? null,
@@ -856,7 +872,7 @@ function ActionModal({
     setPaymentRequiresReauthorization(false);
 
     try {
-      const response = await fetch("/api/olist/payment-options/sync", { method: "POST" });
+      const response = await olistAwareFetch("/api/olist/payment-options/sync", { method: "POST" });
       const data = await response.json().catch(() => null);
       if (!response.ok || !data?.ok) {
         setPaymentSyncState("error");
@@ -888,25 +904,14 @@ function ActionModal({
   }
 
   async function reconnectOlistForPayment() {
-    if (paymentSyncState === "syncing") return;
-    setPaymentSyncState("syncing");
-    setPaymentSyncMessage("Abrindo autenticação Olist...");
-    const redirectPath = `/quotes/${encodeURIComponent(quoteId)}`;
-    const response = await fetch(`/api/olist/auth-url?redirectPath=${encodeURIComponent(redirectPath)}`);
-    const data = await response.json().catch(() => null);
-    if (!response.ok || !data?.authUrl) {
-      setPaymentSyncState("error");
-      setPaymentSyncMessage(data?.error ?? "Não foi possível iniciar a reautorização Olist.");
-      return;
-    }
-    window.location.href = data.authUrl;
+    requestOlistReconnect();
   }
 
   useEffect(() => {
     if (action !== "salesOrder") return;
     let cancelled = false;
     setSalesOrderPreview({ loading: true, error: null, data: null });
-    fetch(`/api/quotes/${encodeURIComponent(quoteId)}/olist/sales-order/preview`)
+    olistAwareFetch(`/api/quotes/${encodeURIComponent(quoteId)}/olist/sales-order/preview`)
       .then(async (response) => {
         const data = await response.json().catch(() => null);
         if (cancelled) return;
@@ -931,13 +936,13 @@ function ActionModal({
     return () => {
       cancelled = true;
     };
-  }, [action, quoteId]);
+  }, [action, quoteId, previewRetry]);
 
   useEffect(() => {
     if (action !== "invoice" && action !== "invoiceCancel") return;
     let cancelled = false;
     setInvoicePreview({ loading: true, error: null, data: null });
-    fetch(`/api/quotes/${encodeURIComponent(quoteId)}/olist/invoice/preview`)
+    olistAwareFetch(`/api/quotes/${encodeURIComponent(quoteId)}/olist/invoice/preview`)
       .then(async (response) => {
         const data = await response.json().catch(() => null);
         if (cancelled) return;
@@ -962,7 +967,7 @@ function ActionModal({
     return () => {
       cancelled = true;
     };
-  }, [action, quoteId]);
+  }, [action, quoteId, previewRetry]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2263,33 +2268,6 @@ function currencyLike(value: unknown) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return stringValue(value);
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(numeric);
-}
-
-function isOlistOAuthFailure(data: unknown, responseStatus: number) {
-  if (responseStatus === 401) return true;
-  if (!data || typeof data !== "object") return false;
-  const record = data as Record<string, unknown>;
-  const httpStatus = Number(record.httpStatus);
-  if (httpStatus === 401) return true;
-  const text = [
-    record.error,
-    record.message,
-    record.responseSummary,
-    record.response
-  ]
-    .map((value) => typeof value === "string" ? value : JSON.stringify(value ?? ""))
-    .join(" ")
-    .toLowerCase();
-
-  return [
-    "oauth",
-    "token",
-    "autentica",
-    "unauthorized",
-    "não autoriz",
-    "nao autoriz",
-    "integration is not active"
-  ].some((pattern) => text.includes(pattern));
 }
 
 function formatDateTime(value: unknown) {

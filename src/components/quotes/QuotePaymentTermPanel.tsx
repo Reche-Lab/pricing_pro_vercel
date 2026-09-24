@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, CreditCard, KeyRound, RotateCcw, Save } from "lucide-react";
 import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
+import { olistAwareFetch, requestOlistReconnect, OLIST_CONNECTED_EVENT } from "@/lib/olist/browser-request";
 
 type PaymentOption = {
   kind: "payment_method" | "receiving_method" | "category";
@@ -50,8 +51,17 @@ export function QuotePaymentTermPanel({
   const [state, setState] = useState<"idle" | "saving" | "syncing" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const [requiresReauthorization, setRequiresReauthorization] = useState(false);
-  const [reconnecting, setReconnecting] = useState(false);
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const connected = () => {
+      setRequiresReauthorization(false);
+      setMessage("Olist reconectado. Você já pode sincronizar as formas de recebimento novamente.");
+      setState("idle");
+    };
+    window.addEventListener(OLIST_CONNECTED_EVENT, connected);
+    return () => window.removeEventListener(OLIST_CONNECTED_EVENT, connected);
+  }, []);
 
   const paymentMethods = useMemo(
     () => paymentOptions.filter((option) => option.kind === "payment_method" && option.groupName === "Banco"),
@@ -84,7 +94,7 @@ export function QuotePaymentTermPanel({
     setState("syncing");
     setMessage("Sincronizando opções do Olist...");
     setRequiresReauthorization(false);
-    const response = await fetch("/api/olist/payment-options/sync", { method: "POST" });
+    const response = await olistAwareFetch("/api/olist/payment-options/sync", { method: "POST" });
     const data = await response.json().catch(() => null);
     if (!response.ok || !data?.ok) {
       setState("error");
@@ -117,18 +127,7 @@ export function QuotePaymentTermPanel({
   }
 
   async function reconnectOlist() {
-    if (reconnecting) return;
-    setReconnecting(true);
-    const redirectPath = `/quotes/${encodeURIComponent(quoteId)}`;
-    const response = await fetch(`/api/olist/auth-url?redirectPath=${encodeURIComponent(redirectPath)}`);
-    const data = await response.json().catch(() => null);
-    if (!response.ok || !data?.authUrl) {
-      setReconnecting(false);
-      setState("error");
-      setMessage(data?.error ?? "Não foi possível iniciar a reautorização Olist.");
-      return;
-    }
-    window.location.href = data.authUrl;
+    requestOlistReconnect();
   }
 
   async function save() {
@@ -283,12 +282,11 @@ export function QuotePaymentTermPanel({
               {requiresReauthorization ? (
                 <button
                   className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-cyan-400/30 px-4 text-sm font-semibold text-cyan-100 hover:bg-cyan-400/10 disabled:opacity-60"
-                  disabled={reconnecting}
                   type="button"
                   onClick={reconnectOlist}
                 >
                   <KeyRound size={15} />
-                  {reconnecting ? "Abrindo OAuth..." : "Reautorizar Olist"}
+                  Reautorizar Olist
                 </button>
               ) : null}
               <button
@@ -309,12 +307,11 @@ export function QuotePaymentTermPanel({
           {requiresReauthorization ? (
             <button
               className="focus-ring inline-flex h-8 w-fit shrink-0 items-center justify-center gap-2 rounded-md border border-cyan-400/30 px-3 text-xs font-semibold text-cyan-100 hover:bg-cyan-400/10 disabled:opacity-60"
-              disabled={reconnecting}
               type="button"
               onClick={reconnectOlist}
             >
               <KeyRound size={13} />
-              {reconnecting ? "Abrindo..." : "Reautorizar Olist"}
+              Reautorizar Olist
             </button>
           ) : null}
         </div>

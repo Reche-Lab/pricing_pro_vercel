@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isOlistReconnectRequired } from "@/lib/olist/oauth-errors";
 import { randomUUID } from "node:crypto";
 import { getCurrentSession } from "@/lib/auth/session";
 import {
@@ -69,6 +70,7 @@ export async function POST() {
     }
   }
 
+  const reconnectRequired = isOlistReconnectRequired({ failures });
   const paymentPermissionDenied = failures.some((failure) => failure.kind === "receiving_method" && failure.status === 403);
   const permissionMessage = paymentPermissionDenied
     ? "O aplicativo Olist não tem permissão para consultar as formas de recebimento. Habilite a permissão de leitura de Formas de recebimento no aplicativo Olist e reautorize o OAuth."
@@ -84,6 +86,8 @@ export async function POST() {
     return NextResponse.json({
       ok: false,
       debugId,
+      reconnectRequired,
+      code: reconnectRequired ? "olist_oauth_invalid" : "olist_sync_failed",
       error: permissionMessage ?? "Não foi possível sincronizar opções financeiras do Olist.",
       failures,
       requiresReauthorization: paymentPermissionDenied,
@@ -102,6 +106,7 @@ export async function POST() {
   return NextResponse.json({
     ok: true,
     debugId,
+    reconnectRequired,
     options,
     failures,
     syncedKinds,

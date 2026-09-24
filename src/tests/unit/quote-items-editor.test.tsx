@@ -18,7 +18,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe("quote products editor", () => {
   it("adds a product with curve pricing and preserves existing items", async () => {
-    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) });
+    const fetcher = vi.fn().mockImplementation(async () => Response.json({ ok: true }));
     vi.stubGlobal("fetch", fetcher);
     show();
     fireEvent.click(screen.getByRole("button", { name: "Adicionar produto" }));
@@ -48,7 +48,7 @@ describe("quote products editor", () => {
   });
 
   it("confirms removal, retains other items, and prevents removal of the last item", async () => {
-    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) });
+    const fetcher = vi.fn().mockImplementation(async () => Response.json({ ok: true }));
     vi.stubGlobal("fetch", fetcher);
     const view = show();
     expect(screen.getByRole("button", { name: "Remover produto Botton" })).toBeDisabled();

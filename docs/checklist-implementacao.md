@@ -2,6 +2,20 @@
 
 Status atualizado durante a refatoracao inicial.
 
+## Reconexão Olist Nos Orçamentos (2026-09-24)
+
+- [x] Centralizar identificação de autenticação expirada/revogada, incluindo `invalid_grant` e HTTP 401 do Olist, sem confundir sessão local expirada, validação ou permissão 403.
+- [x] Abrir modal nas ações de cliente, assunto/tarefa CRM, pedido, nota/cancelamento, despacho/expedição, prévias, pagamentos e edição sincronizada.
+- [x] Compartilhar o mesmo modal no precificador, inclusive busca de cliente, pagamentos e ações do orçamento recém-gerado.
+- [x] Reconectar em janela auxiliar sem descartar campos; retorno por canal exclusivo por tentativa, preservando o isolamento de janelas do site.
+- [x] Atualizar indicador de conexão e recuperar prévias que falharam; nunca reenviar operações de escrita automaticamente após reconexão.
+- [x] Tratar pop-up bloqueado, erro ao iniciar autenticação, autorização negada e tempo limite.
+- [x] Testes de regressão do classificador, componentes, contratos de erro e callback.
+- [x] Validação local: suíte completa com 353 testes aprovados e 16 condicionais não executados; 45 testes focados reexecutados após ajustes finais; typecheck, lint e build de produção aprovados (execução sequencial com memória limitada).
+- [ ] Homologação OAuth real com uma conta Olist do tenant.
+
+Sem migration ou variável de ambiente nova. A URL cadastrada no Olist continua `/api/olist/oauth/callback`; `/olist/oauth/complete` é somente o retorno interno da janela auxiliar. Se pop-ups forem bloqueados, liberar para o domínio da aplicação. Erros 403 continuam orientando a revisão das permissões, com reautorização disponível manualmente.
+
 ## Planejado x Realizado
 
 - [x] Criar documento de arquitetura multi-tenant.

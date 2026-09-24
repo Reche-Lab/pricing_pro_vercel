@@ -10,7 +10,6 @@ import {
   Clipboard,
   FileText,
   Image as ImageIcon,
-  KeyRound,
   Plus,
   Search,
   ShoppingCart,
@@ -37,6 +36,8 @@ import type { DemoProductVariant } from "@/domain/pricing/defaults";
 import type { PlatformRule, PricingCurve, PricingCurveMode } from "@/domain/pricing/types";
 import { fetchCepAddress, formatCep, normalizeCep, type CepAddress } from "@/lib/cep";
 import { OlistQuoteActions } from "@/components/quotes/OlistQuoteActions";
+import { OlistReconnectBoundary } from "@/components/olist/OlistReconnectBoundary";
+import { olistAwareFetch } from "@/lib/olist/browser-request";
 import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 
 export type PricingPlatformOption = PlatformRule & {
@@ -196,9 +197,6 @@ export function PricingCalculator({
   const [olistCustomerLookupState, setOlistCustomerLookupState] = useState<"idle" | "loading" | "error">("idle");
   const [olistCustomerLookupMessage, setOlistCustomerLookupMessage] = useState("");
   const [olistCustomerResults, setOlistCustomerResults] = useState<OlistCustomerLookupResult[]>([]);
-  const [olistReconnectOpen, setOlistReconnectOpen] = useState(false);
-  const [olistReconnectLoading, setOlistReconnectLoading] = useState(false);
-  const [olistReconnectMessage, setOlistReconnectMessage] = useState("");
   const [destinationPostalCode, setDestinationPostalCode] = useState("");
   const [destinationAddress, setDestinationAddress] = useState<CepAddress | null>(null);
   const [originPostalCode, setOriginPostalCode] = useState(formatCep(defaultOriginPostalCode));
@@ -506,7 +504,7 @@ export function PricingCalculator({
     setOlistCustomerResults([]);
     const hasExplicitSearchTerm = Boolean(olistCustomerLookupTerm.trim());
     try {
-      const response = await fetch("/api/pricing/olist/customer-lookup", {
+      const response = await olistAwareFetch("/api/pricing/olist/customer-lookup", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -520,10 +518,6 @@ export function PricingCalculator({
       });
       const data = await response.json().catch(() => null);
       if (!response.ok || !data?.ok) {
-        if (isOlistReconnectRequired(data, response.status)) {
-          setOlistReconnectOpen(true);
-          setOlistReconnectMessage(data?.error ?? "A autenticação com o Olist/Tiny precisa ser renovada.");
-        }
         setOlistCustomerLookupState("error");
         setOlistCustomerLookupMessage(data?.error ?? "Não foi possível consultar cliente no Olist.");
         return;
@@ -538,33 +532,14 @@ export function PricingCalculator({
     }
   }
 
-  async function reconnectOlistFromPricing() {
-    setOlistReconnectLoading(true);
-    setOlistReconnectMessage("");
-    const response = await fetch("/api/olist/auth-url?redirectPath=/pricing");
-    const data = await response.json().catch(() => null);
-    setOlistReconnectLoading(false);
-
-    if (!response.ok || !data?.authUrl) {
-      setOlistReconnectMessage(data?.error ?? "Não foi possível iniciar a autenticação do Olist/Tiny.");
-      return;
-    }
-
-    window.location.href = data.authUrl;
-  }
-
   async function syncOlistPaymentOptions() {
     if (demoMode || readonlyMode || paymentSyncState === "syncing") return;
     setPaymentSyncState("syncing");
     setPaymentMessage("Sincronizando formas de pagamento do Olist...");
     try {
-      const response = await fetch("/api/olist/payment-options/sync", { method: "POST" });
+      const response = await olistAwareFetch("/api/olist/payment-options/sync", { method: "POST" });
       const data = await response.json().catch(() => null);
       if (!response.ok || !data?.ok) {
-        if (isOlistReconnectRequired(data, response.status)) {
-          setOlistReconnectOpen(true);
-          setOlistReconnectMessage(data?.error ?? "A autenticação com o Olist/Tiny precisa ser renovada.");
-        }
         throw new Error(data?.error ?? "Não foi possível sincronizar formas de pagamento.");
       }
       const nextOptions = (data.options ?? []).map((option: Record<string, unknown>) => ({
@@ -1170,7 +1145,7 @@ export function PricingCalculator({
   }
 
   return (
-    <>
+    <OlistReconnectBoundary>
     <section className="w-full max-w-full min-w-0 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl shadow-zinc-950/20">
       <div className="border-b border-zinc-800 bg-zinc-950 px-4 py-4 sm:px-5 sm:py-5 md:px-6">
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
@@ -1987,14 +1962,7 @@ export function PricingCalculator({
       onSyncPaymentOptions={syncOlistPaymentOptions}
       shippingAmount={shippingAmount}
     />
-    <OlistReconnectModal
-      loading={olistReconnectLoading}
-      message={olistReconnectMessage}
-      open={olistReconnectOpen}
-      onClose={() => setOlistReconnectOpen(false)}
-      onReconnect={reconnectOlistFromPricing}
-    />
-    </>
+    </OlistReconnectBoundary>
   );
 }
 
@@ -2426,96 +2394,12 @@ function QuoteDraftDrawer({
   );
 }
 
-function OlistReconnectModal({
-  loading,
-  message,
-  open,
-  onClose,
-  onReconnect
-}: {
-  loading: boolean;
-  message: string;
-  open: boolean;
-  onClose: () => void;
-  onReconnect: () => void;
-}) {
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6 backdrop-blur-sm">
-      <div className="w-full max-w-lg overflow-hidden rounded-lg border border-amber-400/25 bg-zinc-950 shadow-2xl shadow-black/40">
-        <div className="flex items-start justify-between gap-4 border-b border-zinc-800 px-5 py-4">
-          <div>
-            <p className="inline-flex items-center gap-2 text-sm font-semibold text-amber-200">
-              <KeyRound size={17} />
-              Reconectar Olist/Tiny
-            </p>
-            <h3 className="mt-2 text-lg font-semibold text-white">Autenticação necessária</h3>
-          </div>
-          <button
-            className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-md border border-zinc-800 text-zinc-400 hover:bg-zinc-900"
-            type="button"
-            onClick={onClose}
-          >
-            <X size={16} />
-          </button>
-        </div>
-        <div className="grid gap-4 px-5 py-5 text-sm text-zinc-300">
-          <p className="leading-6">
-            Não foi possível acessar os dados de clientes no Olist/Tiny porque a conexão OAuth expirou,
-            foi revogada ou precisa ser autorizada novamente para este tenant.
-          </p>
-          <div className="rounded-md border border-zinc-800 bg-zinc-900/70 px-3 py-3 text-xs leading-5 text-zinc-400">
-            Ao clicar em reconectar, você será levado para a autenticação do Olist/Tiny. Depois da confirmação,
-            o sistema retorna para o Precificador e a busca poderá ser feita novamente.
-          </div>
-          {message ? (
-            <p className="rounded-md border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
-              {message}
-            </p>
-          ) : null}
-        </div>
-        <div className="flex flex-col-reverse gap-2 border-t border-zinc-800 px-5 py-4 sm:flex-row sm:justify-end">
-          <button
-            className="focus-ring inline-flex min-h-10 items-center justify-center rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-900"
-            type="button"
-            onClick={onClose}
-          >
-            Agora não
-          </button>
-          <button
-            className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-60"
-            disabled={loading}
-            type="button"
-            onClick={onReconnect}
-          >
-            <KeyRound size={16} />
-            {loading ? "Abrindo autenticação..." : "Reconectar Olist/Tiny"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 async function fetchQuoteWhatsAppText(quoteId: string) {
   const response = await fetch(`/api/quotes/${quoteId}/whatsapp`);
   if (!response.ok) throw new Error("WhatsApp text failed.");
   const payload = (await response.json()) as { text?: string };
   if (!payload.text) throw new Error("WhatsApp text missing.");
   return payload.text;
-}
-
-function isOlistReconnectRequired(data: unknown, responseStatus: number) {
-  if (responseStatus === 401) return true;
-  if (!data || typeof data !== "object") return false;
-  const record = data as Record<string, unknown>;
-  if (record.reconnectRequired === true || record.code === "olist_oauth_invalid") return true;
-  const text = [record.error, record.message, record.response]
-    .map((value) => typeof value === "string" ? value : JSON.stringify(value ?? ""))
-    .join(" ")
-    .toLowerCase();
-  return text.includes("invalid_grant") || text.includes("oauth") || text.includes("autenticação");
 }
 
 function currentDemoItem(

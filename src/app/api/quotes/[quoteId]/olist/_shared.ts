@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isOlistReconnectRequired } from "@/lib/olist/oauth-errors";
 import { randomUUID } from "node:crypto";
 import { getCurrentSession } from "@/lib/auth/session";
 import {
@@ -231,8 +232,9 @@ export class OlistQuoteOperationError extends Error {
 export function olistOperationErrorResponse(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : fallback;
   const debugId = error instanceof OlistQuoteOperationError ? error.debugId : randomUUID();
-  const status = error instanceof OlistQuoteOperationError ? error.status : undefined;
-  const response = error instanceof OlistQuoteOperationError ? error.response : undefined;
+  const status = error instanceof OlistQuoteOperationError || error instanceof OlistRequestError ? error.status : undefined;
+  const response = error instanceof OlistQuoteOperationError ? error.response : error instanceof OlistRequestError ? error.data : undefined;
+  const reconnectRequired = isOlistReconnectRequired({ message, httpStatus: status, response });
   if (!(error instanceof OlistQuoteOperationError)) {
     console.error("Unexpected Olist route failure.", {
       debugId,
@@ -243,6 +245,8 @@ export function olistOperationErrorResponse(error: unknown, fallback: string) {
   return {
     ok: false,
     error: humanizeOlistError(message, status),
+    code: reconnectRequired ? "olist_oauth_invalid" : "olist_operation_failed",
+    reconnectRequired,
     debugId,
     httpStatus: status,
     responseSummary: summarizeOlistResult(response),

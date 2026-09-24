@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { olistAwareFetch } from "@/lib/olist/browser-request";
 import { CheckCircle2, Edit3, History, ImagePlus, Lock, Plus, Save, Trash2, Upload, X } from "lucide-react";
 import { calculateQuote, roundMoney } from "@/domain/pricing/pricing";
 import { isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
@@ -87,7 +88,7 @@ export function QuoteEditPanel({
     setState("saving");
     setMessage("");
 
-    const response = await fetch(`/api/quotes/${quote.id}/edit`, {
+    const response = await olistAwareFetch(`/api/quotes/${quote.id}/edit`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -317,7 +318,7 @@ export function QuoteItemEditPanel({
     setState("saving");
     setMessage("");
     try {
-      const response = await fetch(`/api/quotes/${quote.id}/edit`, {
+      const response = await olistAwareFetch(`/api/quotes/${quote.id}/edit`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

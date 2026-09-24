@@ -15,15 +15,15 @@ export async function GET(request: Request) {
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
 
-  if (error) return redirectWithStatus(request, "error", error);
-  if (!code || !state) return redirectWithStatus(request, "error", "missing_code_or_state");
+  if (!state) return redirectWithStatus(request, "error", "missing_code_or_state");
 
   const oauthState =
     (await consumeOAuthState(state, "olist")) ?? (await consumeOAuthState(state, "olist_crm"));
   if (!oauthState) return redirectWithStatus(request, "error", "invalid_or_expired_state");
+  if (error || !code) return redirectWithStatus(request, "error", error ?? "missing_code_or_state", oauthState.redirect_path);
 
   const connection = await getIntegrationConnection(oauthState.user_id, oauthState.tenant_id, oauthState.provider);
-  if (!connection) return redirectWithStatus(request, "error", "integration_not_configured");
+  if (!connection) return redirectWithStatus(request, "error", "integration_not_configured", oauthState.redirect_path);
 
   try {
     const currentCredentials = decryptIntegrationCredentials<OlistCredentials>(connection);
