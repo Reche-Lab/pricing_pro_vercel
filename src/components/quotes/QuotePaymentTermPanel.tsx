@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, CreditCard, KeyRound, RotateCcw, Save } from "lucide-react";
 import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
+import { isOlistPaymentLink } from "@/lib/olist/payment-terms";
 import { olistAwareFetch, requestOlistReconnect, OLIST_CONNECTED_EVENT } from "@/lib/olist/browser-request";
 
 type PaymentOption = {
@@ -69,8 +70,12 @@ export function QuotePaymentTermPanel({
   );
   const receivingMethods = useMemo(() => paymentOptions.filter((option) => option.kind === "receiving_method"), [paymentOptions]);
   const categories = useMemo(() => paymentOptions.filter((option) => option.kind === "category"), [paymentOptions]);
-  const selectedPaymentMethod = paymentMethods.find((option) => option.externalId === paymentMethodId) ?? null;
   const selectedReceivingMethod = receivingMethods.find((option) => option.externalId === receivingMethodId) ?? null;
+  const paymentLink = isOlistPaymentLink(selectedReceivingMethod?.name);
+  const selectedPaymentMethod = paymentLink ? null : paymentMethods.find((option) => option.externalId === paymentMethodId) ?? null;
+  useEffect(() => {
+    if (paymentLink) setPaymentMethodId("");
+  }, [paymentLink]);
   const selectedCategory = categories.find((option) => option.externalId === categoryId) ?? (defaultCategory.externalId ? {
     kind: "category" as const,
     externalId: defaultCategory.externalId,
@@ -231,11 +236,13 @@ export function QuotePaymentTermPanel({
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             <SelectOption label="Forma de recebimento" options={receivingMethods} placeholder={receivingMethods.length ? "Selecione" : "Sincronize formas de recebimento"} value={receivingMethodId} onChange={setReceivingMethodId} />
+            {!paymentLink ? <>
             <SelectOption label={`Conta bancária${requiresBankAccount(selectedReceivingMethod?.name) ? " (obrigatória)" : ""}`} options={paymentMethods} placeholder={paymentMethods.length ? "Selecione a conta" : "Cadastre a conta em Configurações"} value={paymentMethodId} onChange={setPaymentMethodId} />
             <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-500">
               <span className="block font-medium text-zinc-300">Meio</span>
               <span className="mt-1 block">{selectedPaymentMethod ? "Banco" : "Definido após selecionar a conta"}</span>
             </div>
+            </> : <p className="self-center text-xs text-zinc-400">Link de pagamento: sem conta bancária adicional.</p>}
             <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-500">
               <span className="block font-medium text-zinc-300">Categoria padrão</span>
               <span className="mt-1 block">{selectedCategory?.name ?? "Não definida"}</span>
@@ -440,6 +447,7 @@ function shouldShowPaymentInstallments(name: string | null | undefined) {
 }
 
 function requiresBankAccount(name: string | null | undefined) {
+  if (isOlistPaymentLink(name)) return false;
   const normalized = normalizeText(name ?? "");
   return ["pix", "boleto", "deposito", "transferencia"].some((term) => normalized.includes(term));
 }

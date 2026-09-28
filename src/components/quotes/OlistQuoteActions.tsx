@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { olistAwareFetch, requestOlistReconnect, OLIST_CONNECTED_EVENT, OLIST_RECONNECT_EVENT } from "@/lib/olist/browser-request";
 import { isOlistReconnectRequired } from "@/lib/olist/oauth-errors";
+import { isOlistPaymentLink } from "@/lib/olist/payment-terms";
 import type { ShipmentRow } from "@/repositories/shipments";
 import {
   CalendarPlus,
@@ -1504,6 +1505,7 @@ function SalesOrderPaymentFields({
     name: defaultCategory.name
   }));
   const selectedReceivingMethod = decodePaymentOption(selectedReceivingValue);
+  const paymentLink = isOlistPaymentLink(selectedReceivingMethod?.name);
   const showInstallments = shouldShowPaymentInstallments(selectedReceivingMethod?.name);
 
   return (
@@ -1551,7 +1553,11 @@ function SalesOrderPaymentFields({
             name="salesOrderReceivingMethod"
             required
             value={selectedReceivingValue}
-            onChange={(event) => setSelectedReceivingValue(event.currentTarget.value)}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setSelectedReceivingValue(value);
+              if (isOlistPaymentLink(decodePaymentOption(value)?.name)) setSelectedPaymentValue("");
+            }}
           >
             <option value="">{receivingMethods.length ? "Selecione" : "Sincronize formas de recebimento"}</option>
             {receivingMethods.map((option) => (
@@ -1561,6 +1567,7 @@ function SalesOrderPaymentFields({
             ))}
           </select>
         </label>
+        {!paymentLink ? <>
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-zinc-300">Conta bancária</span>
           <select
@@ -1582,6 +1589,7 @@ function SalesOrderPaymentFields({
           <span className="block text-sm font-medium text-zinc-300">Meio</span>
           <span className="mt-1 block text-sm text-zinc-400">{selectedPaymentValue ? "Banco" : "Definido após selecionar a conta"}</span>
         </div>
+        </> : <p className="self-center text-xs text-zinc-400">Link de pagamento: sem conta bancária adicional.</p>}
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-zinc-300">Categoria</span>
           <select
@@ -2153,7 +2161,8 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
     const receivingMethod = decodePaymentOption(stringField(formData, "salesOrderReceivingMethod"));
     if (!receivingMethod) return { body: undefined };
 
-    const paymentMethod = decodePaymentOption(stringField(formData, "salesOrderPaymentMethod"));
+    const paymentMethod = isOlistPaymentLink(receivingMethod.name)
+      ? null : decodePaymentOption(stringField(formData, "salesOrderPaymentMethod"));
     if (requiresBankAccount(receivingMethod.name) && !paymentMethod) {
       return { error: "Selecione a conta bancária para esta forma de recebimento." };
     }
@@ -2231,6 +2240,7 @@ function shouldShowPaymentInstallments(name: string | null | undefined) {
 }
 
 function requiresBankAccount(name: string | null | undefined) {
+  if (isOlistPaymentLink(name)) return false;
   const normalized = normalizeText(name ?? "");
   return ["pix", "boleto", "deposito", "transferencia"].some((term) => normalized.includes(term));
 }

@@ -324,6 +324,14 @@ node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 - [x] Testes de domínio, UI e banco isolado; navegação/filtros verificados em desktop e celular.
 - [x] Sem nova migration ou variável de ambiente.
 
+### Olist: Link de pagamento sem conta adicional
+
+- [x] Omitir `meioPagamento` no pedido e nas parcelas para Link de pagamento, preservando valores, categoria e observações.
+- [x] Normalizar condições novas e já salvas; ocultar e limpar a conta adicional no painel e no modal de pedido.
+- [x] Validar testes de regressão, tipos, lint e build local: suíte com 360 testes aprovados e 16 integrações condicionais não executadas; mais 2 testes de persistência aprovados em execução direcionada.
+- [ ] Homologar o pedido no Olist após deploy, sem emitir cobranças automaticamente.
+- [x] Sem nova migration ou variável de ambiente.
+
 ### Extrato e fatura de cartão
 
 - [x] Importação de fatura Nubank em conta de cartão separada, com competência/vencimento confirmado.

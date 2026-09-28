@@ -152,6 +152,37 @@ describe("olist payloads", () => {
     expect(payload.observacoesInternas).toContain("Observação financeira: Pix em 2 parcelas");
   });
 
+  it.each(["Link de pagamento", "LINK DE PAGAMENTO OLIST", " Link  de pagamento - Pix "])("omits stale bank accounts for %s, including installments", (name) => {
+    const paymentTerm = {
+      id: "term-1", quote_id: "quote-1",
+      payment_method_external_id: "775384875", payment_method_name: "Olist Conta Digital",
+      receiving_method_external_id: "775384957", receiving_method_name: name,
+      category_external_id: "30", category_name: "Vendas",
+      installments_count: 2, notes: "Enviar comprovante",
+      installments: [
+        { installmentNumber: 1, amount: 135, days: 0, dueDate: "2026-09-28", notes: "Entrada",
+          paymentMethodExternalId: "775384875", paymentMethodName: "Olist Conta Digital",
+          receivingMethodExternalId: "775384957", receivingMethodName: name },
+        { installmentNumber: 2, amount: 135, days: 30, dueDate: "2026-10-28", notes: "Saldo" }
+      ]
+    };
+    const original = structuredClone(paymentTerm);
+    const payload = buildOlistSalesOrderPayload({ quote: quote(), items: [item()], paymentTerm });
+    expect(payload.pagamento).toMatchObject({
+      formaRecebimento: { id: 775384957 }, categoria: { id: 30 },
+      parcelas: [
+        { valor: 135, dias: 0, data: "2026-09-28", formaRecebimento: { id: 775384957 } },
+        { valor: 135, dias: 30, data: "2026-10-28", formaRecebimento: { id: 775384957 } }
+      ]
+    });
+    expect(JSON.stringify(payload.pagamento)).not.toContain("meioPagamento");
+    expect(JSON.stringify(payload.pagamento)).not.toContain("Conta bancária");
+    expect(JSON.stringify(payload.pagamento)).toContain("Entrada");
+    expect(JSON.stringify(payload.pagamento)).toContain("Saldo");
+    expect(payload.observacoes).toContain("Enviar comprovante");
+    expect(paymentTerm).toEqual(original);
+  });
+
   it("adds package dimensions and gross weight to sales order notes", () => {
     const payload = buildOlistSalesOrderPayload({ quote: quote(), items: [item()], shipment: shipment() });
 

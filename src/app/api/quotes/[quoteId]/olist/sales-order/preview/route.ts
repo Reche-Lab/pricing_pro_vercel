@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isOlistPaymentLink } from "@/lib/olist/payment-terms";
 import { getQuotePaymentTerm } from "@/repositories/olist-payment-options";
 import { listQuoteShipments, type ShipmentRow } from "@/repositories/shipments";
 import { buildOlistSalesOrderPayload, missingOlistSkus } from "@/services/olist/payloads";
@@ -101,7 +102,7 @@ export async function GET(_request: Request, context: { params: Promise<{ quoteI
 }
 
 function paymentNeedsBankAccount(receivingMethodName: string | null | undefined, bankAccountId: string | null | undefined) {
-  if (bankAccountId) return false;
+  if (bankAccountId || isOlistPaymentLink(receivingMethodName)) return false;
   const normalized = (receivingMethodName ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   return ["pix", "boleto", "deposito", "transferencia"].some((term) => normalized.includes(term));
 }

@@ -1,4 +1,5 @@
 import { withTenantContext } from "@/lib/db/client";
+import { isOlistPaymentLink, normalizeOlistPaymentTermInput, normalizeOlistPaymentTermRow } from "@/lib/olist/payment-terms";
 
 export type OlistPaymentOptionKind = "payment_method" | "receiving_method" | "category";
 
@@ -255,7 +256,7 @@ export async function getQuotePaymentTerm(
       [tenantId, term.id]
     );
 
-    return {
+    return normalizeOlistPaymentTermRow({
       ...term,
       installments: installmentsResult.rows.map((row) => ({
         installmentNumber: row.installment_number,
@@ -268,7 +269,7 @@ export async function getQuotePaymentTerm(
         receivingMethodExternalId: row.receiving_method_external_id,
         receivingMethodName: row.receiving_method_name
       }))
-    };
+    });
   });
 }
 
@@ -278,6 +279,7 @@ export async function upsertQuotePaymentTerm(
   quoteId: string,
   input: QuotePaymentTermInput
 ) {
+  input = normalizeOlistPaymentTermInput(input);
   return withTenantContext(userId, tenantId, async (client) => {
     const installments = normalizeInstallments(input);
     const termResult = await client.query<{ id: string }>(
@@ -351,8 +353,8 @@ export async function upsertQuotePaymentTerm(
           installment.days ?? null,
           installment.amount,
           clean(installment.notes),
-          clean(installment.paymentMethodExternalId ?? input.paymentMethodExternalId),
-          clean(installment.paymentMethodName ?? input.paymentMethodName),
+          isOlistPaymentLink(installment.receivingMethodName) ? null : clean(installment.paymentMethodExternalId ?? input.paymentMethodExternalId),
+          isOlistPaymentLink(installment.receivingMethodName) ? null : clean(installment.paymentMethodName ?? input.paymentMethodName),
           clean(installment.receivingMethodExternalId ?? input.receivingMethodExternalId),
           clean(installment.receivingMethodName ?? input.receivingMethodName)
         ]

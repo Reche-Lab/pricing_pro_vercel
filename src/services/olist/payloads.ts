@@ -4,6 +4,7 @@ import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 import type { ShipmentRow } from "@/repositories/shipments";
 import type { TenantMemberRow } from "@/repositories/users";
 import type { OlistSettings } from "./types";
+import { isOlistPaymentLink, normalizeOlistPaymentTermRow } from "@/lib/olist/payment-terms";
 
 export function buildOlistCustomerPayload(customer: CustomerRow, options?: { personType?: "F" | "J" | null }) {
   return compactObject({
@@ -217,6 +218,7 @@ function nativeOrderItem(item: QuoteItemRow) {
 
 function buildPaymentPayload(paymentTerm: QuotePaymentTermRow | null | undefined) {
   if (!paymentTerm) return null;
+  paymentTerm = normalizeOlistPaymentTermRow(paymentTerm);
   const formaRecebimentoId = numericId(paymentTerm.receiving_method_external_id);
   const meioPagamentoId = numericId(paymentTerm.payment_method_external_id);
   const categoriaId = numericId(paymentTerm.category_external_id);
@@ -230,7 +232,8 @@ function buildPaymentPayload(paymentTerm: QuotePaymentTermRow | null | undefined
       installment.paymentMethodName ? `Meio: Banco | Conta bancária: ${installment.paymentMethodName}` : null
     ].filter(Boolean).join(" | "),
     formaRecebimento: paymentObject(numericId(installment.receivingMethodExternalId) ?? formaRecebimentoId),
-    meioPagamento: paymentObject(numericId(installment.paymentMethodExternalId) ?? meioPagamentoId)
+    meioPagamento: isOlistPaymentLink(installment.receivingMethodName)
+      ? null : paymentObject(numericId(installment.paymentMethodExternalId) ?? meioPagamentoId)
   }));
 
   return compactObject({
