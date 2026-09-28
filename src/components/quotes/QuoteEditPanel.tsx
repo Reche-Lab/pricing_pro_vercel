@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { olistAwareFetch } from "@/lib/olist/browser-request";
-import { CheckCircle2, Edit3, History, ImagePlus, Lock, Plus, Save, Trash2, Upload, X } from "lucide-react";
+import { CheckCircle2, Edit3, History, ImagePlus, Loader2, Lock, Plus, Save, Trash2, X } from "lucide-react";
 import { calculateQuote, roundMoney } from "@/domain/pricing/pricing";
 import { isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
 import { calculateQuoteDiscount, quoteDiscountLabel, type QuoteDiscountType } from "@/domain/quotes/discount";
@@ -280,6 +280,7 @@ export function QuoteItemEditPanel({
   const [artworkMessage, setArtworkMessage] = useState("");
   const [removingArtworkId, setRemovingArtworkId] = useState<string | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
+  const artworkUploadInFlight = useRef(false);
 
   const blockedReason = editBlockedReason(quote);
   const original = draft ? items.find((item) => item.id === draft.id) ?? null : null;
@@ -292,7 +293,7 @@ export function QuoteItemEditPanel({
     : items;
 
   async function saveItem() {
-    if (!draft || blockedReason || state === "saving") return;
+    if (!draft || blockedReason || state === "saving" || artworkState === "saving" || artworkUploadInFlight.current) return;
     const manuallyOverriddenCurvePrice = changedPrice && priceDiffersFromCurve;
     const effectiveReason = manuallyOverriddenCurvePrice
       ? reason.trim()
@@ -314,7 +315,7 @@ export function QuoteItemEditPanel({
   }
 
   async function persistItems(payloadItems: Array<Omit<EditableItem, "id"> & { id?: string }>, changeReason: string, successMessage: string) {
-    if (blockedReason || state === "saving") return;
+    if (blockedReason || state === "saving" || artworkState === "saving" || artworkUploadInFlight.current) return;
     setState("saving");
     setMessage("");
     try {
@@ -355,78 +356,86 @@ export function QuoteItemEditPanel({
   }
 
   async function selectArtworkFile(file: File | null) {
+    if (!file || !draft || addingItem || blockedReason || state === "saving" || artworkState === "saving" || artworkUploadInFlight.current) return;
     setArtworkState("idle");
     setArtworkMessage("");
     setPendingArtwork(null);
-    if (!file) return;
     const allowedTypes = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp"]);
     if (!allowedTypes.has(file.type)) {
       setArtworkState("error");
       setArtworkMessage("Use uma imagem PNG, JPEG ou WebP.");
+      setFileInputKey((current) => current + 1);
       return;
     }
-    if (file.size > 3 * 1024 * 1024) {
+    if (file.size === 0 || file.size > 3 * 1024 * 1024) {
       setArtworkState("error");
-      setArtworkMessage("A imagem deve ter no máximo 3 MB.");
+      setArtworkMessage("A imagem não pode estar vazia e deve ter no máximo 3 MB.");
+      setFileInputKey((current) => current + 1);
       return;
     }
+    artworkUploadInFlight.current = true;
+    setArtworkState("saving");
+    setArtworkMessage("Enviando e salvando imagem...");
+    let fileRead = false;
     try {
       const dataUrl = await readFileAsDataUrl(file);
-      setPendingArtwork({
+      fileRead = true;
+      const artworkFile: ArtworkFilePayload = {
         fileName: file.name,
         mimeType: file.type as ArtworkFilePayload["mimeType"],
         fileSize: file.size,
         dataUrl
+      };
+      setPendingArtwork(artworkFile);
+      const response = await fetch(`/api/quotes/${quote.id}/items/${draft.id}/artworks`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ artworkName: draft.artworkName, artworkFile })
       });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) {
+        setArtworkState("error");
+        setArtworkMessage(typeof data?.error === "string" ? data.error : "Não foi possível incluir a imagem.");
+        return;
+      }
+      setArtworkState("success");
+      setArtworkMessage("Imagem salva no item e registrada no histórico.");
+      router.refresh();
     } catch {
       setArtworkState("error");
-      setArtworkMessage("Não foi possível ler esta imagem.");
+      setArtworkMessage(fileRead
+        ? "Não foi possível confirmar o envio. Confira as imagens do item antes de tentar novamente."
+        : "Não foi possível ler esta imagem.");
+    } finally {
+      artworkUploadInFlight.current = false;
+      setPendingArtwork(null);
+      setFileInputKey((current) => current + 1);
     }
-  }
-
-  async function addArtwork() {
-    if (!draft || !pendingArtwork || artworkState === "saving") return;
-    setArtworkState("saving");
-    setArtworkMessage("");
-    const response = await fetch(`/api/quotes/${quote.id}/items/${draft.id}/artworks`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        artworkName: draft.artworkName,
-        artworkFile: pendingArtwork
-      })
-    });
-    const data = await response.json().catch(() => null);
-    if (!response.ok || !data?.ok) {
-      setArtworkState("error");
-      setArtworkMessage(data?.error ?? "Não foi possível incluir a imagem.");
-      return;
-    }
-    setArtworkState("success");
-    setArtworkMessage("Imagem adicionada ao item e registrada no histórico.");
-    setPendingArtwork(null);
-    setFileInputKey((current) => current + 1);
-    router.refresh();
   }
 
   async function removeArtwork(artworkId: string) {
-    if (!draft || artworkState === "saving") return;
+    if (!draft || blockedReason || state === "saving" || artworkState === "saving" || artworkUploadInFlight.current) return;
     setArtworkState("saving");
     setArtworkMessage("");
-    const response = await fetch(
-      `/api/quotes/${quote.id}/items/${draft.id}/artworks?artworkId=${encodeURIComponent(artworkId)}`,
-      { method: "DELETE" }
-    );
-    const data = await response.json().catch(() => null);
-    if (!response.ok || !data?.ok) {
+    try {
+      const response = await fetch(
+        `/api/quotes/${quote.id}/items/${draft.id}/artworks?artworkId=${encodeURIComponent(artworkId)}`,
+        { method: "DELETE" }
+      );
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) {
+        setArtworkState("error");
+        setArtworkMessage(typeof data?.error === "string" ? data.error : "Não foi possível remover a imagem.");
+        return;
+      }
+      setArtworkState("success");
+      setArtworkMessage("Imagem removida e alteração registrada no histórico.");
+      setRemovingArtworkId(null);
+      router.refresh();
+    } catch {
       setArtworkState("error");
-      setArtworkMessage(data?.error ?? "Não foi possível remover a imagem.");
-      return;
+      setArtworkMessage("Não foi possível confirmar a remoção. Confira as imagens do item antes de tentar novamente.");
     }
-    setArtworkState("success");
-    setArtworkMessage("Imagem removida e alteração registrada no histórico.");
-    setRemovingArtworkId(null);
-    router.refresh();
   }
 
   return (
@@ -439,7 +448,7 @@ export function QuoteItemEditPanel({
         {blockedReason ? <Lock className="text-amber-300" size={17} /> : null}
         {!blockedReason ? <button
           className="focus-ring inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-cyan-400/30 px-3 text-sm text-cyan-200 hover:bg-cyan-400/10 disabled:opacity-50"
-          disabled={addingItem || state === "saving" || items.length >= 50 || !variants.length}
+          disabled={addingItem || state === "saving" || artworkState === "saving" || items.length >= 50 || !variants.length}
           onClick={() => {
             const variant = variants[0];
             const next: EditableItem = { id: crypto.randomUUID(), productVariantId: variant.id, quantity: 1, unitPrice: 0, artworkName: "" };
@@ -482,7 +491,7 @@ export function QuoteItemEditPanel({
                 </div>
                 <div className="flex shrink-0 gap-1">
                 <button
-                  disabled={state === "saving"}
+                  disabled={state === "saving" || artworkState === "saving"}
                   className="focus-ring inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-zinc-700 px-2 text-xs text-zinc-300 hover:bg-zinc-900"
                   type="button"
                   onClick={() => {
@@ -513,7 +522,7 @@ export function QuoteItemEditPanel({
                 {items.some(existing => existing.id === item.id) ? <button
                   aria-label={`Remover produto ${item.description}`}
                   title={items.length === 1 ? "Mantenha ao menos um produto no orçamento" : "Remover produto"}
-                  disabled={state === "saving" || items.length === 1}
+                  disabled={state === "saving" || artworkState === "saving" || items.length === 1}
                   className="focus-ring grid h-8 w-8 place-items-center rounded-md border border-rose-400/25 text-rose-300 hover:bg-rose-400/10 disabled:opacity-40"
                   type="button"
                   onClick={() => { setAddingItem(false); setEditingItemId(null); setDraft(null); setRemovingItem(item); resetMessage(); }}
@@ -584,7 +593,7 @@ export function QuoteItemEditPanel({
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   <button
                                     className="focus-ring h-8 rounded-md bg-rose-400 px-2 text-xs font-semibold text-zinc-950 hover:bg-rose-300 disabled:opacity-60"
-                                    disabled={artworkState === "saving"}
+                                    disabled={artworkState === "saving" || state === "saving"}
                                     onClick={() => removeArtwork(artwork.id)}
                                     type="button"
                                   >
@@ -601,6 +610,7 @@ export function QuoteItemEditPanel({
                               ) : (
                                 <button
                                   aria-label={`Remover ${artwork.file_name}`}
+                                  disabled={artworkState === "saving" || state === "saving"}
                                   className="focus-ring mt-2 inline-flex h-8 items-center gap-1 rounded-md border border-rose-400/25 px-2 text-xs text-rose-200 hover:bg-rose-400/10"
                                   onClick={() => setRemovingArtworkId(artwork.id)}
                                   type="button"
@@ -619,26 +629,18 @@ export function QuoteItemEditPanel({
                       </p>
                     )}
 
-                    <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                    <div className="mt-3">
                       <label className="block min-w-0">
                         <span className="mb-1 block text-xs font-medium text-zinc-400">Nova imagem</span>
                         <input
                           accept="image/png,image/jpeg,image/webp"
+                          disabled={artworkState === "saving" || state === "saving"}
                           className="focus-ring block h-10 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-300 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-800 file:px-3 file:py-1 file:text-xs file:font-medium file:text-zinc-200"
                           key={fileInputKey}
                           onChange={(event) => selectArtworkFile(event.currentTarget.files?.[0] ?? null)}
                           type="file"
                         />
                       </label>
-                      <button
-                        className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-cyan-300 px-3 text-sm font-semibold text-zinc-950 hover:bg-cyan-200 disabled:opacity-50"
-                        disabled={!pendingArtwork || artworkState === "saving"}
-                        onClick={addArtwork}
-                        type="button"
-                      >
-                        <Upload size={15} />
-                        {artworkState === "saving" ? "Enviando..." : "Adicionar imagem"}
-                      </button>
                     </div>
 
                     {pendingArtwork ? (
@@ -653,11 +655,13 @@ export function QuoteItemEditPanel({
                     ) : null}
 
                     {artworkMessage ? (
-                      <p className={`mt-3 rounded-md border px-3 py-2 text-xs ${
+                      <p role={artworkState === "error" ? "alert" : "status"} className={`mt-3 flex items-center gap-2 rounded-md border px-3 py-2 text-xs ${
                         artworkState === "error"
                           ? "border-rose-400/20 bg-rose-400/10 text-rose-100"
+                          : artworkState === "saving" ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-100"
                           : "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
                       }`}>
+                        {artworkState === "saving" ? <Loader2 className="shrink-0 animate-spin motion-reduce:animate-none" size={14} /> : null}
                         {artworkMessage}
                       </p>
                     ) : null}
@@ -700,7 +704,7 @@ export function QuoteItemEditPanel({
                       />
                     </label>
                   ) : null}
-                  <SaveFooter message="" state={state} onSave={saveItem} />
+                  <SaveFooter message="" state={state} disabled={artworkState === "saving"} onSave={saveItem} />
                 </div>
               ) : null}
             </div>
@@ -752,10 +756,12 @@ function formatBytes(value: number) {
 }
 
 function SaveFooter({
+  disabled = false,
   message,
   onSave,
   state
 }: {
+  disabled?: boolean;
   message: string;
   onSave: () => void;
   state: "idle" | "saving" | "success" | "error";
@@ -773,7 +779,7 @@ function SaveFooter({
       ) : <span />}
       <button
         className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:opacity-60"
-        disabled={state === "saving"}
+        disabled={disabled || state === "saving"}
         type="button"
         onClick={onSave}
       >

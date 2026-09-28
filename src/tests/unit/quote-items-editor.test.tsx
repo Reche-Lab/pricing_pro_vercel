@@ -1,5 +1,5 @@
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QuoteItemEditPanel, type QuoteEditPricingContext, type QuoteEditVariant } from "@/components/quotes/QuoteEditPanel";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
@@ -17,6 +17,77 @@ beforeEach(() => vi.stubGlobal("React", React));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe("quote products editor", () => {
+  it("prevents duplicate submissions and item switching while the image is being saved", async () => {
+    let complete!: (response: Response) => void;
+    const fetcher = vi.fn().mockImplementation(() => new Promise<Response>(resolve => { complete = resolve; }));
+    vi.stubGlobal("fetch", fetcher);
+    show([...items, { ...items[0], id: "item-two", description: "Espelho" }]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Editar" })[0]);
+    const input = screen.getByLabelText("Nova imagem");
+    const file = new File(["image"], "arte.png", { type: "image/png" });
+    fireEvent.change(input, { target: { files: [file] } });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+    expect(screen.getByRole("status")).toHaveTextContent("Enviando e salvando");
+    expect(screen.getAllByRole("button", { name: "Editar" }).every(button => button.hasAttribute("disabled"))).toBe(true);
+    expect(screen.getByRole("button", { name: "Adicionar produto" })).toBeDisabled();
+    await act(async () => complete(Response.json({ ok: true })));
+    expect(screen.getByRole("status")).toHaveTextContent("Imagem salva");
+    expect(screen.getByLabelText("Nova imagem")).toBeEnabled();
+  });
+
+  it("saves a selected image immediately without saving other item edits", async () => {
+    const fetcher = vi.fn().mockImplementation(async () => Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetcher);
+    show();
+    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    fireEvent.change(screen.getByLabelText("Qtd."), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText("Nova imagem"), { target: { files: [new File(["image"], "nova.webp", { type: "image/webp" })] } });
+    expect(screen.getByLabelText("Nova imagem")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Salvar alterações" })).toBeDisabled();
+    await screen.findByText("Imagem salva no item e registrada no histórico.");
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls[0][0]).toBe("/api/quotes/quote/items/item-one/artworks");
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({ artworkFile: { fileName: "nova.webp", mimeType: "image/webp" } });
+    expect(screen.queryByRole("button", { name: "Adicionar imagem" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Qtd.")).toHaveValue(10);
+    expect(screen.getByRole("button", { name: "Salvar alterações" })).toBeEnabled();
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it("keeps existing artwork and permits retrying the same file after a network failure", async () => {
+    const fetcher = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetcher);
+    show([{ ...items[0], artworks: [{ id: "art", file_name: "original.png", file_size: 5, data_url: "data:image/png;base64,aQ==" }] } as QuoteItemRow]);
+    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    const file = new File(["image"], "nova.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Nova imagem"), { target: { files: [file] } });
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Não foi possível confirmar o envio"));
+    expect(screen.getByText("original.png")).toBeVisible();
+    expect(screen.getByLabelText("Nova imagem")).toBeEnabled();
+    expect(refresh).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Nova imagem"), { target: { files: [file] } });
+    await screen.findByText("Imagem salva no item e registrada no histórico.");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows server refusal and rejects invalid images without submitting item changes", async () => {
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ ok: false, error: "Orçamento bloqueado." }, { status: 409 }));
+    vi.stubGlobal("fetch", fetcher);
+    show();
+    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    fireEvent.change(screen.getByLabelText("Nova imagem"), { target: { files: [new File(["pdf"], "arte.pdf", { type: "application/pdf" })] } });
+    expect(screen.getByRole("alert")).toHaveTextContent("PNG, JPEG ou WebP");
+    expect(fetcher).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Nova imagem"), { target: { files: [new File([new Uint8Array(3 * 1024 * 1024 + 1)], "grande.png", { type: "image/png" })] } });
+    expect(screen.getByRole("alert")).toHaveTextContent("3 MB");
+    expect(fetcher).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Nova imagem"), { target: { files: [new File(["image"], "arte.png", { type: "image/png" })] } });
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Orçamento bloqueado."));
+    expect(screen.getByLabelText("Nova imagem")).toBeEnabled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
   it("adds a product with curve pricing and preserves existing items", async () => {
     const fetcher = vi.fn().mockImplementation(async () => Response.json({ ok: true }));
     vi.stubGlobal("fetch", fetcher);

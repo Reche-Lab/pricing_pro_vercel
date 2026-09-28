@@ -159,6 +159,10 @@ Sem migration ou variável de ambiente nova. A URL cadastrada no Olist continua 
 
 ### Produção de artes
 
+- [x] Salvar automaticamente a imagem selecionada na edição de item, sem confirmação adicional e sem salvar outros campos pendentes.
+- [x] Indicar envio, sucesso e erro; impedir envios concorrentes e manter as imagens existentes em caso de falha.
+- [x] Validar regressões do upload automático, tipos e lint: 366 testes aprovados, 16 testes de integração condicionais não executados; sem nova migration.
+
 - [x] Cadastrar formato, dimensões, cantos e orientação de impressão por variante.
 - [x] Manter compatibilidade com produtos circulares antigos que possuem somente diâmetro.
 - [x] Preservar a imagem original e preparar uma versão recortada no formato do produto em PNG.
