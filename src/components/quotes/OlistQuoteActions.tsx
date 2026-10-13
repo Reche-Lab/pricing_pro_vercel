@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { olistAwareFetch, requestOlistReconnect, OLIST_CONNECTED_EVENT, OLIST_RECONNECT_EVENT } from "@/lib/olist/browser-request";
 import { isOlistReconnectRequired } from "@/lib/olist/oauth-errors";
 import { isOlistPaymentLink } from "@/lib/olist/payment-terms";
+import type { OlistCustomerLookupField } from "@/services/olist/customer-lookup";
 import type { ShipmentRow } from "@/repositories/shipments";
 import {
   CalendarPlus,
@@ -825,6 +826,7 @@ function ActionModal({
   }>;
 }) {
   const config = ACTIONS[action];
+  const [lookupPreferredField, setLookupPreferredField] = useState<OlistCustomerLookupField | undefined>();
   const [salesOrderPreview, setSalesOrderPreview] = useState<SalesOrderPreviewState>({
     loading: false,
     error: null,
@@ -1020,20 +1022,22 @@ function ActionModal({
               </InfoBox>
               <div className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
                 <p className="text-sm font-medium text-white">Valores que serão pesquisados</p>
+                <input type="hidden" name="lookupPreferredField" value={lookupPreferredField ?? ""} />
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Input label="CPF/CNPJ" name="lookupDocument" defaultValue={customerLookupDefaults.document} />
-                  <Input label="Telefone/celular" name="lookupPhone" defaultValue={customerLookupDefaults.phone} />
-                  <Input label="E-mail" name="lookupEmail" defaultValue={customerLookupDefaults.email} />
-                  <Input label="Código/local" name="lookupCodigo" defaultValue={customerLookupDefaults.codigo} />
+                  <Input label="CPF/CNPJ" name="lookupDocument" defaultValue={customerLookupDefaults.document} onChange={() => setLookupPreferredField("cpfCnpj")} />
+                  <Input label="Telefone/celular" name="lookupPhone" defaultValue={customerLookupDefaults.phone} onChange={() => setLookupPreferredField("celular")} />
+                  <Input label="E-mail" name="lookupEmail" defaultValue={customerLookupDefaults.email} onChange={() => setLookupPreferredField("email")} />
+                  <Input label="Código Olist" name="lookupCodigo" defaultValue="" onChange={() => setLookupPreferredField("codigo")} />
                 </div>
                 <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-                  <Input label="Nome para busca" name="lookupName" defaultValue={customerLookupDefaults.name} />
+                  <Input label="Nome para busca" name="lookupName" defaultValue={customerLookupDefaults.name} onChange={() => setLookupPreferredField("nome")} />
                   <button
                     className="focus-ring rounded-md border border-zinc-700 px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-950"
                     onClick={(event) => {
                       const form = event.currentTarget.form;
                       const input = form?.elements.namedItem("lookupName");
                       if (input instanceof HTMLInputElement) input.value = customerLookupDefaults.firstName || customerLookupDefaults.name;
+                      setLookupPreferredField("nome");
                     }}
                     type="button"
                   >
@@ -1044,7 +1048,7 @@ function ActionModal({
                   <label className="block">
                     <span className="mb-1 block text-sm font-medium text-zinc-300">Campo principal</span>
                     <select className="focus-ring w-full rounded-md border border-zinc-700 px-3 py-2" name="lookupMode" defaultValue="auto">
-                      <option value="auto">Automático: CPF/CNPJ, telefone, e-mail e nome</option>
+                      <option value="auto">Automático (campo alterado)</option>
                       <option value="nome">Nome</option>
                       <option value="cpfCnpj">CPF/CNPJ</option>
                       <option value="celular">Telefone/celular</option>
@@ -1064,7 +1068,7 @@ function ActionModal({
                   </label>
                 </div>
                 <p className="text-xs leading-5 text-zinc-500">
-                  No modo automático, o sistema prioriza CPF/CNPJ, depois telefone, e-mail, código e nome. A consulta usa apenas um campo principal para evitar filtros combinados demais.
+                  No modo automático, a busca usa o campo que você alterou, inclusive parte do nome. Sem alterações, prioriza CPF/CNPJ, telefone, e-mail e nome. Código Olist deve ser informado manualmente.
                 </p>
               </div>
             </div>
@@ -2063,13 +2067,15 @@ function Input({
   name,
   defaultValue,
   type = "text",
-  required = false
+  required = false,
+  onChange
 }: {
   label: string;
   name: string;
   defaultValue?: string;
   type?: string;
   required?: boolean;
+  onChange?: () => void;
 }) {
   return (
     <label className="block">
@@ -2080,6 +2086,7 @@ function Input({
         name={name}
         required={required}
         type={type}
+        onChange={onChange}
       />
     </label>
   );
@@ -2091,6 +2098,7 @@ function buildPayload(action: ActionKey, formData: FormData | undefined, default
     return {
       body: {
         mode,
+        preferredField: stringField(formData, "lookupPreferredField") || undefined,
         cpfCnpj: digits(stringField(formData, "lookupDocument")),
         celular: digits(stringField(formData, "lookupPhone")),
         email: stringField(formData, "lookupEmail"),

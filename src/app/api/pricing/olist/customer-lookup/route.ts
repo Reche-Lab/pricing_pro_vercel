@@ -11,6 +11,7 @@ import {
 import { OlistRequestError, olistRequest, refreshOlistToken } from "@/services/olist/olist";
 import { OLIST_DEFAULT_PATHS } from "@/services/olist/defaults";
 import type { OlistCredentials, OlistSettings } from "@/services/olist/types";
+import { buildOlistCustomerLookupPath, resolveOlistCustomerLookupCriteria } from "@/services/olist/customer-lookup";
 
 const lookupSchema = z.object({
   mode: z.enum(["auto", "nome", "cpfCnpj", "celular", "email", "codigo"]).optional().default("auto"),
@@ -21,8 +22,6 @@ const lookupSchema = z.object({
   email: z.string().trim().optional().default(""),
   codigo: z.string().trim().optional().default("")
 });
-
-type LookupMode = z.infer<typeof lookupSchema>["mode"];
 
 export async function POST(request: Request) {
   const debugId = randomUUID();
@@ -40,12 +39,12 @@ export async function POST(request: Request) {
 
   const settings = connection.settings as OlistSettings;
   const credentials = decryptIntegrationCredentials<OlistCredentials>(connection);
-  const criteria = resolveCriteria(parsed.data);
+  const criteria = resolveOlistCustomerLookupCriteria(parsed.data);
   if (!criteria.value) {
     return NextResponse.json({ ok: false, error: "Informe nome, CPF/CNPJ, telefone, e-mail ou código para buscar.", debugId }, { status: 400 });
   }
 
-  const path = buildLookupPath(settings.customer_lookup_path || settings.customer_path || OLIST_DEFAULT_PATHS.customerLookup, criteria);
+  const path = buildOlistCustomerLookupPath(settings.customer_lookup_path || settings.customer_path || OLIST_DEFAULT_PATHS.customerLookup, criteria);
   try {
     const result = await requestWithRefresh({
       userId: session.userId,
@@ -143,42 +142,6 @@ async function requestWithRefresh(input: {
   }
 }
 
-function resolveCriteria(input: z.infer<typeof lookupSchema>) {
-  const values = {
-    nome: input.nome || input.value,
-    cpfCnpj: digits(input.cpfCnpj || input.value),
-    celular: digits(input.celular || input.value),
-    email: input.email || input.value,
-    codigo: input.codigo || input.value
-  };
-  const mode = input.mode === "auto" ? autoMode(values) : input.mode;
-  const value = mode === "cpfCnpj"
-    ? values.cpfCnpj
-    : mode === "celular"
-      ? values.celular
-      : mode === "email"
-        ? values.email
-        : mode === "codigo"
-          ? values.codigo
-          : values.nome;
-  return { mode, value };
-}
-
-function autoMode(values: Record<Exclude<LookupMode, "auto">, string>) {
-  if (values.cpfCnpj.length === 11 || values.cpfCnpj.length === 14) return "cpfCnpj" as const;
-  if (values.celular.length >= 10) return "celular" as const;
-  if (values.email.includes("@")) return "email" as const;
-  return "nome" as const;
-}
-
-function buildLookupPath(path: string, criteria: { mode: Exclude<LookupMode, "auto">; value: string }) {
-  const params = new URLSearchParams();
-  params.set(criteria.mode, criteria.value);
-  params.set("limit", "5");
-  params.set("offset", "0");
-  return `${path}${path.includes("?") ? "&" : "?"}${params.toString()}`;
-}
-
 function normalizeOlistCustomer(record: unknown) {
   const data = record && typeof record === "object" ? record as Record<string, unknown> : {};
   const address = pickObject(data, ["endereco", "enderecoPrincipal", "address"]) ?? data;
@@ -237,10 +200,6 @@ function pickObject(record: Record<string, unknown>, keys: string[]) {
     if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
   }
   return null;
-}
-
-function digits(value: unknown) {
-  return typeof value === "string" || typeof value === "number" ? String(value).replace(/\D/g, "") : "";
 }
 
 function humanizeOlistError(message: string, status?: number) {

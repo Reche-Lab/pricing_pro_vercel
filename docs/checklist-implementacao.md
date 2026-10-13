@@ -2,6 +2,15 @@
 
 Status atualizado durante a refatoracao inicial.
 
+## Busca de Clientes Olist (2026-10-13)
+
+- [x] Compartilhar resolução de critérios e montagem do endpoint entre precificador e orçamento.
+- [x] Priorizar o campo alterado no modo automático, incluindo nome parcial e o atalho de primeiro nome, mesmo com CPF e telefone preenchidos.
+- [x] Manter os modos explícitos, a situação do contato e os critérios efetivamente enviados no retorno e no log.
+- [x] Remover o código local do preenchimento da busca por código Olist e evitar consultas sem critério ou com filtros antigos do endpoint.
+- [x] Validar regressões das duas APIs, interface e OAuth: 45 testes focados aprovados com respostas simuladas; tipos, lint e build de produção aprovados em sequência com memória limitada.
+- [x] Sem migration ou variável de ambiente nova.
+
 ## Reconexão Olist Nos Orçamentos (2026-09-24)
 
 - [x] Centralizar identificação de autenticação expirada/revogada, incluindo `invalid_grant` e HTTP 401 do Olist, sem confundir sessão local expirada, validação ou permissão 403.
