@@ -4,6 +4,8 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useId,
+  useRef,
   useState,
   type CSSProperties,
   type FormEvent,
@@ -23,6 +25,11 @@ import {
   Moon,
   Sun,
   RefreshCw,
+  CheckCircle2,
+  ChevronDown,
+  ImagePlus,
+  Loader2,
+  X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import type {
@@ -42,6 +49,7 @@ import { StorePriceBreakdown } from "./StorePriceBreakdown";
 import { StoreDeliveryInquiry } from "./StoreDeliveryInquiry";
 import { useStoreTheme, accentForeground } from "./use-store-theme";
 import { useCommercePreview } from "./CommercePreviewProvider";
+import type { StoreArtwork } from "./StoreArtworkTools";
 const ArtworkTools = dynamic(
   () => import("./StoreArtworkTools").then((m) => m.StoreArtworkTools),
   { ssr: false },
@@ -96,14 +104,16 @@ export function Storefront({
       void refreshOrders().catch((e) => setError(e.message));
   }, [view, cart?.customer?.id, refreshOrders, cart?.customer]);
   async function action(work: () => Promise<void>) {
-    if (busy) return;
+    if (busy) return false;
     setBusy(true);
     setError("");
     setMessage("");
     try {
       await work();
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível concluir.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -299,15 +309,16 @@ export function Storefront({
           <ProductDetail
             key={selectedProduct.id}
             product={selectedProduct}
+            slug={slug}
+            preview={preview}
+            artworks={cart?.artworks ?? []}
+            onArtworkRefresh={refresh}
             base={base}
             api={api}
             disabled={busy || !cart || paused}
             onAdd={(lines) =>
               action(async () => {
                 await update([...(cart?.lines ?? []), ...lines]);
-                setMessage(
-                  "Produtos adicionados. Suas artes podem ser preparadas no carrinho.",
-                );
               })
             }
           />
@@ -516,8 +527,8 @@ export function Storefront({
                 settings={settings}
                 base={base}
                 disabled={busy || paused}
-                onSubmit={(input) =>
-                  action(async () => {
+                onSubmit={async (input) => {
+                  await action(async () => {
                     const result = await storeRequest(
                       `${api}/orders`,
                       "POST",
@@ -525,8 +536,8 @@ export function Storefront({
                     );
                     await refresh();
                     router.push(`${base}/pedidos/${result.id}`);
-                  })
-                }
+                  });
+                }}
               />
             )}
           </>
@@ -544,17 +555,17 @@ export function Storefront({
                   order={order}
                   instructions={cart.payments.manual_instructions}
                   busy={busy}
-                  onRefresh={() => action(refreshOrders)}
-                  onPay={() =>
-                    action(async () => {
+                  onRefresh={async () => { await action(refreshOrders); }}
+                  onPay={async () => {
+                    await action(async () => {
                       const result = await storeRequest(
                         `${api}/payment`,
                         "POST",
                         { orderId: order.id },
                       );
                       window.location.assign(result.url);
-                    })
-                  }
+                    });
+                  }}
                 />
               ) : (
                 <p>Carregando pedido ou pedido não encontrado nesta conta.</p>
@@ -715,19 +726,35 @@ function Catalog({
 }
 function ProductDetail({
   product,
+  slug,
+  preview,
+  artworks,
+  onArtworkRefresh,
   base,
   api,
   disabled,
   onAdd,
 }: {
   product: Product;
+  slug: string;
+  preview: boolean;
+  artworks: StoreArtwork[];
+  onArtworkRefresh: () => Promise<void>;
   base: string;
   api: string;
   disabled: boolean;
-  onAdd: (lines: CartLine[]) => Promise<void>;
+  onAdd: (lines: CartLine[]) => Promise<boolean>;
 }) {
   const [quantity, setQuantity] = useState(String(product.minQuantity));
   const [groups, setGroups] = useState("1");
+  const [draftArtworks, setDraftArtworks] = useState<Record<number, string>>({});
+  const [artworksOpen, setArtworksOpen] = useState(false);
+  const [uploadingGroups, setUploadingGroups] = useState<Set<number>>(new Set());
+  const [adding, setAdding] = useState(false);
+  const addingRef = useRef(false);
+  const [confirmation, setConfirmation] = useState<{ quantity: number; groups: number; artworks: number } | null>(null);
+  const artworkPanelId = useId();
+  const artworkBusy = uploadingGroups.size > 0;
   const [priced, setPrice] = useState<{ lines: CartLine[]; calculation: {
     totalCents: number;
     items: { unitCents: number; quantity?: number; artworkName?: string }[];
@@ -737,20 +764,39 @@ function ProductDetail({
     try {
       return distributeQuantity(
         Number(quantity),
-        product.personalized ? Number(groups) : 1,
+        product.personalized ? Number(groups || "1") : 1,
       ).map((q, i) => ({
         id: crypto.randomUUID(),
         productId: product.id,
         quantity: q,
         artworkName: product.personalized ? `Arte ${i + 1}` : "",
-        artworkId: null,
+        artworkId: product.personalized ? draftArtworks[i] ?? null : null,
       }));
     } catch {
       return [];
     }
-  }, [quantity, groups, product.id, product.personalized]);
+  }, [quantity, groups, product.id, product.personalized, draftArtworks]);
+  const attachedCount = lines.filter(line => line.artworkId).length;
   const price = priced?.lines === lines ? priced.calculation : null;
   const deliveryIssue = commerceSelectionError(lines, product);
+  async function addToCart() {
+    if (disabled || !price || deliveryIssue || artworkBusy || addingRef.current) return;
+    addingRef.current = true;
+    setAdding(true);
+    setConfirmation(null);
+    try {
+      const added = await onAdd(lines);
+      if (!added) return;
+      setConfirmation({ quantity: lines.reduce((sum, line) => sum + line.quantity, 0), groups: lines.length, artworks: attachedCount });
+      setQuantity("");
+      setGroups("");
+      setDraftArtworks({});
+      setArtworksOpen(false);
+    } finally {
+      addingRef.current = false;
+      setAdding(false);
+    }
+  }
   useEffect(() => {
     let active = true;
     setPrice(null);
@@ -797,6 +843,8 @@ function ProductDetail({
               Quantidade de produtos
               <input
                 inputMode="numeric"
+                placeholder={String(product.minQuantity)}
+                disabled={adding || artworkBusy}
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
               />
@@ -806,6 +854,8 @@ function ProductDetail({
                 Quantidade de artes
                 <input
                   inputMode="numeric"
+                  placeholder="1"
+                  disabled={adding || artworkBusy}
                   value={groups}
                   onChange={(e) => setGroups(e.target.value)}
                 />
@@ -840,23 +890,68 @@ function ProductDetail({
               {error}
             </p>
           ) : null}
+          {product.personalized ? (
+            <section className={styles.productPersonalization}>
+              <button type="button" className={styles.personalizationToggle}
+                disabled={artworkBusy || adding}
+                aria-expanded={artworksOpen} aria-controls={artworkPanelId}
+                onClick={() => setArtworksOpen(open => !open)}>
+                <ImagePlus size={21} aria-hidden="true" />
+                <span><strong>{attachedCount ? "Suas artes" : "Adicionar sua arte"}</strong>
+                  <small>{attachedCount ? `${attachedCount} de ${lines.length} ${lines.length === 1 ? "arte anexada" : "artes anexadas"}` : "Opcional · envie agora ou no carrinho"}</small>
+                </span>
+                <ChevronDown size={18} className={artworksOpen ? styles.chevronOpen : undefined} aria-hidden="true" />
+              </button>
+              {artworksOpen ? <div id={artworkPanelId} className={styles.personalizationContent}>
+                <p className={styles.muted}>PNG, JPEG ou WebP de até 3 MB por arte.</p>
+                {lines.length && !deliveryIssue ? lines.map((line, index) => (
+                  <div className={styles.productArtworkGroup} key={index}>
+                    <div className={styles.artworkGroupHeading}><strong>{line.artworkName}</strong><span>{line.quantity} un.</span></div>
+                    <ArtworkTools slug={slug} product={product} preview={preview}
+                      uploadLabel={`Enviar ${line.artworkName.toLowerCase()}`}
+                      artwork={artworks.find(art => art.id === line.artworkId)}
+                      artworks={artworks.filter(art => art.product_id === product.id)}
+                      disabled={disabled || adding}
+                      onBusyChange={busy => setUploadingGroups(current => {
+                        const next = new Set(current);
+                        if (busy) next.add(index); else next.delete(index);
+                        return next;
+                      })}
+                      onRefresh={onArtworkRefresh}
+                      onSelect={async id => setDraftArtworks(current => ({ ...current, [index]: id }))}
+                    />
+                  </div>
+                )) : <p className={styles.muted}>Informe a quantidade de produtos para anexar sua arte.</p>}
+              </div> : null}
+            </section>
+          ) : null}
           <button
             className={`${styles.primary} w-full`}
-            disabled={disabled || !price}
-            onClick={() => void onAdd(lines)}
+            disabled={disabled || !price || Boolean(deliveryIssue) || artworkBusy || adding}
+            onClick={() => void addToCart()}
           >
-            <ShoppingBag size={18} />
-            Adicionar ao carrinho
+            {adding || artworkBusy ? <Loader2 className="animate-spin motion-reduce:animate-none" size={18} /> : <ShoppingBag size={18} />}
+            {adding ? "Adicionando..." : artworkBusy ? "Salvando sua arte..." : "Adicionar ao carrinho"}
           </button>
           {product.personalized ? (
             <p className="mt-3 text-sm text-zinc-500">
-              No carrinho, envie, ajuste e aprove a imagem de cada arte antes de
-              concluir.
+              O enquadramento e a aprovação de cada arte podem ser concluídos no carrinho.
             </p>
           ) : null}
-          <StoreDeliveryInquiry api={api} lines={lines} disabled={Boolean(deliveryIssue)} disabledReason={deliveryIssue ?? undefined} />
+          {quantity.trim() ? <StoreDeliveryInquiry api={api} lines={lines} disabled={Boolean(deliveryIssue)} disabledReason={deliveryIssue ?? undefined} /> : null}
         </section>
       </div>
+      {confirmation ? <aside className={styles.cartConfirmation} aria-label="Confirmação do carrinho">
+        <button type="button" className={styles.confirmationClose} title="Fechar confirmação" aria-label="Fechar confirmação" onClick={() => setConfirmation(null)}><X size={18} /></button>
+        <img className={styles.confirmationImage} src={product.imageUrl} alt="" width={64} height={64} />
+        <div role="status" aria-live="polite" className={styles.confirmationMessage}>
+          <span className={styles.confirmationHeading}><CheckCircle2 size={20} aria-hidden="true" />Produto adicionado ao carrinho</span>
+          <strong>{product.name}</strong>
+          <p>{confirmation.quantity.toLocaleString("pt-BR")} {confirmation.quantity === 1 ? "unidade" : "unidades"}{product.personalized ? ` · ${confirmation.groups} ${confirmation.groups === 1 ? "arte" : "artes"}` : ""}</p>
+          {confirmation.artworks ? <small>{confirmation.artworks} {confirmation.artworks === 1 ? "arte já anexada" : "artes já anexadas"}</small> : null}
+        </div>
+        <Link href={`${base}/carrinho`} className={`${styles.primary} ${styles.confirmationLink}`}>Ver carrinho<ArrowRight size={17} /></Link>
+      </aside> : null}
     </>
   );
 }

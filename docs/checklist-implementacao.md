@@ -2,6 +2,15 @@
 
 Status atualizado durante a refatoracao inicial.
 
+## Personalização Na Página Do Produto (2026-10-13)
+
+- [x] Seção opcional e recolhível para enviar, selecionar, enquadrar e aprovar uma arte por grupo antes de adicionar ao carrinho.
+- [x] Vincular os IDs das artes aos itens, preservando sessão/tenant e isolamento da prévia temporária.
+- [x] Confirmação visual com produto, quantidades, artes anexadas, atalho para o carrinho e movimento reduzido.
+- [x] Limpar quantidades e seleção de artes somente após confirmação; impedir inclusão durante upload ou envio concorrente.
+- [x] Verificar regressões do carrinho e personalização: 20 testes focados aprovados com respostas simuladas; tipos, lint e build aprovados. Revisão visual dos componentes reais com dados fictícios em 1440 px e 390 px, temas claro/escuro, sem rolagem horizontal ou sobreposição da confirmação.
+- [x] Sem migration ou variável de ambiente nova.
+
 ## Busca de Clientes Olist (2026-10-13)
 
 - [x] Compartilhar resolução de critérios e montagem do endpoint entre precificador e orçamento.

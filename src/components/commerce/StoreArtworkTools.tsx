@@ -1,6 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ArtworkStudioAsset } from "../quotes/artwork-studio-types";
 import { Check, Crop, Paintbrush, Upload } from "lucide-react";
 import type { publicCommerceProduct } from "@/repositories/commerce";
@@ -31,6 +31,9 @@ export function StoreArtworkTools({
   onSelect,
   onRefresh,
   preview = false,
+  disabled = false,
+  onBusyChange,
+  uploadLabel = "Enviar arte",
 }: {
   slug: string;
   product: ReturnType<typeof publicCommerceProduct>;
@@ -39,12 +42,21 @@ export function StoreArtworkTools({
   onSelect: (id: string) => Promise<void>;
   onRefresh: () => Promise<void>;
   preview?: boolean;
+  disabled?: boolean;
+  onBusyChange?: (busy: boolean) => void;
+  uploadLabel?: string;
 }) {
   const simulation = useCommercePreview();
   const [editor, setEditor] = useState<"crop" | "retouch" | "review" | null>(
     null,
   );
   const [busy, setBusy] = useState(false);
+  const working = useRef(false);
+  function setWorking(value: boolean) {
+    working.current = value;
+    setBusy(value);
+    onBusyChange?.(value);
+  }
   const [error, setError] = useState("");
   const base = `/api/store/${slug}/artworks`;
   const temporaryArt = preview
@@ -95,11 +107,12 @@ export function StoreArtworkTools({
     return result.artwork.id as string;
   }
   async function upload(file?: File) {
-    if (!file) return;
-    setBusy(true);
+    if (!file || disabled || working.current) return;
+    setWorking(true);
     setError("");
     try {
-      if (file.size > 3145728) throw new Error("Envie uma imagem de até 3 MB.");
+      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) throw new Error("Use uma imagem PNG, JPEG ou WebP.");
+      if (file.size === 0 || file.size > 3145728) throw new Error("Envie uma imagem de até 3 MB, que não esteja vazia.");
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result));
@@ -116,20 +129,20 @@ export function StoreArtworkTools({
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha no envio.");
     } finally {
-      setBusy(false);
+      setWorking(false);
     }
   }
   return (
     <div className="mt-3 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-sm">
+        <label className={`inline-flex items-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-sm ${busy || disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}>
           <Upload size={15} />
-          {busy ? "Enviando…" : "Enviar arte"}
+          {busy ? "Enviando…" : uploadLabel}
           <input
             className="sr-only"
             type="file"
             accept="image/png,image/jpeg,image/webp"
-            disabled={busy}
+            disabled={busy || disabled}
             onChange={(event) => {
               void upload(event.target.files?.[0]);
               event.target.value = "";
@@ -141,11 +154,15 @@ export function StoreArtworkTools({
             aria-label="Versão da arte"
             className="min-w-0 max-w-full rounded-md border border-zinc-300 p-2 text-sm"
             value={artwork?.id ?? ""}
+            disabled={busy || disabled}
             onChange={(event) => {
+              const id = event.target.value;
+              if (working.current || disabled) return;
+              setWorking(true);
               setError("");
-              void onSelect(event.target.value).catch((e) =>
+              void onSelect(id).catch((e) =>
                 setError(e.message),
-              );
+              ).finally(() => setWorking(false));
             }}
           >
             <option value="" disabled>
@@ -177,6 +194,7 @@ export function StoreArtworkTools({
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
+              disabled={busy || disabled}
               className="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-3 py-2 text-sm"
               onClick={() => setEditor("retouch")}
             >
@@ -185,6 +203,7 @@ export function StoreArtworkTools({
             </button>
             <button
               type="button"
+              disabled={busy || disabled}
               className="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-3 py-2 text-sm"
               onClick={() => setEditor("crop")}
             >
@@ -193,7 +212,7 @@ export function StoreArtworkTools({
             </button>
             <button
               type="button"
-              disabled={busy || !artwork.crop || Boolean(artwork.approved_at)}
+              disabled={busy || disabled || !artwork.crop || Boolean(artwork.approved_at)}
               className="inline-flex items-center gap-1 rounded-md border border-emerald-600 px-3 py-2 text-sm text-emerald-800 disabled:opacity-50"
               onClick={() => setEditor("review")}
             >
