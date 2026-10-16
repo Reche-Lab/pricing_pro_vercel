@@ -2,6 +2,15 @@
 
 Status atualizado durante a refatoracao inicial.
 
+## Nitidez Do Guia SVG (2026-10-16)
+
+- [x] Revisar o arquivo exportado: contornos vetoriais reais, mas traços finos e tracejados curtos.
+- [x] Escrever regressões para linhas contínuas por padrão, tracejado opcional e preservação das dimensões físicas.
+- [x] Linhas contínuas de 0,3 mm por padrão, precisão geométrica e extremidades suaves; tracejado opcional com segmentos maiores, sincronizado com a prévia.
+- [x] 35 testes focados aprovados; tipos e lint aprovados. SVG baixado conferido em tamanho real e ampliado no Chrome; prévia conferida em 1280 px e 360 px nos temas claro/escuro, sem transbordamento e com troca de estilo funcionando.
+- [x] Build de produção aprovado com memória limitada e sem servidor de desenvolvimento concorrente.
+- [x] Sem migration ou variável nova. Após publicar a atualização, baixar o guia novamente; arquivos já baixados não são alterados.
+
 ## Guia SVG Do Produto (2026-10-16)
 
 - [x] Download na página de produto personalizado, inclusive no preview, independente de upload, quantidade ou carrinho.

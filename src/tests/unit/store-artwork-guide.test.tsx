@@ -12,6 +12,22 @@ function downloadedSvg() {
 }
 
 describe("store artwork guide", () => {
+  it("keeps preview and download continuous by default and switches both to optional dashes", () => {
+    const view = render(<StoreArtworkGuide productName="Botton" geometry={geometry} margins={{ safeMarginMm: 1.5, bleedMm: 2 }} />);
+    fireEvent.click(screen.getByText("Ver marcações e medidas"));
+    const toggle = screen.getByRole("checkbox", { name: "Linhas tracejadas" });
+    expect(toggle).not.toBeChecked();
+    expect(downloadedSvg().querySelector("[stroke-dasharray]")).toBeNull();
+    expect(view.container.querySelector("svg[role='img'] [stroke-dasharray]")).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle).toBeChecked();
+    expect(downloadedSvg().querySelectorAll("[stroke-dasharray]")).toHaveLength(2);
+    expect(view.container.querySelectorAll("svg[role='img'] [stroke-dasharray]")).toHaveLength(2);
+    expect(downloadedSvg().documentElement.getAttribute("width")).toBe("60mm");
+    fireEvent.click(toggle);
+    expect(downloadedSvg().querySelector("[stroke-dasharray]")).toBeNull();
+  });
+
   it("offers a true-size download and a collapsible preview independent of the cart or quantity", () => {
     const view = render(<StoreArtworkGuide productName="Botton" geometry={geometry} margins={{ safeMarginMm: 1.5, bleedMm: 2 }} />);
     expect(screen.getByRole("link", { name: "Baixar guia SVG" })).toHaveAttribute("download", "guia-botton-60x60mm.svg");

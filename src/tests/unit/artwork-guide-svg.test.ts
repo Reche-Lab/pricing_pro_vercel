@@ -6,6 +6,32 @@ const circle: PrintGeometry = { shape: "circle", widthMm: 53, heightMm: 53, corn
 const parse = (svg: string) => new DOMParser().parseFromString(svg, "image/svg+xml");
 
 describe("downloadable product artwork guide", () => {
+  it("uses continuous vector curves with precision rendering and a legible physical stroke by default", () => {
+    const result = createArtworkGuideSvg({ productName: "Botton", geometry: circle, margins: { safeMarginMm: 1.5, bleedMm: 2 } });
+    const doc = parse(result.svg);
+    expect(doc.documentElement.getAttribute("shape-rendering")).toBe("geometricPrecision");
+    for (const path of doc.querySelectorAll("path")) {
+      expect(path.getAttribute("stroke-width")).toBe("0.3");
+      expect(path.getAttribute("stroke-linecap")).toBe("round");
+      expect(path.getAttribute("stroke-linejoin")).toBe("round");
+      expect(path.hasAttribute("stroke-dasharray")).toBe(false);
+      expect(path.getAttribute("d")?.match(/A/g)).toHaveLength(2);
+    }
+  });
+
+  it("offers longer optional dashes without changing the physical geometry", () => {
+    const input = { productName: "Botton", geometry: circle, margins: { safeMarginMm: 1.5, bleedMm: 2 } };
+    const solid = createArtworkGuideSvg(input);
+    const dashed = createArtworkGuideSvg({ ...input, dashed: true });
+    const doc = parse(dashed.svg);
+    expect(doc.querySelector("#guia-safe path")?.getAttribute("stroke-dasharray")).toBe("3 1.5");
+    expect(doc.querySelector("#guia-bleed path")?.getAttribute("stroke-dasharray")).toBe("6 2");
+    expect(doc.querySelector("#guia-cut path")?.hasAttribute("stroke-dasharray")).toBe(false);
+    expect(dashed.layout).toEqual(solid.layout);
+    expect(dashed.dimensions).toEqual(solid.dimensions);
+    expect(doc.documentElement.getAttribute("viewBox")).toBe("0 0 60 60");
+  });
+
   it("exports absolute physical sizes with a transparent canvas and three named layers", () => {
     const result = createArtworkGuideSvg({ productName: "Botton - 5,5 cm", geometry: circle, margins: { safeMarginMm: 1.5, bleedMm: 2 } });
     const doc = parse(result.svg);

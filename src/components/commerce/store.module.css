@@ -73,6 +73,8 @@
 .artworkGuideDetails summary::-webkit-details-marker { display: none; }
 .artworkGuideDetails summary:focus-visible { outline: 3px solid #0d98b0; outline-offset: 3px; }
 .artworkGuideDetails[open] summary svg { transform: rotate(180deg); }
+.artworkGuideLineStyle { display: flex; align-items: center; gap: 8px; width: fit-content; min-height: 40px; margin-top: 8px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.artworkGuideLineStyle input { width: 16px; height: 16px; margin: 0; accent-color: var(--highlight); flex-shrink: 0; }
 .artworkGuideContent { display: grid; grid-template-columns: minmax(0, 140px) minmax(0, 1fr); align-items: center; gap: 16px; margin-top: 16px; }
 .artworkGuideContent > svg { display: block; width: 100%; height: 160px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); }
 .artworkGuideContent dl { display: grid; gap: 12px; min-width: 0; }
