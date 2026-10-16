@@ -155,6 +155,7 @@ export function ArtworkGuidedStudio({
           artworkName={asset.name}
           fileName={asset.fileName}
           imageUrl={asset.sourceUrl}
+          initialCrop={asset.crop}
           geometry={asset.geometry}
           {...asset.margins}
           draftUrl={asset.draftUrl}
@@ -169,7 +170,7 @@ export function ArtworkGuidedStudio({
           onClose={onClose}
           onSave={async (file) => {
             const next = await onRetouch(asset, file);
-            // Retouch exports an extended canvas: previous crop coordinates cannot be reused safely.
+            // The exported image already includes its base framing; applying it again would shift the art.
             pendingRetouch.current = {
               ...next,
               approved: false,

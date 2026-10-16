@@ -50,6 +50,9 @@ describe("artwork retouch", () => {
     };
     expect(retouchDraftSchema.safeParse(draft).success).toBe(true);
     expect(retouchDraftSchema.safeParse({ ...draft, adjustments: { ...draft.adjustments, sharpness: 999 } }).success).toBe(false);
+    const sourceCrop = { scale: 0.8, offsetX: 0.3, offsetY: -0.2, rotationDegrees: 25 };
+    expect(retouchDraftSchema.parse({ ...draft, sourceCrop }).sourceCrop).toEqual(sourceCrop);
+    expect(retouchDraftSchema.safeParse({ ...draft, sourceCrop: { ...sourceCrop, scale: Infinity } }).success).toBe(false);
   });
 
   it("creates proportional hollow circles and squares in every drag direction", () => {

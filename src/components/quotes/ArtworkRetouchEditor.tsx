@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, type PointerE
 import { useArtworkExitGuard } from "./useArtworkExitGuard";
 import {
   ArrowDown, ArrowLeft, ArrowUp, BringToFront, Brush, Check, Circle, Crop, Eraser, Eye, EyeOff, Grab, Group, Layers3, Loader2, Merge, MousePointer2, PaintBucket, Pipette, Plus,
-  RectangleHorizontal, Redo2, RotateCcw, Save, Shapes, SlidersHorizontal, Square, Trash2, Triangle,
+  Maximize2, Minimize2, Scan, RectangleHorizontal, Redo2, RotateCcw, Save, Shapes, SlidersHorizontal, Square, Trash2, Triangle,
   Undo2, Ungroup, SendToBack, X, ZoomIn, ZoomOut
 } from "lucide-react";
 import { calculatePrintGuideDimensions, createPrintGuideLayout, geometryLabel, type PrintGeometry } from "@/domain/artwork/geometry";
@@ -41,6 +41,9 @@ import {
 import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 import { extendArtworkEdges, requiredArtworkEdgePadding } from "@/domain/artwork/edge-extension";
 import type { RetouchStage } from "@/domain/artwork/retouch";
+import { framedArtworkSize, type ArtworkFrame } from "@/domain/artwork/framing";
+import { drawArtworkFrame } from "./artwork-frame-canvas";
+import { useArtworkViewport } from "./useArtworkViewport";
 
 type Tool = "brush" | "eyedropper" | "eraser" | "fill" | "shape" | "select" | "compose" | "pan";
 type Workspace = { width: number; height: number; sourceWidth: number; sourceHeight: number; offsetX: number; offsetY: number };
@@ -58,11 +61,12 @@ const MAX_WORKSPACE_PIXELS = 30_000_000;
 export type RetouchedArtworkFile = { fileName: string; mimeType: "image/webp"; fileSize: number; dataUrl: string };
 
 export function ArtworkRetouchEditor({
-  artworkName, fileName, imageUrl, geometry, bleedMm = 2, safeMarginMm = 2, draftUrl, onClose, onSave, navigation, onContinue
+  artworkName, fileName, imageUrl, initialCrop, geometry, bleedMm = 2, safeMarginMm = 2, draftUrl, onClose, onSave, navigation, onContinue
 }: {
   artworkName: string;
   fileName: string;
   imageUrl: string;
+  initialCrop?: ArtworkFrame;
   geometry?: PrintGeometry | null;
   bleedMm?: number;
   safeMarginMm?: number;
@@ -74,7 +78,7 @@ export function ArtworkRetouchEditor({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
-  const sourceRef = useRef<ImageBitmap | null>(null);
+  const sourceRef = useRef<ImageBitmap | HTMLCanvasElement | null>(null);
   const baseCache = useRef<{ stages: RetouchStage[]; workspace: Workspace; source: ImageBitmap | HTMLCanvasElement; area: Workspace } | null>(null);
   const adjustedSourceRef = useRef<HTMLCanvasElement | null>(null);
   const compositionReady = useRef(false);
@@ -103,6 +107,9 @@ export function ArtworkRetouchEditor({
   const [shapeCreationArmed, setShapeCreationArmed] = useState(true);
   const [groupSelection, setGroupSelection] = useState<number[]>([]);
   const [zoom, setZoom] = useState(1);
+  const [expanded, setExpanded] = useState(false);
+  const [draftReady, setDraftReady] = useState(!draftUrl);
+  const [sourceCrop, setSourceCrop] = useState<ArtworkFrame | null>(initialCrop ?? null);
   const [operations, setOperations] = useState<RetouchOperation[]>([]);
   const [stages, setStages] = useState<RetouchStage[]>([]);
   const [baseDimensions, setBaseDimensions] = useState<{ width: number; height: number } | null>(null);
@@ -120,6 +127,14 @@ export function ArtworkRetouchEditor({
   const [error, setError] = useState("");
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [cursor, setCursor] = useState<{ x: number; y: number; size: number } | null>(null);
+  const { available, fitted } = useArtworkViewport(viewportRef, workspace?.width ?? 1, workspace?.height ?? 1);
+  const displayWidth = fitted.width * zoom;
+  const displayHeight = fitted.height * zoom;
+
+  function fitToView() {
+    setZoom(1);
+    viewportRef.current?.scrollTo?.({ left: 0, top: 0 });
+  }
 
   const visibleOperations = useMemo(() => pendingFill ? [...operations, pendingFill] : operations, [operations, pendingFill]);
   const hasAdjustments = !sameAdjustments(adjustments, DEFAULT_RETOUCH_ADJUSTMENTS);
@@ -170,6 +185,7 @@ export function ArtworkRetouchEditor({
   }, [workspace]);
 
   useEffect(() => {
+    if (!draftReady) return;
     let active = true;
     let bitmap: ImageBitmap | null = null;
     setLoading(true); setError("");
@@ -185,15 +201,30 @@ export function ArtworkRetouchEditor({
           sangriaIncrementMm: safeMarginMm,
           cutIncrementMm: bleedMm
         }) : null;
-        const area = createRetouchWorkspace(loaded.width, loaded.height, dimensions ? dimensions.cutWidthMm / dimensions.cutHeightMm : null);
+        const aspect = dimensions ? dimensions.cutWidthMm / dimensions.cutHeightMm : loaded.width / loaded.height;
+        let area: Workspace;
+        let source: ImageBitmap | HTMLCanvasElement = loaded;
+        if (sourceCrop && geometry) {
+          const size = framedArtworkSize(loaded.width, loaded.height, aspect);
+          const framed = document.createElement("canvas"); framed.width = size.width; framed.height = size.height;
+          const context = framed.getContext("2d");
+          if (!context) throw new Error("O navegador não conseguiu preparar o enquadramento.");
+          context.imageSmoothingEnabled = true; context.imageSmoothingQuality = "high";
+          drawArtworkFrame(context, loaded, loaded.width, loaded.height, size.width, size.height, sourceCrop);
+          source = framed;
+          area = { ...size, sourceWidth: size.width, sourceHeight: size.height, offsetX: 0, offsetY: 0 };
+        } else {
+          // Older drafts use the original padded coordinate system and must not be repositioned.
+          area = createRetouchWorkspace(loaded.width, loaded.height, dimensions ? aspect : null);
+        }
         canvasRef.current.width = area.width; canvasRef.current.height = area.height;
         const editLayer = document.createElement("canvas"); editLayer.width = area.width; editLayer.height = area.height;
-        sourceRef.current = loaded; editLayerRef.current = editLayer;
+        sourceRef.current = source; editLayerRef.current = editLayer;
         setWorkspace(area); setLoading(false);
       })
       .catch((loadError) => { if (active) { setLoading(false); setError(loadError instanceof Error ? loadError.message : "Não foi possível carregar a imagem."); } });
     return () => { active = false; bitmap?.close(); sourceRef.current = null; adjustedSourceRef.current = null; editLayerRef.current = null; };
-  }, [bleedMm, geometry, imageUrl, safeMarginMm]);
+  }, [bleedMm, draftReady, geometry, imageUrl, safeMarginMm, sourceCrop]);
 
   useEffect(() => {
     const source = sourceRef.current;
@@ -241,6 +272,7 @@ export function ArtworkRetouchEditor({
         if (!response.ok) throw new Error(data?.error ?? "Não foi possível recuperar o rascunho.");
         if (active && data?.draft) {
           const draft = data.draft as RetouchDraft;
+          setSourceCrop(draft.sourceCrop ?? null);
           setOperations(draft.operations ?? []);
           setAdjustments(draft.adjustments ?? DEFAULT_RETOUCH_ADJUSTMENTS);
           setComposition(draft.composition ?? DEFAULT_RETOUCH_COMPOSITION);
@@ -248,28 +280,28 @@ export function ArtworkRetouchEditor({
           setDraftStatus("saved");
         } else if (active) setDraftStatus("idle");
       })
-      .catch(() => { if (active) setDraftStatus("error"); })
-      .finally(() => { if (active) draftLoadedRef.current = true; });
+      .catch(() => { if (active) { setDraftStatus("error"); draftPaused.current = true; } })
+      .finally(() => { if (active) { draftLoadedRef.current = true; setDraftReady(true); } });
     return () => { active = false; };
   }, [draftUrl]);
 
   useEffect(() => {
-    if (!draftUrl || !draftLoadedRef.current || draftPaused.current) return;
+    if (!draftUrl || !draftReady || !draftLoadedRef.current || draftPaused.current) return;
     const timeout = window.setTimeout(() => {
       setDraftStatus("saving");
-      const draft: RetouchDraft = { version: 1, operations, adjustments, composition, stages };
+      const draft: RetouchDraft = { version: 1, sourceCrop: sourceCrop ?? undefined, operations, adjustments, composition, stages };
       draftWrite.current = draftWrite.current.then(() => fetch(draftUrl, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ draft }) }))
         .then((response) => { if (!response.ok) throw new Error(); setDraftStatus("saved"); })
         .catch(() => setDraftStatus("error"));
     }, 900);
     draftTimer.current = timeout;
     return () => window.clearTimeout(timeout);
-  }, [adjustments, composition, draftUrl, operations, stages]);
+  }, [adjustments, composition, draftReady, draftUrl, operations, sourceCrop, stages]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (document.querySelector('[role="alertdialog"]')) return;
-      const target = event.target as HTMLElement | null;
+      const target = event.target instanceof Element ? event.target : null;
       if (target?.matches("input, textarea, select") && event.key !== "Escape") return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
         event.preventDefault();
@@ -287,7 +319,7 @@ export function ArtworkRetouchEditor({
       else if (key === "r") chooseTool("select");
       else if (key === "t") chooseTool("compose");
       else if ((key === "delete" || key === "backspace") && selectedShapeIndex !== null) { event.preventDefault(); deleteSelectedShape(); }
-      else if (key === "escape") { setSelection(null); setPendingFill(null); setSelectedShapeIndex(null); setGroupSelection([]); setShapeCreationArmed(true); }
+      else if (key === "escape") { setExpanded(false); setSelection(null); setPendingFill(null); setSelectedShapeIndex(null); setGroupSelection([]); setShapeCreationArmed(true); }
     }
     function onKeyUp(event: KeyboardEvent) { if (event.key === " " && toolBeforeSpaceRef.current) { setTool(toolBeforeSpaceRef.current); toolBeforeSpaceRef.current = null; } }
     window.addEventListener("keydown", onKeyDown); window.addEventListener("keyup", onKeyUp);
@@ -624,10 +656,16 @@ export function ArtworkRetouchEditor({
   const cursorStyle = tool === "eyedropper" || tool === "fill" || tool === "shape" ? "crosshair" : tool === "pan" ? "grab" : tool === "select" ? "crosshair" : "none";
   const checkerboard = { backgroundColor: "#f4f4f5", backgroundImage: "linear-gradient(45deg,#d4d4d8 25%,transparent 25%),linear-gradient(-45deg,#d4d4d8 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#d4d4d8 75%),linear-gradient(-45deg,transparent 75%,#d4d4d8 75%)", backgroundSize: "24px 24px", backgroundPosition: "0 0,0 12px,12px -12px,-12px 0" };
 
-  return <div className="fixed inset-0 z-[80] grid place-items-center overflow-hidden bg-black/85 p-0 backdrop-blur-sm sm:p-5">
+  return <div className={`fixed inset-0 z-[80] grid place-items-center overflow-hidden bg-black/85 backdrop-blur-sm ${expanded ? "p-0" : "p-0 sm:p-5"}`}>
     {cursor ? <span className="pointer-events-none fixed z-[100] rounded-full border border-white shadow-[0_0_0_1px_rgba(0,0,0,.75)]" style={{ left: cursor.x, top: cursor.y, width: cursor.size, height: cursor.size, transform: "translate(-50%,-50%)", background: tool === "brush" ? `${color}33` : "transparent" }} /> : null}
-    <div className="grid h-dvh w-full max-w-7xl grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden border border-zinc-700 bg-zinc-950 shadow-2xl sm:h-[96dvh] sm:rounded-lg">
-      <header className="flex min-w-0 flex-wrap items-start justify-between gap-2 border-b border-zinc-800 px-3 py-2.5 sm:gap-3 sm:px-5 sm:py-3"><div className="min-w-0 flex-1"><h2 className="text-base font-semibold text-white">Retocar imagem</h2><p className="mt-0.5 max-w-full truncate text-xs text-zinc-500">{artworkName} · original preservado · molde completo até o corte efetivo</p>{navigation}</div><div className="flex shrink-0 items-center gap-2 sm:gap-3"><DraftStatus status={draftStatus} /><button aria-label="Fechar editor" className="focus-ring grid h-9 w-9 place-items-center rounded-md border border-transparent text-zinc-400 transition hover:border-zinc-700 hover:bg-zinc-800 hover:text-white" disabled={saving} title="Fechar editor" type="button" onClick={() => exit.request(onClose)}><X size={18} /></button></div></header>
+    <div data-editor-expanded={expanded} className={`grid w-full min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden border border-zinc-700 bg-zinc-950 shadow-2xl ${expanded ? "h-dvh max-w-none" : "h-dvh max-w-7xl sm:h-[96dvh] sm:rounded-lg"}`}>
+      <header className="flex min-w-0 flex-wrap items-start justify-between gap-2 border-b border-zinc-800 px-3 py-2.5 sm:gap-3 sm:px-5 sm:py-3">
+        <div className="min-w-0 flex-1"><h2 className="text-base font-semibold text-white">Retocar imagem</h2><p className="mt-0.5 max-w-full truncate text-xs text-zinc-500">{artworkName} · original preservado · molde completo até o corte efetivo</p>{navigation}</div>
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3"><DraftStatus status={draftStatus} />
+          <button aria-label={expanded ? "Restaurar tamanho do editor" : "Expandir editor"} aria-pressed={expanded} className="focus-ring grid h-9 w-9 place-items-center rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800" title={expanded ? "Restaurar tamanho do editor (Esc)" : "Expandir editor para toda a tela"} type="button" onClick={() => setExpanded(current => !current)}>{expanded ? <Minimize2 size={17} /> : <Maximize2 size={17} />}</button>
+          <button aria-label="Fechar editor" className="focus-ring grid h-9 w-9 place-items-center rounded-md border border-transparent text-zinc-400 transition hover:border-zinc-700 hover:bg-zinc-800 hover:text-white" disabled={saving} title="Fechar editor" type="button" onClick={() => exit.request(onClose)}><X size={18} /></button>
+        </div>
+      </header>
       {geometry && guides ? <PrintGuideMeasurements geometry={geometry} bleedMm={bleedMm} guides={guides} safeMarginMm={safeMarginMm} /> : <div className="border-b border-zinc-800 bg-amber-950/20 px-4 py-2 text-xs text-amber-200">Configure as medidas de impressão do produto para visualizar as linhas de produção.</div>}
       <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_minmax(120px,32dvh)] lg:grid-cols-[272px_minmax(0,1fr)] lg:grid-rows-1">
         <aside className="order-2 min-h-0 overflow-y-auto overscroll-contain border-t border-zinc-800 p-3 lg:order-1 lg:border-r lg:border-t-0 lg:p-4">
@@ -689,7 +727,6 @@ export function ArtworkRetouchEditor({
             {pendingFill ? <div className="rounded-md border border-amber-700/50 bg-amber-950/30 p-3"><p className="text-xs text-amber-200">Prévia do preenchimento</p><div className="mt-2 flex gap-2"><button className="focus-ring inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md bg-amber-300 px-2 text-xs font-semibold text-amber-950 transition hover:bg-amber-200" type="button" onClick={applyPendingFill}><Check size={14} /> Aplicar</button><button className="focus-ring inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md border border-amber-800 px-2 text-xs text-amber-200 transition hover:bg-amber-950/60" type="button" onClick={() => setPendingFill(null)}><X size={14} /> Cancelar</button></div></div> : null}
             {selection ? <div className="rounded-md border border-cyan-900 bg-cyan-950/20 p-2 text-xs text-cyan-200"><p>Ferramentas limitadas à seleção atual.</p><button className="mt-1 underline" type="button" onClick={() => setSelection(null)}>Remover seleção</button></div> : null}
             <details className="rounded-md border border-zinc-800"><summary className="cursor-pointer px-3 py-2 text-xs font-medium text-zinc-300"><span className="inline-flex items-center gap-2"><SlidersHorizontal size={14} /> Ajustes rápidos</span></summary><div className="grid gap-3 border-t border-zinc-800 p-3"><Adjustment label="Brilho" min={50} max={150} value={adjustments.brightness} onChange={(value) => setAdjustments((current) => ({ ...current, brightness: value }))} /><Adjustment label="Contraste" min={50} max={150} value={adjustments.contrast} onChange={(value) => setAdjustments((current) => ({ ...current, contrast: value }))} /><Adjustment label="Saturação" min={0} max={200} value={adjustments.saturation} onChange={(value) => setAdjustments((current) => ({ ...current, saturation: value }))} /><Adjustment label="Nitidez" min={0} max={100} value={adjustments.sharpness} onChange={(value) => setAdjustments((current) => ({ ...current, sharpness: value }))} /></div></details>
-            <div><span className="mb-2 block text-xs font-medium text-zinc-300">Visualização</span><div className="flex w-fit items-center rounded-md border border-zinc-700 bg-zinc-900 p-1 shadow-inner shadow-black/20"><IconButton icon={<ZoomOut size={16} />} label="Reduzir zoom" onClick={() => setZoom((value) => clamp(value - .25, .5, 4))} /><span className="min-w-14 text-center text-xs font-medium tabular-nums text-cyan-300">{Math.round(zoom * 100)}%</span><IconButton icon={<ZoomIn size={16} />} label="Aumentar zoom" onClick={() => setZoom((value) => clamp(value + .25, .5, 4))} /></div></div>
             <button aria-pressed={showGuides} className={`focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border text-xs font-medium transition ${showGuides ? "border-cyan-600/60 bg-cyan-950/35 text-cyan-200 shadow-[inset_0_0_0_1px_rgba(34,211,238,.08)]" : "border-zinc-700 text-zinc-400 hover:bg-zinc-900"}`} title={showGuides ? "Ocultar guias de produção" : "Mostrar guias de produção"} type="button" onClick={() => setShowGuides((current) => !current)}>{showGuides ? <Eye size={15} /> : <EyeOff size={15} />} Guias {showGuides ? "visíveis" : "ocultas"}</button>
             <div className="grid grid-cols-2 gap-2"><ActionButton disabled={!operations.length} icon={<Undo2 size={15} />} label="Desfazer" title="Desfazer última alteração (Ctrl+Z)" onClick={undo} /><ActionButton disabled={!redoStack.length} icon={<Redo2 size={15} />} label="Refazer" title="Refazer alteração (Ctrl+Shift+Z)" onClick={redo} /></div>
             <button className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-zinc-700 text-xs font-medium text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-900" type="button" onClick={() => setComparison((current) => current === null ? 50 : null)}>{comparison === null ? <Eye size={15} /> : <EyeOff size={15} />} {comparison === null ? "Comparar com original" : "Encerrar comparação"}</button>
@@ -697,7 +734,33 @@ export function ArtworkRetouchEditor({
             <button className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-red-950/80 text-xs font-medium text-red-300 transition hover:border-red-900 hover:bg-red-950/35 disabled:cursor-not-allowed disabled:opacity-35" disabled={!hasChanges} title="Descartar todos os retoques desta sessão" type="button" onClick={reset}><RotateCcw size={15} /> Restaurar original</button>
           </div>
         </aside>
-        <main className="relative order-1 grid min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-zinc-900 lg:order-2"><div className="flex min-w-0 flex-wrap items-center justify-between gap-1 border-b border-zinc-800 px-2.5 py-1.5 text-[10px] text-zinc-400 sm:gap-2 sm:px-3 sm:py-2 sm:text-[11px]"><span className="min-w-0 break-words">A linha amarela limita a área visível. Continue o fundo além dela, por toda a faixa oculta, até a linha vermelha de corte.</span><span className="shrink-0">{workspace ? `${workspace.width} × ${workspace.height}px · ${geometry ? geometryLabel(geometry) : "sem molde"}` : "Carregando..."}</span></div><div ref={viewportRef} className="relative min-h-0 overflow-auto overscroll-contain p-2 sm:p-7"><div className="relative mx-auto" style={{ width: `${zoom * 100}%`, minWidth: zoom > 1 ? `${zoom * 100}%` : undefined, ...checkerboard }}><canvas ref={canvasRef} aria-label={`Editor da arte ${artworkName}`} className="block h-auto w-full touch-none shadow-[0_12px_40px_rgba(0,0,0,.45)]" style={{ cursor: cursorStyle }} onPointerCancel={finishPointer} onPointerDown={onPointerDown} onPointerEnter={updateCursor} onPointerLeave={() => setCursor(null)} onPointerMove={onPointerMove} onPointerUp={finishPointer} />{workspace ? <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${workspace.width} ${workspace.height}`}>{foregroundBounds ? <rect fill="none" height={foregroundBounds.height} stroke="rgba(255,255,255,.55)" strokeDasharray="12 8" strokeWidth="2" width={foregroundBounds.width} x={foregroundBounds.x} y={foregroundBounds.y} /> : null}{showGuides && guides ? <><RetouchGuidePath color="rgba(244,63,94,1)" dash="14 9" d={guides.cut.path} haloWidth={9} transform={`translate(${guides.cut.x} ${guides.cut.y})`} width={4.5} /><RetouchGuidePath color="rgba(251,191,36,1)" dash="12 7" d={guides.bleed.path} haloWidth={8} transform={`translate(${guides.bleed.x} ${guides.bleed.y})`} width={4} /><RetouchGuidePath color="rgba(103,232,249,1)" dash="10 6" d={guides.safe.path} haloWidth={7} transform={`translate(${guides.safe.x} ${guides.safe.y})`} width={3.5} /></> : null}{selection ? <rect fill="rgba(34,211,238,.08)" height={selection.height} stroke="rgba(34,211,238,.95)" strokeDasharray="8 6" strokeWidth="2" width={selection.width} x={selection.x} y={selection.y} /> : null}{tool === "shape" && selectedShapeBounds ? <ShapeSelectionOverlay bounds={selectedShapeBounds} workspace={workspace} /> : null}{comparison !== null ? <line stroke="white" strokeWidth="3" x1={workspace.width * comparison / 100} x2={workspace.width * comparison / 100} y1="0" y2={workspace.height} /> : null}</svg> : null}</div>{showGuides && geometry ? <div className="mt-2 flex gap-3 overflow-x-auto pb-1 text-[10px] text-zinc-400 sm:mt-3 sm:flex-wrap sm:justify-center sm:gap-4 sm:text-[11px]"><span className="shrink-0 text-cyan-300">--- segurança (menor)</span><span className="shrink-0 text-amber-300">--- limite visível / sangria</span><span className="shrink-0 text-rose-300">--- corte efetivo (fundo até aqui)</span><span className="shrink-0 text-zinc-300">--- limite da arte principal</span></div> : null}{loading ? <div className="absolute inset-0 grid place-items-center bg-zinc-900/80 text-sm text-zinc-300"><span className="inline-flex items-center gap-2"><Loader2 className="animate-spin" size={18} /> Carregando imagem...</span></div> : null}</div></main>
+        <main className="relative order-1 grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] bg-zinc-900 lg:order-2">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2 text-[11px] text-zinc-400">
+            <span className="min-w-0">{workspace ? `${workspace.width} × ${workspace.height}px · ${geometry ? geometryLabel(geometry) : "sem molde"}` : "Carregando..."}</span>
+            <div role="group" aria-label="Zoom de visualização" className="flex shrink-0 items-center rounded-md border border-zinc-700 bg-zinc-950 p-0.5">
+              <IconButton icon={<ZoomOut size={16} />} label="Reduzir zoom" onClick={() => setZoom(value => clamp(value / 1.25, .25, 8))} />
+              <span className="min-w-16 text-center text-xs tabular-nums text-cyan-300" title="Zoom de visualização; não altera o tamanho da arte no produto">{zoom === 1 ? "Ajustado" : `${Math.round(zoom * 100)}%`}</span>
+              <IconButton icon={<ZoomIn size={16} />} label="Aumentar zoom" onClick={() => setZoom(value => clamp(value * 1.25, .25, 8))} />
+              <IconButton icon={<Scan size={16} />} label="Ajustar à tela" onClick={fitToView} />
+            </div>
+          </div>
+          <div ref={viewportRef} aria-label="Área de trabalho do retoque" className="relative min-h-0 min-w-0 overflow-auto overscroll-contain p-2 sm:p-7">
+            <div className="grid place-items-center" style={{ width: Math.max(available.width, displayWidth), height: Math.max(available.height, displayHeight) }}>
+              <div className="relative shrink-0" style={{ width: displayWidth, height: displayHeight, ...checkerboard }}>
+                <canvas ref={canvasRef} aria-label={`Editor da arte ${artworkName}`} className="block h-full w-full touch-none shadow-[0_12px_40px_rgba(0,0,0,.45)]" style={{ cursor: cursorStyle }} onPointerCancel={finishPointer} onPointerDown={onPointerDown} onPointerEnter={updateCursor} onPointerLeave={() => setCursor(null)} onPointerMove={onPointerMove} onPointerUp={finishPointer} />
+                {workspace ? <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${workspace.width} ${workspace.height}`}>
+                  {foregroundBounds ? <rect fill="none" height={foregroundBounds.height} stroke="rgba(255,255,255,.55)" strokeDasharray="12 8" strokeWidth="2" width={foregroundBounds.width} x={foregroundBounds.x} y={foregroundBounds.y} /> : null}
+                  {showGuides && guides ? <><RetouchGuidePath color="rgba(244,63,94,1)" dash="14 9" d={guides.cut.path} haloWidth={9} transform={`translate(${guides.cut.x} ${guides.cut.y})`} width={4.5} /><RetouchGuidePath color="rgba(251,191,36,1)" dash="12 7" d={guides.bleed.path} haloWidth={8} transform={`translate(${guides.bleed.x} ${guides.bleed.y})`} width={4} /><RetouchGuidePath color="rgba(103,232,249,1)" dash="10 6" d={guides.safe.path} haloWidth={7} transform={`translate(${guides.safe.x} ${guides.safe.y})`} width={3.5} /></> : null}
+                  {selection ? <rect fill="rgba(34,211,238,.08)" height={selection.height} stroke="rgba(34,211,238,.95)" strokeDasharray="8 6" strokeWidth="2" width={selection.width} x={selection.x} y={selection.y} /> : null}
+                  {tool === "shape" && selectedShapeBounds ? <ShapeSelectionOverlay bounds={selectedShapeBounds} workspace={workspace} /> : null}
+                  {comparison !== null ? <line stroke="white" strokeWidth="3" x1={workspace.width * comparison / 100} x2={workspace.width * comparison / 100} y1="0" y2={workspace.height} /> : null}
+                </svg> : null}
+              </div>
+            </div>
+            {loading ? <div className="absolute inset-0 grid place-items-center bg-zinc-900/80 text-sm text-zinc-300"><span className="inline-flex items-center gap-2"><Loader2 className="animate-spin" size={18} /> Carregando imagem...</span></div> : null}
+          </div>
+          {showGuides && geometry ? <div className="flex gap-3 overflow-x-auto border-t border-zinc-800 px-3 py-2 text-[10px] text-zinc-400 sm:flex-wrap sm:justify-center sm:text-[11px]"><span className="shrink-0 text-cyan-300">Segurança</span><span className="shrink-0 text-amber-300">Limite visível / sangria</span><span className="shrink-0 text-rose-300">Corte · continue o fundo até aqui</span></div> : <div />}
+        </main>
       </div>
       <footer className="grid shrink-0 gap-2 border-t border-zinc-800 bg-zinc-950/95 px-3 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:px-5 sm:py-3"><div className="min-w-0">{error ? <p role="alert" className="text-xs text-red-300 sm:text-sm">{error}</p> : <p className="hidden text-xs text-zinc-500 sm:block">Os retoques só substituem a versão ativa depois de salvar.</p>}</div><div className="grid grid-cols-2 gap-2 sm:flex"><button className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm font-medium text-zinc-300 transition hover:bg-zinc-800 disabled:opacity-50 sm:px-4" disabled={saving} type="button" onClick={() => exit.request(onContinue ?? onClose)}>{onContinue ? <ArrowLeft size={15} /> : <X size={15} />} {onContinue ? "Voltar ao enquadramento" : "Fechar"}</button><button className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-cyan-400 px-3 py-2 text-center text-sm font-semibold text-cyan-950 shadow-[0_0_24px_rgba(34,211,238,.16)] transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400 disabled:shadow-none sm:px-4" disabled={saving || loading || (!hasChanges && !onContinue) || Boolean(pendingFill)} type="button" onClick={onContinue ? continueToCrop : save}>{saving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} {onContinue ? hasChanges ? "Salvar e enquadrar" : "Ir para enquadramento" : "Salvar versão"}</button></div></footer>
     </div>

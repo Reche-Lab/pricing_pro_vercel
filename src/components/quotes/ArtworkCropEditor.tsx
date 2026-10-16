@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { LocateFixed, Loader2, Paintbrush, RotateCcw, X } from "lucide-react";
 import { useArtworkExitGuard } from "./useArtworkExitGuard";
 import { createPrintGuideLayout, type PrintGeometry } from "@/domain/artwork/geometry";
 import type { QuoteItemArtworkRow } from "@/repositories/quotes";
+import { artworkFramePlacement } from "@/domain/artwork/framing";
+import { useArtworkViewport } from "./useArtworkViewport";
 
 export function ArtworkCropEditor({
   artwork,
@@ -84,16 +86,15 @@ export function ArtworkCropEditor({
   const physicalDimensions = createPrintGuideLayout({ geometry, margins: { bleedMm, safeMarginMm }, viewportWidth: viewWidth, viewportHeight: viewWidth });
   const outputWidthMm = physicalDimensions.outputWidthMm;
   const outputHeightMm = physicalDimensions.outputHeightMm;
-  const viewHeight = Math.max(200, viewWidth * outputHeightMm / outputWidthMm);
+  const viewHeight = viewWidth * outputHeightMm / outputWidthMm;
   const guides = createPrintGuideLayout({ geometry, margins: { bleedMm, safeMarginMm }, viewportWidth: viewWidth, viewportHeight: viewHeight });
   const clipPath = guides.outer.path;
   const cutPath = guides.cut.path;
   const bleedPath = guides.bleed.path;
   const safePath = guides.safe.path;
-  const imageWidth = viewWidth * scale;
-  const imageHeight = viewHeight * scale;
-  const imageX = (viewWidth - imageWidth) / 2 + offsetX * viewWidth / 2;
-  const imageY = (viewHeight - imageHeight) / 2 + offsetY * viewHeight / 2;
+  const image = artworkFramePlacement(viewWidth, viewHeight, { scale, offsetX, offsetY, rotationDegrees: rotation });
+  const previewRef = useRef<HTMLDivElement>(null);
+  const { fitted } = useArtworkViewport(previewRef, viewWidth, viewHeight);
   const oneDimension = geometry.shape === "circle" || geometry.shape === "square";
   const safeAbsolute = formatAbsoluteSize(guides.safeWidthMm, guides.safeHeightMm, oneDimension);
   const sangriaAbsolute = formatAbsoluteSize(guides.sangriaWidthMm, guides.sangriaHeightMm, oneDimension);
@@ -102,16 +103,20 @@ export function ArtworkCropEditor({
   return (
     <div className="fixed inset-0 z-[70] grid place-items-center overflow-hidden bg-black/80 p-0 backdrop-blur-sm sm:p-3 lg:p-6">
       <div className="grid h-dvh w-full min-w-0 grid-rows-[minmax(210px,42dvh)_minmax(0,1fr)] overflow-hidden border border-zinc-700 bg-zinc-950 shadow-2xl sm:h-[94dvh] sm:rounded-lg lg:max-w-4xl lg:grid-cols-[minmax(320px,1fr)_360px] lg:grid-rows-1">
-        <div className="grid min-h-0 place-items-center overflow-hidden bg-zinc-900 p-3 sm:p-5 lg:p-8">
-          <div className="w-full max-w-[520px] overflow-hidden bg-zinc-800 shadow-[0_0_0_5px_rgba(34,211,238,0.12)] sm:shadow-[0_0_0_8px_rgba(34,211,238,0.12)]" style={{ aspectRatio: `${outputWidthMm} / ${outputHeightMm}` }}>
+        <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-zinc-900 p-3 sm:p-5 lg:p-8">
+          <div ref={previewRef} className="grid min-h-0 place-items-center">
+          <div className="overflow-hidden bg-zinc-800 shadow-[0_0_0_5px_rgba(34,211,238,0.12)] sm:shadow-[0_0_0_8px_rgba(34,211,238,0.12)]" style={{ width: fitted.width, height: fitted.height }}>
             <svg aria-label={artwork.artwork_name ?? artwork.file_name} className="h-full w-full" viewBox={`0 0 ${viewWidth} ${viewHeight}`}>
               <defs><clipPath id={`artwork-shape-${artwork.id}`}><path d={clipPath} /></clipPath></defs>
               <path d={clipPath} fill="white" />
-              <image clipPath={`url(#artwork-shape-${artwork.id})`} height={imageHeight} href={imageUrl} preserveAspectRatio="xMidYMid slice" transform={`rotate(${rotation} ${viewWidth / 2} ${viewHeight / 2})`} width={imageWidth} x={imageX} y={imageY} />
+              <g clipPath={`url(#artwork-shape-${artwork.id})`}>
+                <image height={image.height} href={imageUrl} preserveAspectRatio="xMidYMid slice" transform={`rotate(${rotation} ${viewWidth / 2} ${viewHeight / 2})`} width={image.width} x={image.x} y={image.y} />
+              </g>
               <GuidePath d={cutPath} color="rgba(244,63,94,1)" dash="14 9" haloWidth={9} width={4.5} />
               <GuidePath d={bleedPath} color="rgba(251,191,36,1)" dash="12 7" haloWidth={8} width={4} />
               <GuidePath d={safePath} color="rgba(103,232,249,1)" dash="10 6" haloWidth={7} width={3.5} />
             </svg>
+          </div>
           </div>
           <div className="mt-3 flex max-w-full gap-3 overflow-x-auto pb-1 text-[11px] text-zinc-400 sm:mt-5 sm:flex-wrap sm:justify-center sm:gap-4 sm:text-xs"><span className="shrink-0 text-cyan-300">Segurança: {safeAbsolute}</span><span className="shrink-0 text-amber-300">Sangria: {sangriaAbsolute}</span><span className="shrink-0 text-rose-300">Corte: {cutAbsolute}</span></div>
         </div>

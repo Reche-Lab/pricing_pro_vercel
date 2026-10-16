@@ -2,6 +2,18 @@
 
 Status atualizado durante a refatoracao inicial.
 
+## Enquadramento E Retoque Na Loja (2026-10-16)
+
+- [x] Diagnosticar diferenças: retoque com margem adicional, sem herdar enquadramento; zoom visual ajustado somente pela largura.
+- [x] Compartilhar posicionamento da imagem entre os editores, mantendo escala, deslocamentos e rotação; novos retoques sem margem artificial em relação ao corte.
+- [x] Preservar o sistema de coordenadas dos rascunhos antigos e registrar o enquadramento-base nos novos rascunhos.
+- [x] Ajuste automático pela largura e altura, zoom de visualização independente e botão para expandir/restaurar o editor.
+- [x] 69 testes focados aprovados, tipos e lint aprovados; comparação de pixels entre os editores no Chrome com imagens paisagem/retrato, moldes circular/retangular e enquadramento com rotação/deslocamentos.
+- [x] Conferir imagem inteira sem rolagem inicial em 1366 × 900 e 375 × 812, controles de ajuste/zoom e expansão/restauração do editor.
+- [x] Conferir exportação WebP do retoque e reabertura no enquadramento: pixels de referência iguais na imagem exportada, sem aplicar os deslocamentos duas vezes.
+- [x] Build de produção aprovado com memória limitada e sem servidor de desenvolvimento concorrente.
+- [x] Sem migration ou variável de ambiente nova. Ajustes compartilhados pela loja, prévia e demais telas que usam o estúdio de artes; rascunhos antigos mantêm suas coordenadas originais.
+
 ## Nitidez Do Guia SVG (2026-10-16)
 
 - [x] Revisar o arquivo exportado: contornos vetoriais reais, mas traços finos e tracejados curtos.

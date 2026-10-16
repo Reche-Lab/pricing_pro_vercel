@@ -1,3 +1,5 @@
+import type { ArtworkFrame } from "./framing";
+
 export function createRetouchedArtworkFileName(fileName: string, timestamp: number) {
   const base = fileName
     .replace(/\.[^.]+$/, "")
@@ -68,6 +70,7 @@ export type RetouchStage = {
 };
 export type RetouchDraft = {
   version: 1;
+  sourceCrop?: ArtworkFrame;
   operations: RetouchOperation[];
   adjustments: RetouchAdjustments;
   composition?: RetouchComposition;

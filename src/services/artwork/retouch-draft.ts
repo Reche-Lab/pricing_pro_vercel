@@ -42,6 +42,12 @@ const stage = z.object({
 
 export const retouchDraftSchema = stage.extend({
   version: z.literal(1),
+  sourceCrop: z.object({
+    scale: z.number().finite().min(0.1).max(5),
+    offsetX: z.number().finite().min(-1).max(1),
+    offsetY: z.number().finite().min(-1).max(1),
+    rotationDegrees: z.number().finite().min(-180).max(180)
+  }).optional(),
   stages: z.array(stage.extend({ cut: z.boolean() })).max(32).optional()
 }).refine((draft) => (draft.stages ?? []).reduce((sum, entry) => sum + entry.operations.length, draft.operations.length) <= 1500,
   "Rascunho muito complexo. Salve uma versão para continuar.");

@@ -8,7 +8,7 @@ import type { ArtworkRetouchEditor } from "@/components/quotes/ArtworkRetouchEdi
 
 vi.mock("next/dynamic", () => ({ default: (loader: () => unknown) => {
   if (loader.toString().includes("ArtworkCropEditor")) return function Crop(props: React.ComponentProps<typeof ArtworkCropEditor>) { return <ArtworkCropEditor {...props} />; };
-  return function Retouch(props: React.ComponentProps<typeof ArtworkRetouchEditor>) { return <div>{props.navigation}<p>Retoque em teste</p><button onClick={async () => {
+  return function Retouch(props: React.ComponentProps<typeof ArtworkRetouchEditor>) { return <div data-testid="retouch" data-crop={JSON.stringify(props.initialCrop)}>{props.navigation}<p>Retoque em teste</p><button onClick={async () => {
     await props.onSave({ fileName: "nova.webp", mimeType: "image/webp", fileSize: 3, dataUrl: "data:image/webp;base64,YWJj" });
     props.onContinue?.();
   }}>Salvar e enquadrar</button></div>; };
@@ -72,6 +72,7 @@ describe("guided artwork workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retocar arte" }));
     fireEvent.click(screen.getByRole("button", { name: "Salvar e continuar" }));
     await screen.findByText("Retoque em teste");
+    expect(screen.getByTestId("retouch")).toHaveAttribute("data-crop", JSON.stringify({ ...asset.crop, offsetX: 0.4 }));
     expect(handlers.onPrepare).toHaveBeenCalledWith(asset, { ...asset.crop, offsetX: 0.4 });
     expect(handlers.onApprove).not.toHaveBeenCalled();
   });
