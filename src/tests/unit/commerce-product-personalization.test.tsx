@@ -29,12 +29,24 @@ function PreviewCartProbe() {
   const simulation = useCommercePreview();
   return <output aria-label="Itens simulados">{JSON.stringify(simulation?.cart.lines)}</output>;
 }
-function show(preview = false, personalized = true) {
-  const page = <Storefront slug="shop" settings={settings} products={[{ ...product, personalized }]} path={["produto", product.id]} paused={false} preview={preview} />;
+function show(preview = false, personalized = true, geometry: import("@/domain/artwork/geometry").PrintGeometry | null = null) {
+  const page = <Storefront slug="shop" settings={settings} products={[{ ...product, personalized, geometry }]} path={["produto", product.id]} paused={false} preview={preview} />;
   return render(preview ? <CommercePreviewProvider slug="shop">{page}<PreviewCartProbe /></CommercePreviewProvider> : page);
 }
 
 describe("product artwork and cart confirmation", () => {
+  it.each([false, true])("offers the configured SVG guide before choosing quantities or uploading (preview: %s)", async preview => {
+    vi.mocked(storeRequest).mockImplementation(async (url, _method, body) => url.endsWith("/price") ? calculation(body) : { revision: 0, lines: [], artworks: [], customer: null, calculation: null });
+    const geometry = { shape: "circle" as const, widthMm: 35, heightMm: 35, cornerStyle: "sharp" as const, cornerRadiusMm: 0, rotationDegrees: 0, allowPrintRotation: true };
+    const view = show(preview, true, geometry);
+    await act(async () => Promise.resolve());
+    expect(screen.getByRole("link", { name: "Baixar guia SVG" })).toHaveAttribute("download", "guia-botton-personalizado-35x35mm.svg");
+    view.unmount();
+    show(preview, false, geometry);
+    await act(async () => Promise.resolve());
+    expect(screen.queryByRole("link", { name: "Baixar guia SVG" })).not.toBeInTheDocument();
+  });
+
   it("uploads before adding and persists the selected artwork in the buyer cart", async () => {
     let uploaded = false;
     vi.mocked(storeRequest).mockImplementation(async (url, method, body) => {

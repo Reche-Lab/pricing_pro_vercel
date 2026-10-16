@@ -61,6 +61,28 @@
   margin-bottom: 20px;
   border-block: 1px solid var(--line);
 }
+.artworkGuide { padding-block: 16px; border-top: 1px solid var(--line); }
+.artworkGuideHeader { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.artworkGuideHeader > div { min-width: 0; }
+.artworkGuideHeader h2 { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 650; }
+.artworkGuideHeader h2 svg { color: var(--highlight); flex-shrink: 0; }
+.artworkGuideHeader p { margin-top: 4px; font-size: 12px; color: var(--muted); }
+.artworkGuideHeader a { min-height: 40px; padding: 8px 12px; font-size: 12px; }
+.artworkGuideDetails { margin-top: 12px; }
+.artworkGuideDetails summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; color: var(--muted); font-size: 12px; list-style: none; }
+.artworkGuideDetails summary::-webkit-details-marker { display: none; }
+.artworkGuideDetails summary:focus-visible { outline: 3px solid #0d98b0; outline-offset: 3px; }
+.artworkGuideDetails[open] summary svg { transform: rotate(180deg); }
+.artworkGuideContent { display: grid; grid-template-columns: minmax(0, 140px) minmax(0, 1fr); align-items: center; gap: 16px; margin-top: 16px; }
+.artworkGuideContent > svg { display: block; width: 100%; height: 160px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); }
+.artworkGuideContent dl { display: grid; gap: 12px; min-width: 0; }
+.artworkGuideContent dt { display: flex; align-items: baseline; gap: 6px; font-size: 11px; color: var(--muted); }
+.artworkGuideContent dd { margin-top: 3px; font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
+.guideSwatch { display: inline-block; width: 16px; border-top: 2px solid; flex-shrink: 0; }
+.artworkGuideHint { margin-top: 12px; font-size: 12px; line-height: 1.6; color: var(--muted); }
+@media (max-width: 400px) {
+  .artworkGuideContent { grid-template-columns: minmax(0, 110px) minmax(0, 1fr); gap: 12px; }
+}
 .personalizationToggle {
   display: flex;
   align-items: center;

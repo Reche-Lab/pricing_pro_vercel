@@ -2,6 +2,17 @@
 
 Status atualizado durante a refatoracao inicial.
 
+## Guia SVG Do Produto (2026-10-16)
+
+- [x] Download na página de produto personalizado, inclusive no preview, independente de upload, quantidade ou carrinho.
+- [x] SVG vetorial transparente em escala 1:1, com dimensões físicas em milímetros e camadas separadas para segurança, imagem/sangria e corte.
+- [x] Reutilizar os contornos do enquadramento/produção, incluindo formatos, cantos e orientação cadastrados, com medidas absolutas e nomes escapados no XML.
+- [x] Prévia recolhível com legenda, medidas e orientação para continuar o fundo até o corte e remover as guias da arte final.
+- [x] Validar dimensões exportadas, todos os formatos, XML seguro e interface: 32 testes focados aprovados; tipos, lint e build de produção aprovados. Revisão visual em 1280 px e 360 px nos temas claro/escuro.
+- [x] Sem migration, API ou variável de ambiente nova.
+
+O guia utiliza a geometria da publicação da loja, igual ao enquadramento e à produção. Após alterar medidas em Produtos, salvar novamente a configuração da loja para atualizar a publicação.
+
 ## Personalização Na Página Do Produto (2026-10-13)
 
 - [x] Seção opcional e recolhível para enviar, selecionar, enquadrar e aprovar uma arte por grupo antes de adicionar ao carrinho.

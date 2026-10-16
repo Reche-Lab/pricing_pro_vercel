@@ -47,6 +47,7 @@ import { StoreHome, StoreProductCard } from "./StoreHome";
 import { StoreProductGallery } from "./StoreProductGallery";
 import { StorePriceBreakdown } from "./StorePriceBreakdown";
 import { StoreDeliveryInquiry } from "./StoreDeliveryInquiry";
+import { StoreArtworkGuide } from "./StoreArtworkGuide";
 import { useStoreTheme, accentForeground } from "./use-store-theme";
 import { useCommercePreview } from "./CommercePreviewProvider";
 import type { StoreArtwork } from "./StoreArtworkTools";
@@ -890,6 +891,7 @@ function ProductDetail({
               {error}
             </p>
           ) : null}
+          {product.personalized ? <StoreArtworkGuide productName={product.name} geometry={product.geometry} margins={product.margins} /> : null}
           {product.personalized ? (
             <section className={styles.productPersonalization}>
               <button type="button" className={styles.personalizationToggle}
