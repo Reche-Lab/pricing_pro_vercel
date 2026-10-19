@@ -2,6 +2,19 @@
 
 Status atualizado durante a refatoracao inicial.
 
+## Páginas Institucionais Ground Shop (2026-10-19)
+
+- [x] Consultar as cinco páginas do site atual; identificar divergências de prazos e dados da empresa mais recentes na política de privacidade.
+- [x] Criar conteúdo estruturado e específico do tenant `ground-shop`, sem herdar políticas para outros tenants.
+- [x] Integrar páginas públicas e prévia privada, navegação no rodapé, sumário por âncoras e dúvidas expansíveis, seguindo os temas da loja.
+- [x] Renderizar textos no HTML inicial, com título/descrição exclusivos, canonical, Open Graph/Twitter e JSON-LD seguro de página/organização/breadcrumb.
+- [x] Criar sitemap geral e por loja, somente com lojas publicadas/ativas e produtos públicos; manter prévia e fluxos privados fora da indexação.
+- [x] 36 testes focados aprovados; tipos e lint aprovados. HTML inicial, JSON-LD escapado, canonical, isolamento, sitemap e regressões de navegação/carrinho cobertos.
+- [x] Revisar as cinco páginas em 1366 × 900 e 375 × 812, temas claro/escuro: sem transbordamento horizontal, âncoras válidas e dúvidas expansíveis funcionando.
+- [x] Build de produção aprovado com memória limitada, incluindo sitemap geral, sitemap por loja e robots.txt.
+- [x] Sem migration ou variável de ambiente nova; documentar rotas, escopo editorial, revisão necessária e envio do sitemap ao Search Console.
+- [ ] Revisão comercial/jurídica dos textos e confirmação dos dados cadastrais antes de publicar a loja em produção.
+
 ## Enquadramento E Retoque Na Loja (2026-10-16)
 
 - [x] Diagnosticar diferenças: retoque com margem adicional, sem herdar enquadramento; zoom visual ajustado somente pela largura.

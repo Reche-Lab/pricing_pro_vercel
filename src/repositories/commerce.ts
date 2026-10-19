@@ -107,6 +107,15 @@ export async function getCommerceStore(
   );
   return result.rows[0] ?? null;
 }
+
+export async function publishedCommerceSitemapStores() {
+  if (!commerceEnabled()) return [];
+  const result = await getPool().query<{ slug: string }>(
+    `select t.slug from commerce_stores s join tenants t on t.id=s.tenant_id
+     where t.status='active' and s.enabled and s.status='published' order by t.slug`
+  );
+  return result.rows;
+}
 export async function commercePaymentTenant(
   slug: string,
 ): Promise<string | null> {

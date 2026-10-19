@@ -6,31 +6,25 @@ import {
   publicCommerceProduct,
 } from "@/repositories/commerce";
 import { Storefront } from "@/components/commerce/Storefront";
+import React, { cache } from "react";
+import { storeInstitutionalPage, storeInstitutionalPages } from "@/domain/commerce/institutional";
+import { StoreInstitutionalPage } from "@/components/commerce/StoreInstitutionalPage";
+import { institutionalStructuredData, serializeStructuredData, storePageMetadata } from "@/services/commerce/store-seo";
 export const dynamic = "force-dynamic";
+const loadStore = cache(getCommerceStore);
 type Props = { params: Promise<{ slug: string; path?: string[] }> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug, path = [] } = await params;
-  const store = await getCommerceStore(slug, true);
+  const store = await loadStore(slug, true);
   if (!store) return { title: "Loja indisponível", robots: { index: false } };
-  const url = `/loja/${slug}/${path.join("/")}`;
-  return {
-    title: { absolute: store.settings.name },
-    description: store.settings.description,
-    alternates: { canonical: url },
-    openGraph: {
-      title: store.settings.name,
-      description: store.settings.description,
-      url,
-      images: store.settings.bannerUrl ? [store.settings.bannerUrl] : [],
-    },
-    robots: { index: path.length === 0 || path[0] === "produto", follow: true },
-  };
+  return storePageMetadata(slug, path, store.settings, store.status === "published");
 }
 export default async function StorePage({ params }: Props) {
   const { slug, path = [] } = await params;
-  const store = await getCommerceStore(slug, true);
+  const store = await loadStore(slug, true);
   if (!store) notFound();
-  const supported =
+  const institutional = storeInstitutionalPage(slug, path);
+  const supported = Boolean(institutional) ||
     path.length === 0 ||
     (path.length === 1 &&
       [
@@ -55,6 +49,12 @@ export default async function StorePage({ params }: Props) {
       products={products}
       path={path}
       paused={store.status !== "published"}
-    />
+      institutionalLinks={storeInstitutionalPages(slug).map(({ slug, title }) => ({ slug, title }))}
+    >
+      {institutional ? <>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeStructuredData(institutionalStructuredData(slug, institutional.slug, store.settings)) }} />
+        <StoreInstitutionalPage slug={slug} page={institutional} settings={store.settings} featuredProduct={products.find(product => Boolean(product.imageUrl))} />
+      </> : null}
+    </Storefront>
   );
 }

@@ -9,6 +9,7 @@ import React, {
   useState,
   type CSSProperties,
   type FormEvent,
+  type ReactNode,
 } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -65,6 +66,8 @@ type Props = {
   path: string[];
   paused: boolean;
   preview?: boolean;
+  institutionalLinks?: { slug: string; title: string }[];
+  children?: ReactNode;
 };
 
 export function Storefront({
@@ -74,6 +77,8 @@ export function Storefront({
   path,
   paused,
   preview = false,
+  institutionalLinks = [],
+  children,
 }: Props) {
   const router = useRouter();
   const { theme, toggle } = useStoreTheme(slug, settings.theme);
@@ -87,10 +92,10 @@ export function Storefront({
   const [error, setError] = useState("");
   const [orders, setOrders] = useState<Order[]>([]);
   const refresh = useCallback(async () => {
-    if (preview) return;
+    if (preview || children) return;
     const data = await storeRequest(`${api}/cart`);
     setCart(data);
-  }, [api, preview]);
+  }, [api, preview, children]);
   useEffect(() => {
     void refresh().catch((e) => setError(e.message));
   }, [refresh]);
@@ -299,6 +304,7 @@ export function Storefront({
             </Link>
           </p>
         ) : null}
+        {children}
         {view === "catalogo" ? (
           <Catalog
             products={products}
@@ -610,6 +616,7 @@ export function Storefront({
             <div className="max-w-3xl whitespace-pre-wrap leading-7">
               {settings.terms}
             </div>
+            {institutionalLinks.length ? <nav aria-label="Políticas da loja" className="mt-6 flex flex-wrap gap-4 text-sm underline">{institutionalLinks.map(link => <Link key={link.slug} href={`${base}/${link.slug}`}>{link.title}</Link>)}</nav> : null}
           </>
         ) : null}
       </div>
@@ -627,12 +634,14 @@ export function Storefront({
               {settings.contactEmail}
             </a>
           </div>
-          <div className="flex flex-col gap-2 text-sm">
+          {institutionalLinks.length ? <nav aria-label="Institucional" className="flex flex-col gap-3 text-sm"><p className="mb-1 font-semibold">Institucional</p>{institutionalLinks.map(link => <Link key={link.slug} href={`${base}/${link.slug}`} aria-current={view === link.slug ? "page" : undefined}>{link.title}</Link>)}</nav> : null}
+          <nav aria-label="Atendimento" className="flex flex-col gap-3 text-sm">
+            <p className="mb-1 font-semibold">Sua compra</p>
             <Link href={`${base}/condicoes`}>Condições de compra</Link>
             {!preview ? (
               <Link href={`${base}/pedidos`}>Acompanhar pedido</Link>
             ) : null}
-          </div>
+          </nav>
         </div>
       </footer>
     </main>

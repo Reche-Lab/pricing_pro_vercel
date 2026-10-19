@@ -1,5 +1,43 @@
 # Loja online opcional: piloto
 
+## Páginas Institucionais Da Ground Shop
+
+No tenant de slug `ground-shop`, a loja e a prévia possuem as páginas
+`quem-somos`, `termos-de-uso`, `politica-de-reembolso`, `politica-de-troca` e
+`politica-de-privacidade`. Os links ficam no rodapé e em Condições de compra.
+Exemplo público: `/loja/ground-shop/quem-somos`. Na prévia, use
+`/commerce/ground-shop/preview/quem-somos`, com a mesma autorização da loja.
+Não há migration nem variável nova. Os textos são conteúdo editorial versionado
+em `src/domain/commerce/institutional.ts`, ainda sem CMS administrativo; eles não
+são aplicados a outros tenants. O contato utiliza os dados cadastrados na loja.
+
+As referências são as [cinco páginas do site atual](https://www.groundshop.com.br/quem-somos/)
+e as políticas correspondentes nos mesmos slugs. A leitura de 19/10/2026 encontrou
+prazos conflitantes de 7 e 30 dias para defeitos e a exigência de embalagem original.
+A nova redação distingue arrependimento de garantia, sem reproduzir essas limitações
+como perda automática de direitos. A antiga promessa de estorno em até 30 dias
+após a devolução não foi repetida para arrependimento, pois o
+[CDC, art. 49](https://www.planalto.gov.br/ccivil_03/leis/l8078compilado.htm)
+prevê restituição imediata. **Antes da publicação, revisar comercial e juridicamente
+os textos e confirmar CNPJ, razão social, endereço, canais de contato, logística
+reversa e práticas reais de tratamento de dados.** A aprovação da arte não exclui
+responsabilidade por defeitos, e produtos personalizados não receberam exclusão
+automática de direitos. Esta entrega não implementa consentimento de marketing
+nem um novo sistema de gestão de solicitações de privacidade.
+
+SEO: o HTML inicial contém todo o texto e o sumário. Cada página tem metadados
+próprios, canonical, Open Graph/Twitter e JSON-LD de página, organização e breadcrumbs.
+O sitemap geral fica em `/sitemap.xml`; o específico, em
+`/loja/ground-shop/sitemap.xml`. Somente lojas publicadas e ativas entram no sitemap;
+prévias, carrinhos, contas e pedidos não entram. `APP_URL` deve apontar para a origem
+de produção realmente usada. Não apontar o canonical para o domínio antigo enquanto
+ele ainda servir outra loja. A rota continua com `/loja/ground-shop`: domínio próprio
+sem esse prefixo depende do futuro módulo de domínios, não é ativado por esta entrega.
+Após o deploy, cadastrar o sitemap no Google Search Console e conferir as URLs na
+ferramenta de inspeção e no validador do Schema.org. Metadados e sitemap não garantem
+indexação, posicionamento ou rich results; FAQ é interação de leitura, sem promessa
+de resultado especial do Google. Robots não substitui controle de acesso.
+
 ## Escopo desta entrega
 
 O e-commerce é um módulo separado dos orçamentos administrativos. Não publica

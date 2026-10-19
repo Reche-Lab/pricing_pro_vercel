@@ -57,6 +57,22 @@ const product = {
   offer: { originalUnitCents: 100, minimumUnitCents: 100, maxDiscountPercent: 0, discountQuantity: 1 },
 };
 describe("preview storefront navigation", () => {
+  it("keeps institutional content readable without creating a cart session and links within the preview", () => {
+    render(<Storefront slug="ground-shop" settings={settings} products={[]} path={["quem-somos"]} paused={false} preview
+      institutionalLinks={[{ slug: "quem-somos", title: "Quem somos" }, { slug: "politica-de-privacidade", title: "Política de Privacidade" }]}>
+      <article><h1>Quem somos</h1><p>Conteúdo renderizado pelo servidor</p></article>
+    </Storefront>);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Quem somos");
+    expect(screen.getByRole("link", { name: "Política de Privacidade" })).toHaveAttribute("href", "/commerce/ground-shop/preview/politica-de-privacidade");
+    expect(storeRequest).not.toHaveBeenCalled();
+  });
+  it("does not turn an institutional page into a buyer session in the public store", () => {
+    render(<Storefront slug="ground-shop" settings={settings} products={[]} path={["quem-somos"]} paused={false}>
+      <article><h1>Quem somos</h1></article>
+    </Storefront>);
+    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+    expect(storeRequest).not.toHaveBeenCalled();
+  });
   it("sorts the catalog by unit price or name and preserves search filtering without API mutations", () => {
     render(<Storefront slug="ground-shop" settings={settings} products={[
       { ...product, id: "b", name: "Produto B", unitCents: 200 }, { ...product, id: "a", name: "Produto A", unitCents: 500 },
