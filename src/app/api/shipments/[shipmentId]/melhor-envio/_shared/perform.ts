@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { melhorEnvioErrorPayload } from "@/services/melhor-envio/errors";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
 import {
@@ -191,7 +192,7 @@ export async function performShipmentMelhorEnvioOperation(
     });
 
     return NextResponse.json(
-      { ok: false, error: humanizeMelhorEnvioError(message, status), httpStatus: status, response },
+      { ...melhorEnvioErrorPayload(error), ...(status !== 401 ? { error: humanizeMelhorEnvioError(message, status) } : {}), response },
       { status: 502 }
     );
   }

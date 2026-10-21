@@ -2,6 +2,22 @@
 
 Status atualizado durante a refatoracao inicial.
 
+## Reconexão Melhor Envio No Frete (2026-10-21)
+
+- [x] Identificar HTTP 401/Unauthenticated do provedor nas APIs de cotação do precificador e do orçamento, sem confundir sessão local expirada, validação ou escopos 403.
+- [x] Padronizar contrato de erro com provedor, código e sinalização de reconexão; estender o contrato às operações de etiqueta já cobertas pela tela de orçamento.
+- [x] Reutilizar o modal de OAuth com janela auxiliar, canal exclusivo por tentativa, preservação dos campos e sem reenvio automático de operações.
+- [x] Retornar sucesso/recusa do callback à janela original, com estado vinculado ao tenant e retorno restrito a destinos internos permitidos; manter retorno padrão de Configurações.
+- [x] Testar os fluxos reais dos componentes do precificador e do orçamento, mais regressões da reconexão Olist.
+- [x] 75 testes focados aprovados; tipos, lint e build de produção aprovados em sequência com memória limitada. Modal revisado em 1366 × 900, 360 × 800 e 320 × 568, sem transbordamento e preservando os campos ao fechar/reconectar, com respostas simuladas.
+- [ ] Homologar a autorização real com a conta Melhor Envio do tenant.
+
+Sem migration ou variável nova. A URL cadastrada no Melhor Envio continua
+`/api/melhor-envio/oauth/callback`; `/melhor-envio/oauth/complete` é somente o retorno
+interno da janela auxiliar. Se o navegador bloquear a janela, permitir pop-ups para
+o domínio da aplicação. Após a confirmação, refazer manualmente a cotação ou ação
+interrompida; compras e etiquetas não são reenviadas automaticamente.
+
 ## Páginas Institucionais Ground Shop (2026-10-19)
 
 - [x] Consultar as cinco páginas do site atual; identificar divergências de prazos e dados da empresa mais recentes na política de privacidade.

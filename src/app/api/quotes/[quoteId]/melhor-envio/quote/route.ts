@@ -12,6 +12,7 @@ import { createShipmentDraft } from "@/repositories/shipments";
 import { getTenantShippingProfile } from "@/repositories/tenant-settings";
 import { quoteMelhorEnvioShipping } from "@/services/melhor-envio/melhor-envio";
 import type { MelhorEnvioCredentials, MelhorEnvioSettings } from "@/services/melhor-envio/types";
+import { melhorEnvioErrorPayload } from "@/services/melhor-envio/errors";
 
 const quoteRequestSchema = z.object({
   selectedServiceCode: z.string().trim().optional().nullable(),
@@ -131,7 +132,7 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
     });
 
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Unknown Melhor Envio error" },
+      melhorEnvioErrorPayload(error),
       { status: 502 }
     );
   }

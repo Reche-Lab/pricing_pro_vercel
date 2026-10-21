@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 import { AppShell } from "@/components/layout/AppShell";
 import { OlistReconnectBoundary } from "@/components/olist/OlistReconnectBoundary";
+import { MelhorEnvioReconnectBoundary } from "@/components/shipping/MelhorEnvioReconnectBoundary";
 import { DeleteQuoteButton } from "@/components/quotes/DeleteQuoteButton";
 import { MelhorEnvioQuoteLabelActions } from "@/components/quotes/MelhorEnvioQuoteLabelActions";
 import { MelhorEnvioPayloadPreview } from "@/components/quotes/MelhorEnvioPayloadPreview";
@@ -87,6 +88,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
       tenantName={profile.tenant_name}
     >
       <OlistReconnectBoundary>
+      <MelhorEnvioReconnectBoundary>
       <QuoteAdministrativeEditingControl
         accepted={accepted}
         canManage={canReopenQuotes}
@@ -347,6 +349,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
           </div>
         </aside>
       </div>
+      </MelhorEnvioReconnectBoundary>
       </OlistReconnectBoundary>
     </AppShell>
   );

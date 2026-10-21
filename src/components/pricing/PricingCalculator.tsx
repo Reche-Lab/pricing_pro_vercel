@@ -37,6 +37,8 @@ import type { PlatformRule, PricingCurve, PricingCurveMode } from "@/domain/pric
 import { fetchCepAddress, formatCep, normalizeCep, type CepAddress } from "@/lib/cep";
 import { OlistQuoteActions } from "@/components/quotes/OlistQuoteActions";
 import { OlistReconnectBoundary } from "@/components/olist/OlistReconnectBoundary";
+import { MelhorEnvioReconnectBoundary } from "@/components/shipping/MelhorEnvioReconnectBoundary";
+import { melhorEnvioAwareFetch } from "@/lib/melhor-envio/browser-request";
 import { olistAwareFetch } from "@/lib/olist/browser-request";
 import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 
@@ -672,7 +674,8 @@ export function PricingCalculator({
         quantity: item.quantity
       }));
       const shippingSubtotal = shippingItems.length > 0 ? draftItemsSubtotal : simulatedResult.subtotal;
-      const response = await fetch(endpoint, {
+      const shippingFetch = shippingService === "melhor_envio" ? melhorEnvioAwareFetch : fetch;
+      const response = await shippingFetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -1146,6 +1149,7 @@ export function PricingCalculator({
 
   return (
     <OlistReconnectBoundary>
+    <MelhorEnvioReconnectBoundary>
     <section className="w-full max-w-full min-w-0 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl shadow-zinc-950/20">
       <div className="border-b border-zinc-800 bg-zinc-950 px-4 py-4 sm:px-5 sm:py-5 md:px-6">
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
@@ -1962,6 +1966,7 @@ export function PricingCalculator({
       onSyncPaymentOptions={syncOlistPaymentOptions}
       shippingAmount={shippingAmount}
     />
+    </MelhorEnvioReconnectBoundary>
     </OlistReconnectBoundary>
   );
 }

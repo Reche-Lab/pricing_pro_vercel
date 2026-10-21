@@ -8,6 +8,7 @@ import {
 } from "@/repositories/integrations";
 import { exchangeMelhorEnvioAuthorizationCode } from "@/services/melhor-envio/melhor-envio";
 import type { MelhorEnvioCredentials, MelhorEnvioSettings } from "@/services/melhor-envio/types";
+import { melhorEnvioOAuthReturnPath } from "@/lib/melhor-envio/oauth-return";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -15,14 +16,14 @@ export async function GET(request: Request) {
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
 
-  if (error) return redirectWithStatus(request, "error", error);
-  if (!code || !state) return redirectWithStatus(request, "error", "missing_code_or_state");
+  if (!state) return redirectWithStatus(request, "error", "missing_code_or_state");
 
   const oauthState = await consumeOAuthState(state, "melhor_envio");
   if (!oauthState) return redirectWithStatus(request, "error", "invalid_or_expired_state");
+  if (error || !code) return redirectWithStatus(request, "error", error ?? "missing_code_or_state", oauthState.redirect_path);
 
   const connection = await getIntegrationConnection(oauthState.user_id, oauthState.tenant_id, "melhor_envio");
-  if (!connection) return redirectWithStatus(request, "error", "integration_not_configured");
+  if (!connection) return redirectWithStatus(request, "error", "integration_not_configured", oauthState.redirect_path);
 
   try {
     const currentCredentials = decryptIntegrationCredentials<MelhorEnvioCredentials>(connection);
@@ -50,7 +51,7 @@ export async function GET(request: Request) {
       }
     });
 
-    return redirectWithStatus(request, "connected");
+    return redirectWithStatus(request, "connected", undefined, oauthState.redirect_path);
   } catch (callbackError) {
     await logIntegrationEvent(oauthState.user_id, oauthState.tenant_id, {
       provider: "melhor_envio",
@@ -61,13 +62,14 @@ export async function GET(request: Request) {
     return redirectWithStatus(
       request,
       "error",
-      callbackError instanceof Error ? callbackError.message : "unknown_oauth_error"
+      "authorization_failed",
+      oauthState.redirect_path
     );
   }
 }
 
-function redirectWithStatus(request: Request, status: "connected" | "error", message?: string) {
-  const target = new URL("/settings", request.url);
+function redirectWithStatus(request: Request, status: "connected" | "error", message?: string, redirectPath?: string | null) {
+  const target = new URL(melhorEnvioOAuthReturnPath(redirectPath), request.url);
   target.searchParams.set("melhor_envio", status);
   if (message) target.searchParams.set("message", message.slice(0, 140));
   return NextResponse.redirect(target);

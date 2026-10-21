@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import type { ShipmentRow } from "@/repositories/shipments";
 import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
+import { melhorEnvioAwareFetch } from "@/lib/melhor-envio/browser-request";
 
 type QuoteOption = {
   code: string;
@@ -101,7 +102,7 @@ export function MelhorEnvioQuoteLabelActions({
     setLoading("quote");
     setMessage("");
     setResult(null);
-    const response = await fetch(`/api/quotes/${quoteId}/melhor-envio/quote`, {
+    const response = await melhorEnvioAwareFetch(`/api/quotes/${quoteId}/melhor-envio/quote`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({})
@@ -136,7 +137,7 @@ export function MelhorEnvioQuoteLabelActions({
 
     setLoading("save-service");
     setMessage("");
-    const response = await fetch(`/api/quotes/${quoteId}/melhor-envio/quote`, {
+    const response = await melhorEnvioAwareFetch(`/api/quotes/${quoteId}/melhor-envio/quote`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ selectedServiceCode })
@@ -173,7 +174,7 @@ export function MelhorEnvioQuoteLabelActions({
     setResult(null);
     setHasCustomerValidationError(false);
 
-    const payloadResponse = await fetch(`/api/shipments/${selectedShipment.id}/melhor-envio/payload?operation=${operation}`);
+    const payloadResponse = await melhorEnvioAwareFetch(`/api/shipments/${selectedShipment.id}/melhor-envio/payload?operation=${operation}`);
     const payloadData = await payloadResponse.json().catch(() => null);
     if (!payloadResponse.ok || !payloadData?.ok) {
       setLoading("");
@@ -197,7 +198,7 @@ export function MelhorEnvioQuoteLabelActions({
       return;
     }
 
-    const response = await fetch(`/api/shipments/${selectedShipment.id}/melhor-envio/${operation}`, {
+    const response = await melhorEnvioAwareFetch(`/api/shipments/${selectedShipment.id}/melhor-envio/${operation}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ payload: payloadData.payload })

@@ -6,6 +6,7 @@ import {
   logIntegrationEvent
 } from "@/repositories/integrations";
 import type { MelhorEnvioCredentials, MelhorEnvioSettings } from "@/services/melhor-envio/types";
+import { melhorEnvioErrorPayload } from "@/services/melhor-envio/errors";
 
 type MelhorEnvioOperation = (
   payload: unknown,
@@ -50,7 +51,7 @@ export async function performMelhorEnvioOperation(
     });
 
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Unknown Melhor Envio error" },
+      melhorEnvioErrorPayload(error),
       { status: 502 }
     );
   }

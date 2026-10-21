@@ -10,6 +10,7 @@ import { estimatePackaging } from "@/repositories/packaging";
 import { createShipmentDraft } from "@/repositories/shipments";
 import { quoteMelhorEnvioShipping } from "@/services/melhor-envio/melhor-envio";
 import type { MelhorEnvioCredentials, MelhorEnvioSettings } from "@/services/melhor-envio/types";
+import { melhorEnvioErrorPayload } from "@/services/melhor-envio/errors";
 
 const shippingItemSchema = z.object({
   productVariantId: z.string().uuid(),
@@ -104,7 +105,7 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Unknown Melhor Envio error" },
+      melhorEnvioErrorPayload(error),
       { status: 502 }
     );
   }
