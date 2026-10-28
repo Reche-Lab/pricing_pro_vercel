@@ -60,6 +60,7 @@ export function buildOlistSalesOrderPayload(input: {
   paymentTerm?: QuotePaymentTermRow | null;
   settings?: OlistSettings;
 }) {
+  if (input.quote.delivery_method === "pickup") input = { ...input, shipment: null };
   return compactObject({
     idContato: numericId(input.quote.customer_external_olist_id),
     data: dateOnly(input.quote.created_at),
@@ -74,7 +75,9 @@ export function buildOlistSalesOrderPayload(input: {
     valorDesconto: money(input.quote.discount_total),
     enderecoEntrega: quoteDeliveryAddress(input.quote),
     ecommerce: { numeroPedidoEcommerce: input.quote.id },
-    transportador: buildOlistTransportadorPayload(input.shipment, input.settings),
+    transportador: input.quote.delivery_method === "pickup"
+      ? { fretePorConta: "S", ...(numericId(input.settings?.pickup_forma_envio_id) ? { formaEnvio: { id: numericId(input.settings?.pickup_forma_envio_id) } } : {}) }
+      : buildOlistTransportadorPayload(input.shipment, input.settings),
     pagamento: buildPaymentPayload(input.paymentTerm),
     itens: input.items.map((item) => nativeOrderItem(item))
   });

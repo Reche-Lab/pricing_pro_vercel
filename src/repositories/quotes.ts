@@ -10,6 +10,7 @@ import {
 import { canTransitionQuoteStatus, createQuoteCalculationSnapshot, isQuoteAdministrativeEditingOpen } from "@/domain/quotes/quotes";
 import { calculateQuoteDiscount, type QuoteDiscountType } from "@/domain/quotes/discount";
 import { validateQuoteItemEdit } from "@/domain/quotes/item-edit";
+import { quoteShippingEditBlock, QuoteShippingError } from "@/domain/quotes/shipping";
 import {
   hashPublicQuoteOtp,
   maskPublicEmail,
@@ -41,6 +42,8 @@ export type QuoteDetail = {
   valid_until: string | null;
   subtotal: string;
   shipping_total: string;
+  delivery_method?: "delivery" | "pickup";
+  shipping_olist_sync_pending?: boolean;
   discount_total: string;
   discount_type?: QuoteDiscountType;
   discount_value?: string;
@@ -321,6 +324,8 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           q.valid_until,
           q.subtotal,
           q.shipping_total,
+          to_jsonb(q)->>'delivery_method' as delivery_method,
+          coalesce((to_jsonb(q)->>'shipping_olist_sync_pending')::boolean, false) as shipping_olist_sync_pending,
           q.discount_total,
           q.discount_type,
           q.discount_value,
@@ -646,6 +651,8 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           q.valid_until::text as valid_until,
           q.subtotal::text as subtotal,
           q.shipping_total::text as shipping_total,
+          to_jsonb(q)->>'delivery_method' as delivery_method,
+          coalesce((to_jsonb(q)->>'shipping_olist_sync_pending')::boolean, false) as shipping_olist_sync_pending,
           q.discount_total::text as discount_total,
           q.discount_type,
           q.discount_value::text as discount_value,
@@ -1359,11 +1366,17 @@ export async function updateQuoteShippingTotal(
 ) {
   return withTenantContext(userId, tenantId, async (client) => {
     const amount = clampNumber(shippingTotal, 0, 100000, 0);
+    const previous = await client.query<QuoteDetail>("select * from quotes where tenant_id = $1 and id = $2 for update", [tenantId, quoteId]);
+    if (!previous.rows[0]) return null;
+    const blocked = quoteShippingEditBlock(previous.rows[0]);
+    if (blocked) throw new QuoteShippingError(blocked);
     const result = await client.query<{ id: string; shipping_total: string; grand_total: string }>(
       `
         update quotes
         set shipping_total = $3,
             grand_total = subtotal + $3 - discount_total,
+            delivery_method = case when $3 > 0 then 'delivery' else delivery_method end,
+            shipping_olist_sync_pending = case when shipping_total <> $3 and external_olist_order_id is not null then true else shipping_olist_sync_pending end,
             updated_at = now()
         where tenant_id = $1 and id = $2
         returning id, shipping_total::text, grand_total::text
@@ -1373,6 +1386,8 @@ export async function updateQuoteShippingTotal(
 
     const quote = result.rows[0];
     if (!quote) return null;
+
+    await rebalanceQuotePaymentInstallments(client, tenantId, quoteId, Number(quote.grand_total));
 
     await client.query(
       `
@@ -1655,6 +1670,8 @@ export async function updateQuoteEditable(
           set valid_until = coalesce($3::date, valid_until),
               subtotal = $4,
               shipping_total = $5,
+              delivery_method = case when $5 > 0 then 'delivery' else delivery_method end,
+              shipping_olist_sync_pending = case when shipping_total <> $5 and external_olist_order_id is not null then true else shipping_olist_sync_pending end,
               discount_type = $6,
               discount_value = $7,
               discount_total = $8,
@@ -2996,7 +3013,7 @@ function clean(value: string | null | undefined): string | null {
   return trimmed || null;
 }
 
-async function rebalanceQuotePaymentInstallments(
+export async function rebalanceQuotePaymentInstallments(
   client: pg.PoolClient,
   tenantId: string,
   quoteId: string,

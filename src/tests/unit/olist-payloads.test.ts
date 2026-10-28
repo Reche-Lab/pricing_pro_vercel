@@ -14,6 +14,17 @@ import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 import type { ShipmentRow } from "@/repositories/shipments";
 
 describe("olist payloads", () => {
+  it("uses pickup instead of an old Melhor Envio shipment when creating a new order", () => {
+    const payload = buildOlistSalesOrderPayload({
+      quote: { ...quote(), shipping_total: "0", delivery_method: "pickup" },
+      items: [item()],
+      shipment: { provider: "melhor_envio", tracking_code: "OLDTRACK", service_name: "SEDEX" } as ShipmentRow,
+      settings: { pickup_forma_envio_id: "42", melhor_envio_forma_envio_id: "99" }
+    });
+    expect(payload.valorFrete).toBe(0);
+    expect(payload.transportador).toEqual({ fretePorConta: "S", formaEnvio: { id: 42 } });
+    expect(JSON.stringify(payload)).not.toContain("OLDTRACK");
+  });
   it("builds customer payload", () => {
     const payload = buildOlistCustomerPayload(customer());
 

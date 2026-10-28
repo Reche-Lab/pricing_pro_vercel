@@ -247,7 +247,7 @@ export async function generateQuotePdf(input: {
   drawSectionTitle("Resumo");
   const summaryRows = [
     ["Subtotal", brl.format(Number(input.quote.subtotal))],
-    ["Frete", brl.format(Number(input.quote.shipping_total))],
+    [input.quote.delivery_method === "pickup" ? "Frete - retirada no local" : "Frete", brl.format(Number(input.quote.shipping_total))],
     [quoteDiscountLabel(input.quote.discount_type, Number(input.quote.discount_value ?? input.quote.discount_total), Number(input.quote.discount_total)), brl.format(Number(input.quote.discount_total))],
     ["TOTAL GERAL", brl.format(Number(input.quote.grand_total))]
   ];

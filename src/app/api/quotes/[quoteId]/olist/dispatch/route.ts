@@ -8,6 +8,7 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
   const { quoteId } = await context.params;
   const loaded = await loadQuoteOlistContext(quoteId, "olist");
   if ("error" in loaded && loaded.error) return NextResponse.json(loaded.error.body, { status: loaded.error.status });
+  if (loaded.detail.quote.delivery_method === "pickup") return NextResponse.json({ ok: false, error: "Orçamento para retirada no local. Use Conferir no Olist no resumo, sem reenviar o despacho de uma etiqueta antiga." }, { status: 409 });
 
   const orderId = loaded.detail.quote.external_olist_order_id;
   if (!orderId) {

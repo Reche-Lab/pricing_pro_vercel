@@ -13,6 +13,7 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
   const { quoteId } = await context.params;
   const loaded = await loadQuoteOlistContext(quoteId, "olist");
   if ("error" in loaded && loaded.error) return NextResponse.json(loaded.error.body, { status: loaded.error.status });
+  if (loaded.detail.quote.delivery_method === "pickup") return NextResponse.json({ ok: false, error: "Orçamento para retirada no local. Não envie para expedição de transportadora." }, { status: 409 });
 
   const body = await request.json().catch(() => ({}));
   const parsed = fulfillmentSchema.safeParse(body);

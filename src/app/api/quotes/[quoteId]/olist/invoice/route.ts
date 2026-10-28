@@ -7,6 +7,9 @@ export async function POST(_request: Request, context: { params: Promise<{ quote
   const { quoteId } = await context.params;
   const loaded = await loadQuoteOlistContext(quoteId, "olist");
   if ("error" in loaded && loaded.error) return NextResponse.json(loaded.error.body, { status: loaded.error.status });
+  if (loaded.detail.quote.shipping_olist_sync_pending) {
+    return NextResponse.json({ ok: false, error: "O frete foi alterado no orçamento. Ajuste o pedido no Olist e use Conferir no Olist no resumo antes de gerar a nota fiscal." }, { status: 409 });
+  }
 
   const hasInvoice = Boolean(loaded.detail.quote.external_olist_invoice_id);
   const pathTemplate = hasInvoice ? loaded.settings.invoice_emit_path : loaded.settings.invoice_path;

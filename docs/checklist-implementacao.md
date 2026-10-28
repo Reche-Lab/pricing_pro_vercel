@@ -2,6 +2,19 @@
 
 Status atualizado durante a refatoracao inicial.
 
+## Retirada No Local Em Orçamento Salvo (2026-10-28)
+
+- [x] Ação compacta no resumo, modal de confirmação com novo total e motivo obrigatório; respeitar orçamento aprovado/fechado e nota fiscal existente.
+- [x] Persistir retirada, zerar frete, recalcular total e parcelas locais em transação por tenant; registrar usuário, motivo e valores anteriores/novos no histórico e auditoria.
+- [x] Refletir retirada no PDF/link público e nos novos pedidos; manter etiquetas anteriores no histórico, sem cancelamento ou estorno automático.
+- [x] Enviar observação ao pedido Olist existente, preservar observações anteriores e manter pendência persistente para a correção financeira manual.
+- [x] Conferir o frete do pedido via GET antes de liberar NF; atualizar despacho para o ID de retirada configurado, sem reusar o rastreio de etiqueta antiga.
+- [x] Sinalizar falhas OAuth ao modal existente, sem perder a alteração local nem afirmar sincronização financeira completa.
+- [x] 77 testes focados aprovados, tipos/lint/build aprovados com memória limitada; modal e confirmação conferidos em 1366 × 900, 375 × 812 e 320 × 568, com dados simulados, sem transbordamento e com botões acessíveis no celular.
+- [ ] Aplicar `supabase/migrations/0066_quote_pickup.sql` no Supabase e homologar com um pedido de teste Olist.
+
+Limitação confirmada na [documentação oficial de atualização do pedido](https://api-docs.erp.olist.com/api-reference/pedidos/atualizar-pedido): `PUT /pedidos/{idPedido}` não documenta `valorFrete`. O campo `fretePagoEmpresa` do despacho não representa o frete cobrado ao cliente. Por isso, em pedidos existentes, o usuário deve zerar o frete cobrado e revisar parcelas/pagamentos no ERP; o botão **Conferir no Olist** consulta o valor e aplica a forma de envio de retirada configurada em Configurações > Olist. Nunca recriar o pedido nem substituir frete por desconto para contornar essa limitação. Nenhuma variável de ambiente nova.
+
 ## Reconexão Melhor Envio No Frete (2026-10-21)
 
 - [x] Identificar HTTP 401/Unauthenticated do provedor nas APIs de cotação do precificador e do orçamento, sem confundir sessão local expirada, validação ou escopos 403.

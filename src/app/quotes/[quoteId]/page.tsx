@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AppShell } from "@/components/layout/AppShell";
 import { OlistReconnectBoundary } from "@/components/olist/OlistReconnectBoundary";
 import { MelhorEnvioReconnectBoundary } from "@/components/shipping/MelhorEnvioReconnectBoundary";
+import { QuotePickupAction } from "@/components/quotes/QuotePickupAction";
 import { DeleteQuoteButton } from "@/components/quotes/DeleteQuoteButton";
 import { MelhorEnvioQuoteLabelActions } from "@/components/quotes/MelhorEnvioQuoteLabelActions";
 import { MelhorEnvioPayloadPreview } from "@/components/quotes/MelhorEnvioPayloadPreview";
@@ -139,6 +140,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
               <Detail label="Margem" value={`${Number(detail.quote.margin_percent).toFixed(1)}%`} />
               <Detail label="Validade" value={formatDate(detail.quote.valid_until)} />
             </dl>
+            <QuotePickupAction quote={detail.quote} />
           </div>
 
           <QuotePaymentTermPanel
@@ -339,11 +341,11 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                     email: member.email
                   }))}
               />
-              <MelhorEnvioQuoteLabelActions
+              {detail.quote.delivery_method === "pickup" ? <p className="rounded-md border border-zinc-700 p-3 text-sm text-zinc-300">Retirada no local: não será criada uma nova etiqueta. Envios anteriores permanecem no histórico; eventuais cancelamentos devem ser feitos no Melhor Envio.</p> : <MelhorEnvioQuoteLabelActions
                 quoteId={quoteId}
                 quoteShippingTotal={Number(detail.quote.shipping_total)}
                 shipments={shipments}
-              />
+              />}
               <QuoteStatusActions quoteId={quoteId} />
             </div>
           </div>
