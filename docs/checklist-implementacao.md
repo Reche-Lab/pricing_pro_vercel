@@ -4,6 +4,7 @@ Status atualizado durante a refatoracao inicial.
 
 ## Retirada No Local Em Orçamento Salvo (2026-10-28)
 
+- [x] Disponibilizar o mesmo botão de retirada também na cotação de “7. Etiqueta Melhor Envio”, com ou sem envio já vinculado, reutilizando confirmação, histórico e bloqueios do resumo. Atalho validado com 30 testes focados, tipos e lint aprovados; nenhuma migration adicional.
 - [x] Ação compacta no resumo, modal de confirmação com novo total e motivo obrigatório; respeitar orçamento aprovado/fechado e nota fiscal existente.
 - [x] Persistir retirada, zerar frete, recalcular total e parcelas locais em transação por tenant; registrar usuário, motivo e valores anteriores/novos no histórico e auditoria.
 - [x] Refletir retirada no PDF/link público e nos novos pedidos; manter etiquetas anteriores no histórico, sem cancelamento ou estorno automático.

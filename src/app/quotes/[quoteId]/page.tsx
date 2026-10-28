@@ -342,6 +342,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                   }))}
               />
               {detail.quote.delivery_method === "pickup" ? <p className="rounded-md border border-zinc-700 p-3 text-sm text-zinc-300">Retirada no local: não será criada uma nova etiqueta. Envios anteriores permanecem no histórico; eventuais cancelamentos devem ser feitos no Melhor Envio.</p> : <MelhorEnvioQuoteLabelActions
+                pickupAction={<QuotePickupAction quote={detail.quote} />}
                 quoteId={quoteId}
                 quoteShippingTotal={Number(detail.quote.shipping_total)}
                 shipments={shipments}

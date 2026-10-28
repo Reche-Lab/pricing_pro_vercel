@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
@@ -50,11 +50,13 @@ const OPERATIONS: Array<{
 export function MelhorEnvioQuoteLabelActions({
   quoteId,
   quoteShippingTotal,
-  shipments
+  shipments,
+  pickupAction
 }: {
   quoteId: string;
   quoteShippingTotal: number;
   shipments: ShipmentRow[];
+  pickupAction?: ReactNode;
 }) {
   const router = useRouter();
   const initialShipments = useMemo(() => shipments.filter((shipment) => shipment.provider === "melhor_envio"), [shipments]);
@@ -346,6 +348,7 @@ export function MelhorEnvioQuoteLabelActions({
             </div>
           </>
         ) : null}
+        {pickupAction}
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-5">

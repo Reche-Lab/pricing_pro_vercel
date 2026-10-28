@@ -1,13 +1,41 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QuotePickupAction } from "@/components/quotes/QuotePickupAction";
+import { MelhorEnvioQuoteLabelActions } from "@/components/quotes/MelhorEnvioQuoteLabelActions";
 import type { QuoteDetail } from "@/repositories/quotes";
+import type { ShipmentRow } from "@/repositories/shipments";
 const refresh = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 const quote = { id: "quote", status: "draft", shipping_total: "30", subtotal: "200", discount_total: "20", grand_total: "210" } as QuoteDetail;
+beforeEach(() => { vi.stubGlobal("React", React); });
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 describe("pickup confirmation", () => {
+  it.each([false, true])("offers the same removal action inside the label quote area, with a linked shipment: %s", async linked => {
+    const fetch = vi.fn().mockImplementation(async () => Response.json({ ok: true, pending: false, message: "Frete removido" }));
+    vi.stubGlobal("fetch", fetch);
+    const props = {
+      quoteId: quote.id,
+      quoteShippingTotal: 30,
+      shipments: linked ? [{ id: "shipment", provider: "melhor_envio", status: "quoted", service_name: "SEDEX", shipping_amount: "30" } as ShipmentRow] : [],
+      pickupAction: <QuotePickupAction quote={quote} />
+    };
+    const { container } = render(<MelhorEnvioQuoteLabelActions {...props} />);
+    expect(screen.getByText("7. Etiqueta Melhor Envio")).toBeInTheDocument();
+    fireEvent.click(within(container).getByRole("button", { name: /Retirar frete/ }));
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByRole("dialog")).toHaveTextContent("180,00");
+    expect(fetch).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar retirada" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toBe("/api/quotes/quote/pickup");
+  });
+  it("keeps the label-area shortcut disabled when the quote has an invoice", () => {
+    const props = { quoteId: quote.id, quoteShippingTotal: 30, shipments: [], pickupAction: <QuotePickupAction quote={{ ...quote, external_olist_invoice_id: "123" }} /> };
+    render(<MelhorEnvioQuoteLabelActions {...props} />);
+    expect(screen.getByRole("button", { name: /Retirar frete/ })).toBeDisabled();
+  });
   it("shows the new total and saves only after confirmation", async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, pending: false, message: "Frete removido" })));
     vi.stubGlobal("fetch", fetch);
