@@ -1,0 +1,81 @@
+import React from "react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { QuoteCustomerDeliveryModal } from "@/components/quotes/QuoteCustomerDeliveryModal";
+import { requestQuoteCustomerImport } from "@/lib/olist/quote-customer-import";
+import type { QuoteDetail } from "@/repositories/quotes";
+const refresh = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
+const quote = { id: "quote", customer_name: "Nome atual", customer_email: "atual@example.test", customer_phone: "11999999999", customer_postal_code: "20000000", customer_address_line: "Rua antiga", customer_address_number: "7", customer_city: "Rio de Janeiro", customer_state: "RJ", customer_external_olist_id: "2", delivery_attention_to: "Marina - Recepção" } as QuoteDetail;
+const profile = { name: "Nome Olist", postalCode: "01001000", addressLine: "Praça da Sé", addressNumber: "10", district: "Sé", city: "São Paulo", state: "SP" };
+beforeEach(() => { vi.stubGlobal("React", React); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+describe("review Olist data in the existing customer delivery form", () => {
+  it("reopens using the latest persisted address instead of stale component state", () => {
+    const { rerender } = render(<QuoteCustomerDeliveryModal quote={quote} />);
+    fireEvent.click(screen.getByRole("button", { name: "Editar dados" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    rerender(<QuoteCustomerDeliveryModal quote={{ ...quote, customer_address_line: "Rua persistida", customer_city: "São Paulo", customer_postal_code: "01001000" }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Editar dados" }));
+    expect(screen.getByDisplayValue("Rua persistida")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("01001-000")).toBeInTheDocument();
+  });
+  it("ignores a late import response after closing the review", async () => {
+    let resolve!: (value: Response) => void;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => new Promise<Response>(done => { resolve = done; })));
+    render(<QuoteCustomerDeliveryModal quote={quote} />);
+    act(() => requestQuoteCustomerImport("quote", "2"));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    await act(async () => { resolve(Response.json({ ok: true, externalId: "2", profile })); });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Editar dados" }));
+    expect(screen.getByDisplayValue("Rua antiga")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Nome Olist")).not.toBeInTheDocument();
+  });
+  it("prefills the form only after explicit import, preserving missing fields and the delivery recipient", async () => {
+    const fetch = vi.fn().mockImplementation(async () => Response.json({ ok: true, externalId: "2", profile }));
+    vi.stubGlobal("fetch", fetch);
+    render(<QuoteCustomerDeliveryModal quote={quote} />);
+    act(() => requestQuoteCustomerImport("quote", "2"));
+    expect(await screen.findByDisplayValue("Nome Olist")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Praça da Sé")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("01001-000")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("atual@example.test")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Marina - Recepção")).toBeInTheDocument();
+    expect(fetch.mock.calls.every(([, init]) => init?.method !== "PATCH")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Editar dados" }));
+    expect(screen.getByDisplayValue("Rua antiga")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Praça da Sé")).not.toBeInTheDocument();
+  });
+  it("saves the reviewed fields through the existing delivery endpoint, with import source and recipient preserved", async () => {
+    const fetch = vi.fn().mockImplementation(async (_url, init) => Response.json(init?.method === "PATCH" ? { ok: true } : { ok: true, externalId: "2", profile }));
+    vi.stubGlobal("fetch", fetch);
+    const { container } = render(<QuoteCustomerDeliveryModal quote={quote} />);
+    act(() => requestQuoteCustomerImport("quote", "2"));
+    await screen.findByDisplayValue("Nome Olist");
+    fireEvent.submit(container.querySelector("form")!);
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    const saved = fetch.mock.calls.find(([, init]) => init?.method === "PATCH");
+    expect(saved?.[0]).toBe("/api/quotes/quote/customer-delivery");
+    expect(JSON.parse(saved?.[1].body)).toMatchObject({ name: "Nome Olist", city: "São Paulo", addressLine: "Praça da Sé", attentionTo: "Marina - Recepção", sourceOlistExternalId: "2" });
+  });
+  it("shows lookup errors without replacing fields or saving and ignores other quotes", async () => {
+    const fetch = vi.fn().mockImplementation(async () => Response.json({ ok: false, error: "Reconecte Olist" }, { status: 502 }));
+    vi.stubGlobal("fetch", fetch);
+    render(<QuoteCustomerDeliveryModal quote={quote} />);
+    act(() => requestQuoteCustomerImport("another-quote", "2"));
+    expect(fetch).not.toHaveBeenCalled();
+    act(() => requestQuoteCustomerImport("quote", "2"));
+    expect(await screen.findByText("Reconecte Olist")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Rua antiga")).toBeInTheDocument();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+  it("does not import when editing is disabled", () => {
+    const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+    render(<QuoteCustomerDeliveryModal quote={quote} disabled />);
+    act(() => requestQuoteCustomerImport("quote", "2"));
+    expect(fetch).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});

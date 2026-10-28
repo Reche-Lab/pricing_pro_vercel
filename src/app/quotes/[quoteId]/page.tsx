@@ -291,6 +291,10 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
                 ) : null}
               </div>
               <OlistQuoteActions
+                enableCustomerDataImport
+                customerDataImportDisabledReason={detail.quote.external_olist_invoice_id
+                  ? "Orçamento com nota fiscal emitida não permite alterar os dados do cliente."
+                  : accepted && !administrativeEditingOpen ? "Reabra administrativamente o orçamento para atualizar os dados do cliente." : undefined}
                 customerDocument={detail.quote.customer_document}
                 customerEmail={detail.quote.customer_email}
                 customerPostalCode={detail.quote.customer_postal_code}

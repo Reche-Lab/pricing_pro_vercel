@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { olistAwareFetch, requestOlistReconnect, OLIST_CONNECTED_EVENT, OLIST_RECONNECT_EVENT } from "@/lib/olist/browser-request";
 import { isOlistReconnectRequired } from "@/lib/olist/oauth-errors";
+import { requestQuoteCustomerImport } from "@/lib/olist/quote-customer-import";
 import { isOlistPaymentLink } from "@/lib/olist/payment-terms";
 import type { OlistCustomerLookupField } from "@/services/olist/customer-lookup";
 import type { ShipmentRow } from "@/repositories/shipments";
@@ -17,6 +18,7 @@ import {
   Lock,
   PlugZap,
   ReceiptText,
+  RefreshCw,
   RotateCcw,
   Send,
   ShoppingCart,
@@ -207,10 +209,14 @@ export function OlistQuoteActions({
   shipments,
   defaultPaymentCategory,
   paymentOptions,
-  responsibleUsers
+  responsibleUsers,
+  enableCustomerDataImport = false,
+  customerDataImportDisabledReason
 }: {
   quoteId: string;
   hasCustomer: boolean;
+  enableCustomerDataImport?: boolean;
+  customerDataImportDisabledReason?: string;
   customerName?: string | null;
   customerDocument?: string | null;
   customerEmail?: string | null;
@@ -458,25 +464,27 @@ export function OlistQuoteActions({
     router.refresh();
   }
 
-  async function useFoundCustomer(externalId: string, raw?: unknown) {
+  async function useFoundCustomer(externalId: string) {
+    if (usingCustomer) return;
     setMessage("");
     setUsingCustomer(true);
-    const response = await olistAwareFetch(`/api/quotes/${quoteId}/olist/customer/use`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ externalId, raw })
-    });
-    const data = await response.json().catch(() => null);
-    setUsingCustomer(false);
-
-    if (!response.ok || !data?.ok) {
-      setMessage(data?.error ?? "Não foi possível vincular o cliente Olist.");
-      return;
-    }
-
-    setCustomerExternalId(externalId);
-    setMessage(data.message ?? `Cliente Olist vinculado. ID: ${externalId}.`);
-    router.refresh();
+    try {
+      const response = await olistAwareFetch(`/api/quotes/${quoteId}/olist/customer/use`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ externalId })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) {
+        setMessage(data?.error ?? "Não foi possível vincular o cliente Olist.");
+        return;
+      }
+      setCustomerExternalId(externalId);
+      setMessage(data.message ?? `Cliente Olist vinculado. ID: ${externalId}.`);
+      router.refresh();
+    } catch {
+      setMessage("Falha de comunicação ao vincular o cliente. Tente novamente.");
+    } finally { setUsingCustomer(false); }
   }
 
   function openAction(action: ActionKey) {
@@ -508,6 +516,8 @@ export function OlistQuoteActions({
           loading={usingCustomer}
           lookup={customerLookup}
           onUseCustomer={useFoundCustomer}
+          onUpdateCustomer={enableCustomerDataImport ? (externalId) => requestQuoteCustomerImport(quoteId, externalId) : undefined}
+          updateDisabledReason={customerDataImportDisabledReason}
         />
       ) : null}
       {actionResult ? <OlistActionResultPanel result={actionResult} /> : null}
@@ -520,7 +530,7 @@ export function OlistQuoteActions({
           icon={<UserCheck size={16} />}
           loading={loading}
           onClick={openAction}
-          primaryName={customerReady ? "customer" : "customerLookup"}
+          primaryName="customerLookup"
           secondaryName={customerReady ? undefined : "customer"}
           title="1. Cliente Olist"
         />
@@ -1930,12 +1940,16 @@ function CustomerLookupResult({
   lookup,
   activeExternalId,
   loading,
-  onUseCustomer
+  onUseCustomer,
+  onUpdateCustomer,
+  updateDisabledReason
 }: {
   lookup: CustomerLookupState;
   activeExternalId: string | null;
   loading: boolean;
   onUseCustomer: (externalId: string, raw?: unknown) => void;
+  onUpdateCustomer?: (externalId: string) => void;
+  updateDisabledReason?: string;
 }) {
   const title =
     lookup.status === "found"
@@ -1994,6 +2008,15 @@ function CustomerLookupResult({
       ) : (
         <p className="mt-2 text-xs opacity-80">Nenhum contato correspondente foi retornado pela API.</p>
       )}
+      {onUpdateCustomer && lookup.externalId && activeExternalId === lookup.externalId ? (
+        <div className="mt-3 border-t border-emerald-300/20 pt-3">
+          <button type="button" disabled={loading || Boolean(updateDisabledReason)} onClick={() => onUpdateCustomer(lookup.externalId as string)}
+            title={updateDisabledReason ?? "Consultar os dados completos no Olist e revisar no formulário de cliente antes de salvar"}
+            className="focus-ring inline-flex min-h-10 max-w-full items-center justify-center gap-2 rounded-md border border-emerald-300/40 bg-emerald-300/10 px-3 py-2 text-left text-xs font-semibold text-emerald-100 hover:bg-emerald-300/20 disabled:opacity-60">
+            <RefreshCw size={15} className="shrink-0" />Atualizar dados do orçamento
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -2,6 +2,19 @@
 
 Status atualizado durante a refatoracao inicial.
 
+## Dados Olist No Formulário Do Orçamento (2026-10-28)
+
+- [x] Separar o vínculo Olist da atualização cadastral: “Usar este cliente” não sobrescreve nome, contato ou endereço sem revisão.
+- [x] Exibir “Atualizar dados do orçamento” após localizar e vincular o contato, inclusive quando ele já estava vinculado; manter “Consultar cliente” disponível nesse caso.
+- [x] Consultar o contato completo pelo ID com as credenciais do tenant, ignorar o resultado bruto enviado pelo navegador e conferir a identidade retornada.
+- [x] Preencher “Cliente e responsável pelo recebimento” como rascunho: preservar campos ausentes e “Aos cuidados de”, permitir revisão/edição, gravar apenas após confirmação.
+- [x] Reabrir o formulário com os dados atuais, descartar importação cancelada/respostas atrasadas e tratar falhas sem perder o formulário.
+- [x] Respeitar aprovação/NF e cobrança; conferir vínculo sob bloqueio transacional ao salvar e registrar a origem Olist na auditoria existente.
+- [x] 66 testes focados aprovados; tipos, lint e build aprovados com memória limitada. Fluxo real dos componentes revisado em 1366 × 900, 375 × 812 e 320 × 568 com dados fictícios: sem transbordamento, sem gravar antes da confirmação e com endereço correto ao reabrir o formulário.
+- [ ] Homologar com um contato real do tenant no Olist.
+
+Sem migration ou variável nova. A importação usa a [consulta oficial de contato](https://api-docs.erp.olist.com/api-reference/contatos/obter-contato), somente leitura no ERP. O formulário atualiza o cadastro local do cliente e o recebimento do orçamento; pedidos Olist já criados não são atualizados automaticamente. Se o endereço for alterado, revisar o frete.
+
 ## Retirada No Local Em Orçamento Salvo (2026-10-28)
 
 - [x] Disponibilizar o mesmo botão de retirada também na cotação de “7. Etiqueta Melhor Envio”, com ou sem envio já vinculado, reutilizando confirmação, histórico e bloqueios do resumo. Atalho validado com 30 testes focados, tipos e lint aprovados; nenhuma migration adicional.

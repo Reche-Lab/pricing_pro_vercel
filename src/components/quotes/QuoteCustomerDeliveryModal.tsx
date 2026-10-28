@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Link2, MapPin, Pencil, Unlink, X } from "lucide-react";
+import { CheckCircle2, Link2, Loader2, MapPin, Pencil, Unlink, X } from "lucide-react";
 import { fetchCepAddress, formatCep, normalizeCep } from "@/lib/cep";
 import type { QuoteDetail } from "@/repositories/quotes";
+import type { OlistCustomerProfile } from "@/services/olist/customer-profile";
+import { olistAwareFetch } from "@/lib/olist/browser-request";
+import { QUOTE_CUSTOMER_IMPORT_EVENT } from "@/lib/olist/quote-customer-import";
 
 export function QuoteCustomerDeliveryModal({ quote, disabled = false }: { quote: QuoteDetail; disabled?: boolean }) {
   const router = useRouter();
@@ -17,31 +20,96 @@ export function QuoteCustomerDeliveryModal({ quote, disabled = false }: { quote:
   const [district, setDistrict] = useState(quote.customer_district ?? "");
   const [city, setCity] = useState(quote.customer_city ?? "");
   const [state, setState] = useState(quote.customer_state ?? "");
+  const [profileDraft, setProfileDraft] = useState<OlistCustomerProfile | null>(null);
+  const [sourceOlistExternalId, setSourceOlistExternalId] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [formRevision, setFormRevision] = useState(0);
+  const importRequest = useRef<AbortController | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cepAttempt = useRef(0);
+  const editingDisabled = disabled || Boolean(quote.external_olist_invoice_id);
+
+  const resetFields = useCallback(() => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    cepAttempt.current++;
+    importRequest.current?.abort(); importRequest.current = null;
+    setImporting(false); setProfileDraft(null); setSourceOlistExternalId(null);
+    setPostalCode(formatCep(quote.customer_postal_code ?? ""));
+    setAddressLine(quote.customer_address_line ?? ""); setDistrict(quote.customer_district ?? "");
+    setCity(quote.customer_city ?? ""); setState(quote.customer_state ?? "");
+    setFormRevision(current => current + 1);
+  }, [quote]);
+
+  const close = useCallback(() => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    cepAttempt.current++;
+    importRequest.current?.abort(); importRequest.current = null;
+    setImporting(false); setOpen(false);
+  }, []);
+
+  useEffect(() => () => {
+    importRequest.current?.abort(); importRequest.current = null;
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape" && !saving) close();
     }
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [open]);
+  }, [open, saving, close]);
 
   useEffect(() => {
     function openFromShippingValidation() {
+      if (editingDisabled) return;
+      resetFields();
       setError("");
       setMessage("Complete os dados indicados para continuar com a etiqueta.");
       setOpen(true);
     }
+    async function importFromOlist(event: Event) {
+      const detail = (event as CustomEvent<{ quoteId?: string; externalId?: string }>).detail;
+      if (editingDisabled || saving || detail?.quoteId !== quote.id || !detail.externalId) return;
+      resetFields(); setError(""); setMessage(""); setOpen(true); setImporting(true);
+      const controller = new AbortController();
+      importRequest.current = controller;
+      try {
+        const response = await olistAwareFetch(`/api/quotes/${quote.id}/olist/customer/use?externalId=${encodeURIComponent(detail.externalId)}`, { cache: "no-store", signal: controller.signal });
+        const data = await response.json().catch(() => null);
+        if (importRequest.current !== controller) return;
+        if (!response.ok || !data?.ok || !data.profile) throw new Error(typeof data?.error === "string" ? data.error : "Não foi possível importar os dados do cliente.");
+        const profile = data.profile as OlistCustomerProfile;
+        setProfileDraft(profile); setSourceOlistExternalId(data.externalId);
+        setPostalCode(formatCep(profile.postalCode || quote.customer_postal_code || ""));
+        setAddressLine(profile.addressLine || quote.customer_address_line || "");
+        setDistrict(profile.district || quote.customer_district || "");
+        setCity(profile.city || quote.customer_city || "");
+        setState(profile.state || quote.customer_state || "");
+        setFormRevision(current => current + 1);
+        setMessage("Dados do Olist preenchidos para revisão. Confira o endereço e clique em Salvar dados de entrega para aplicar. Campos não informados e Aos cuidados de foram mantidos.");
+      } catch (failure) {
+        if (importRequest.current === controller) setError(failure instanceof Error ? failure.message : "Falha de comunicação com o Olist.");
+      } finally {
+        if (importRequest.current === controller) { importRequest.current = null; setImporting(false); }
+      }
+    }
     window.addEventListener("quote-customer-delivery:open", openFromShippingValidation);
-    return () => window.removeEventListener("quote-customer-delivery:open", openFromShippingValidation);
-  }, []);
+    window.addEventListener(QUOTE_CUSTOMER_IMPORT_EVENT, importFromOlist);
+    return () => {
+      window.removeEventListener("quote-customer-delivery:open", openFromShippingValidation);
+      window.removeEventListener(QUOTE_CUSTOMER_IMPORT_EVENT, importFromOlist);
+    };
+  }, [editingDisabled, quote, resetFields, saving]);
 
   async function lookupCep() {
     const cep = normalizeCep(postalCode);
     if (cep.length !== 8) return;
+    const attempt = ++cepAttempt.current;
     setMessage("Buscando endereço pelo CEP...");
     const address = await fetchCepAddress(cep).catch(() => null);
+    if (attempt !== cepAttempt.current) return;
     if (!address) {
       setMessage("CEP não encontrado. Preencha o endereço manualmente.");
       return;
@@ -56,51 +124,55 @@ export function QuoteCustomerDeliveryModal({ quote, disabled = false }: { quote:
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving || importing || editingDisabled) return;
     setSaving(true);
     setError("");
     setMessage("");
     const form = new FormData(event.currentTarget);
-    const response = await fetch(`/api/quotes/${quote.id}/customer-delivery`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        name: form.get("name"),
-        document: form.get("document"),
-        email: form.get("email"),
-        phone: form.get("phone"),
-        postalCode,
-        addressLine,
-        addressNumber: form.get("addressNumber"),
-        addressComplement: form.get("addressComplement"),
-        district,
-        city,
-        state,
-        attentionTo: form.get("attentionTo")
-      })
-    });
-    const data = await response.json().catch(() => null);
-    setSaving(false);
-
-    if (!response.ok || !data?.ok) {
-      const fieldMessages = data?.fields && typeof data.fields === "object"
-        ? Object.values(data.fields).flat().filter(Boolean).join(" ")
-        : "";
-      setError(fieldMessages || data?.error || "Não foi possível atualizar os dados do cliente.");
-      return;
-    }
-
-    setMessage("Dados de entrega atualizados.");
-    router.refresh();
-    window.setTimeout(() => setOpen(false), 500);
+    try {
+      const response = await fetch(`/api/quotes/${quote.id}/customer-delivery`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: form.get("name"),
+          document: form.get("document"),
+          email: form.get("email"),
+          phone: form.get("phone"),
+          postalCode,
+          addressLine,
+          addressNumber: form.get("addressNumber"),
+          addressComplement: form.get("addressComplement"),
+          district,
+          city,
+          state,
+          attentionTo: form.get("attentionTo"),
+          sourceOlistExternalId
+        })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) {
+        const fieldMessages = data?.fields && typeof data.fields === "object"
+          ? Object.values(data.fields).flat().filter(Boolean).join(" ")
+          : "";
+        setError(fieldMessages || data?.error || "Não foi possível atualizar os dados do cliente.");
+        return;
+      }
+      setMessage("Dados de entrega atualizados.");
+      router.refresh();
+      closeTimer.current = setTimeout(close, 500);
+    } catch {
+      setError("Falha de comunicação ao salvar. Seus dados continuam no formulário; tente novamente.");
+    } finally { setSaving(false); }
   }
 
   return (
     <>
       <button
         className="focus-ring inline-flex h-9 items-center gap-2 rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-950 disabled:cursor-not-allowed disabled:opacity-40"
-        disabled={disabled}
-        title={disabled ? "Reabra administrativamente o orçamento para editar os dados." : "Editar dados do cliente e entrega"}
+        disabled={editingDisabled}
+        title={editingDisabled ? "Orçamento fechado para edição ou com nota fiscal emitida." : "Editar dados do cliente e entrega"}
         onClick={() => {
+          resetFields();
           setError("");
           setMessage("");
           setOpen(true);
@@ -117,11 +189,12 @@ export function QuoteCustomerDeliveryModal({ quote, disabled = false }: { quote:
           aria-modal="true"
           className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden bg-black/75 p-0 backdrop-blur-sm sm:p-4"
           onMouseDown={(event) => {
-            if (event.currentTarget === event.target) setOpen(false);
+            if (event.currentTarget === event.target && !saving) close();
           }}
           role="dialog"
         >
           <form
+            key={formRevision}
             className="flex h-dvh w-full max-w-3xl flex-col overflow-hidden border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/50 sm:h-auto sm:max-h-[92dvh] sm:rounded-lg"
             onSubmit={submit}
           >
@@ -137,7 +210,8 @@ export function QuoteCustomerDeliveryModal({ quote, disabled = false }: { quote:
               <button
                 aria-label="Fechar"
                 className="focus-ring inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-800 text-zinc-400 hover:bg-zinc-900 hover:text-white"
-                onClick={() => setOpen(false)}
+                disabled={saving}
+                onClick={close}
                 type="button"
               >
                 <X size={17} />
@@ -145,6 +219,8 @@ export function QuoteCustomerDeliveryModal({ quote, disabled = false }: { quote:
             </header>
 
             <div className="grid min-h-0 gap-4 overflow-y-auto overflow-x-hidden p-4 sm:gap-5 sm:p-5">
+              {importing ? <p role="status" className="flex items-center gap-2 text-sm text-cyan-200"><Loader2 size={16} className="animate-spin" />Buscando dados completos no Olist...</p> : null}
+              {sourceOlistExternalId ? <p className="rounded-md border border-cyan-400/25 bg-cyan-400/10 p-3 text-sm leading-6 text-cyan-100">Revisão dos dados do cliente Olist {sourceOlistExternalId}. Nada foi salvo ainda. O cadastro local do cliente será atualizado; pedidos Olist já criados não serão alterados automaticamente. Se o endereço mudar, revise o frete.</p> : null}
               <div className={`flex items-start gap-3 rounded-md border px-3 py-3 ${
                 quote.customer_external_olist_id
                   ? "border-emerald-400/20 bg-emerald-400/10"
@@ -167,19 +243,20 @@ export function QuoteCustomerDeliveryModal({ quote, disabled = false }: { quote:
                 </div>
               </div>
 
+              <fieldset disabled={saving || importing} className="contents">
               <section className="grid gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <Input defaultValue={quote.customer_name} label="Nome ou razão social" name="name" required />
+                  <Input defaultValue={profileDraft?.name ?? quote.customer_name} label="Nome ou razão social" name="name" required />
                 </div>
-                <Input defaultValue={quote.customer_document} label="CPF/CNPJ" name="document" />
+                <Input defaultValue={profileDraft?.document ?? quote.customer_document} label="CPF/CNPJ" name="document" />
                 <Input
-                  defaultValue={quote.customer_phone}
+                  defaultValue={profileDraft?.phone ?? quote.customer_phone}
                   label="Telefone com DDD"
                   name="phone"
                   placeholder="(11) 99999-9999"
                 />
                 <div className="sm:col-span-2">
-                  <Input defaultValue={quote.customer_email} label="E-mail" name="email" type="email" />
+                  <Input defaultValue={profileDraft?.email ?? quote.customer_email} label="E-mail" name="email" type="email" />
                 </div>
               </section>
 
@@ -215,11 +292,11 @@ export function QuoteCustomerDeliveryModal({ quote, disabled = false }: { quote:
                     <ControlledInput label="Endereço" name="addressLine" onChange={setAddressLine} value={addressLine} />
                   </div>
                   <div className="sm:col-span-2">
-                    <Input defaultValue={quote.customer_address_number} label="Número" name="addressNumber" />
+                    <Input defaultValue={profileDraft?.addressNumber ?? quote.customer_address_number} label="Número" name="addressNumber" />
                   </div>
                   <div className="sm:col-span-3">
                     <Input
-                      defaultValue={quote.customer_address_complement}
+                      defaultValue={profileDraft?.addressComplement ?? quote.customer_address_complement}
                       label="Complemento"
                       name="addressComplement"
                     />
@@ -242,6 +319,8 @@ export function QuoteCustomerDeliveryModal({ quote, disabled = false }: { quote:
                 </div>
               </section>
 
+              </fieldset>
+
               {error ? (
                 <p className="rounded-md border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
                   {error}
@@ -258,14 +337,15 @@ export function QuoteCustomerDeliveryModal({ quote, disabled = false }: { quote:
             <footer className="flex shrink-0 justify-end gap-3 border-t border-zinc-800 p-4">
               <button
                 className="focus-ring min-h-10 rounded-md border border-zinc-700 px-4 text-sm font-medium text-zinc-300 hover:bg-zinc-900"
-                onClick={() => setOpen(false)}
+                disabled={saving}
+                onClick={close}
                 type="button"
               >
                 Cancelar
               </button>
               <button
                 className="focus-ring min-h-10 rounded-md bg-cyan-300 px-4 text-sm font-semibold text-zinc-950 hover:bg-cyan-200 disabled:opacity-60"
-                disabled={saving}
+                disabled={saving || importing}
                 type="submit"
               >
                 {saving ? "Salvando..." : "Salvar dados de entrega"}

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
+import { requireWritableBilling } from "@/lib/billing/guard";
 import { isValidCpfOrCnpj } from "@/lib/validation/documents";
 import { assertQuoteCanBeEdited, updateQuoteCustomerDelivery } from "@/repositories/quotes";
 
@@ -16,7 +17,8 @@ const schema = z.object({
   district: z.string().trim().max(120).optional().nullable(),
   city: z.string().trim().max(120).optional().nullable(),
   state: z.string().trim().max(2).optional().nullable(),
-  attentionTo: z.string().trim().max(120).optional().nullable()
+  attentionTo: z.string().trim().max(120).optional().nullable(),
+  sourceOlistExternalId: z.string().regex(/^[1-9]\d{0,14}$/).optional().nullable()
 }).superRefine((value, context) => {
   if (value.document && !isValidCpfOrCnpj(value.document)) {
     context.addIssue({
@@ -39,6 +41,8 @@ const schema = z.object({
 export async function PATCH(request: Request, context: { params: Promise<{ quoteId: string }> }) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ ok: false, error: "Não autenticado." }, { status: 401 });
+  const billingBlock = await requireWritableBilling(session.userId, session.tenantId);
+  if (billingBlock) return billingBlock;
 
   const { quoteId } = await context.params;
   if (!z.string().uuid().safeParse(quoteId).success) {

@@ -2115,6 +2115,7 @@ export type UpdateQuoteCustomerDeliveryInput = {
   city?: string | null;
   state?: string | null;
   attentionTo?: string | null;
+  sourceOlistExternalId?: string | null;
 };
 
 export async function updateQuoteCustomerDelivery(
@@ -2128,10 +2129,18 @@ export async function updateQuoteCustomerDelivery(
       customer_id: string | null;
       external_olist_invoice_id: string | null;
       delivery_attention_to: string | null;
+      status: string;
+      public_accepted_at: string | null;
+      edit_reopened_at: string | null;
+      edit_relocked_at: string | null;
     }>(
       `
         select
           customer_id,
+          status,
+          to_jsonb(quotes)->>'public_accepted_at' as public_accepted_at,
+          to_jsonb(quotes)->>'edit_reopened_at' as edit_reopened_at,
+          to_jsonb(quotes)->>'edit_relocked_at' as edit_relocked_at,
           to_jsonb(quotes)->>'external_olist_invoice_id' as external_olist_invoice_id,
           to_jsonb(quotes)->>'delivery_attention_to' as delivery_attention_to
         from quotes
@@ -2145,6 +2154,9 @@ export async function updateQuoteCustomerDelivery(
     if (!quote.customer_id) throw new Error("Este orçamento não possui um cliente local para atualizar.");
     if (quote.external_olist_invoice_id) {
       throw new Error("Os dados de entrega não podem ser alterados após a emissão da nota fiscal.");
+    }
+    if ((quote.public_accepted_at || quote.status === "accepted") && !isQuoteAdministrativeEditingOpen({ editReopenedAt: quote.edit_reopened_at, editRelockedAt: quote.edit_relocked_at })) {
+      throw new Error("Orçamento aceito pelo cliente está fechado para edição.");
     }
 
     const beforeResult = await client.query(
@@ -2169,6 +2181,9 @@ export async function updateQuoteCustomerDelivery(
       [tenantId, quote.customer_id]
     );
     if (!beforeResult.rows[0]) throw new Error("Cliente do orçamento não encontrado.");
+    if (input.sourceOlistExternalId && beforeResult.rows[0].external_olist_id !== input.sourceOlistExternalId) {
+      throw new Error("O cliente Olist vinculado mudou. Recarregue o orçamento e importe os dados novamente.");
+    }
 
     const customerResult = await client.query(
       `
@@ -2247,7 +2262,8 @@ export async function updateQuoteCustomerDelivery(
         JSON.stringify({
           customerId: quote.customer_id,
           changedFields,
-          attentionToChanged: quote.delivery_attention_to !== attentionTo
+          attentionToChanged: quote.delivery_attention_to !== attentionTo,
+          sourceOlistExternalId: input.sourceOlistExternalId ?? null
         })
       ]
     );
