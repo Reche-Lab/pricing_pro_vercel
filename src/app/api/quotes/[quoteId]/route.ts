@@ -27,8 +27,29 @@ export async function PATCH(request: Request, context: { params: Promise<{ quote
   let quote;
   try { quote = await updateQuoteShippingTotal(session.userId, session.tenantId, quoteId, parsed.data.shippingTotal); }
   catch (error) {
-    console.error("Quote shipping update failed.", { quoteId, tenantId: session.tenantId, message: error instanceof Error ? error.message : "Unknown error" });
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Não foi possível atualizar o frete." }, { status: error instanceof QuoteShippingError ? error.status : 500 });
+    const databaseError = error && typeof error === "object" ? error as { code?: string; column?: string } : undefined;
+    const migrationRequired = databaseError?.code === "42703" && (
+      ["delivery_method", "shipping_olist_sync_pending"].includes(databaseError.column ?? "")
+      || error instanceof Error && /\b(?:delivery_method|shipping_olist_sync_pending)\b/.test(error.message)
+    );
+    console.error("Quote shipping update failed.", {
+      quoteId, tenantId: session.tenantId,
+      databaseCode: databaseError?.code,
+      requiredMigration: migrationRequired ? "0066_quote_pickup.sql" : undefined,
+      message: error instanceof Error ? error.message : "Unknown error"
+    });
+    if (migrationRequired) {
+      return NextResponse.json({
+        ok: false,
+        code: "database_migration_required",
+        requiredMigration: "0066_quote_pickup.sql",
+        error: "O banco de dados precisa de uma atualização para salvar o frete. Peça ao administrador para aplicar a migration 0066_quote_pickup.sql no Supabase desta instalação e tente novamente."
+      }, { status: 503 });
+    }
+    return NextResponse.json({
+      ok: false,
+      error: error instanceof QuoteShippingError ? error.message : "Não foi possível atualizar o frete. Tente novamente ou informe o administrador."
+    }, { status: error instanceof QuoteShippingError ? error.status : 500 });
   }
   if (!quote) return NextResponse.json({ ok: false, error: "Quote not found." }, { status: 404 });
 

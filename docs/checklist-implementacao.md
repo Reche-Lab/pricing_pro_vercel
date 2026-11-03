@@ -2,6 +2,16 @@
 
 Status atualizado durante a refatoracao inicial.
 
+## Migration Pendente Ao Salvar Frete (2026-11-03)
+
+- [x] Identificar que `delivery_method` e `shipping_olist_sync_pending` são criadas por `0066_quote_pickup.sql`; não alterar o banco automaticamente nem salvar sem os controles de retirada/sincronização.
+- [x] Retornar orientação específica e HTTP 503 quando faltar uma dessas colunas; preservar mensagens das regras de negócio e não expor erros internos de banco na UI.
+- [x] Acrescentar código PostgreSQL e nome da migration ao log do servidor.
+- [x] 41 testes focados, tipos e lint aprovados. Cobertos os erros das duas colunas, falhas internas não expostas, regras de bloqueio, atualização bem-sucedida e regressões de retirada/OAuth.
+- [ ] Aplicar `supabase/migrations/0066_quote_pickup.sql` no projeto Supabase usado pelo `DATABASE_URL` do deploy e testar novamente a inclusão do frete.
+
+Nenhuma migration nova. O arquivo `0066_quote_pickup.sql` é idempotente (`add column if not exists`) e deve ser aplicado antes de utilizar as operações de frete/retirada desta versão. Não há necessidade de alterar variáveis de ambiente nem reconectar OAuth para corrigir essa ausência de colunas.
+
 ## Dados Olist No Formulário Do Orçamento (2026-10-28)
 
 - [x] Separar o vínculo Olist da atualização cadastral: “Usar este cliente” não sobrescreve nome, contato ou endereço sem revisão.
