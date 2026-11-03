@@ -1373,10 +1373,10 @@ export async function updateQuoteShippingTotal(
     const result = await client.query<{ id: string; shipping_total: string; grand_total: string }>(
       `
         update quotes
-        set shipping_total = $3,
-            grand_total = subtotal + $3 - discount_total,
-            delivery_method = case when $3 > 0 then 'delivery' else delivery_method end,
-            shipping_olist_sync_pending = case when shipping_total <> $3 and external_olist_order_id is not null then true else shipping_olist_sync_pending end,
+        set shipping_total = $3::numeric,
+            grand_total = subtotal + $3::numeric - discount_total,
+            delivery_method = case when $3::numeric > 0 then 'delivery' else delivery_method end,
+            shipping_olist_sync_pending = case when shipping_total <> $3::numeric and external_olist_order_id is not null then true else shipping_olist_sync_pending end,
             updated_at = now()
         where tenant_id = $1 and id = $2
         returning id, shipping_total::text, grand_total::text
@@ -1669,9 +1669,9 @@ export async function updateQuoteEditable(
           update quotes
           set valid_until = coalesce($3::date, valid_until),
               subtotal = $4,
-              shipping_total = $5,
-              delivery_method = case when $5 > 0 then 'delivery' else delivery_method end,
-              shipping_olist_sync_pending = case when shipping_total <> $5 and external_olist_order_id is not null then true else shipping_olist_sync_pending end,
+              shipping_total = $5::numeric,
+              delivery_method = case when $5::numeric > 0 then 'delivery' else delivery_method end,
+              shipping_olist_sync_pending = case when shipping_total <> $5::numeric and external_olist_order_id is not null then true else shipping_olist_sync_pending end,
               discount_type = $6,
               discount_value = $7,
               discount_total = $8,

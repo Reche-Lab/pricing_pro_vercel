@@ -2,6 +2,17 @@
 
 Status atualizado durante a refatoracao inicial.
 
+## Tipo Do Frete Na Edição Do Orçamento (2026-11-03)
+
+- [x] Reproduzir `inconsistent types deduced for parameter $5` em PostgreSQL 16 local descartável, usando as migrations do projeto e a consulta real do repositório.
+- [x] Tipar explicitamente como `numeric` o frete nos usos de `$5` da edição e `$3` da atualização isolada, sem converter valores monetários em inteiros.
+- [x] 8 testes de integração aprovados no PostgreSQL real: edição, frete com centavos/zero, total, parcelas, troca para entrega, pendência Olist, auditoria e bloqueios existentes.
+- [x] 51 testes focados aprovados para edição, itens, frete e retirada; encerrar o banco descartável após os testes, sem acessar o Supabase ou Olist reais.
+- [x] Tipos, lint e build de produção aprovados em sequência com memória limitada e sem servidor de desenvolvimento concorrente.
+- [ ] Publicar a correção e repetir o salvamento do orçamento que falhou. Caso exista pedido Olist vinculado, conferir seus itens: o fluxo atual envia a alteração externa antes da gravação local.
+
+Sem migration ou variável de ambiente nova. A correção é somente nas consultas SQL da aplicação; manter a migration `0066_quote_pickup.sql` já necessária para as colunas de frete/retirada.
+
 ## Migration Pendente Ao Salvar Frete (2026-11-03)
 
 - [x] Identificar que `delivery_method` e `shipping_olist_sync_pending` são criadas por `0066_quote_pickup.sql`; não alterar o banco automaticamente nem salvar sem os controles de retirada/sincronização.

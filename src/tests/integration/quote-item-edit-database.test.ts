@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getPool } from "@/lib/db/client";
-import { updateQuoteEditable, type UpdateQuoteInput } from "@/repositories/quotes";
+import { updateQuoteEditable, updateQuoteShippingTotal, type UpdateQuoteInput } from "@/repositories/quotes";
 
 const url = process.env.QUOTE_EDIT_TEST_DATABASE_URL;
 describe.skipIf(!url)("quote item edits in isolated Postgres", () => {
@@ -12,8 +12,8 @@ describe.skipIf(!url)("quote item edits in isolated Postgres", () => {
   let variantId: string;
   let originalId: string;
   let newItemId: string;
-  const edit = (items: UpdateQuoteInput["items"], expectedItemIds: string[]) => updateQuoteEditable(actorId, tenantId, quoteId, {
-    items, expectedItemIds, shippingTotal: 5, discountType: "percent", discountValue: 10, discountReason: "Teste", reason: "Teste de edição"
+  const edit = (items: UpdateQuoteInput["items"], expectedItemIds: string[], shippingTotal = 5) => updateQuoteEditable(actorId, tenantId, quoteId, {
+    items, expectedItemIds, shippingTotal, discountType: "percent", discountValue: 10, discountReason: "Teste", reason: "Teste de edição"
   });
   beforeAll(async () => {
     if (!url || new URL(url).hostname !== "127.0.0.1" || !new URL(url).pathname.startsWith("/commerce_test_")) throw new Error("Isolated local database required");
@@ -68,6 +68,46 @@ describe.skipIf(!url)("quote item edits in isolated Postgres", () => {
     const rows = (await getPool().query("select id,quantity from quote_items where quote_id=$1", [quoteId])).rows;
     expect(rows).toHaveLength(2);
     expect(rows.find(item => item.id === originalId)?.quantity).toBe(2);
+  });
+
+  it("preserves fractional freight in quote edits instead of inferring an integer from CASE", async () => {
+    const result = await edit([
+      { id: originalId, productVariantId: variantId, quantity: 2, unitPrice: 10 },
+      { id: newItemId, productVariantId: variantId, quantity: 3, unitPrice: 12.35 }
+    ], [originalId, newItemId], 12.34);
+    expect(result).toMatchObject({ shippingTotal: 12.34, grandTotal: 63.68 });
+    const saved = (await getPool().query("select shipping_total, delivery_method from quotes where id=$1", [quoteId])).rows[0];
+    expect(Number(saved.shipping_total)).toBe(12.34);
+    expect(saved.delivery_method).toBe("delivery");
+  });
+
+  it.each([0, 23.45])("updates standalone freight to %s and keeps totals and installments consistent", async shippingTotal => {
+    const result = await updateQuoteShippingTotal(actorId, tenantId, quoteId, shippingTotal);
+    const saved = (await getPool().query("select subtotal, discount_total, grand_total, shipping_total from quotes where id=$1", [quoteId])).rows[0];
+    expect(Number(saved.shipping_total)).toBe(shippingTotal);
+    expect(Number(result?.grand_total)).toBeCloseTo(Number(saved.subtotal) - Number(saved.discount_total) + shippingTotal, 2);
+    const installment = await getPool().query("select amount from quote_payment_installments where quote_payment_term_id in (select id from quote_payment_terms where quote_id=$1)", [quoteId]);
+    expect(Number(installment.rows[0].amount)).toBe(Number(saved.grand_total));
+  });
+
+  it("preserves the delivery transition and Olist pending flag with fractional freight", async () => {
+    const db = getPool();
+    await db.query("update quotes set external_olist_order_id='123', shipping_olist_sync_pending=false where id=$1", [quoteId]);
+    try {
+      await updateQuoteShippingTotal(actorId, tenantId, quoteId, 23.45);
+      expect((await db.query("select shipping_olist_sync_pending from quotes where id=$1", [quoteId])).rows[0].shipping_olist_sync_pending).toBe(false);
+      await updateQuoteShippingTotal(actorId, tenantId, quoteId, 12.34);
+      expect((await db.query("select shipping_olist_sync_pending from quotes where id=$1", [quoteId])).rows[0].shipping_olist_sync_pending).toBe(true);
+      await updateQuoteShippingTotal(actorId, tenantId, quoteId, 0);
+      await db.query("update quotes set delivery_method='pickup', shipping_olist_sync_pending=false where id=$1", [quoteId]);
+      await updateQuoteShippingTotal(actorId, tenantId, quoteId, 12.34);
+      const saved = (await db.query("select delivery_method, shipping_olist_sync_pending, shipping_total from quotes where id=$1", [quoteId])).rows[0];
+      expect(saved.delivery_method).toBe("delivery");
+      expect(saved.shipping_olist_sync_pending).toBe(true);
+      expect(Number(saved.shipping_total)).toBe(12.34);
+    } finally {
+      await db.query("update quotes set external_olist_order_id=null, shipping_olist_sync_pending=false where id=$1", [quoteId]);
+    }
   });
 
   it("removes only the selected item and its artworks and records before/after snapshots", async () => {
