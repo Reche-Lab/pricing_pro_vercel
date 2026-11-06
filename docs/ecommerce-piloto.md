@@ -1,5 +1,13 @@
 # Loja online opcional: piloto
 
+## Aparência do Tema Claro
+
+O tema claro diferencia o fundo neutro, as superfícies brancas e as áreas suaves
+em verde e rosa. Cabeçalho, produtos e resumo da compra usam elevações discretas;
+consulta de entrega e rodapé possuem fundos próprios. A cor principal da loja,
+as imagens com transparência e o modo escuro são preservados. A mudança vale
+também para a prévia, sem configuração, migration ou variável adicional.
+
 ## Pedidos, Alertas e Produção
 
 Aplicar `0068_commerce_order_workspace.sql` após a `0067`. Nenhuma variável nova:

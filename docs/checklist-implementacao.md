@@ -470,6 +470,18 @@ node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 - [x] Suíte com 549 testes aprovados (21 integrações condicionais não executadas); tipos, lint e build aprovados.
 - [x] Sem migration ou variável de ambiente adicional.
 
+### Tonalidades e profundidade na loja clara
+
+- [x] Fundo neutro levemente tonalizado, superfícies brancas e destaques suaves em verde e rosa.
+- [x] Sombras graduais nos produtos, cabeçalho, controles e resumo da compra; frete e rodapé com fundos próprios.
+- [x] Cor principal configurada pela loja preservada; regras novas de elevação restritas ao tema claro.
+- [x] Testes de contraste mínimo de 4,5:1 para leitura e preços nas superfícies claras e de preservação da paleta escura.
+- [x] Home, catálogo, produto, carrinho e checkout conferidos em 320/390/1440 px, incluindo consulta de entrega e carregamento das imagens.
+- [x] Estilos computados do modo escuro comparados com a versão anterior em desktop e celular, sem diferenças nos componentes verificados.
+- [x] Regressão com 589 testes aprovados (24 integrações condicionais não executadas nesta alteração visual), TypeScript e lint aprovados.
+- [x] Build local de produção aprovado com limite de memória.
+- [x] Sem migration ou variável de ambiente nova.
+
 ### Central de pedidos e produção da loja
 
 - [x] Área independente de pedidos, com filtros por pagamento, preparação, aprovação e produção, paginação e resumo operacional.
