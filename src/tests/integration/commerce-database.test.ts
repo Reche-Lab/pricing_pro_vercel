@@ -28,6 +28,11 @@ import {
 } from "@/repositories/commerce-media";
 import { commerceVideoPath } from "@/domain/commerce/product-media";
 import { testCommerceBilling } from "../fixtures/commerce-checkout";
+import { getOrderWorkspace, getOrderWorkspaceItem, markOrderSeen } from "@/repositories/commerce-orders";
+import { userHasPermission } from "@/repositories/users";
+import { getCurrentSession } from "@/lib/auth/session";
+import { GET as orderFiles } from "@/app/api/commerce/admin/orders/[orderId]/files/route";
+vi.mock("@/lib/auth/session", () => ({ getCurrentSession: vi.fn() }));
 const objects = vi.hoisted(() => new Map<string, { bytes: Uint8Array; contentType: string }>());
 vi.mock("@/services/storage/artwork-storage", async importOriginal => ({
   ...await importOriginal<typeof import("@/services/storage/artwork-storage")>(),
@@ -413,5 +418,51 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
     const client = await getPool().connect();
     try { await client.query("set role anon"); await expect(client.query("select * from commerce_artwork_proofs")).rejects.toMatchObject({ code: "42501" }); }
     finally { await client.query("reset role"); client.release(); }
+  });
+  it("isolates staff worklists and persists per-user unread markers without hiding later changes", async () => {
+    const viewer = (await getPool().query("insert into app_users(email,name,password_hash,status) values('worklist-viewer@example.test','Produção','unused','active') returning id")).rows[0].id;
+    await getPool().query("insert into tenant_members(tenant_id,user_id,role_id,status) select $1,$2,id,'active' from roles where key='viewer'", [tenantId, viewer]);
+    expect(await userHasPermission(viewer, tenantId, 'commerce:orders:read')).toBe(true);
+    expect(await userHasPermission(viewer, tenantId, 'commerce:orders:manage')).toBe(false);
+    expect(await userHasPermission(viewer, tenantId, 'commerce:artworks:write')).toBe(false);
+    const initial = await getOrderWorkspace(tenantId, viewer);
+    expect(initial.summary.unread).toBe(initial.summary.total);
+    expect(initial.summary.total).toBeGreaterThan(0);
+    expect((await getOrderWorkspace(otherTenant, viewer)).orders).toEqual([]);
+    const row = initial.orders[0];
+    expect(await getOrderWorkspaceItem(otherTenant, viewer, row.id)).toBeNull();
+    expect(await markOrderSeen(otherTenant, viewer, row.id, row.activity_at)).toBe(false);
+    await markOrderSeen(tenantId, viewer, row.id, row.activity_at);
+    expect((await getOrderWorkspace(tenantId, viewer)).summary.unread).toBe(initial.summary.total - 1);
+    expect((await getOrderWorkspace(tenantId, actorId)).summary.unread).toBe(initial.summary.total);
+    await getPool().query("select pg_sleep(0.01)");
+    await getPool().query("update commerce_orders set updated_at=clock_timestamp() where tenant_id=$1 and id=$2", [tenantId, row.id]);
+    await markOrderSeen(tenantId, viewer, row.id, row.activity_at);
+    expect((await getOrderWorkspaceItem(tenantId, viewer, row.id))?.unread).toBe(true);
+    const latest = (await getOrderWorkspaceItem(tenantId, viewer, row.id))!;
+    await markOrderSeen(tenantId, viewer, row.id, latest.activity_at);
+    expect((await getOrderWorkspaceItem(tenantId, viewer, row.id))?.unread).toBe(false);
+    expect((await getOrderWorkspace(tenantId, viewer, { filter: 'unread', pageSize: 1 })).orders).toHaveLength(1);
+    const client = await getPool().connect();
+    try { await client.query("set role anon"); await expect(client.query("select * from commerce_order_reads")).rejects.toMatchObject({ code: "42501" }); }
+    finally { await client.query("reset role"); client.release(); }
+  });
+  it("lets read-only production staff print only paid orders with all current artworks approved", async () => {
+    const viewer = (await getPool().query("select id from app_users where email='worklist-viewer@example.test'")).rows[0].id;
+    vi.mocked(getCurrentSession).mockResolvedValue({ userId: viewer, tenantId, role: 'viewer', email: 'worklist-viewer@example.test' });
+    const order = (await getPool().query("select * from commerce_orders where tenant_id=$1 and snapshot->'customer'->>'email'='proof-buyer@example.test'", [tenantId])).rows[0];
+    await getPool().query("update commerce_orders set payment_status='paid',fulfillment_status='received',updated_at=clock_timestamp() where tenant_id=$1 and id=$2", [tenantId, order.id]);
+    const request = () => orderFiles(new Request(`http://localhost/api/commerce/admin/orders/${order.id}/files?pdf=1&cutLines=0`), { params: Promise.resolve({ orderId: order.id }) });
+    expect((await getOrderWorkspace(tenantId, viewer, { filter: 'approval' })).orders.some(o => o.id === order.id)).toBe(true);
+    expect((await request()).status).toBe(409);
+    const catalogProduct = (await commerceProducts(tenantId))[0];
+    await getPool().query("update commerce_artwork_proofs set approved_at=now(),published_at=now(),updated_at=clock_timestamp(),crop=jsonb_set(crop,'{geometryHash}',to_jsonb($3::text)) where tenant_id=$1 and order_id=$2", [tenantId, order.id, geometryHash(catalogProduct)]);
+    expect((await getOrderWorkspace(tenantId, viewer, { filter: 'ready' })).orders.some(o => o.id === order.id)).toBe(true);
+    const response = await request();
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('application/pdf');
+    expect(Buffer.from(await response.arrayBuffer()).subarray(0,4).toString()).toBe('%PDF');
+    vi.mocked(getCurrentSession).mockResolvedValue({ userId: viewer, tenantId: otherTenant, role: 'viewer', email: 'worklist-viewer@example.test' });
+    expect((await request()).status).toBe(403);
   });
 });

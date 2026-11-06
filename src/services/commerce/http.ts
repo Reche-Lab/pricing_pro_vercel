@@ -118,6 +118,8 @@ export function commerceFailure(error: unknown, operation: string) {
     operation,
     status: error instanceof CommerceError ? error.status : 500,
     errorType: error instanceof Error ? error.name : "unknown",
+    message: error instanceof Error ? error.message : "Unknown failure",
+    code: error && typeof error === "object" && "code" in error ? error.code : undefined,
   });
   return commerceJson(
     {

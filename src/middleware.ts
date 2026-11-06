@@ -59,7 +59,7 @@ function requiresAcceptedTerms(path: string): boolean {
       "/api/olist/oauth/callback"
     ].some((prefix) => path.startsWith(prefix));
   }
-  return ["/dashboard", "/onboarding", "/pricing", "/products", "/quotes", "/customers", "/packaging", "/platforms", "/shipping", "/settings", "/billing", "/users", "/audit", "/superadmin"].some(
+  return ["/dashboard", "/onboarding", "/pricing", "/products", "/quotes", "/customers", "/packaging", "/platforms", "/shipping", "/settings", "/billing", "/users", "/audit", "/superadmin", "/commerce"].some(
     (prefix) => path === prefix || path.startsWith(`${prefix}/`)
   );
 }

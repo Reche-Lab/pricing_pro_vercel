@@ -563,10 +563,20 @@ export async function createCommerceOrder(
     return result.rows[0];
   });
 }
-export const geometryHash = (product: CommerceProduct) =>
+export const geometryHash = (product: Pick<CommerceProduct, "geometry" | "margins">) =>
   hashCommerceToken(
     JSON.stringify({ geometry: product.geometry, margins: product.margins }),
   );
+export function matchesOrderGeometryHash(product: CommerceProduct, hash: unknown) {
+  if (typeof hash !== "string") return false;
+  if (hash === geometryHash(product)) return true;
+  const g = product.geometry;
+  // JSONB reorders keys. Accept the original catalog field order without accepting changed measurements.
+  return hash === geometryHash({
+    geometry: g ? { shape: g.shape, widthMm: g.widthMm, heightMm: g.heightMm, cornerStyle: g.cornerStyle, cornerRadiusMm: g.cornerRadiusMm, rotationDegrees: g.rotationDegrees, allowPrintRotation: g.allowPrintRotation } : null,
+    margins: { bleedMm: product.margins.bleedMm, safeMarginMm: product.margins.safeMarginMm }
+  });
+}
 export async function calculateCommerceCart(tenantId: string, sessionId: string | null, lines: CartLine[], products: CommerceProduct[], client: Pick<PoolClient, "query"> = getPool()) {
   const keys = new Set<string>();
   if (sessionId && lines.some(line => line.artworkId)) {

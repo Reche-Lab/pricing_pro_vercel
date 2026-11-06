@@ -42,6 +42,7 @@ const settingsItems = [
 export function SidebarNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
   const pathname = usePathname();
   const [canAccessFinance, setCanAccessFinance] = useState(isSuperAdmin);
+  const [commerce, setCommerce] = useState({ read: false, configure: false });
 
   useEffect(() => {
     let active = true;
@@ -51,6 +52,7 @@ export function SidebarNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean })
         if (!active || !payload?.profile) return;
         const profile = payload.profile as { role?: string; is_super_admin?: boolean };
         setCanAccessFinance(Boolean(profile.is_super_admin || profile.role === "owner" || profile.role === "admin"));
+        setCommerce({ read: Boolean(payload.commerce?.read), configure: Boolean(payload.commerce?.configure) });
       })
       .catch(() => null);
     return () => { active = false; };
@@ -64,6 +66,7 @@ export function SidebarNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean })
             {item.label}
           </NavItem>
         ))}
+        {commerce.read ? <NavItem active={isActive(pathname, "/commerce/orders")} href="/commerce/orders" icon={ClipboardList}>Pedidos da loja</NavItem> : null}
         {isSuperAdmin ? (
           <NavItem active={isActive(pathname, "/superadmin")} href="/superadmin" icon={Sparkles}>
             Superadmin global
@@ -82,6 +85,7 @@ export function SidebarNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean })
               {item.label}
             </NavItem>
           ))}
+          {commerce.configure ? <NavItem active={isActive(pathname, "/commerce")} href="/commerce" icon={Store} nested>Loja online</NavItem> : null}
         </div>
       </div>
     </nav>
@@ -125,6 +129,7 @@ function NavItem({
 }
 
 function isActive(pathname: string, href: string) {
+  if (href === "/commerce/orders") return pathname === href || pathname.startsWith(`${href}/`);
   if (href === "/dashboard") return pathname === href;
   if (href === "/quotes") return pathname === "/quotes" || pathname.startsWith("/quotes/");
   return pathname === href;

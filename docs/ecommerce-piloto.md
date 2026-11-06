@@ -1,5 +1,43 @@
 # Loja online opcional: piloto
 
+## Pedidos, Alertas e Produção
+
+Aplicar `0068_commerce_order_workspace.sql` após a `0067`. Nenhuma variável nova:
+o módulo continua dependendo de `COMMERCE_ENABLED=true`.
+
+- **Pedidos da loja** (`/commerce/orders`) é a área operacional, separada da
+  configuração da loja. Filtre compras por pagamento, preparação de artes,
+  aprovação do cliente e produção; abra o pedido para conferir os itens e arquivos.
+- O sino no topo apresenta compras e atualizações não vistas. A leitura é
+  individual e persistida no banco. Abri-lo não limpa os avisos: abrir o pedido
+  marca somente a atualização exibida. Mudanças posteriores geram novo aviso.
+  Há consulta a cada 60 segundos com a aba visível, ao voltar à janela e após ações
+  da equipe. Não há push, e-mail ou som nesta etapa.
+- **Produção e impressão** mostra o pagamento e a quantidade de artes aprovadas.
+  As folhas A4 usam as versões enquadradas aprovadas e as quantidades do pedido,
+  com opção de incluir/retirar as linhas de corte. A API continua conferindo
+  pagamento, aprovação e geometria; o limite síncrono permanece em 1.000 unidades.
+- **Preparação e aprovação das artes** permite abrir a arte atual, baixar o
+  original do cliente, retocar, enquadrar e publicar uma prova na conta do comprador.
+  Um ajuste invalida a aprovação anterior sem alterar preços. A produção aguarda
+  nova aprovação explícita do cliente. Após iniciar a produção, a edição é bloqueada.
+- Confirmar pagamentos manuais e avançar produção/envio/conclusão exige permissão
+  específica, confirmação e observação registrada no histórico.
+
+Permissões padrão por perfil:
+
+| Perfil | Consultar e imprimir | Preparar artes | Pagamento manual e etapas | Configurar loja |
+| --- | --- | --- | --- | --- |
+| Owner / Admin | Sim | Sim | Sim | Sim |
+| Manager | Sim | Sim | Sim | Não |
+| Sales / Support | Sim | Sim | Não | Não |
+| Viewer | Sim | Não | Não | Não |
+
+As permissões são `commerce:orders:read`, `commerce:artworks:write` e
+`commerce:orders:manage`. Todos os dados, arquivos e marcadores de leitura são
+isolados por tenant. Os endpoints administrativos mantêm sessão da plataforma;
+não aceitam cookies do comprador nem tokens públicos de orçamento.
+
 ## Páginas Institucionais Da Ground Shop
 
 No tenant de slug `ground-shop`, a loja e a prévia possuem as páginas

@@ -3,12 +3,12 @@ import { commerceTransaction } from "@/repositories/commerce";
 import { CommerceError } from "@/domain/commerce/commerce";
 import { assertCommerceProofsReady } from "@/services/commerce/order-artworks";
 import {
-  requireCommerceAdmin,
   checkCommerceOrigin,
   readCommerceBody,
   commerceJson,
   commerceFailure,
 } from "@/services/commerce/http";
+import { requireCommerceOrderAccess } from "@/services/commerce/order-access";
 const schema = z
   .object({
     action: z.enum(["confirm_manual", "production", "shipped", "completed"]),
@@ -21,7 +21,7 @@ export async function POST(
 ) {
   try {
     checkCommerceOrigin(request);
-    const { session } = await requireCommerceAdmin();
+    const { session } = await requireCommerceOrderAccess("commerce:orders:manage");
     const orderId = z
       .string()
       .uuid()
@@ -74,6 +74,7 @@ export async function POST(
         ],
       );
     });
+    console.info("Commerce order state updated.", { tenantId: session.tenantId, orderId, actorId: session.userId, action: input.action });
     return commerceJson({ ok: true });
   } catch (error) {
     return commerceFailure(error, "order.admin_action");

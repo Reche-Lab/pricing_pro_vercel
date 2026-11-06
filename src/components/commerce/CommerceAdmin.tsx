@@ -736,7 +736,7 @@ export function CommerceAdmin({
       ) : null}
       {tab === "orders" ? (
         <section className="space-y-4">
-          <h2 className="font-semibold">Últimos pedidos</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">Últimos pedidos</h2><Link className={`${button} text-emerald-300`} href="/commerce/orders"><Package size={16} />Central de pedidos e produção</Link></div>
           {!data.orders.length ? (
             <p className="py-8 text-sm text-zinc-500">
               Nenhum pedido recebido ainda.

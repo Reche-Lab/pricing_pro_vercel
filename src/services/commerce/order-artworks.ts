@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { getPool } from "@/lib/db/client";
 import { CommerceError } from "@/domain/commerce/commerce";
-import { commerceTransaction, geometryHash, publicCommerceProduct, type CommerceOrder } from "@/repositories/commerce";
+import { commerceTransaction, geometryHash, matchesOrderGeometryHash, publicCommerceProduct, type CommerceOrder } from "@/repositories/commerce";
 import { normalizePublicArtworkUpload } from "@/services/artwork/public-upload";
 import { prepareArtwork } from "@/services/artwork/production";
 import { uploadArtworkObject, deleteArtworkObject, downloadArtworkObject } from "@/services/storage/artwork-storage";
@@ -16,7 +16,7 @@ export const proofBodySchema = z.object({
   fileSize: z.number().int().positive().max(3145728).optional(), dataUrl: z.string().max(4200000).optional(),
   scale: z.number().min(0.1).max(5).optional(), offsetX: z.number().min(-1).max(1).optional(), offsetY: z.number().min(-1).max(1).optional(), rotationDegrees: z.number().min(-180).max(180).optional(),
 }).strict();
-export type CommerceProofView = { lineId: string; revision: number; approvedAt: string | null; prepared: boolean; crop: { scale: number; offsetX: number; offsetY: number; rotationDegrees: number } | null; artworkName: string; quantity: number; product: ReturnType<typeof publicCommerceProduct> };
+export type CommerceProofView = { lineId: string; artworkId?: string; revision: number; approvedAt: string | null; prepared: boolean; crop: { scale: number; offsetX: number; offsetY: number; rotationDegrees: number } | null; artworkName: string; quantity: number; product: ReturnType<typeof publicCommerceProduct> };
 
 export async function authorizedCommerceOrder(tenantId: string, orderId: string, customerId: string | null) {
   if (!z.string().uuid().safeParse(orderId).success) throw new CommerceError("Pedido não encontrado.", 404);
@@ -25,7 +25,7 @@ export async function authorizedCommerceOrder(tenantId: string, orderId: string,
   return result.rows[0];
 }
 
-export async function readCommerceProofs(request: Request, order: CommerceOrder, admin = false) {
+export async function readCommerceProofs(request: Request, order: CommerceOrder, admin = false, canEdit = admin) {
   const rows = (await getPool().query("select * from commerce_artwork_proofs where tenant_id=$1 and order_id=$2", [order.tenant_id, order.id])).rows;
   const query = new URL(request.url).searchParams;
   if (query.has("asset")) {
@@ -43,9 +43,9 @@ export async function readCommerceProofs(request: Request, order: CommerceOrder,
     const proof = rows.find(p => p.line_id === line.id);
     const product = order.snapshot.products.find(p => p.id === line.productId);
     if (!proof || !product) continue;
-    proofs.push({ lineId: line.id, revision: proof.revision, approvedAt: proof.approved_at?.toISOString() ?? null, prepared: Boolean(proof.prepared_path && (admin || proof.published_at)), crop: proof.crop, artworkName: line.artworkName, quantity: line.quantity, product: publicCommerceProduct(product) });
+    proofs.push({ lineId: line.id, artworkId: proof.artwork_id, revision: proof.revision, approvedAt: proof.approved_at?.toISOString() ?? null, prepared: Boolean(proof.prepared_path && (admin || proof.published_at)), crop: proof.crop, artworkName: line.artworkName, quantity: line.quantity, product: publicCommerceProduct(product) });
   }
-  return commerceJson({ proofs, editable: order.fulfillment_status === "received" && order.payment_status !== "refunded" });
+  return commerceJson({ proofs, editable: (!admin || canEdit) && order.fulfillment_status === "received" && order.payment_status !== "refunded" });
 }
 
 export async function mutateCommerceProof(request: Request, order: CommerceOrder, actorId: string | null) {
@@ -78,7 +78,7 @@ export async function mutateCommerceProof(request: Request, order: CommerceOrder
       const proof = (await client.query("select * from commerce_artwork_proofs where tenant_id=$1 and order_id=$2 and line_id=$3 for update", [order.tenant_id, order.id, input.lineId])).rows[0];
       if (!proof || proof.revision !== input.revision || proof.revision !== current.revision) throw new CommerceError("A prova mudou. Atualize e revise a versão mais recente.", 409);
       if (input.action === "approve" || input.action === "publish") {
-        if (!proof.prepared_path || proof.crop?.geometryHash !== geometryHash(product) || input.action === "approve" && !proof.published_at) throw new CommerceError("Aguarde a preparação e publicação da prova.", 409);
+        if (!proof.prepared_path || !matchesOrderGeometryHash(product, proof.crop?.geometryHash) || input.action === "approve" && !proof.published_at) throw new CommerceError("Aguarde a preparação e publicação da prova.", 409);
         if (input.action === "approve" && proof.approved_at) return proof.revision;
         await client.query(input.action === "approve" ? "update commerce_artwork_proofs set approved_at=now(),updated_at=now() where tenant_id=$1 and order_id=$2 and line_id=$3" : "update commerce_artwork_proofs set published_at=now(),updated_at=now() where tenant_id=$1 and order_id=$2 and line_id=$3", [order.tenant_id, order.id, input.lineId]);
       } else {
@@ -101,6 +101,6 @@ export async function assertCommerceProofsReady(client: Pick<PoolClient, "query"
   const proofs = (await client.query("select line_id,prepared_path,approved_at,crop from commerce_artwork_proofs where tenant_id=$1 and order_id=$2", [order.tenant_id, order.id])).rows;
   for (const line of lines) {
     const product = order.snapshot.products.find(p => p.id === line.productId)!;
-    if (!proofs.some(p => p.line_id === line.id && p.prepared_path && p.approved_at && p.crop?.geometryHash === geometryHash(product))) throw new CommerceError("A produção aguarda a preparação e aprovação de todas as artes pelo cliente.", 409);
+    if (!proofs.some(p => p.line_id === line.id && p.prepared_path && p.approved_at && matchesOrderGeometryHash(product, p.crop?.geometryHash))) throw new CommerceError("A produção aguarda a preparação e aprovação de todas as artes pelo cliente.", 409);
   }
 }

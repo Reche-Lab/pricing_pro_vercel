@@ -25,7 +25,7 @@ export function CommerceOrderArtworks({ endpoint, admin = false }: { endpoint: s
     document.body.style.overflow = "hidden"; dialog.current?.focus();
     return () => { document.body.style.overflow = overflow; previous?.focus(); };
   }, [confirming]);
-  async function refresh() { const data = await storeRequest(endpoint); setProofs(data.proofs); setEditable(Boolean(data.editable)); }
+  async function refresh() { const data = await storeRequest(endpoint); setProofs(data.proofs); setEditable(Boolean(data.editable)); if (admin) { window.dispatchEvent(new Event("commerce:orders-updated")); window.dispatchEvent(new Event("commerce:artworks-updated")); } }
   useEffect(() => {
     if (!open) return;
     let active = true; setBusy(true);
@@ -47,15 +47,27 @@ export function CommerceOrderArtworks({ endpoint, admin = false }: { endpoint: s
   return <section className="my-5 min-w-0 border-y border-current/15 py-4">
     <button type="button" className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold" aria-expanded={open} onClick={() => setOpen(!open)}><ImagePlus size={18} />{admin ? "Preparação e aprovação das artes" : "Minhas artes e aprovação"}</button>
     {open ? <div className="mt-3 grid min-w-0 gap-4">
-      {admin ? <label className="grid gap-1 text-sm">Orientação / motivo do ajuste<input className="min-h-10 min-w-0 rounded-md border border-current/25 bg-transparent px-3" value={note} maxLength={500} onChange={e => setNote(e.target.value)} /></label> : <p className="text-sm opacity-70">Artes enviadas à equipe ficam aguardando preparação. Confira a prova e o produto antes de aprovar a impressão.</p>}
+      {admin ? editable ? <div className="space-y-2"><label className="grid gap-1 text-sm">Orientação / motivo do ajuste<input className="min-h-10 min-w-0 rounded-md border border-current/25 bg-transparent px-3" value={note} maxLength={500} onChange={e => setNote(e.target.value)} /></label><p className="text-xs leading-5 text-amber-200">Salvar um ajuste preserva o original, invalida a aprovação anterior e exige nova aprovação do cliente antes da impressão.</p></div> : <p className="text-xs text-zinc-400">Consulta das artes. A edição depende do seu perfil e fica bloqueada após o início da produção.</p> : <p className="text-sm opacity-70">Artes enviadas à equipe ficam aguardando preparação. Confira a prova e o produto antes de aprovar a impressão.</p>}
       <button title="Atualizar provas" aria-label="Atualizar provas" type="button" className="grid h-10 w-10 place-items-center rounded-md border border-current/25" disabled={busy} onClick={() => { setError(""); void refresh().catch(e => setError(e.message)); }}>{busy ? <Loader2 size={17} className="animate-spin" /> : <RefreshCw size={17} />}</button>
       {proofs.map(proof => <div key={proof.lineId} className="min-w-0 border-t border-current/15 pt-4">
         <div className="flex flex-wrap items-center justify-between gap-2"><div><strong className="text-sm">{proof.product.name} · {proof.artworkName}</strong><p className="mt-1 text-xs opacity-70">{proof.quantity} un. · Versão {proof.revision} · {proof.approvedAt ? "Aprovada pelo cliente" : proof.prepared ? "Prova pronta para revisão" : "Aguardando preparação da equipe"}</p></div>{proof.approvedAt ? <CheckCircle2 size={20} className="text-emerald-500" /> : null}</div>
+        {admin ? <div className="mt-3 flex min-w-0 flex-wrap items-center gap-4">
+          <a href={url(proof, "source")} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-md border border-zinc-800 bg-zinc-900 p-2" title="Abrir a arte atual em tamanho original">
+            {/* Private image requests must carry the staff session cookie. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img alt={`Arte de ${proof.artworkName || proof.product.name}`} src={url(proof, proof.prepared ? "prepared" : "source")} className="h-24 w-24 object-contain" loading="lazy" />
+          </a>
+          <div className="flex flex-col gap-3 text-xs text-emerald-300">
+            <a target="_blank" rel="noopener noreferrer" href={url(proof, "source")}>Abrir arte atual</a>
+            {proof.prepared ? <a target="_blank" rel="noopener noreferrer" href={url(proof, "prepared")}>Abrir arte enquadrada</a> : null}
+            {proof.artworkId ? <a target="_blank" rel="noopener noreferrer" href={endpoint.replace(/\/artworks$/, "/files") + `?artworkId=${proof.artworkId}&lineId=${proof.lineId}`}>Baixar original do cliente</a> : null}
+          </div>
+        </div> : null}
         {proof.prepared ? <button type="button" aria-expanded={expandedProof === proof.lineId} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-md border border-current/25 px-3 text-sm" onClick={() => setExpandedProof(expandedProof === proof.lineId ? null : proof.lineId)}><Eye size={16} />{expandedProof === proof.lineId ? "Recolher prova" : "Visualizar prova"}</button> : null}
         {expandedProof === proof.lineId && proof.prepared && proof.product.geometry ? <div className="mt-3"><StoreProductMockup name={proof.product.name} sourceUrl={url(proof, "prepared")} geometry={proof.product.geometry} margins={proof.product.margins} model={proof.product.artworkOptions?.mockup} /><a className="mt-3 inline-block text-sm underline" target="_blank" rel="noopener noreferrer" href={url(proof, "prepared")}>Abrir arte exata para impressão</a>
           {!admin && !proof.approvedAt ? <button type="button" disabled={!editable || busy} className="mt-3 flex min-h-10 items-center gap-2 rounded-md bg-emerald-500 px-4 text-sm font-semibold text-zinc-950 disabled:opacity-50" onClick={() => { setError(""); setConfirm(proof); }}><CheckCircle2 size={17} />Revisar e aprovar esta versão</button> : null}
         </div> : null}
-        {admin ? <button type="button" disabled={!editable || note.trim().length < 5 || busy} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-md border border-current/25 px-3 text-sm disabled:opacity-50" onClick={() => { current.current = proof; setSelected(proof); }}><Paintbrush size={16} />Retocar e enquadrar</button> : null}
+        {admin && editable ? <button type="button" disabled={note.trim().length < 5 || busy} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-md border border-current/25 px-3 text-sm disabled:opacity-50" onClick={() => { current.current = proof; setSelected(proof); }}><Paintbrush size={16} />Retocar e enquadrar</button> : null}
       </div>)}
       {!busy && !proofs.length ? <p className="text-sm opacity-70">Este pedido não possui artes personalizadas.</p> : null}
       {message ? <p role="status" className="text-sm text-emerald-500">{message}</p> : null}

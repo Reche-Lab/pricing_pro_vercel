@@ -470,6 +470,20 @@ node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 - [x] Suíte com 549 testes aprovados (21 integrações condicionais não executadas); tipos, lint e build aprovados.
 - [x] Sem migration ou variável de ambiente adicional.
 
+### Central de pedidos e produção da loja
+
+- [x] Área independente de pedidos, com filtros por pagamento, preparação, aprovação e produção, paginação e resumo operacional.
+- [x] Sino no topo para compras/atualizações, leitura individual persistida e atualização ao retornar à plataforma ou a cada minuto com a aba visível.
+- [x] Permissões separadas para consulta/impressão, preparação de artes e gestão de pagamentos/etapas.
+- [x] Acesso às artes atuais e originais, retoque/enquadramento e publicação para nova aprovação do comprador.
+- [x] Folhas A4 com ou sem linhas de corte; pagamento e todas as aprovações obrigatórios também na API.
+- [x] Compatibilidade da aprovação feita no catálogo com a ordenação dos campos JSONB do pedido, sem aceitar alteração das medidas.
+- [x] Migration `0068_commerce_order_workspace.sql` validada em PostgreSQL local; 10 testes de integração aprovados.
+- [x] Regressão completa: 587 testes aprovados; 24 integrações condicionais na suíte geral, com 10 delas executadas separadamente no PostgreSQL local.
+- [x] Tipos e lint aprovados; telas, permissões e erros nos modais conferidos em 320/390/1440 px para administrador e usuário de consulta.
+- [x] Build local de produção aprovado com limite de memória.
+- [ ] Aplicar `0068_commerce_order_workspace.sql` no Supabase de destino.
+
 ### Deslocamento da imagem nos editores
 
 - [x] Controles horizontal e vertical no retoque compartilhado, com ação para centralizar sem alterar escala ou cores.

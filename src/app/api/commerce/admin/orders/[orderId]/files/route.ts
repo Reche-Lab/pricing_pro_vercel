@@ -2,7 +2,6 @@ import { z } from "zod";
 import { getPool } from "@/lib/db/client";
 import type { CommerceOrder } from "@/repositories/commerce";
 import {
-  requireCommerceAdmin,
   commerceFailure,
 } from "@/services/commerce/http";
 import { CommerceError } from "@/domain/commerce/commerce";
@@ -13,12 +12,13 @@ import {
 } from "@/services/artwork/imposition";
 import { getArtworkProductionProfile } from "@/repositories/artwork-production";
 import { assertCommerceProofsReady } from "@/services/commerce/order-artworks";
+import { requireCommerceOrderAccess } from "@/services/commerce/order-access";
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ orderId: string }> },
 ) {
   try {
-    const { session } = await requireCommerceAdmin();
+    const { session } = await requireCommerceOrderAccess();
     const { orderId } = await params;
     if (!z.string().uuid().safeParse(orderId).success)
       throw new CommerceError("Pedido não encontrado.", 404);
@@ -96,6 +96,7 @@ export async function GET(
       ...profile,
       drawCutLines: query.get("cutLines") !== "0",
     });
+    console.info("Commerce production PDF generated.", { tenantId: session.tenantId, orderId, actorId: session.userId, artworkCount: artworks.length, bytes: result.bytes.length, cutLines: query.get("cutLines") !== "0" });
     return new Response(Buffer.from(result.bytes), {
       headers: {
         "content-type": "application/pdf",
