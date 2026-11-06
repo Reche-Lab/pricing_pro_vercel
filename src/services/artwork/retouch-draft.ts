@@ -36,7 +36,9 @@ const stage = z.object({
     backgroundExpansionMm: z.number().finite().min(0).max(50),
     backgroundScalePercent: z.number().int().min(50).max(250),
     backgroundBlurPx: z.number().int().min(0).max(80),
-    backgroundMode: z.enum(["copy", "extend"]).optional()
+    backgroundMode: z.enum(["copy", "extend"]).optional(),
+    offsetX: z.number().finite().min(-1).max(1).optional(),
+    offsetY: z.number().finite().min(-1).max(1).optional()
   }).optional()
 });
 

@@ -86,6 +86,32 @@ describe("artwork retouch", () => {
       .toEqual({ x: 300, y: 260, width: 800, height: 480 });
   });
 
+  it.each([50, 100, 250])("moves the artwork independently of its scale (%s%%)", (scalePercent) => {
+    const size = { canvasWidth: 1200, canvasHeight: 800, sourceWidth: 800, sourceHeight: 600, scalePercent };
+    const centered = calculateCenteredLayerBounds(size);
+    expect(calculateCenteredLayerBounds({ ...size, offsetX: 0.4, offsetY: -0.5 })).toEqual({
+      ...centered, x: centered.x + 240, y: centered.y - 200
+    });
+    const background = calculateCenteredLayerBounds({ ...size, expansionPx: 30, offsetX: 0.4, offsetY: -0.5 });
+    expect(background.x + background.width / 2).toBe(840);
+    expect(background.y + background.height / 2).toBe(200);
+  });
+
+  it("persists displacement in compositions and incorporated stages, keeping legacy drafts valid", () => {
+    const stage = {
+      operations: [], adjustments: { brightness: 100, contrast: 100, saturation: 100, sharpness: 0 },
+      composition: { foregroundScalePercent: 100, backgroundEnabled: false, backgroundExpansionMm: 4, backgroundScalePercent: 100, backgroundBlurPx: 0, offsetX: 0.3, offsetY: -0.5 }
+    };
+    const draft = { version: 1, ...stage, stages: [{ ...stage, cut: false }] };
+    const parsed = retouchDraftSchema.parse(draft);
+    expect(parsed.composition).toMatchObject({ offsetX: 0.3, offsetY: -0.5 });
+    expect(parsed.stages?.[0].composition).toMatchObject({ offsetX: 0.3, offsetY: -0.5 });
+    for (const offset of [NaN, Infinity, -1.1, 1.1]) {
+      expect(retouchDraftSchema.safeParse({ ...draft, composition: { ...stage.composition, offsetX: offset } }).success).toBe(false);
+      expect(retouchDraftSchema.safeParse({ ...draft, composition: { ...stage.composition, offsetY: offset } }).success).toBe(false);
+    }
+  });
+
   it("accepts persisted image composition and rejects unsafe scales", () => {
     const draft = {
       version: 1,

@@ -3,6 +3,20 @@
 Fluxo compartilhado pela produção administrativa, orçamento público e carrinho da
 loja (incluindo a prévia privada): **Retocar (opcional) → Enquadrar → Aprovar**.
 
+## Posição da imagem
+
+O retoque e o enquadramento permitem deslocar a imagem horizontal e verticalmente,
+inclusive no tamanho de 100%. Os controles de posição são independentes do zoom de
+visualização; **Centralizar** zera apenas o deslocamento.
+
+No retoque, o fundo ampliado ou continuado acompanha a imagem. Guias de produção e
+elementos desenhados permanecem fixos. Para mover os desenhos junto com a imagem,
+use **Incorporar** antes. O deslocamento integra o rascunho (quando disponível) e
+a versão exportada, sem modificar o original. Rascunhos antigos continuam válidos.
+
+Os mesmos controles estão disponíveis na produção interna, no orçamento público,
+na loja e na prévia. Nenhuma migration adicional é necessária.
+
 ## Planejado x realizado
 
 - [x] Mesmo estúdio no viewport, com etapas visíveis e navegação entre ferramentas.

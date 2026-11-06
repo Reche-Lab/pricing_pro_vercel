@@ -43,6 +43,14 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("crop preparation adapters", () => {
+  it("keeps horizontal and vertical displacement when preparing the artwork", async () => {
+    const onPrepare = vi.fn().mockResolvedValue(undefined);
+    render(<ArtworkCropEditor {...props} onPrepare={onPrepare} />);
+    fireEvent.change(screen.getByRole("slider", { name: /Posição horizontal/ }), { target: { value: "0.3" } });
+    fireEvent.change(screen.getByRole("slider", { name: /Posição vertical/ }), { target: { value: "-0.2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Preparar arte" }));
+    await waitFor(() => expect(onPrepare).toHaveBeenCalledWith({ scale: 1, offsetX: 0.3, offsetY: -0.2, rotationDegrees: 0 }));
+  });
   it("uses the preview callback without calling the real quote API", async () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);

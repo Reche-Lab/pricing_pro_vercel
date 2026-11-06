@@ -470,6 +470,18 @@ node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 - [x] Suíte com 549 testes aprovados (21 integrações condicionais não executadas); tipos, lint e build aprovados.
 - [x] Sem migration ou variável de ambiente adicional.
 
+### Deslocamento da imagem nos editores
+
+- [x] Controles horizontal e vertical no retoque compartilhado, com ação para centralizar sem alterar escala ou cores.
+- [x] Imagem e fundo expandido se movem juntos; guias de segurança, sangria e corte permanecem fixas.
+- [x] Deslocamento independente do tamanho da arte e do zoom de visualização; exportação e rascunhos preservam a posição.
+- [x] Compatibilidade com rascunhos antigos e incorporação de composições deslocadas.
+- [x] Enquadramento mantém controles e persistência nos adaptadores internos, públicos e da loja/prévia.
+- [x] Regressão: 568 testes aprovados; 22 integrações condicionais não executadas. TypeScript e lint aprovados.
+- [x] Conferência visual em 320/390/1440 px e comparação por pixels entre canvas e WebP exportado; enquadramento validado nos mesmos tamanhos.
+- [x] Build local de produção aprovado com limite de memória.
+- [x] Sem nova migration ou variável de ambiente.
+
 ### E-commerce: preparação da arte e máscaras do produto
 
 - [x] Modelo Botton 2,5 cm reconstruído da referência: seis camadas PNG, transparência e calibração inicial; aplicação por botão e ZIP para download.

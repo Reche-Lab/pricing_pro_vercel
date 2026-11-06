@@ -61,6 +61,8 @@ export type RetouchComposition = {
   backgroundScalePercent: number;
   backgroundBlurPx: number;
   backgroundMode?: "copy" | "extend";
+  offsetX?: number;
+  offsetY?: number;
 };
 export type RetouchStage = {
   operations: RetouchOperation[];
@@ -89,7 +91,9 @@ export const DEFAULT_RETOUCH_COMPOSITION: RetouchComposition = {
   backgroundEnabled: false,
   backgroundExpansionMm: 3,
   backgroundScalePercent: 100,
-  backgroundBlurPx: 0
+  backgroundBlurPx: 0,
+  offsetX: 0,
+  offsetY: 0
 };
 
 export function calculateCenteredLayerBounds(input: {
@@ -99,12 +103,18 @@ export function calculateCenteredLayerBounds(input: {
   sourceHeight: number;
   scalePercent: number;
   expansionPx?: number;
+  offsetX?: number;
+  offsetY?: number;
 }) {
   const scale = Math.max(0.1, input.scalePercent / 100);
   const expansion = Math.max(0, input.expansionPx ?? 0);
   const width = input.sourceWidth * scale + expansion * 2;
   const height = input.sourceHeight * scale + expansion * 2;
-  return { x: (input.canvasWidth - width) / 2, y: (input.canvasHeight - height) / 2, width, height };
+  return {
+    x: (input.canvasWidth - width) / 2 + (input.offsetX ?? 0) * input.canvasWidth / 2,
+    y: (input.canvasHeight - height) / 2 + (input.offsetY ?? 0) * input.canvasHeight / 2,
+    width, height
+  };
 }
 
 export function findContiguousColorRegion(input: {

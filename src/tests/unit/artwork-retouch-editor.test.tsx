@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ArtworkRetouchEditor } from "@/components/quotes/ArtworkRetouchEditor";
 import { drawArtworkFrame } from "@/components/quotes/artwork-frame-canvas";
-import { DEFAULT_RETOUCH_ADJUSTMENTS } from "@/domain/artwork/retouch";
+import { DEFAULT_RETOUCH_ADJUSTMENTS, DEFAULT_RETOUCH_COMPOSITION } from "@/domain/artwork/retouch";
 
 vi.mock("@/components/quotes/artwork-frame-canvas", () => ({ drawArtworkFrame: vi.fn() }));
 const initialCrop = { scale: 0.8, offsetX: 0.3, offsetY: -0.2, rotationDegrees: 25 };
@@ -14,12 +14,13 @@ const props = {
 };
 let resize: () => void;
 let viewport = { width: 640, height: 360 };
+const drawImage = vi.fn();
 beforeEach(() => {
   viewport = { width: 640, height: 360 };
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => viewport.width);
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(() => viewport.height);
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(function (this: HTMLCanvasElement) {
-    return { canvas: this, clearRect: vi.fn(), drawImage: vi.fn(), save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn() } as unknown as CanvasRenderingContext2D;
+    return { canvas: this, clearRect: vi.fn(), drawImage, save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn() } as unknown as CanvasRenderingContext2D;
   });
   vi.stubGlobal("ResizeObserver", class {
     constructor(callback: () => void) { resize = callback; }
@@ -35,6 +36,55 @@ async function loaded() {
 }
 
 describe("retouch framing and fitted viewport", () => {
+  it("moves the image at 100% without moving the guides or changing the viewport zoom", async () => {
+    render(<ArtworkRetouchEditor {...props} onContinue={undefined} />);
+    const canvas = await loaded();
+    const guides = canvas.parentElement?.querySelector("svg")?.innerHTML;
+    fireEvent.change(screen.getByRole("slider", { name: /Posição horizontal/ }), { target: { value: "40" } });
+    fireEvent.change(screen.getByRole("slider", { name: /Posição vertical/ }), { target: { value: "-50" } });
+    expect(drawImage).toHaveBeenCalledWith(expect.any(HTMLCanvasElement), 160, -200, 800, 800);
+    expect(screen.getByRole("button", { name: "Salvar versão" })).toBeEnabled();
+    expect(canvas.parentElement?.querySelector("svg path")?.getAttribute("d")).toBeTruthy();
+    // The artwork bounds move, but the production paths remain in the same place.
+    expect([...canvas.parentElement!.querySelectorAll("svg path")].every(path => guides?.includes(path.outerHTML))).toBe(true);
+    expect(canvas.parentElement?.style.width).toBe("360px");
+    fireEvent.click(screen.getByRole("button", { name: "Centralizar imagem" }));
+    expect(screen.getByRole("slider", { name: /Posição horizontal/ })).toHaveValue("0");
+    expect(screen.getByRole("slider", { name: /Posição vertical/ })).toHaveValue("0");
+    expect(screen.getByRole("button", { name: "Salvar versão" })).toBeDisabled();
+  });
+
+  it("restores and autosaves displacement in the same draft as other image adjustments", async () => {
+    vi.mocked(fetch).mockImplementation(async (url) => url === "/draft"
+      ? { ok: true, json: async () => ({ draft: { version: 1, sourceCrop: initialCrop, operations: [], adjustments: DEFAULT_RETOUCH_ADJUSTMENTS, composition: { ...DEFAULT_RETOUCH_COMPOSITION, offsetX: 0.25, offsetY: -0.1 } } }) } as Response
+      : { ok: true, blob: async () => new Blob(["art"]) } as Response);
+    render(<ArtworkRetouchEditor {...props} draftUrl="/draft" />);
+    await loaded();
+    expect(screen.getByRole("slider", { name: /Posição horizontal/ })).toHaveValue("25");
+    expect(screen.getByRole("slider", { name: /Posição vertical/ })).toHaveValue("-10");
+    fireEvent.change(screen.getByRole("slider", { name: /Posição vertical/ }), { target: { value: "35" } });
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/draft", expect.objectContaining({
+      method: "PUT", body: expect.stringContaining('"offsetY":0.35')
+    })), { timeout: 2000 });
+    expect(drawImage).toHaveBeenCalledWith(expect.any(HTMLCanvasElement), 100, 140, 800, 800);
+  });
+
+  it("exports the moved artwork without changing the original source or the crop", async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(callback => callback(new Blob(["retouched"], { type: "image/webp" })));
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<ArtworkRetouchEditor {...props} onContinue={undefined} onSave={onSave} />);
+    await loaded();
+    fireEvent.change(screen.getByRole("slider", { name: /Posição horizontal/ }), { target: { value: "-60" } });
+    fireEvent.change(screen.getByRole("slider", { name: /Posição vertical/ }), { target: { value: "20" } });
+    expect(drawImage).toHaveBeenCalledWith(expect.any(HTMLCanvasElement), -240, 80, 800, 800);
+    fireEvent.click(screen.getByRole("button", { name: "Salvar versão" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      mimeType: "image/webp", dataUrl: expect.stringMatching(/^data:image\/webp;base64,/)
+    })));
+    expect(drawArtworkFrame).toHaveBeenCalledOnce();
+    expect(drawArtworkFrame).toHaveBeenCalledWith(expect.anything(), expect.anything(), 1200, 800, 800, 800, initialCrop);
+  });
+
   it("inherits crop scale, offset and rotation without extra margins and fits by height", async () => {
     render(<ArtworkRetouchEditor {...props} />);
     const canvas = await loaded();

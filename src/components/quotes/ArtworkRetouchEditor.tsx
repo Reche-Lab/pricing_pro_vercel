@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, type PointerE
 import { useArtworkExitGuard } from "./useArtworkExitGuard";
 import {
   ArrowDown, ArrowLeft, ArrowUp, BringToFront, Brush, Check, Circle, Crop, Eraser, Eye, EyeOff, Grab, Group, Layers3, Loader2, Merge, MousePointer2, PaintBucket, Pipette, Plus,
-  Maximize2, Minimize2, Scan, RectangleHorizontal, Redo2, RotateCcw, Save, Shapes, SlidersHorizontal, Square, Trash2, Triangle,
+  LocateFixed, Maximize2, Minimize2, Move, Scan, RectangleHorizontal, Redo2, RotateCcw, Save, Shapes, SlidersHorizontal, Square, Trash2, Triangle,
   Undo2, Ungroup, SendToBack, X, ZoomIn, ZoomOut
 } from "lucide-react";
 import { calculatePrintGuideDimensions, createPrintGuideLayout, geometryLabel, type PrintGeometry } from "@/domain/artwork/geometry";
@@ -605,8 +605,10 @@ export function ArtworkRetouchEditor({
     canvasHeight: workspace.height,
     sourceWidth: baseDimensions?.width ?? workspace.sourceWidth,
     sourceHeight: baseDimensions?.height ?? workspace.sourceHeight,
-    scalePercent: composition.foregroundScalePercent
-  }) : null, [baseDimensions, composition.foregroundScalePercent, workspace]);
+    scalePercent: composition.foregroundScalePercent,
+    offsetX: composition.offsetX,
+    offsetY: composition.offsetY
+  }) : null, [baseDimensions, composition.foregroundScalePercent, composition.offsetX, composition.offsetY, workspace]);
   function fillOutsideArtwork() {
     if (!foregroundBounds) return;
     const outsideFill: RetouchOperation = { kind: "outside_fill", color, innerBounds: normalizeSelection(foregroundBounds) };
@@ -671,6 +673,12 @@ export function ArtworkRetouchEditor({
         <aside className="order-2 min-h-0 overflow-y-auto overscroll-contain border-t border-zinc-800 p-3 lg:order-1 lg:border-r lg:border-t-0 lg:p-4">
           <div className="rounded-md border border-zinc-800 bg-zinc-900/45 p-2.5 shadow-inner shadow-black/20"><div className="mb-2 flex items-center justify-between px-0.5"><p className="text-[11px] font-semibold uppercase text-zinc-400">Ferramentas</p><span className="text-[10px] text-zinc-600">Escolha uma ação</span></div><div className="grid grid-cols-4 gap-1.5"><ToolButton active={tool === "brush"} description="Pintar livremente sobre a imagem" icon={<Brush size={18} strokeWidth={1.8} />} label="Pincel" shortcut="B" onClick={() => chooseTool("brush")} /><ToolButton active={tool === "eyedropper"} description="Capturar uma cor da imagem" icon={<Pipette size={18} strokeWidth={1.8} />} label="Cor" shortcut="I" onClick={activateEyedropper} /><ToolButton active={tool === "eraser"} description="Apagar partes do retoque" icon={<Eraser size={18} strokeWidth={1.8} />} label="Apagar" shortcut="E" onClick={() => chooseTool("eraser")} /><ToolButton active={tool === "fill"} description="Preencher uma área de cor contínua" icon={<PaintBucket size={18} strokeWidth={1.8} />} label="Preencher" shortcut="G" onClick={() => chooseTool("fill")} /><ToolButton active={tool === "shape"} description="Inserir um novo formato ou editar os existentes" icon={<Shapes size={18} strokeWidth={1.8} />} label="Formato" shortcut="S" onClick={() => beginNewShape()} /><ToolButton active={tool === "select"} description="Limitar os retoques a uma área" icon={<MousePointer2 size={18} strokeWidth={1.8} />} label="Selecionar" shortcut="R" onClick={() => chooseTool("select")} /><ToolButton active={tool === "compose"} description="Redimensionar a arte e estender seu fundo" icon={<Layers3 size={18} strokeWidth={1.8} />} label="Expandir" shortcut="T" onClick={() => chooseTool("compose")} /><ToolButton active={tool === "pan"} description="Mover a área de trabalho" icon={<Grab size={18} strokeWidth={1.8} />} label="Navegar" shortcut="Espaço" onClick={() => chooseTool("pan")} /></div></div>
           <div className="mt-5 grid gap-4">
+            <fieldset className="grid min-w-0 gap-3 rounded-md border border-zinc-800 p-3" disabled={loading || saving || Boolean(pendingFill)}>
+              <legend className="px-1 text-xs font-medium text-zinc-300"><span className="inline-flex items-center gap-2"><Move size={14} /> Posição da imagem</span></legend>
+              <RangeControl label="Posição horizontal" min={-100} max={100} step={1} suffix="%" value={Math.round((composition.offsetX ?? 0) * 100)} onChange={value => setComposition(current => ({ ...current, offsetX: value / 100 }))} />
+              <RangeControl label="Posição vertical" min={-100} max={100} step={1} suffix="%" value={Math.round((composition.offsetY ?? 0) * 100)} onChange={value => setComposition(current => ({ ...current, offsetY: value / 100 }))} />
+              <button aria-label="Centralizar imagem" className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-zinc-700 text-xs text-zinc-300 transition hover:border-cyan-700 hover:bg-cyan-950/25 disabled:opacity-40" disabled={!(composition.offsetX || composition.offsetY)} title="Centralizar a imagem e seu fundo expandido sem alterar o tamanho, as guias ou os retoques. Para mover também os retoques, incorpore a composição antes." type="button" onClick={() => setComposition(current => ({ ...current, offsetX: 0, offsetY: 0 }))}><LocateFixed size={15} /> Centralizar</button>
+            </fieldset>
             <div className="grid grid-cols-2 gap-2">
               <ActionButton disabled={loading || saving || Boolean(pendingFill) || !hasChanges} icon={<Merge size={15} />} label="Incorporar" title="Incorporar tudo: une a arte, a cópia de fundo, formas e pincel em uma imagem que pode ser duplicada novamente. O original é preservado." onClick={() => incorporate(false)} />
               <ActionButton disabled={loading || saving || Boolean(pendingFill) || !geometry} icon={<Crop size={15} />} label="Recortar" title="Recortar no molde: incorpora a composição e deixa transparente tudo o que estiver fora da linha de corte do produto, sem imprimir as guias." onClick={() => incorporate(true)} />
@@ -871,14 +879,15 @@ function buildAdjustedSource(source: ImageBitmap | HTMLCanvasElement, workspace:
   const context = canvas.getContext("2d", { willReadFrequently: adjustments.sharpness > 0 }); if (!context) return canvas;
   const colorFilter = `brightness(${adjustments.brightness}%) contrast(${adjustments.contrast}%) saturate(${adjustments.saturation}%)`;
   context.imageSmoothingEnabled = true; context.imageSmoothingQuality = "high";
-  const foreground = calculateCenteredLayerBounds({ canvasWidth: workspace.width, canvasHeight: workspace.height, sourceWidth: workspace.sourceWidth, sourceHeight: workspace.sourceHeight, scalePercent: composition.foregroundScalePercent });
+  const placement = { canvasWidth: workspace.width, canvasHeight: workspace.height, sourceWidth: workspace.sourceWidth, sourceHeight: workspace.sourceHeight, offsetX: composition.offsetX, offsetY: composition.offsetY };
+  const foreground = calculateCenteredLayerBounds({ ...placement, scalePercent: composition.foregroundScalePercent });
   if (composition.backgroundEnabled) {
     const expansionPx = geometry ? createPrintGuideLayout({ geometry, margins: { bleedMm, safeMarginMm }, viewportWidth: workspace.width, viewportHeight: workspace.height, paddingRatio: 0 }).unitsPerMm * composition.backgroundExpansionMm : millimetersToWorkspacePixels(workspace, geometry, composition.backgroundExpansionMm);
     if (composition.backgroundMode === "extend") {
       context.filter = colorFilter;
       drawEdgeContinuation(context, source, foreground, expansionPx);
     } else {
-    const background = calculateCenteredLayerBounds({ canvasWidth: workspace.width, canvasHeight: workspace.height, sourceWidth: workspace.sourceWidth, sourceHeight: workspace.sourceHeight, scalePercent: composition.backgroundScalePercent, expansionPx });
+    const background = calculateCenteredLayerBounds({ ...placement, scalePercent: composition.backgroundScalePercent, expansionPx });
     context.filter = `${colorFilter} blur(${composition.backgroundBlurPx}px)`;
     context.drawImage(source, background.x, background.y, background.width, background.height);
     }
@@ -1001,6 +1010,6 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) 
 function blobToDataUrl(blob: Blob) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Não foi possível ler a versão editada.")); reader.onerror = () => reject(new Error("Não foi possível ler a versão editada.")); reader.readAsDataURL(blob); }); }
 function hexToRgb(value: string) { const normalized = value.replace("#", ""); return [Number.parseInt(normalized.slice(0, 2), 16), Number.parseInt(normalized.slice(2, 4), 16), Number.parseInt(normalized.slice(4, 6), 16)]; }
 function sameAdjustments(left: RetouchAdjustments, right: RetouchAdjustments) { return left.brightness === right.brightness && left.contrast === right.contrast && left.saturation === right.saturation && left.sharpness === right.sharpness; }
-function sameComposition(left: RetouchComposition, right: RetouchComposition) { return (left.backgroundMode ?? "copy") === (right.backgroundMode ?? "copy") && left.foregroundScalePercent === right.foregroundScalePercent && left.backgroundEnabled === right.backgroundEnabled && left.backgroundExpansionMm === right.backgroundExpansionMm && left.backgroundScalePercent === right.backgroundScalePercent && left.backgroundBlurPx === right.backgroundBlurPx; }
+function sameComposition(left: RetouchComposition, right: RetouchComposition) { return (left.offsetX ?? 0) === (right.offsetX ?? 0) && (left.offsetY ?? 0) === (right.offsetY ?? 0) && (left.backgroundMode ?? "copy") === (right.backgroundMode ?? "copy") && left.foregroundScalePercent === right.foregroundScalePercent && left.backgroundEnabled === right.backgroundEnabled && left.backgroundExpansionMm === right.backgroundExpansionMm && left.backgroundScalePercent === right.backgroundScalePercent && left.backgroundBlurPx === right.backgroundBlurPx; }
 function formatMeasurement(value: number) { return Number(value.toFixed(2)).toLocaleString("pt-BR"); }
 function clamp(value: number, minimum: number, maximum: number) { return Math.min(maximum, Math.max(minimum, value)); }
