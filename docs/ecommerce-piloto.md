@@ -482,3 +482,33 @@ TypeScript, lint e build de produção aprovados. Prévia testada por pixels e
 capturas em Chromium em 320, 390 e 1440 px, incluindo frente/verso e ampliação.
 Storage e pagamentos reais não foram acionados; faltam a configuração e a
 homologação dos modelos fotográficos reais de cada produto.
+
+### Modelo Botton baseado na referência de 2,5 cm
+
+Em **Preparação da arte, benefício e modelo do produto**, use **Aplicar modelo
+Botton** e depois salve a loja. Isso seleciona seis camadas já alinhadas, sem
+alterar a preparação, o desconto nem as medidas físicas de impressão do produto.
+O modelo é oferecido somente para formatos circulares (ou ainda não configurados).
+
+Os arquivos ficam em `public/mockups/botton-25mm-v1/`, com 1254 × 1254 px, fundo
+transparente e menos de 3 MB cada. **Baixar camadas PNG** fornece o ZIP com as duas
+bases, duas máscaras, dois acabamentos, calibração JSON e os prompts de geração.
+As máscaras podem ser utilizadas também pelo uploader existente.
+
+As bases foram reconstruídas pelo `image_gen` embutido a partir de `botton25mm.webp`,
+sem os textos da referência, pois as duas faces originais estavam sobrepostas.
+As máscaras técnicas e os acabamentos vetoriais são gerados por
+`node scripts/build-botton-masks.mjs`, sem modificar as fotografias-base.
+No verso a máscara é vazada para preservar o metal e o alfinete.
+
+Esse é um modelo visual inicial, não uma medição física certificada. Confira os
+fechos e a largura da dobra em cada tamanho de botton antes de publicar. Para
+outros acabamentos (ímã/abridor), cadastre as camadas correspondentes; não use o
+verso com alfinete como se representasse esses produtos. Não exige nova migration
+ou variável de ambiente. Os demais tipos de mídia continuam aceitando somente
+URLs HTTPS; a exceção relativa permite apenas os seis arquivos deste modelo.
+
+Validação do modelo: 14 testes direcionados e 533 testes na suíte completa
+aprovados (21 integrações condicionais não executadas nesta etapa), TypeScript,
+lint e build de produção aprovados. Pixels e capturas conferidos em 320/390/1440 px,
+incluindo transparência e preservação do metal/alfinete no verso. ZIP verificado.

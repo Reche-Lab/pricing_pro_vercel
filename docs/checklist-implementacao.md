@@ -449,6 +449,11 @@ node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 
 ### E-commerce: preparação da arte e máscaras do produto
 
+- [x] Modelo Botton 2,5 cm reconstruído da referência: seis camadas PNG, transparência e calibração inicial; aplicação por botão e ZIP para download.
+- [x] Preset sem alterar preços, preparação ou medidas físicas; URLs locais restritas à lista dos seis arquivos do modelo.
+- [x] Modelo validado por pixels e capturas em 320/390/1440 px; 533 testes, TypeScript, lint e build aprovados. Sem migration adicional.
+- [ ] Conferir o verso e a dobra com uma peça física de cada tamanho antes de publicar o modelo.
+
 - [x] Escolha por arte entre preparação pela equipe e pelo comprador, habilitada por produto.
 - [x] Benefício fixo por arte, com teto percentual, calculado no servidor e registrado no pedido.
 - [x] Modelo frente/verso com upload de base, máscara alfa e acabamento; calibração e ampliação.

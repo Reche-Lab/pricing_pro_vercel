@@ -1,10 +1,15 @@
 import { z } from "zod";
 import { safeCommerceMediaUrl } from "./product-media";
 
+const safeMockupMediaUrl = z.union([safeCommerceMediaUrl, z.enum([
+  "/mockups/botton-25mm-v1/base-frente.png", "/mockups/botton-25mm-v1/base-verso.png",
+  "/mockups/botton-25mm-v1/mascara-frente.png", "/mockups/botton-25mm-v1/mascara-verso.png",
+  "/mockups/botton-25mm-v1/acabamento-frente.png", "/mockups/botton-25mm-v1/acabamento-verso.png",
+])]);
 export const mockupSideSchema = z.object({
-  baseUrl: safeCommerceMediaUrl,
-  maskUrl: safeCommerceMediaUrl,
-  overlayUrl: safeCommerceMediaUrl,
+  baseUrl: safeMockupMediaUrl,
+  maskUrl: safeMockupMediaUrl,
+  overlayUrl: safeMockupMediaUrl,
   x: z.number().min(0).max(1), y: z.number().min(0).max(1),
   width: z.number().min(0.05).max(1), height: z.number().min(0.05).max(1),
 }).strict().refine(v => v.x + v.width <= 1.001 && v.y + v.height <= 1.001, "A região da arte precisa ficar dentro da imagem do modelo.");

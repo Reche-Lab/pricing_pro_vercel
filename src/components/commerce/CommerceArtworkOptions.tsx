@@ -1,11 +1,12 @@
 "use client";
 import React, { useState } from "react";
-import { ImagePlus, Layers } from "lucide-react";
+import { CircleDot, ImagePlus, Layers } from "lucide-react";
 import { defaultArtworkOptions, defaultMockup, type CommerceArtworkOptions as Options, type ProductMockup } from "@/domain/commerce/artwork-options";
 import type { PrintGeometry, PrintMargins } from "@/domain/artwork/geometry";
 import { CommerceImageUpload } from "./CommerceImageUpload";
 import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 import { StoreProductMockup } from "./StoreProductMockup";
+import bottonModel from "../../../public/mockups/botton-25mm-v1/modelo.json";
 const field = "w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white";
 export function CommerceArtworkOptions({ value, onChange, onBusyChange, geometry, margins }: {
   value?: Options; onChange: (value: Options) => void; onBusyChange: (busy: boolean) => void;
@@ -14,6 +15,7 @@ export function CommerceArtworkOptions({ value, onChange, onBusyChange, geometry
   const options = value ?? defaultArtworkOptions();
   const [sample, setSample] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   function update(patch: Partial<Options>) { onChange({ ...options, ...patch }); }
   function updateModel(patch: Partial<ProductMockup>) { update({ mockup: { ...(options.mockup ?? defaultMockup()), ...patch } }); }
   return <details className="min-w-0 border-t border-zinc-800 pt-3 sm:col-span-2"><summary className="cursor-pointer text-sm font-medium text-emerald-200"><Layers size={16} className="mr-2 inline" />Preparação da arte, benefício e modelo do produto</summary><div className="mt-4 grid min-w-0 gap-4">
@@ -21,6 +23,14 @@ export function CommerceArtworkOptions({ value, onChange, onBusyChange, geometry
     <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1 text-sm">Desconto por arte pronta (R$)<EditableNumberInput className={field} min={0} max={1000} step={0.01} value={options.discountFixedCents / 100} onValueChange={v => update({ discountFixedCents: Math.round(v * 100) })} /></label><label className="grid gap-1 text-sm">Limite do desconto no grupo (%)<EditableNumberInput className={field} min={0} max={30} step={1} value={options.maxDiscountPercent} onValueChange={v => update({ maxDiscountPercent: v })} /></label></div>
     <p className="text-xs leading-5 text-zinc-400">O benefício é aplicado uma vez por arte e produto, somente com enquadramento e aprovação válidos. Não incide no frete. Zero desativa o desconto.</p>
     <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(options.mockup)} onChange={e => update({ mockup: e.target.checked ? defaultMockup() : undefined })} />Configurar máscaras de frente e verso</label>
+    <div className="flex flex-wrap items-center gap-3">
+      <button type="button" disabled={Boolean(geometry && geometry.shape !== "circle")}
+        title="Modelo visual baseado no botton de 2,5 cm com alfinete. Não altera as medidas de impressão. Confira o acabamento físico dos outros tamanhos."
+        className="inline-flex min-h-10 items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 text-sm text-emerald-200 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+        onClick={() => { update({ mockup: structuredClone(bottonModel) }); setMessage("Modelo Botton aplicado. Salve a loja para utilizar nos produtos."); }}><CircleDot size={17} />Aplicar modelo Botton</button>
+      <a href="/mockups/botton-25mm-v1/kit-botton.zip" download className="text-xs text-zinc-400 underline hover:text-zinc-100">Baixar camadas PNG</a>
+    </div>
+    {message ? <p role="status" className="text-xs text-emerald-300">{message}</p> : null}
     {options.mockup ? <>
       <p className="text-xs leading-5 text-zinc-400">Cada face usa imagens com o mesmo enquadramento: base do produto, máscara com área da arte opaca e restante transparente, e acabamento sobreposto. Use transparência PNG/WebP. A simulação não modifica o PDF de impressão.</p>
       {(["front", "back"] as const).map(side => <details key={side} className="border-t border-zinc-800 pt-3"><summary className="cursor-pointer text-sm">{side === "front" ? "Frente" : "Verso"}</summary><div className="mt-3 grid min-w-0 gap-4 sm:grid-cols-2">
