@@ -26,6 +26,8 @@ export function ArtworkGuidedStudio({
   onPrepare,
   onApprove,
   onClose,
+  renderProductPreview,
+  proofMode = false,
 }: {
   initialAsset: ArtworkStudioAsset;
   initialStep?: ArtworkStudioStep;
@@ -39,6 +41,8 @@ export function ArtworkGuidedStudio({
   ) => Promise<ArtworkStudioAsset>;
   onApprove: (asset: ArtworkStudioAsset) => Promise<void>;
   onClose: () => void;
+  renderProductPreview?: (asset: ArtworkStudioAsset) => React.ReactNode;
+  proofMode?: boolean;
 }) {
   const [asset, setAsset] = useState(initialAsset);
   const [step, setStep] = useState(initialStep);
@@ -104,7 +108,7 @@ export function ArtworkGuidedStudio({
             ? "Retocar (opcional)"
             : value === "crop"
               ? "Enquadrar"
-              : "Aprovar"}
+              : proofMode ? "Publicar prova" : "Aprovar"}
         </li>
       ))}
     </ol>
@@ -211,7 +215,7 @@ export function ArtworkGuidedStudio({
             <header className="flex shrink-0 items-start justify-between gap-3 border-b border-zinc-800 p-4">
               <div className="min-w-0">
                 <h2 className="font-semibold text-white">
-                  {complete ? "Arte aprovada" : "Revisar e aprovar"}
+                  {proofMode ? complete ? "Prova disponível para o cliente" : "Revisar prova" : complete ? "Arte aprovada" : "Revisar e aprovar"}
                 </h2>
                 <p className="mt-1 break-words text-xs text-zinc-400">
                   {asset.name}
@@ -229,6 +233,7 @@ export function ArtworkGuidedStudio({
               </button>
             </header>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+              {asset.preparedUrl && renderProductPreview ? renderProductPreview(asset) : null}
               {asset.preparedUrl ? (
                 <img
                   key={asset.preparedUrl}
@@ -258,7 +263,7 @@ export function ArtworkGuidedStudio({
                   role="status"
                   className="flex items-center gap-2 text-emerald-300"
                 >
-                  <Check size={20} /> Esta versão está aprovada.
+                  <Check size={20} /> {proofMode ? "Esta prova aguarda a aprovação do cliente." : "Esta versão está aprovada."}
                 </p>
               ) : (
                 <label className="flex items-start gap-3 text-sm">
@@ -326,7 +331,7 @@ export function ArtworkGuidedStudio({
                       }
                     }}
                   >
-                    <Check size={16} /> {busy ? "Aprovando..." : "Aprovar arte"}
+                    <Check size={16} /> {proofMode ? busy ? "Publicando..." : "Publicar prova na conta do cliente" : busy ? "Aprovando..." : "Aprovar arte"}
                   </button>
                 </>
               )}

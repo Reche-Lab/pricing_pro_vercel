@@ -26,10 +26,10 @@ export async function POST(
     if (blocked) return blocked;
     const input = await readCommerceBody(
       request,
-      z.object({ lines: z.array(cartLineSchema).max(40) }).strict(),
+      z.object({ lines: z.array(cartLineSchema).max(40), readyArtworkIds: z.array(z.string().uuid()).max(40).optional() }).strict(),
     );
     return commerceJson(
-      calculateCart(input.lines, await commerceProducts(store.tenant_id)),
+      calculateCart(input.lines, await commerceProducts(store.tenant_id), new Set(input.lines.filter(line => line.artworkId && input.readyArtworkIds?.includes(line.artworkId)).map(line => `${line.productId}:${line.artworkId}`))),
     );
   } catch (error) {
     return commerceFailure(error, "preview.price");

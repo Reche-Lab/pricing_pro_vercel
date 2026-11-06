@@ -49,6 +49,7 @@ import { StoreProductGallery } from "./StoreProductGallery";
 import { StorePriceBreakdown } from "./StorePriceBreakdown";
 import { StoreDeliveryInquiry } from "./StoreDeliveryInquiry";
 import { StoreArtworkGuide } from "./StoreArtworkGuide";
+import { CommerceOrderArtworks } from "./CommerceOrderArtworks";
 import { useStoreTheme, accentForeground } from "./use-store-theme";
 import { useCommercePreview } from "./CommercePreviewProvider";
 import type { StoreArtwork } from "./StoreArtworkTools";
@@ -400,7 +401,7 @@ export function Storefront({
                             <p className={styles.muted}>
                               {line.artworkName || "Sem personalização"}
                             </p>
-                            {priced && product ? <StorePriceBreakdown compact quantity={line.quantity} originalUnitCents={product.offer.originalUnitCents} price={{ totalCents: priced.totalCents, items: [priced] }} /> : <p>Remova o item indisponível para continuar.</p>}
+                            {priced && product ? <StorePriceBreakdown compact quantity={line.quantity} originalUnitCents={product.offer.originalUnitCents} price={{ totalCents: priced.totalCents, artworkDiscountCents: priced.artworkDiscountCents, items: [priced] }} /> : <p>Remova o item indisponível para continuar.</p>}
                           </div>
                           <button
                             aria-label="Remover item"
@@ -472,6 +473,8 @@ export function Storefront({
                               (a) => a.product_id === product.id,
                             )}
                             onRefresh={refresh}
+                            preparation={line.preparation ?? "customer"}
+                            onPreparationChange={preparation => update(cart.lines.map(item => item.id === line.id ? { ...item, preparation } : item))}
                             onSelect={(id) =>
                               update(
                                 cart.lines.map((item) =>
@@ -489,6 +492,7 @@ export function Storefront({
                 </div>
                 <aside className={styles.summary}>
                   <h2 className="text-xl font-semibold">Resumo</h2>
+                  {(cart.calculation?.artworkDiscountCents ?? 0) > 0 ? <p className="mt-3 text-sm text-emerald-600">Benefício por arte pronta: −{storeMoney(cart.calculation!.artworkDiscountCents!)}</p> : null}
                   <Summary subtotal={cart.calculation?.totalCents ?? 0} />
                   <Link
                     className={`${styles.primary} mt-5 w-full`}
@@ -560,6 +564,7 @@ export function Storefront({
               order ? (
                 <OrderDetail
                   order={order}
+                  api={api}
                   instructions={cart.payments.manual_instructions}
                   busy={busy}
                   onRefresh={async () => { await action(refreshOrders); }}
@@ -758,6 +763,7 @@ function ProductDetail({
   const [quantity, setQuantity] = useState(String(product.minQuantity));
   const [groups, setGroups] = useState("1");
   const [draftArtworks, setDraftArtworks] = useState<Record<number, string>>({});
+  const [draftPreparation, setDraftPreparation] = useState<Record<number, "team" | "customer">>({});
   const [artworksOpen, setArtworksOpen] = useState(false);
   const [uploadingGroups, setUploadingGroups] = useState<Set<number>>(new Set());
   const [adding, setAdding] = useState(false);
@@ -767,6 +773,7 @@ function ProductDetail({
   const artworkBusy = uploadingGroups.size > 0;
   const [priced, setPrice] = useState<{ lines: CartLine[]; calculation: {
     totalCents: number;
+    artworkDiscountCents?: number;
     items: { unitCents: number; quantity?: number; artworkName?: string }[];
   } } | null>(null);
   const [error, setError] = useState("");
@@ -781,11 +788,14 @@ function ProductDetail({
         quantity: q,
         artworkName: product.personalized ? `Arte ${i + 1}` : "",
         artworkId: product.personalized ? draftArtworks[i] ?? null : null,
+        preparation: draftPreparation[i] ?? (product.artworkOptions?.allowTeamPreparation ? "team" as const : "customer" as const),
       }));
     } catch {
       return [];
     }
-  }, [quantity, groups, product.id, product.personalized, draftArtworks]);
+  }, [quantity, groups, product.id, product.personalized, product.artworkOptions, draftArtworks, draftPreparation]);
+  const approvalRevision = artworks.map(art => `${art.id}:${art.approved_at ?? ""}:${JSON.stringify(art.crop)}`).join("|");
+  const previewPriceEvidence = JSON.stringify({ readyArtworkIds: artworks.filter(art => art.approved_at && art.crop).map(art => art.id) });
   const attachedCount = lines.filter(line => line.artworkId).length;
   const price = priced?.lines === lines ? priced.calculation : null;
   const deliveryIssue = commerceSelectionError(lines, product);
@@ -801,6 +811,7 @@ function ProductDetail({
       setQuantity("");
       setGroups("");
       setDraftArtworks({});
+      setDraftPreparation({});
       setArtworksOpen(false);
     } finally {
       addingRef.current = false;
@@ -813,7 +824,7 @@ function ProductDetail({
     setError("");
     if (!lines.length) return;
     const timer = setTimeout(() => {
-      void storeRequest(`${api}/price`, "POST", { lines })
+      void storeRequest(`${api}/price`, "POST", { lines, ...(preview ? JSON.parse(previewPriceEvidence) : {}) })
         .then((result) => {
           if (active) setPrice({ lines, calculation: result });
         })
@@ -825,7 +836,7 @@ function ProductDetail({
       active = false;
       clearTimeout(timer);
     };
-  }, [api, lines]);
+  }, [api, lines, approvalRevision, preview, previewPriceEvidence]);
   return (
     <>
       <Link
@@ -929,6 +940,8 @@ function ProductDetail({
                         return next;
                       })}
                       onRefresh={onArtworkRefresh}
+                      preparation={line.preparation}
+                      onPreparationChange={value => setDraftPreparation(current => ({ ...current, [index]: value }))}
                       onSelect={async id => setDraftArtworks(current => ({ ...current, [index]: id }))}
                     />
                   </div>
@@ -946,7 +959,7 @@ function ProductDetail({
           </button>
           {product.personalized ? (
             <p className="mt-3 text-sm text-zinc-500">
-              O enquadramento e a aprovação de cada arte podem ser concluídos no carrinho.
+              {product.artworkOptions?.allowTeamPreparation ? "Envie sua arte para a equipe preparar ou enquadre e aprove para receber o benefício disponível." : "O enquadramento e a aprovação de cada arte podem ser concluídos no carrinho."}
             </p>
           ) : null}
           {quantity.trim() ? <StoreDeliveryInquiry api={api} lines={lines} disabled={Boolean(deliveryIssue)} disabledReason={deliveryIssue ?? undefined} /> : null}
@@ -1128,6 +1141,7 @@ function PreviewCheckout({
           const missing = cart.lines.some(
             (line) =>
               products.find((p) => p.id === line.productId)?.personalized &&
+              !(line.preparation === "team" && products.find(p => p.id === line.productId)?.artworkOptions?.allowTeamPreparation && cart.artworks.some(a => a.id === line.artworkId && a.product_id === line.productId)) &&
               !cart.artworks.some(
                 (art) =>
                   art.id === line.artworkId &&
@@ -1459,12 +1473,14 @@ function OrderDetail({
   busy,
   onPay,
   onRefresh,
+  api,
 }: {
   order: Order;
   instructions: string;
   busy: boolean;
   onPay: () => Promise<void>;
   onRefresh: () => Promise<void>;
+  api: string;
 }) {
   return (
     <div className={styles.columns}>
@@ -1503,6 +1519,7 @@ function OrderDetail({
             <span>{storeMoney(item.totalCents)}</span>
           </div>
         ))}
+        <CommerceOrderArtworks endpoint={`${api}/orders/${order.id}/artworks`} />
         {order.address ? (
           <p className="mt-5 text-sm">
             <Truck className="mr-2 inline" size={17} />
@@ -1518,6 +1535,7 @@ function OrderDetail({
           subtotal={order.subtotal_cents}
           shipping={order.shipping_cents}
         />
+        {(order.artworkDiscountCents ?? 0) > 0 ? <p className="mt-3 text-sm text-emerald-600">Benefício por arte pronta já incluído: −{storeMoney(order.artworkDiscountCents!)}</p> : null}
         {order.payment_status === "pending" ? (
           order.provider === "mercado_pago" ? (
             <button

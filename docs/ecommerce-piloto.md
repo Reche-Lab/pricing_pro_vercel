@@ -425,3 +425,60 @@ Regressão visual: `scripts/commerce-surfaces-browser.mjs`, com as mesmas variá
 de banco/base/Playwright dos scripts acima. Opcionalmente,
 `COMMERCE_BROWSER_EXECUTABLE` aponta para um Chromium já instalado.
 Não requer migration nem novas configurações para a aplicação.
+
+## Preparação da arte e produto acabado (06/11/2026)
+
+Aplicar `0067_commerce_artwork_proofs.sql` antes de publicar esta versão. Não há
+novas variáveis de ambiente. O Storage privado `artwork-production` e o uploader
+de imagens da loja continuam sendo utilizados.
+
+Em **Loja online → Produtos → Preparação da arte, benefício e modelo do produto**:
+
+1. Habilite, por produto, a compra com preparação pela equipe. O cliente envia
+   a imagem sem precisar editar/aprovar antes de comprar. Produtos existentes
+   mantêm o comportamento anterior até essa opção ser ativada.
+2. Configure um desconto fixo em reais por arte aprovada pelo cliente e um limite
+   percentual por grupo (até 30%). Zero desativa. A aplicação verifica a sessão,
+   o produto e as medidas aprovadas no servidor; não confia em preços do browser.
+   Uma mesma arte dividida em grupos do mesmo produto recebe o benefício uma vez.
+   O frete não recebe esse desconto. O pedido registra o benefício e mantém seu preço.
+3. Habilite o modelo do produto. Para cada face, envie **base**, **máscara alfa**
+   e **acabamento sobreposto**, com a mesma proporção e enquadramento. PNG/WebP
+   transparentes são recomendados, até 3 MB por upload, normalizados pelo uploader.
+   Na máscara, somente a área que recebe a arte deve ser opaca; preto/branco
+   sem transparência não funciona como máscara alfa. O acabamento fica acima
+   da arte: fecho, ímã, abridor, brilho ou sombra do produto real.
+4. Ajuste posição/tamanho da região da arte e calibre a faixa da frente e a abertura
+   do verso. Use uma arte de teste e compare com a peça física antes de publicar.
+   A dobra radial é simulada para modelos circulares. Outros formatos usam máscaras
+   planas, sem simular a dobra física. Sem imagens de modelo, a loja mostra uma
+   prévia geométrica identificada como esquemática, não uma foto do produto.
+
+A prévia tem frente/verso e ampliação. Usa a arte enquadrada no limite de corte:
+a área visível vai até a sangria; a faixa restante continua nas bordas e no verso.
+As máscaras e o acabamento **nunca** são incorporados ao arquivo de impressão.
+A fidelidade visual depende das imagens e da calibração do modelo de cada produto.
+
+### Preparação interna após a compra
+
+- No pedido administrativo, abra **Preparação e aprovação das artes**. Informe
+  a orientação, retoque/enquadre e use **Publicar prova na conta do cliente**.
+- A prova fica disponível em **Minha conta → Pedido → Minhas artes e aprovação**.
+  Esse botão publica a prova na conta; não envia um e-mail de notificação.
+- O comprador revisa a prévia, pode abrir o arquivo exato de impressão e confirma
+  a versão. Cada nova edição invalida a aprovação anterior, com registro no histórico.
+- Provas em rascunho são privadas. Somente o comprador do pedido pode aprovar.
+  A produção e o PDF A4 exigem pagamento confirmado e aprovação de todas as artes.
+- Depois de iniciar a produção, a edição fica bloqueada. A aprovação posterior
+  de uma arte preparada pela equipe não concede desconto retroativo à compra.
+
+O preview administrativo permite simular os dois modos, o benefício e o acabamento,
+mas não gera pedidos reais nem simula a preparação interna posterior a uma compra.
+
+Validação desta etapa: 528 testes aprovados na suíte comum (21 integrações
+condicionais não executadas nessa chamada); os 7 testes de integração da loja
+foram aprovados separadamente em PostgreSQL local novo com todas as migrations.
+TypeScript, lint e build de produção aprovados. Prévia testada por pixels e
+capturas em Chromium em 320, 390 e 1440 px, incluindo frente/verso e ampliação.
+Storage e pagamentos reais não foram acionados; faltam a configuração e a
+homologação dos modelos fotográficos reais de cada produto.

@@ -7,7 +7,7 @@ import styles from "./store.module.css";
 export function StorePriceBreakdown({ originalUnitCents, quantity, price, compact = false, pending = true }: {
   originalUnitCents: number; quantity: number; compact?: boolean;
   pending?: boolean;
-  price: { totalCents: number; items: { unitCents: number; artworkName?: string; quantity?: number }[] } | null;
+  price: { totalCents: number; artworkDiscountCents?: number; items: { unitCents: number; artworkName?: string; quantity?: number }[] } | null;
 }) {
   const units = price?.items.map(item => item.unitCents) ?? [];
   const min = Math.min(...units), max = Math.max(...units);
@@ -16,7 +16,7 @@ export function StorePriceBreakdown({ originalUnitCents, quantity, price, compac
   return <div className={`${styles.priceBreakdown} ${compact ? styles.compactPrice : ""}`} aria-live="polite" aria-busy={!price && pending}>
     <div className={styles.priceAmounts}>
       <div>
-        <span className={styles.muted}>Preço unitário{min !== max && price ? " por arte" : ""}</span>
+        <span className={styles.muted}>{price?.artworkDiscountCents ? "Unitário antes do benefício" : "Preço unitário"}{min !== max && price ? " por arte" : ""}</span>
         {price && originalUnitCents > max ? <del aria-label="Preço unitário de referência">{storeMoney(originalUnitCents)}</del> : null}
         <strong>{price ? min === max ? storeMoney(min) : `${storeMoney(min)} a ${storeMoney(max)}` : pending ? "Calculando…" : "—"}</strong>
       </div>
@@ -26,6 +26,7 @@ export function StorePriceBreakdown({ originalUnitCents, quantity, price, compac
         <strong>{price ? storeMoney(price.totalCents) : "—"}</strong>
       </div>
     </div>
+    {(price?.artworkDiscountCents ?? 0) > 0 ? <p className={styles.savings}>Benefício por arte pronta: −{storeMoney(price!.artworkDiscountCents!)}</p> : null}
     {savings > 0 ? <p className={styles.savings}><BadgePercent size={16} aria-hidden="true" /> Economia de {storeMoney(savings)}
       <span>({savings * 100 < originalTotal ? "<1" : Math.floor(savings * 100 / originalTotal)}%)</span></p> : null}
     {!compact ? <p className={styles.muted}>Referência de 1 unidade: {storeMoney(originalUnitCents)}. Total sem frete.</p> : null}

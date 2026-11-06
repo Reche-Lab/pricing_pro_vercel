@@ -2,6 +2,7 @@ import { calculateCompositeQuote } from "@/domain/quotes/composite-pricing";
 import { calculateCurveUnitPrice } from "@/domain/pricing/pricing";
 import type { PlatformRule, PricingCurve } from "@/domain/pricing/types";
 import type { CartLine } from "./schemas";
+import type { CommerceArtworkOptions } from "./artwork-options";
 
 export class CommerceError extends Error {
   constructor(
@@ -20,6 +21,8 @@ export type PriceProduct = {
   pricingRule: "per_art" | "total" | "average";
   curve: PricingCurve;
   platform: PlatformRule;
+  personalized?: boolean;
+  artworkOptions?: CommerceArtworkOptions;
 };
 export function distributeQuantity(total: number, groups: number) {
   if (
@@ -51,7 +54,7 @@ export function commerceSelectionError(
     return `Este produto permite até ${product.maxArtworks} artes. Ajuste a quantidade de artes.`;
   return null;
 }
-export function calculateCart(lines: CartLine[], products: PriceProduct[]) {
+export function calculateCart(lines: CartLine[], products: PriceProduct[], readyArtworkKeys: ReadonlySet<string> = new Set()) {
   if (
     new Set(lines.map((line) => line.id)).size !== lines.length ||
     lines.length > 40
@@ -95,7 +98,7 @@ export function calculateCart(lines: CartLine[], products: PriceProduct[]) {
       },
     };
   });
-  if (!source.length) return { totalCents: 0, items: [] };
+  if (!source.length) return { totalCents: 0, items: [], artworkDiscountCents: 0, baseSubtotalCents: 0 };
   const result = calculateCompositeQuote({
     items: source,
     pricingRule: "per_item",
@@ -109,7 +112,23 @@ export function calculateCart(lines: CartLine[], products: PriceProduct[]) {
     artworkName: item.artworkName,
     unitCents: Math.round(item.finalUnitPrice * 100),
     totalCents: Math.round(item.subtotal * 100),
+    artworkDiscountCents: 0,
   }));
+  const discounted = new Set<string>();
+  for (const line of lines) {
+    const key = `${line.productId}:${line.artworkId}`;
+    const options = byId.get(line.productId)?.artworkOptions;
+    if (!options?.discountFixedCents || byId.get(line.productId)?.personalized === false || line.preparation === "team" || !line.artworkId || !readyArtworkKeys.has(key) || discounted.has(key)) continue;
+    discounted.add(key);
+    const group = items.filter(item => lines.some(l => l.id === item.id && l.productId === line.productId && l.artworkId === line.artworkId && l.preparation !== "team"));
+    const base = group.reduce((sum, item) => sum + item.totalCents, 0);
+    const discount = Math.min(options.discountFixedCents, Math.floor(base * options.maxDiscountPercent / 100));
+    let allocated = 0;
+    group.forEach((item, index) => {
+      const amount = index === group.length - 1 ? discount - allocated : Math.floor(discount * item.totalCents / Math.max(1, base));
+      allocated += amount; item.artworkDiscountCents = amount; item.totalCents -= amount;
+    });
+  }
   const totalCents = items.reduce((sum, item) => sum + item.totalCents, 0);
   if (
     !Number.isSafeInteger(totalCents) ||
@@ -117,7 +136,8 @@ export function calculateCart(lines: CartLine[], products: PriceProduct[]) {
     totalCents > 100000000
   )
     throw new CommerceError("Total fora do limite permitido.");
-  return { totalCents, items };
+  const artworkDiscountCents = items.reduce((sum, item) => sum + item.artworkDiscountCents, 0);
+  return { totalCents, items, artworkDiscountCents, baseSubtotalCents: totalCents + artworkDiscountCents };
 }
 export function validatePayment(
   expected: { id: string; total_cents: number; sellerId: string },

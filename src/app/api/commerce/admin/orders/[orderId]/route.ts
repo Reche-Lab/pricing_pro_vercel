@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { commerceTransaction } from "@/repositories/commerce";
 import { CommerceError } from "@/domain/commerce/commerce";
+import { assertCommerceProofsReady } from "@/services/commerce/order-artworks";
 import {
   requireCommerceAdmin,
   checkCommerceOrigin,
@@ -57,6 +58,7 @@ export async function POST(
         }[input.action];
         if (order.fulfillment_status !== previous)
           throw new CommerceError("Confira a etapa atual do pedido.", 409);
+        if (input.action === "production") await assertCommerceProofsReady(client, order);
         await client.query(
           "update commerce_orders set fulfillment_status=$3,updated_at=now() where tenant_id=$1 and id=$2",
           [session.tenantId, orderId, input.action],

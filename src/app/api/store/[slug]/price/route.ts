@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { cartLineSchema } from "@/domain/commerce/schemas";
-import { calculateCart, CommerceError } from "@/domain/commerce/commerce";
-import { commerceProducts, getCommerceStore } from "@/repositories/commerce";
+import { CommerceError } from "@/domain/commerce/commerce";
+import { calculateCommerceCart, commerceProducts, getCommerceStore, findBuyerSession } from "@/repositories/commerce";
+import { cookies } from "next/headers";
+import { buyerCookieName } from "@/services/commerce/http";
 import {
   checkCommerceOrigin,
   readCommerceBody,
@@ -27,9 +29,8 @@ export async function POST(
       request,
       z.object({ lines: z.array(cartLineSchema).min(1).max(40) }).strict(),
     );
-    return commerceJson(
-      calculateCart(input.lines, await commerceProducts(store.tenant_id)),
-    );
+    const session = await findBuyerSession(store.tenant_id, (await cookies()).get(buyerCookieName(store.tenant_id))?.value);
+    return commerceJson(await calculateCommerceCart(store.tenant_id, session?.id ?? null, input.lines, await commerceProducts(store.tenant_id)));
   } catch (error) {
     return commerceFailure(error, "price.calculate");
   }

@@ -447,6 +447,22 @@ node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 
 ## Observacoes
 
+### E-commerce: preparação da arte e máscaras do produto
+
+- [x] Escolha por arte entre preparação pela equipe e pelo comprador, habilitada por produto.
+- [x] Benefício fixo por arte, com teto percentual, calculado no servidor e registrado no pedido.
+- [x] Modelo frente/verso com upload de base, máscara alfa e acabamento; calibração e ampliação.
+- [x] Continuidade radial das bordas em produtos circulares; prévia isolada do arquivo de impressão.
+- [x] Preparação interna por item, publicação de prova e aprovação versionada pelo comprador.
+- [x] Bloqueio de produção/PDF antes de pagamento e aprovação; isolamento por tenant e comprador.
+- [x] Migration aplicada e testes de compra/aprovação executados em PostgreSQL local isolado.
+- [x] Canvas verificado por pixels e capturas em 320, 390 e 1440 px, frente/verso e ampliação.
+- [x] Regressão: 528 testes aprovados; 7 integrações da loja executadas separadamente em banco local; TypeScript, lint e build aprovados.
+- [ ] Aplicar `0067_commerce_artwork_proofs.sql` no Supabase de destino.
+- [ ] Cadastrar e calibrar as fotos/máscaras reais dos produtos e homologar a prova com o comprador.
+
+Configuração e limites: `docs/ecommerce-piloto.md`, seção de preparação da arte.
+
 ### Saldo filtrado e evolução mensal
 
 - [x] Entradas, saídas e saldo dos lançamentos filtrados, excluindo linhas informativas.

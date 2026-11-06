@@ -6,6 +6,7 @@ import { requireCommerceAdmin } from "@/services/commerce/http";
 import type { CommerceOrder } from "@/repositories/commerce";
 import { AppShell } from "@/components/layout/AppShell";
 import { storeMoney } from "@/components/commerce/store-http";
+import { CommerceOrderArtworks } from "@/components/commerce/CommerceOrderArtworks";
 export const dynamic = "force-dynamic";
 export default async function OrderPage({
   params,
@@ -43,7 +44,8 @@ export default async function OrderPage({
       </Link>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <section className="min-w-0 space-y-5">
-          <h2 className="font-semibold">Itens e artes aprovadas</h2>
+          <h2 className="font-semibold">Itens do pedido</h2>
+          <CommerceOrderArtworks endpoint={`/api/commerce/admin/orders/${order.id}/artworks`} admin />
           {order.snapshot.items.map((item) => {
             const line = order.snapshot.lines.find((l) => l.id === item.id);
             return (
@@ -67,7 +69,7 @@ export default async function OrderPage({
                     </a>
                     <a
                       target="_blank"
-                      href={`/api/commerce/admin/orders/${order.id}/files?artworkId=${line.artworkId}&prepared=1`}
+                      href={`/api/commerce/admin/orders/${order.id}/files?artworkId=${line.artworkId}&lineId=${line.id}&prepared=1`}
                     >
                       Baixar arte enquadrada
                     </a>
@@ -119,6 +121,7 @@ export default async function OrderPage({
           <p className="text-sm">
             Produtos: {storeMoney(order.subtotal_cents)}
           </p>
+          {(order.snapshot.artworkDiscountCents ?? 0) > 0 ? <p className="text-sm text-emerald-300">Benefício por arte pronta já incluído: −{storeMoney(order.snapshot.artworkDiscountCents!)}</p> : null}
           <p className="text-sm">Frete: {storeMoney(order.shipping_cents)}</p>
           <p className="text-xl font-semibold">
             Total: {storeMoney(order.total_cents)}

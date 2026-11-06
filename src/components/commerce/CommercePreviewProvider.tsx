@@ -81,6 +81,13 @@ export function CommercePreviewProvider({
       throw new Error("Esta arte não está mais disponível na simulação.");
     return art;
   }
+  async function reprice() {
+    const snapshot = current.current;
+    if (!snapshot.lines.length) return;
+    const version = epoch.current;
+    const calculation = await storeRequest(`${api}/price`, "POST", { lines: snapshot.lines, readyArtworkIds: snapshot.artworks.filter(art => art.approved_at && art.preparedUrl).map(art => art.id) });
+    if (version === epoch.current && snapshot === current.current) commit({ ...snapshot, calculation });
+  }
   return (
     <Context.Provider
       value={{
@@ -95,6 +102,7 @@ export function CommercePreviewProvider({
           const version = epoch.current;
           const calculation = await storeRequest(`${api}/price`, "POST", {
             lines,
+            readyArtworkIds: current.current.artworks.filter(art => art.approved_at && art.preparedUrl).map(art => art.id),
           });
           if (
             revision !== current.current.revision ||
@@ -146,12 +154,14 @@ export function CommercePreviewProvider({
             approved_at: null,
             preparedUrl: result.dataUrl,
           });
+          await reprice();
         },
         async approve(id) {
           const art = getArt(id);
           if (!art.crop || !art.preparedUrl)
             throw new Error("Enquadre a arte antes de aprovar.");
           saveArt({ ...art, approved_at: new Date().toISOString() });
+          await reprice();
         },
       }}
     >

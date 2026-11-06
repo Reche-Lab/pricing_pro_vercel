@@ -21,6 +21,7 @@ import { CommerceImageUpload } from "./CommerceImageUpload";
 import { StoreBannersEditor } from "./StoreBannersEditor";
 import { CommerceProductMediaEditor } from "./CommerceProductMediaEditor";
 import { CommerceCaption, CommerceThemePicker } from "./CommerceAdminControls";
+import { CommerceArtworkOptions } from "./CommerceArtworkOptions";
 import styles from "./commerce-admin.module.css";
 type Data = Awaited<ReturnType<typeof getCommerceAdmin>>;
 const field =
@@ -82,6 +83,7 @@ export function CommerceAdmin({
         maxArtworks,
         personalized,
         pricingRule,
+        artworkOptions,
       } = p.snapshot;
       return {
         variantId,
@@ -95,6 +97,7 @@ export function CommerceAdmin({
         maxArtworks,
         personalized,
         pricingRule,
+        artworkOptions,
         active: p.active,
       };
     }),
@@ -558,7 +561,7 @@ export function CommerceAdmin({
                             update({ personalized: e.target.checked })
                           }
                         />
-                        Exigir arte personalizada aprovada
+                        Produto personalizado
                       </label>
                       {(
                         [
@@ -601,6 +604,9 @@ export function CommerceAdmin({
                           </option>
                         </select>
                       </label>
+                      {publication.personalized ? <CommerceArtworkOptions value={publication.artworkOptions} onChange={artworkOptions => update({ artworkOptions })} onBusyChange={imageBusyChanged}
+                        geometry={data.products.find(p => p.variant_id === publication.variantId)?.snapshot.geometry}
+                        margins={data.products.find(p => p.variant_id === publication.variantId)?.snapshot.margins} /> : null}
                       <button
                         className={`${button} justify-self-start text-rose-300`}
                         type="button"

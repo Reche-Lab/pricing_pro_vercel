@@ -1,5 +1,6 @@
 // @vitest-environment node
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import sharp from "sharp";
 import { getPool } from "@/lib/db/client";
 import { calculateCart } from "@/domain/commerce/commerce";
 import {
@@ -13,7 +14,10 @@ import {
   replaceCart,
   saveCommerceStore,
   hashCommerceToken,
+  calculateCommerceCart,
+  geometryHash,
 } from "@/repositories/commerce";
+import { authorizedCommerceOrder, mutateCommerceProof, readCommerceProofs, assertCommerceProofsReady } from "@/services/commerce/order-artworks";
 import { verifyBuyerCode } from "@/services/commerce/buyer-auth";
 import type { StoreAdminInput } from "@/domain/commerce/schemas";
 import {
@@ -23,6 +27,13 @@ import {
   assertCommerceVideosReady,
 } from "@/repositories/commerce-media";
 import { commerceVideoPath } from "@/domain/commerce/product-media";
+const objects = vi.hoisted(() => new Map<string, { bytes: Uint8Array; contentType: string }>());
+vi.mock("@/services/storage/artwork-storage", async importOriginal => ({
+  ...await importOriginal<typeof import("@/services/storage/artwork-storage")>(),
+  uploadArtworkObject: vi.fn(async (input: { path: string; bytes: Uint8Array; contentType: string }) => { objects.set(input.path, input); return input.path; }),
+  downloadArtworkObject: vi.fn(async (path: string) => objects.get(path) ?? null),
+  deleteArtworkObject: vi.fn(async (path: string) => { objects.delete(path); }),
+}));
 const url = process.env.COMMERCE_TEST_DATABASE_URL;
 describe.skipIf(!url)("commerce isolated Postgres integration", () => {
   let tenantId: string;
@@ -316,5 +327,59 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
       if (previousUrl === undefined) delete process.env.SUPABASE_URL;
       else process.env.SUPABASE_URL = previousUrl;
     }
+  });
+  it("preserves staff-prepared orders, protects drafts and requires versioned buyer approval before production", async () => {
+    await getPool().query("update product_variants set print_width_mm=35,print_height_mm=35 where id=$1", [variantId]);
+    await saveCommerceStore(actorId, tenantId, { ...published, products: [{ ...published.products[0], personalized: true, artworkOptions: { allowTeamPreparation: true, discountFixedCents: 150, maxDiscountPercent: 10 } }] });
+    const store = (await getCommerceStore("ground-shop"))!;
+    const products = await commerceProducts(tenantId), product = products[0];
+    const { session } = await createBuyerSession(tenantId);
+    const customer = (await getPool().query("insert into commerce_customers(tenant_id,email,name) values($1,'proof-buyer@example.test','Cliente da prova') returning id", [tenantId])).rows[0].id;
+    session.customer_id = customer;
+    await getPool().query("update commerce_sessions set customer_id=$2 where id=$1", [session.id, customer]);
+    const bytes = await sharp({ create: { width: 700, height: 700, channels: 4, background: "#159955" } }).png().toBuffer();
+    objects.set("test/original.png", { bytes, contentType: "image/png" });
+    const artId = (await getPool().query("insert into commerce_artworks(tenant_id,session_id,product_id,storage_path,file_name,content_hash) values($1,$2,$3,'test/original.png','arte.png','test') returning id", [tenantId, session.id, product.id])).rows[0].id;
+    const line = { id: crypto.randomUUID(), productId: product.id, quantity: 20, artworkName: "Arte da equipe", artworkId: artId, preparation: "team" as const };
+    expect((await calculateCommerceCart(tenantId, session.id, [line], products)).artworkDiscountCents).toBe(0);
+    await replaceCart(store, session, 0, [line]);
+    const created = await createCommerceOrder(store, session, { revision: 1, expectedTotalCents: calculateCart([line], products).totalCents, delivery: "pickup", address: null, provider: "manual", acceptedTerms: true });
+    const order = await authorizedCommerceOrder(tenantId, created.id, customer);
+    await expect(authorizedCommerceOrder(otherTenant, order.id, customer)).rejects.toMatchObject({ status: 404 });
+    await expect(authorizedCommerceOrder(tenantId, order.id, crypto.randomUUID())).rejects.toMatchObject({ status: 404 });
+    await expect(assertCommerceProofsReady(getPool(), order)).rejects.toMatchObject({ status: 409 });
+    const mutate = (action: string, revision: number, actor: string | null = actorId) => mutateCommerceProof(new Request("https://store.test/proof", { method: "POST", body: JSON.stringify({ action, lineId: line.id, revision, ...(actor ? { note: "Preparação de teste da equipe." } : {}) }) }), order, actor);
+    await expect(mutate("prepare", 1, null)).rejects.toMatchObject({ status: 403 });
+    await expect(mutate("approve", 1)).rejects.toMatchObject({ status: 403 });
+    expect(await (await mutate("prepare", 1)).json()).toMatchObject({ revision: 2 });
+    await expect(mutate("approve", 2, null)).rejects.toMatchObject({ status: 409 });
+    const view = await (await readCommerceProofs(new Request("https://store.test/proofs"), order)).json();
+    expect(view.proofs[0].prepared).toBe(false);
+    await expect(readCommerceProofs(new Request(`https://store.test/proofs?lineId=${line.id}&asset=source`), order)).rejects.toMatchObject({ status: 409 });
+    await mutate("publish", 2);
+    expect((await readCommerceProofs(new Request(`https://store.test/proofs?lineId=${line.id}&asset=prepared`), order)).status).toBe(200);
+    await expect(mutate("approve", 1, null)).rejects.toMatchObject({ status: 409 });
+    await mutate("approve", 2, null);
+    await mutate("approve", 2, null);
+    await expect(assertCommerceProofsReady(getPool(), order)).resolves.toBeUndefined();
+    expect((await getPool().query("select count(*)::integer as count from commerce_order_events where order_id=$1 and type='artwork.approve'", [order.id])).rows[0].count).toBe(1);
+    expect((await authorizedCommerceOrder(tenantId, order.id, customer)).total_cents).toBe(order.total_cents);
+    await mutate("prepare", 2);
+    await expect(assertCommerceProofsReady(getPool(), order)).rejects.toMatchObject({ status: 409 });
+    await expect(mutate("approve", 2, null)).rejects.toMatchObject({ status: 409 });
+    await getPool().query("update commerce_orders set fulfillment_status='production' where id=$1", [order.id]);
+    const count = objects.size;
+    await expect(mutate("prepare", 3)).rejects.toMatchObject({ status: 409 });
+    expect(objects.size).toBe(count);
+    await getPool().query("update commerce_artworks set prepared_path='test/prepared.png',crop=$2,approved_at=now() where id=$1", [artId, JSON.stringify({ geometryHash: geometryHash(product) })]);
+    const self = { ...line, id: crypto.randomUUID(), preparation: "customer" as const };
+    const benefit = await calculateCommerceCart(tenantId, session.id, [self], products);
+    expect(benefit.artworkDiscountCents).toBeGreaterThan(0);
+    expect((await calculateCommerceCart(otherTenant, session.id, [self], products)).artworkDiscountCents).toBe(0);
+    expect((await calculateCommerceCart(tenantId, crypto.randomUUID(), [self], products)).artworkDiscountCents).toBe(0);
+    expect((await calculateCommerceCart(tenantId, session.id, [self], [{ ...product, margins: { ...product.margins, bleedMm: product.margins.bleedMm + 1 } }])).artworkDiscountCents).toBe(0);
+    const client = await getPool().connect();
+    try { await client.query("set role anon"); await expect(client.query("select * from commerce_artwork_proofs")).rejects.toMatchObject({ code: "42501" }); }
+    finally { await client.query("reset role"); client.release(); }
   });
 });

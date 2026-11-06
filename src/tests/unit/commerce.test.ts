@@ -55,6 +55,25 @@ describe("commerce core", () => {
     );
     expect(priced.totalCents).toBe(11000);
   });
+  it("only grants the artwork benefit for server-verified approval, never for staff preparation", () => {
+    const p = { ...product, artworkOptions: { allowTeamPreparation: true, discountFixedCents: 1000, maxDiscountPercent: 10 } };
+    const item = { ...line("a", 10), artworkId: "art" };
+    const ready = new Set([`${p.id}:art`]);
+    expect(calculateCart([item], [p]).artworkDiscountCents).toBe(0);
+    expect(calculateCart([item], [p], ready)).toMatchObject({ totalCents: 4500, baseSubtotalCents: 5000, artworkDiscountCents: 500 });
+    expect(calculateCart([{ ...item, preparation: "team" }], [p], ready).totalCents).toBe(5000);
+    expect(calculateCart([item], [{ ...p, personalized: false }], ready).artworkDiscountCents).toBe(0);
+    expect(calculateCart([item], [p], new Set(["other:art"])).artworkDiscountCents).toBe(0);
+  });
+  it("deduplicates the fixed benefit per artwork and allocates integer cents exactly", () => {
+    const p = { ...product, artworkOptions: { allowTeamPreparation: true, discountFixedCents: 101, maxDiscountPercent: 30 } };
+    const lines = [{ ...line("a", 1), artworkId: "art" }, { ...line("b", 2), artworkId: "art" }, { ...line("c", 1), artworkId: "art2" }];
+    const priced = calculateCart(lines, [p], new Set([`${p.id}:art`, `${p.id}:art2`]));
+    expect(priced.artworkDiscountCents).toBe(202);
+    expect(priced.items.map(i => i.artworkDiscountCents)).toEqual([33, 68, 101]);
+    expect(priced.items.reduce((s, i) => s + i.totalCents, 0)).toBe(1798);
+    expect(calculateCart([], [p])).toMatchObject({ totalCents: 0, artworkDiscountCents: 0 });
+  });
   it("enforces publication availability and total quantity limits across split lines", () => {
     expect(() =>
       calculateCart([line("a", 800), line("b", 800)], [product]),

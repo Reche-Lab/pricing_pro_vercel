@@ -12,6 +12,7 @@ import {
   type PrintArtwork,
 } from "@/services/artwork/imposition";
 import { getArtworkProductionProfile } from "@/repositories/artwork-production";
+import { assertCommerceProofsReady } from "@/services/commerce/order-artworks";
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ orderId: string }> },
@@ -39,12 +40,13 @@ export async function GET(
         [session.tenantId, ids],
       )
     ).rows;
+    const proofs = (await getPool().query("select line_id,artwork_id,prepared_path from commerce_artwork_proofs where tenant_id=$1 and order_id=$2", [session.tenantId, order.id])).rows;
     if (!pdf) {
       const art = rows.find((a) => a.id === query.get("artworkId"));
       if (!art) throw new CommerceError("Arte não encontrada.", 404);
-      const file = await downloadArtworkObject(
-        query.get("prepared") === "1" ? art.prepared_path : art.storage_path,
-      );
+      const path = query.get("prepared") === "1" ? proofs.find(p => p.artwork_id === art.id && (!query.get("lineId") || p.line_id === query.get("lineId")))?.prepared_path : art.storage_path;
+      if (!path) throw new CommerceError("A arte ainda está aguardando preparação.", 409);
+      const file = await downloadArtworkObject(path);
       if (!file) throw new CommerceError("Arquivo indisponível.", 404);
       return new Response(Buffer.from(file.bytes), {
         headers: {
@@ -59,6 +61,7 @@ export async function GET(
         "A produção aguarda a confirmação de pagamento.",
         409,
       );
+    await assertCommerceProofsReady(getPool(), order);
     if (order.snapshot.lines.reduce((sum, l) => sum + l.quantity, 0) > 1000)
       throw new CommerceError(
         "O PDF síncrono do piloto permite até 1.000 unidades. Baixe as artes individuais para pedidos maiores.",
@@ -71,9 +74,10 @@ export async function GET(
       const product = order.snapshot.products.find(
         (p) => p.id === line.productId,
       );
-      if (!art?.prepared_path || !product?.geometry)
+      const preparedPath = proofs.find(p => p.line_id === line.id)?.prepared_path;
+      if (!art || !preparedPath || !product?.geometry)
         throw new CommerceError("Arte de produção indisponível.", 409);
-      const file = await downloadArtworkObject(art.prepared_path);
+      const file = await downloadArtworkObject(preparedPath);
       if (!file) throw new CommerceError("Arquivo indisponível.", 404);
       artworks.push({
         id: line.id,

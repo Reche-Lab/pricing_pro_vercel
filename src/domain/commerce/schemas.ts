@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isValidCpfOrCnpj } from "@/lib/validation/documents";
 import { productMediaSchema, safeCommerceMediaUrl } from "./product-media";
+import { commerceArtworkOptionsSchema } from "./artwork-options";
 
 export const cartLineSchema = z
   .object({
@@ -9,6 +10,7 @@ export const cartLineSchema = z
     quantity: z.number().int().min(1).max(50000),
     artworkName: z.string().trim().max(100),
     artworkId: z.string().uuid().nullable(),
+    preparation: z.enum(["customer", "team"]).optional(),
   })
   .strict();
 export const cartSchema = z
@@ -80,6 +82,7 @@ export const publicationSchema = z
     maxQuantity: z.number().int().min(1).max(50000),
     maxArtworks: z.number().int().min(1).max(20),
     personalized: z.boolean(),
+    artworkOptions: commerceArtworkOptionsSchema.optional(),
     pricingRule: z.enum(["per_art", "total", "average"]),
   })
   .strict()

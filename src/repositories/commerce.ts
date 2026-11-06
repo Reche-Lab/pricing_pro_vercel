@@ -6,6 +6,7 @@ import { listPlatformRules } from "@/repositories/platforms";
 import { commercePriceSummary } from "@/domain/commerce/offers";
 import { assertCommerceVideosReady } from "@/repositories/commerce-media";
 import type { ProductMedia } from "@/domain/commerce/product-media";
+import type { CommerceArtworkOptions } from "@/domain/commerce/artwork-options";
 import {
   resolvePrintGeometry,
   resolvePrintMargins,
@@ -37,6 +38,7 @@ export type CommerceProduct = PriceProduct & {
   personalized: boolean;
   geometry: PrintGeometry | null;
   margins: PrintMargins;
+  artworkOptions?: CommerceArtworkOptions;
 };
 export type CommerceStore = {
   tenant_id: string;
@@ -75,6 +77,7 @@ export type CommerceOrder = {
     terms: string;
     customer: { name: string; email: string };
     storeRevision: number;
+    artworkDiscountCents?: number;
   };
   created_at: string;
 };
@@ -184,6 +187,7 @@ export function publicCommerceProduct(product: CommerceProduct) {
     margins,
     unitCents: price.items[0].unitCents,
     offer: commercePriceSummary(product),
+    ...(product.artworkOptions ? { artworkOptions: product.artworkOptions } : {}),
   };
 }
 export async function getCommerceAdmin(userId: string, tenantId: string) {
@@ -368,7 +372,7 @@ export async function cartView(store: CommerceStore, session: BuyerSession) {
   ).rows;
   let calculation: ReturnType<typeof calculateCart> | null = null;
   try {
-    calculation = calculateCart(session.cart, products);
+    calculation = await calculateCommerceCart(store.tenant_id, session.id, session.cart, products);
   } catch {
     /* Keep unavailable lines removable. */
   }
@@ -448,7 +452,7 @@ export async function createCommerceOrder(
       throw new CommerceError("A loja não está recebendo novos pedidos.", 409);
     const settings = lockedStore.settings;
     const products = await commerceProducts(store.tenant_id, client);
-    const calculated = calculateCart(current.cart, products);
+    const calculated = await calculateCommerceCart(store.tenant_id, session.id, current.cart, products, client);
     if (!current.cart.length || calculated.totalCents <= 0)
       throw new CommerceError("Inclua produtos no carrinho.");
     const shipping = input.delivery === "pickup" ? 0 : settings.deliveryCents;
@@ -479,6 +483,13 @@ export async function createCommerceOrder(
     for (const line of current.cart) {
       const product = products.find((p) => p.id === line.productId)!;
       if (!product.personalized) continue;
+      if (line.preparation === "team" && !product.artworkOptions?.allowTeamPreparation)
+        throw new CommerceError(`A preparação pela equipe não está disponível para ${product.name}. Revise o carrinho.`, 409);
+      if (line.preparation === "team" && product.artworkOptions?.allowTeamPreparation) {
+        const uploaded = await client.query("select id from commerce_artworks where tenant_id=$1 and session_id=$2 and product_id=$3 and id=$4", [store.tenant_id, session.id, line.productId, line.artworkId]);
+        if (!uploaded.rowCount) throw new CommerceError(`Envie a arte de ${product.name} para a equipe preparar.`);
+        continue;
+      }
       const approved = await client.query(
         `select id,crop from commerce_artworks where tenant_id=$1 and session_id=$2 and product_id=$3 and id=$4 and approved_at is not null and prepared_path is not null`,
         [store.tenant_id, session.id, line.productId, line.artworkId],
@@ -508,6 +519,7 @@ export async function createCommerceOrder(
       customer,
       terms: settings.terms,
       storeRevision: lockedStore.revision,
+      artworkDiscountCents: calculated.artworkDiscountCents ?? 0,
     };
     const result = await client.query<{ id: string }>(
       `insert into commerce_orders(tenant_id,customer_id,session_id,cart_revision,snapshot,subtotal_cents,shipping_cents,total_cents,provider) values($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
@@ -527,6 +539,13 @@ export async function createCommerceOrder(
       "insert into commerce_order_events(tenant_id,order_id,type) values($1,$2,'order.created')",
       [store.tenant_id, result.rows[0].id],
     );
+    for (const line of current.cart) {
+      if (!line.artworkId || !products.find(p => p.id === line.productId)?.personalized) continue;
+      await client.query(`insert into commerce_artwork_proofs(tenant_id,order_id,line_id,artwork_id,source_path,prepared_path,crop,approved_at,published_at)
+        select tenant_id,$3,$4,id,storage_path,case when $5::boolean then null else prepared_path end,crop,case when $5::boolean then null else approved_at end,case when $5::boolean then null else approved_at end
+        from commerce_artworks where tenant_id=$1 and session_id=$2 and id=$6`,
+      [store.tenant_id, session.id, result.rows[0].id, line.id, line.preparation === "team", line.artworkId]);
+    }
     await client.query(
       "update commerce_sessions set cart='[]',revision=revision+1 where tenant_id=$1 and id=$2",
       [store.tenant_id, session.id],
@@ -538,6 +557,18 @@ export const geometryHash = (product: CommerceProduct) =>
   hashCommerceToken(
     JSON.stringify({ geometry: product.geometry, margins: product.margins }),
   );
+export async function calculateCommerceCart(tenantId: string, sessionId: string | null, lines: CartLine[], products: CommerceProduct[], client: Pick<PoolClient, "query"> = getPool()) {
+  const keys = new Set<string>();
+  if (sessionId && lines.some(line => line.artworkId)) {
+    const ids = lines.flatMap(line => line.artworkId ? [line.artworkId] : []);
+    const arts = await client.query("select id,product_id,crop,approved_at,prepared_path from commerce_artworks where tenant_id=$1 and session_id=$2 and id=any($3::uuid[])", [tenantId, sessionId, ids]);
+    for (const art of arts.rows) {
+      const product = products.find(p => p.id === art.product_id);
+      if (product && art.approved_at && art.prepared_path && art.crop?.geometryHash === geometryHash(product)) keys.add(`${product.id}:${art.id}`);
+    }
+  }
+  return calculateCart(lines, products, keys);
+}
 export async function buyerOrders(tenantId: string, customerId: string) {
   const result = await getPool().query<CommerceOrder>(
     "select *,created_at::text from commerce_orders where tenant_id=$1 and customer_id=$2 order by commerce_orders.created_at desc limit 100",
@@ -568,6 +599,7 @@ export async function buyerOrders(tenantId: string, customerId: string) {
       items: snapshot.items,
       address: snapshot.address,
       delivery: snapshot.delivery,
+      artworkDiscountCents: snapshot.artworkDiscountCents ?? 0,
     }),
   );
 }
