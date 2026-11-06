@@ -541,3 +541,34 @@ Validação: 549 testes aprovados (21 integrações condicionais não executadas
 TypeScript, lint e build aprovados. Conferência em navegador a 320/390/1440 px,
 com e sem movimento reduzido, incluindo descarte das partículas, ausência de
 rolagem horizontal e composição do total sem desconto duplicado.
+
+### Faturamento e recebimento no checkout
+
+O checkout coleta nome completo/razão social, CPF/CNPJ válido, e-mail de faturamento,
+telefone e endereço fiscal também para pedidos com retirada pessoalmente. O tipo
+de pessoa é identificado pelo documento. Esses dados não alteram nome, e-mail ou
+acesso da conta autenticada e não são enviados automaticamente ao ERP.
+
+Em **Como deseja receber?**, a entrega usa por padrão os dados de faturamento.
+Alterações neles aparecem no endereço compartilhado. **Outro destinatário ou
+endereço** abre o formulário de entrega, inicialmente preenchido com os dados
+fiscais, com a opção de informar "Aos cuidados de". Alternar entre os modos preserva
+as edições do destinatário. Cada formulário possui sua própria consulta de CEP;
+as respostas não substituem campos que o usuário editou durante a consulta.
+
+No servidor, o endereço compartilhado é derivado dos dados fiscais validados;
+um endereço conflitante enviado pelo navegador não substitui essa escolha.
+Retirada pessoalmente não grava um endereço de entrega. Faturamento e recebimento
+são preservados no snapshot do pedido e exibidos ao comprador e ao administrador.
+Pedidos antigos sem dados fiscais continuam legíveis, sem criar dados presumidos.
+
+O preview exige os mesmos campos e oferece **Preencher dados de teste**, sem criar
+pedidos reais. Não há nova migration ou variável: os dados usam o JSON existente
+em `commerce_orders.snapshot`. A API de checkout passa a exigir `billing` e
+`deliveryAddressSameAsBilling`; as APIs de agentes/orçamentos não foram alteradas.
+
+Validação: 560 testes aprovados na suíte comum (22 integrações condicionais não
+executadas nessa chamada), mais 8 integrações da loja em PostgreSQL local novo.
+Tipos, lint e build aprovados. Navegador conferido em 320/390/1440 px, temas claro
+e escuro, com endereço compartilhado, destinatário diferente e consulta de CEP
+atrasada. Nenhum pedido, pagamento ou consulta de CEP real foi executado.

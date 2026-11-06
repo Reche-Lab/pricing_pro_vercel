@@ -447,6 +447,18 @@ node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 
 ## Observacoes
 
+### Checkout: faturamento e destinatário
+
+- [x] Dados fiscais com nome/razão social, CPF/CNPJ, e-mail, telefone e endereço, inclusive para retirada.
+- [x] Entrega usando faturamento por padrão, ou destinatário/endereço diferentes com "Aos cuidados de".
+- [x] Busca de CEP independente, com cancelamento, tempo limite e proteção contra respostas antigas e sobrescrita de campos editados.
+- [x] Validação no cliente e no servidor; endereço compartilhado derivado no servidor.
+- [x] Snapshot imutável dos dois conjuntos de dados no pedido, sem alterar a conta de login; visualização do comprador e administrativa.
+- [x] Oito integrações da loja aprovadas em PostgreSQL isolado, incluindo persistência, pessoa jurídica e pedidos antigos.
+- [x] Navegador em 320/390/1440 px nos temas claro/escuro, incluindo simulação, CEP e alternância de endereços.
+- [x] Regressão: 560 testes aprovados (22 integrações condicionais não executadas nessa chamada), mais 8 integrações da loja executadas separadamente; tipos, lint e build aprovados.
+- [x] Sem migration ou variável de ambiente adicional; dados salvos no JSON do pedido existente.
+
 ### Celebração e benefício por arte aprovada na loja
 
 - [x] Confetes, brilho e fitas após nova aprovação com benefício positivo confirmado pelo servidor.

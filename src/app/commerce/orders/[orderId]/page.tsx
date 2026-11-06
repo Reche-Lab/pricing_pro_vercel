@@ -7,6 +7,7 @@ import type { CommerceOrder } from "@/repositories/commerce";
 import { AppShell } from "@/components/layout/AppShell";
 import { storeMoney } from "@/components/commerce/store-http";
 import { CommerceOrderArtworks } from "@/components/commerce/CommerceOrderArtworks";
+import { StoreOrderContactDetails } from "@/components/commerce/StoreOrderContactDetails";
 export const dynamic = "force-dynamic";
 export default async function OrderPage({
   params,
@@ -96,28 +97,7 @@ export default async function OrderPage({
           <p className="break-all text-sm text-zinc-400">
             {order.snapshot.customer.email}
           </p>
-          <h2 className="pt-3 font-semibold">Entrega</h2>
-          {order.snapshot.address ? (
-            <p className="whitespace-pre-wrap text-sm text-zinc-400">
-              {order.snapshot.address.name}
-              <br />
-              {order.snapshot.address.phone}
-              <br />
-              {order.snapshot.address.street}, {order.snapshot.address.number}{" "}
-              {order.snapshot.address.complement}
-              <br />
-              {order.snapshot.address.district} · {order.snapshot.address.city}/
-              {order.snapshot.address.state}
-              <br />
-              {order.snapshot.address.postalCode}
-              <br />
-              {order.snapshot.address.attention
-                ? `Aos cuidados de ${order.snapshot.address.attention}`
-                : ""}
-            </p>
-          ) : (
-            <p className="text-sm text-zinc-400">Retirada pessoalmente</p>
-          )}
+          <StoreOrderContactDetails billing={order.snapshot.billing} address={order.snapshot.address} same={order.snapshot.deliveryAddressSameAsBilling}/>
           <p className="text-sm">
             Produtos: {storeMoney(order.subtotal_cents)}
           </p>

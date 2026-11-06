@@ -105,11 +105,11 @@ export const storeAdminSchema = z
   .strict();
 export const addressSchema = z
   .object({
-    name: z.string().trim().min(2).max(100),
+    name: z.string().trim().min(2, "Informe o nome do destinatário.").max(100),
     phone: z
       .string()
       .trim()
-      .min(10)
+      .min(10, "Informe um telefone válido com DDD.")
       .max(25)
       .refine(
         (v) => /^\+?[\d\s()-]+$/.test(v) && v.replace(/\D/g, "").length >= 10,
@@ -120,12 +120,12 @@ export const addressSchema = z
       .trim()
       .max(20)
       .refine((v) => !v || isValidCpfOrCnpj(v), "CPF/CNPJ inválido."),
-    postalCode: z.string().regex(/^\d{8}$/),
-    street: z.string().trim().min(2).max(150),
-    number: z.string().trim().min(1).max(20),
+    postalCode: z.string().regex(/^\d{8}$/, "Informe um CEP com 8 dígitos."),
+    street: z.string().trim().min(2, "Informe o endereço.").max(150),
+    number: z.string().trim().min(1, "Informe o número ou S/N.").max(20),
     complement: z.string().trim().max(100),
-    district: z.string().trim().min(2).max(100),
-    city: z.string().trim().min(2).max(100),
+    district: z.string().trim().min(2, "Informe o bairro.").max(100),
+    city: z.string().trim().min(2, "Informe a cidade.").max(100),
     state: z.enum([
       "AC",
       "AL",
@@ -154,7 +154,7 @@ export const addressSchema = z
       "SP",
       "SE",
       "TO",
-    ]),
+    ], { errorMap: () => ({ message: "Selecione uma UF válida." }) }),
     attention: z.string().trim().max(100),
   })
   .strict();
@@ -164,11 +164,26 @@ export const checkoutSchema = z
     expectedTotalCents: z.number().int().positive(),
     delivery: z.enum(["pickup", "delivery"]),
     address: addressSchema.nullable(),
+    billing: addressSchema.omit({ attention: true }).extend({
+      name: z.string().trim().min(2, "Informe o nome completo ou a razão social.").max(100),
+      email: z.string().trim().max(254).email("Informe um e-mail válido para faturamento."),
+      document: z.string().trim().min(1, "Informe o CPF ou CNPJ para faturamento.").max(20)
+        .refine(value => /\d/.test(value) && isValidCpfOrCnpj(value), "Informe um CPF ou CNPJ válido para faturamento.")
+        .transform(value => value.replace(/\D/g, "")),
+    }).strict(),
+    deliveryAddressSameAsBilling: z.boolean(),
     provider: z.enum(["manual", "mercado_pago"]),
     acceptedTerms: z.literal(true),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.delivery === "delivery" && !value.deliveryAddressSameAsBilling && !value.address)
+      ctx.addIssue({ code: "custom", path: ["address"], message: "Informe os dados do destinatário e o endereço de entrega." });
+  });
 export type CartLine = z.infer<typeof cartLineSchema>;
 export type StoreSettings = z.infer<typeof storeSettingsSchema>;
 export type StoreAdminInput = z.infer<typeof storeAdminSchema>;
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
+export type CommerceAddress = z.infer<typeof addressSchema>;
+export type CommerceBilling = CheckoutInput["billing"];
+export type CommerceBillingSnapshot = CommerceBilling & { personType: "F" | "J" };

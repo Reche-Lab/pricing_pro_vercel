@@ -7,6 +7,8 @@ import { commercePriceSummary } from "@/domain/commerce/offers";
 import { assertCommerceVideosReady } from "@/repositories/commerce-media";
 import type { ProductMedia } from "@/domain/commerce/product-media";
 import type { CommerceArtworkOptions } from "@/domain/commerce/artwork-options";
+import { checkoutSchema, type CommerceBillingSnapshot } from "@/domain/commerce/schemas";
+import { resolveCheckoutDelivery } from "@/domain/commerce/checkout";
 import {
   resolvePrintGeometry,
   resolvePrintMargins,
@@ -73,6 +75,8 @@ export type CommerceOrder = {
     lines: CartLine[];
     products: CommerceProduct[];
     address: CheckoutInput["address"];
+    billing?: CommerceBillingSnapshot;
+    deliveryAddressSameAsBilling?: boolean;
     delivery: string;
     terms: string;
     customer: { name: string; email: string };
@@ -424,6 +428,10 @@ export async function createCommerceOrder(
 ) {
   if (!session.customer_id)
     throw new CommerceError("Entre na sua conta para concluir.", 401);
+  const validated = checkoutSchema.safeParse(input);
+  if (!validated.success) throw new CommerceError(validated.error.issues[0]?.message ?? "Confira os dados de faturamento e entrega.");
+  input = validated.data;
+  const address = resolveCheckoutDelivery(input);
   return commerceTransaction(async (client) => {
     const locked = await client.query<BuyerSession>(
       `select * from commerce_sessions where tenant_id=$1 and id=$2 and expires_at>now() for update`,
@@ -459,7 +467,7 @@ export async function createCommerceOrder(
     if (
       (input.delivery === "pickup" && !settings.pickupEnabled) ||
       (input.delivery === "delivery" &&
-        (!settings.deliveryEnabled || !input.address))
+        (!settings.deliveryEnabled || !address))
     )
       throw new CommerceError("Escolha uma opção de entrega disponível.");
     if (calculated.totalCents + shipping !== input.expectedTotalCents)
@@ -514,7 +522,9 @@ export async function createCommerceOrder(
       products: products.filter((p) =>
         current.cart.some((l) => l.productId === p.id),
       ),
-      address: input.address,
+      address,
+      billing: { ...input.billing, personType: input.billing.document.length === 14 ? "J" : "F" },
+      deliveryAddressSameAsBilling: input.delivery === "delivery" && input.deliveryAddressSameAsBilling,
       delivery: input.delivery,
       customer,
       terms: settings.terms,
@@ -598,6 +608,8 @@ export async function buyerOrders(tenantId: string, customerId: string) {
       created_at,
       items: snapshot.items,
       address: snapshot.address,
+      billing: snapshot.billing ?? null,
+      deliveryAddressSameAsBilling: snapshot.deliveryAddressSameAsBilling ?? false,
       delivery: snapshot.delivery,
       artworkDiscountCents: snapshot.artworkDiscountCents ?? 0,
     }),

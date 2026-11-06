@@ -210,6 +210,7 @@ describe("preview storefront navigation", () => {
     );
     view.rerender(content(["checkout"]));
     expect(screen.queryByText("Enviar código")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Preencher dados de teste" }));
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Concluir simulação" }));
     await screen.findByText("Simulação concluída");
@@ -255,6 +256,7 @@ describe("preview storefront navigation", () => {
       expect(screen.getByTitle("Carrinho")).toHaveTextContent("1"),
     );
     view.rerender(content(["checkout"]));
+    fireEvent.click(screen.getByRole("button", { name: "Preencher dados de teste" }));
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Concluir simulação" }));
     expect(screen.getByRole("alert")).toHaveTextContent(

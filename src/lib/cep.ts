@@ -25,11 +25,12 @@ export function formatCep(value: string) {
   return `${digits.slice(0, 5)}-${digits.slice(5)}`;
 }
 
-export async function fetchCepAddress(cep: string): Promise<CepAddress | null> {
+export async function fetchCepAddress(cep: string, signal?: AbortSignal): Promise<CepAddress | null> {
   const digits = normalizeCep(cep);
   if (digits.length !== 8) return null;
 
-  const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+  const url = `https://viacep.com.br/ws/${digits}/json/`;
+  const response = await (signal ? fetch(url, { signal }) : fetch(url));
   if (!response.ok) return null;
 
   const payload = (await response.json()) as ViaCepResponse;

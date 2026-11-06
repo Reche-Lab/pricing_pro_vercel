@@ -31,6 +31,8 @@ try{
   // Email delivery is intentionally not exercised against real SMTP accounts.
   await db.query("update commerce_sessions set customer_id=$2 where id=$1",[session,customer]);
   await page.goto(`${base}/loja/ground-shop/checkout`,{waitUntil:"networkidle"});
+  for(const [name,value] of Object.entries({"billing.name":"Cliente de teste","billing.document":"52998224725","billing.email":"fiscal@example.test","billing.phone":"11999990000","billing.postalCode":"01001000","billing.street":"Praça de teste","billing.number":"100","billing.district":"Centro","billing.city":"São Paulo"}))await page.locator(`[name="${name}"]`).fill(value);
+  await page.locator('[name="billing.state"]').selectOption("SP");
   await page.getByRole("checkbox").check();await page.getByRole("button",{name:"Confirmar pedido"}).click();
   await page.waitForURL(/\/pedidos\/[a-f0-9-]+$/);await page.getByText("Pagar na retirada",{exact:true}).waitFor();
   await page.screenshot({path:"/tmp/commerce-order-desktop.png",fullPage:true});

@@ -310,6 +310,7 @@ try {
     fullPage: true,
   });
   await page.getByRole("link", { name: "Continuar para entrega" }).click();
+  await page.getByRole("button", { name: "Preencher dados de teste" }).click();
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Concluir simulação" }).click();
   await page.getByText("Simulação concluída", { exact: true }).waitFor();

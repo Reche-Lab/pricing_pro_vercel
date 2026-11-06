@@ -27,6 +27,7 @@ import {
   assertCommerceVideosReady,
 } from "@/repositories/commerce-media";
 import { commerceVideoPath } from "@/domain/commerce/product-media";
+import { testCommerceBilling } from "../fixtures/commerce-checkout";
 const objects = vi.hoisted(() => new Map<string, { bytes: Uint8Array; contentType: string }>());
 vi.mock("@/services/storage/artwork-storage", async importOriginal => ({
   ...await importOriginal<typeof import("@/services/storage/artwork-storage")>(),
@@ -191,6 +192,8 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
       expectedTotalCents: total,
       delivery: "pickup" as const,
       address: null,
+      billing: testCommerceBilling,
+      deliveryAddressSameAsBilling: true,
       provider: "manual" as const,
       acceptedTerms: true as const,
     };
@@ -328,6 +331,35 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
       else process.env.SUPABASE_URL = previousUrl;
     }
   });
+  it("freezes billing separately from login identity and derives copied or custom delivery", async () => {
+    await saveCommerceStore(actorId, tenantId, { ...published, settings: { ...published.settings, deliveryEnabled: true, deliveryDescription: "Entrega de teste", deliveryCents: 1200 } });
+    const store = (await getCommerceStore("ground-shop"))!, products = await commerceProducts(tenantId);
+    const customerId = (await getPool().query("insert into commerce_customers(tenant_id,email,name) values($1,'billing-buyer@example.test','Comprador verificado') returning id", [tenantId])).rows[0].id;
+    const billing = { ...testCommerceBilling, name: "Empresa faturada", document: "11.222.333/0001-81" };
+    const destination = { name: "Pessoa que recebe", phone: "11999990000", document: "", postalCode: "20040020", street: "Rua da entrega", number: "20", complement: "", district: "Centro", city: "Rio de Janeiro", state: "RJ" as const, attention: "Portaria" };
+    const createdIds: string[] = [];
+    for (const same of [true, false]) {
+      const { session } = await createBuyerSession(tenantId);
+      session.customer_id = customerId;
+      await getPool().query("update commerce_sessions set customer_id=$2 where id=$1", [session.id, customerId]);
+      const lines = [{ id: crypto.randomUUID(), productId: products[0].id, quantity: 10, artworkName: "", artworkId: null }];
+      await replaceCart(store, session, 0, lines);
+      const created = await createCommerceOrder(store, session, { revision: 1, expectedTotalCents: calculateCart(lines, products).totalCents + 1200, delivery: "delivery", address: destination, billing, deliveryAddressSameAsBilling: same, provider: "manual", acceptedTerms: true });
+      createdIds.push(created.id);
+      const order = await authorizedCommerceOrder(tenantId, created.id, customerId);
+      expect(order.snapshot.billing).toMatchObject({ name: "Empresa faturada", document: "11222333000181", personType: "J" });
+      expect(order.snapshot.customer).toMatchObject({ name: "Comprador verificado", email: "billing-buyer@example.test" });
+      expect(order.snapshot.address?.name).toBe(same ? "Empresa faturada" : "Pessoa que recebe");
+      expect(order.snapshot.address?.street).toBe(same ? testCommerceBilling.street : destination.street);
+      expect(order.snapshot.address?.attention).toBe(same ? "" : "Portaria");
+    }
+    expect(await buyerOrders(otherTenant, customerId)).toEqual([]);
+    const saved = await buyerOrders(tenantId, customerId);
+    expect(saved).toHaveLength(2);
+    expect(saved.every(order => order.billing?.name === "Empresa faturada")).toBe(true);
+    await getPool().query("update commerce_orders set snapshot=snapshot-'billing'-'deliveryAddressSameAsBilling' where tenant_id=$1 and id=$2", [tenantId, createdIds[0]]);
+    expect((await buyerOrders(tenantId, customerId)).find(order => order.id === createdIds[0])?.billing).toBeNull();
+  });
   it("preserves staff-prepared orders, protects drafts and requires versioned buyer approval before production", async () => {
     await getPool().query("update product_variants set print_width_mm=35,print_height_mm=35 where id=$1", [variantId]);
     await saveCommerceStore(actorId, tenantId, { ...published, products: [{ ...published.products[0], personalized: true, artworkOptions: { allowTeamPreparation: true, discountFixedCents: 150, maxDiscountPercent: 10 } }] });
@@ -343,7 +375,7 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
     const line = { id: crypto.randomUUID(), productId: product.id, quantity: 20, artworkName: "Arte da equipe", artworkId: artId, preparation: "team" as const };
     expect((await calculateCommerceCart(tenantId, session.id, [line], products)).artworkDiscountCents).toBe(0);
     await replaceCart(store, session, 0, [line]);
-    const created = await createCommerceOrder(store, session, { revision: 1, expectedTotalCents: calculateCart([line], products).totalCents, delivery: "pickup", address: null, provider: "manual", acceptedTerms: true });
+    const created = await createCommerceOrder(store, session, { revision: 1, expectedTotalCents: calculateCart([line], products).totalCents, delivery: "pickup", address: null, billing: testCommerceBilling, deliveryAddressSameAsBilling: true, provider: "manual", acceptedTerms: true });
     const order = await authorizedCommerceOrder(tenantId, created.id, customer);
     await expect(authorizedCommerceOrder(otherTenant, order.id, customer)).rejects.toMatchObject({ status: 404 });
     await expect(authorizedCommerceOrder(tenantId, order.id, crypto.randomUUID())).rejects.toMatchObject({ status: 404 });

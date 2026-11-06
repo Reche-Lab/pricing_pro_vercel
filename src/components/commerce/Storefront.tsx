@@ -22,7 +22,6 @@ import {
   ShoppingBag,
   Trash2,
   UserRound,
-  Truck,
   Moon,
   Sun,
   RefreshCw,
@@ -41,7 +40,6 @@ import type {
 import type { CartLine, StoreSettings } from "@/domain/commerce/schemas";
 import { commerceSelectionError, distributeQuantity } from "@/domain/commerce/commerce";
 import { normalizeProductSearchTerm } from "@/domain/products/product-search";
-import { fetchCepAddress, normalizeCep } from "@/lib/cep";
 import { storeRequest, storeMoney } from "./store-http";
 import styles from "./store.module.css";
 import { StoreHome, StoreProductCard } from "./StoreHome";
@@ -51,6 +49,8 @@ import { StoreDeliveryInquiry } from "./StoreDeliveryInquiry";
 import { StoreArtworkGuide } from "./StoreArtworkGuide";
 import { CommerceOrderArtworks } from "./CommerceOrderArtworks";
 import { StoreOrderSummary as Summary } from "./StoreOrderSummary";
+import { StoreCheckout as Checkout } from "./StoreCheckout";
+import { StoreOrderContactDetails } from "./StoreOrderContactDetails";
 import { useStoreTheme, accentForeground } from "./use-store-theme";
 import { useCommercePreview } from "./CommercePreviewProvider";
 import type { StoreArtwork } from "./StoreArtworkTools";
@@ -1168,310 +1168,6 @@ function PreviewCheckout({
   );
 }
 
-function Checkout({
-  cart,
-  settings,
-  base,
-  disabled,
-  onSubmit,
-  preview = false,
-}: {
-  cart: Cart;
-  settings: StoreSettings;
-  base: string;
-  disabled: boolean;
-  onSubmit: (input: unknown) => Promise<void>;
-  preview?: boolean;
-}) {
-  const [delivery, setDelivery] = useState(
-    settings.pickupEnabled ? "pickup" : "delivery",
-  );
-  const [provider, setProvider] = useState(
-    cart.payments.mp_enabled ? "mercado_pago" : "manual",
-  );
-  const [accepted, setAccepted] = useState(false);
-  const [cepBusy, setCepBusy] = useState(false);
-  const [cepError, setCepError] = useState("");
-  const [address, setAddress] = useState({
-    name: cart.customer?.name ?? "",
-    phone: "",
-    document: "",
-    postalCode: "",
-    street: "",
-    number: "",
-    complement: "",
-    district: "",
-    city: "",
-    state: "",
-    attention: "",
-  });
-  const shipping = delivery === "pickup" ? 0 : settings.deliveryCents;
-  const fields: {
-    key: keyof typeof address;
-    label: string;
-    required?: boolean;
-  }[] = [
-    { key: "name", label: "Destinatário", required: true },
-    { key: "phone", label: "Telefone com DDD", required: true },
-    { key: "document", label: "CPF/CNPJ" },
-    { key: "street", label: "Endereço", required: true },
-    { key: "number", label: "Número", required: true },
-    { key: "complement", label: "Complemento" },
-    { key: "district", label: "Bairro", required: true },
-    { key: "city", label: "Cidade", required: true },
-    { key: "state", label: "UF", required: true },
-    { key: "attention", label: "Aos cuidados de" },
-  ];
-  async function lookupCep() {
-    if (address.postalCode.length !== 8) return;
-    const requested = address.postalCode;
-    setCepBusy(true);
-    setCepError("");
-    try {
-      const result = await fetchCepAddress(requested);
-      if (result)
-        setAddress((old) =>
-          old.postalCode === requested
-            ? {
-                ...old,
-                street: result.street,
-                district: result.district,
-                city: result.city,
-                state: result.state,
-              }
-            : old,
-        );
-      else setCepError("CEP não encontrado. Preencha o endereço.");
-    } catch {
-      setCepError("Não foi possível consultar o CEP. Preencha o endereço.");
-    } finally {
-      setCepBusy(false);
-    }
-  }
-  return (
-    <form
-      className={styles.columns}
-      onSubmit={(e) => {
-        e.preventDefault();
-        void onSubmit({
-          revision: cart.revision,
-          expectedTotalCents: (cart.calculation?.totalCents ?? 0) + shipping,
-          delivery,
-          address: delivery === "delivery" ? address : null,
-          provider,
-          acceptedTerms: accepted,
-        });
-      }}
-    >
-      <div className={styles.form}>
-        {preview && delivery === "delivery" ? (
-          <button
-            type="button"
-            className={`${styles.secondary} justify-self-start`}
-            onClick={() =>
-              setAddress({
-                name: "Cliente de teste",
-                phone: "11999990000",
-                document: "",
-                postalCode: "01001000",
-                street: "Praça de teste",
-                number: "100",
-                complement: "",
-                district: "Centro",
-                city: "São Paulo",
-                state: "SP",
-                attention: "",
-              })
-            }
-          >
-            Preencher dados de teste
-          </button>
-        ) : null}
-        <h2 className="text-lg font-semibold">1. Como deseja receber?</h2>
-        {settings.pickupEnabled ? (
-          <label className="!flex items-start gap-3 border-b border-zinc-200 pb-4">
-            <input
-              type="radio"
-              checked={delivery === "pickup"}
-              onChange={() => setDelivery("pickup")}
-            />
-            <span>
-              Retirar pessoalmente · Grátis
-              <small className="mt-1 block text-zinc-500">
-                {settings.pickupAddress}
-              </small>
-            </span>
-          </label>
-        ) : null}
-        {settings.deliveryEnabled ? (
-          <label className="!flex items-start gap-3 border-b border-zinc-200 pb-4">
-            <input
-              type="radio"
-              checked={delivery === "delivery"}
-              onChange={() => setDelivery("delivery")}
-            />
-            <span>
-              Entrega · {storeMoney(settings.deliveryCents)}
-              <small className="mt-1 block text-zinc-500">
-                {settings.deliveryDescription}
-              </small>
-            </span>
-          </label>
-        ) : null}
-        {delivery === "delivery" ? (
-          <>
-            <div className="flex items-end gap-2">
-              <label className="flex-1">
-                CEP
-                <input
-                  inputMode="numeric"
-                  value={address.postalCode}
-                  onChange={(e) =>
-                    setAddress({
-                      ...address,
-                      postalCode: normalizeCep(e.target.value),
-                    })
-                  }
-                  required
-                  pattern="[0-9]{8}"
-                />
-              </label>
-              <button
-                className={styles.secondary}
-                type="button"
-                disabled={cepBusy}
-                onClick={() => void lookupCep()}
-              >
-                {cepBusy ? "Consultando…" : "Buscar CEP"}
-              </button>
-            </div>
-            {cepError ? (
-              <p className="text-sm text-amber-800">{cepError}</p>
-            ) : null}
-            <div className="grid gap-3 sm:grid-cols-2">
-              {fields.map((field) => (
-                <label key={field.key}>
-                  {field.label}
-                  <input
-                    required={field.required}
-                    value={address[field.key]}
-                    onChange={(e) =>
-                      setAddress({
-                        ...address,
-                        [field.key]:
-                          field.key === "state"
-                            ? e.target.value.toUpperCase()
-                            : e.target.value,
-                      })
-                    }
-                    maxLength={field.key === "state" ? 2 : 150}
-                  />
-                </label>
-              ))}
-            </div>
-          </>
-        ) : null}
-        <h2 className="mt-5 text-lg font-semibold">2. Forma de pagamento</h2>
-        {preview ? (
-          <p className="text-sm">
-            Pagamento simulado · Nenhum valor será cobrado.
-          </p>
-        ) : (
-          <>
-            {cart.payments.mp_enabled ? (
-              <label className="!flex items-center gap-3">
-                <input
-                  type="radio"
-                  checked={provider === "mercado_pago"}
-                  onChange={() => setProvider("mercado_pago")}
-                />
-                Mercado Pago · Métodos disponíveis no checkout seguro
-              </label>
-            ) : null}
-            {cart.payments.manual_enabled ? (
-              <label className="!flex items-center gap-3">
-                <input
-                  type="radio"
-                  checked={provider === "manual"}
-                  onChange={() => setProvider("manual")}
-                />
-                Pagamento combinado com a loja
-              </label>
-            ) : null}
-            {!cart.payments.mp_enabled && !cart.payments.manual_enabled ? (
-              <p className="text-sm text-red-700">
-                A loja ainda não habilitou formas de pagamento.
-              </p>
-            ) : null}
-            {provider === "manual" ? (
-              <p className="whitespace-pre-wrap text-sm text-zinc-500">
-                {cart.payments.manual_instructions}
-              </p>
-            ) : null}
-          </>
-        )}
-      </div>
-      <aside className={styles.summary}>
-        <h2 className="mb-4 text-lg font-semibold">3. Revise seu pedido</h2>
-        {cart.calculation?.items.map((item) => (
-          <div
-            className="mb-3 flex justify-between gap-3 text-sm"
-            key={item.id}
-          >
-            <span>
-              {item.quantity} × {item.name}
-              <small className="block text-zinc-500">{item.artworkName}</small>
-            </span>
-            <span>{storeMoney(item.totalCents)}</span>
-          </div>
-        ))}
-        <Summary
-          subtotal={cart.calculation?.totalCents ?? 0}
-          shipping={shipping}
-          artworkDiscountCents={cart.calculation?.artworkDiscountCents}
-        />
-        <label className="my-5 flex items-start gap-3 text-sm">
-          <input
-            type="checkbox"
-            checked={accepted}
-            onChange={(e) => setAccepted(e.target.checked)}
-            required
-          />
-          <span>
-            Li e aceito as{" "}
-            <Link
-              target="_blank"
-              href={`${base}/condicoes`}
-              className="underline"
-            >
-              condições de compra
-            </Link>
-            .
-          </span>
-        </label>
-        <button
-          className={`${styles.primary} w-full`}
-          disabled={
-            disabled ||
-            !accepted ||
-            !cart.calculation ||
-            (!cart.payments.mp_enabled && !cart.payments.manual_enabled)
-          }
-        >
-          <Check size={17} />
-          {preview ? "Concluir simulação" : "Confirmar pedido"}
-        </button>
-        <p className="mt-3 text-sm text-zinc-500">
-          {preview
-            ? "Prévia privada. Nenhum pedido real será criado."
-            : provider === "mercado_pago"
-              ? "Após confirmar, abra o pagamento seguro no detalhe do pedido."
-              : "A produção começa após a confirmação do pagamento pela loja."}
-        </p>
-      </aside>
-    </form>
-  );
-}
 function OrderDetail({
   order,
   instructions,
@@ -1525,15 +1221,7 @@ function OrderDetail({
           </div>
         ))}
         <CommerceOrderArtworks endpoint={`${api}/orders/${order.id}/artworks`} />
-        {order.address ? (
-          <p className="mt-5 text-sm">
-            <Truck className="mr-2 inline" size={17} />
-            {order.address.street}, {order.address.number} ·{" "}
-            {order.address.city}/{order.address.state}
-          </p>
-        ) : (
-          <p className="mt-5 text-sm">Retirada pessoalmente.</p>
-        )}
+        <StoreOrderContactDetails billing={order.billing} address={order.address} same={order.deliveryAddressSameAsBilling}/>
       </div>
       <aside className={styles.summary}>
         <Summary
