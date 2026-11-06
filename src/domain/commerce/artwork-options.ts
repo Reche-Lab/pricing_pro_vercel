@@ -5,6 +5,7 @@ const safeMockupMediaUrl = z.union([safeCommerceMediaUrl, z.enum([
   "/mockups/botton-25mm-v1/base-frente.png", "/mockups/botton-25mm-v1/base-verso.png",
   "/mockups/botton-25mm-v1/mascara-frente.png", "/mockups/botton-25mm-v1/mascara-verso.png",
   "/mockups/botton-25mm-v1/acabamento-frente.png", "/mockups/botton-25mm-v1/acabamento-verso.png",
+  "/mockups/ima-redondo-v1/base-verso.png", "/mockups/espelho-redondo-v1/base-verso.png", "/mockups/abridor-redondo-v1/base-verso.png",
 ])]);
 export const mockupSideSchema = z.object({
   baseUrl: safeMockupMediaUrl,

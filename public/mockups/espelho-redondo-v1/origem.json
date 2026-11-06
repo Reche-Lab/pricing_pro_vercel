@@ -1,0 +1,19 @@
+{
+  "product": "Espelho",
+  "method": "Built-in image_gen edits of the original botton rear photograph; lossless technical replacement of only the central inset. Existing front, rear outer rim, masks and finish layers are reused.",
+  "prompt": "Use case: precise-object-edit. Asset type: rear base photograph for a reusable ecommerce personalized round pocket mirror mockup. Edit target: the attached unbranded round silver button BACK on transparent alpha. Change ONLY the inner inset and hardware: REMOVE the horizontal safety pin and BOTH clasps completely. Replace the central inset disc with a real flat circular MIRROR GLASS insert, occupying the full inset. The mirror must look optically smooth, reflective and clean, with a delicate thin bevel at its circumference and broad soft diagonal white and cool-gray studio reflections, clearly different from brushed steel. No reflected people, room, camera, objects or scenery. Keep the outer rolled metal rim, outer silhouette, circle size, object center, square framing, transparent margins, lighting and camera EXACTLY unchanged. Perfect front-on orthographic view of the back face, one object only. No handles, hinge, stand, pin or hardware. Transparent background, no floor, no external shadow, no labels, logos or watermarks. This is the same round product shell with a mirror rear insert, not a new shape. Do not flatten the rim details or make the mirror a small dot.",
+  "sharedFront": {
+    "baseUrl": "/mockups/botton-25mm-v1/base-frente.png",
+    "maskUrl": "/mockups/botton-25mm-v1/mascara-frente.png",
+    "overlayUrl": "/mockups/botton-25mm-v1/acabamento-frente.png",
+    "x": 0.11244019138755981,
+    "y": 0.11642743221690591,
+    "width": 0.7575757575757576,
+    "height": 0.7767145135566188
+  },
+  "sharedRearMask": "/mockups/botton-25mm-v1/mascara-verso.png",
+  "sharedRearOverlay": "/mockups/botton-25mm-v1/acabamento-verso.png",
+  "notice": "Imagens meramente ilustrativas. Cores, acabamento, tamanho relativo do ímã, espelho, abertura e fecho podem variar na peça física. As medidas de segurança, sangria e corte continuam sendo as cadastradas no produto.",
+  "sizePx": 1254,
+  "technicalAssembly": "scripts/build-round-mockups.mjs"
+}

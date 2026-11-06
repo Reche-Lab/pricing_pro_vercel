@@ -551,16 +551,50 @@ As máscaras técnicas e os acabamentos vetoriais são gerados por
 No verso a máscara é vazada para preservar o metal e o alfinete.
 
 Esse é um modelo visual inicial, não uma medição física certificada. Confira os
-fechos e a largura da dobra em cada tamanho de botton antes de publicar. Para
-outros acabamentos (ímã/abridor), cadastre as camadas correspondentes; não use o
-verso com alfinete como se representasse esses produtos. Não exige nova migration
-ou variável de ambiente. Os demais tipos de mídia continuam aceitando somente
-URLs HTTPS; a exceção relativa permite apenas os seis arquivos deste modelo.
+fechos e a largura da dobra em cada tamanho de botton antes de publicar. Não exige
+nova migration ou variável de ambiente. Os demais tipos de mídia continuam
+aceitando somente URLs HTTPS; as exceções relativas são limitadas às camadas
+incluídas explicitamente nos modelos da plataforma.
 
 Validação do modelo: 14 testes direcionados e 533 testes na suíte completa
 aprovados (21 integrações condicionais não executadas nesta etapa), TypeScript,
 lint e build de produção aprovados. Pixels e capturas conferidos em 320/390/1440 px,
 incluindo transparência e preservação do metal/alfinete no verso. ZIP verificado.
+
+### Modelos Circulares de Ímã, Espelho e Abridor
+
+Em **Loja online → Produtos → Preparação da arte, benefício e modelo do produto**,
+selecione **Modelo visual do produto**, clique em **Aplicar modelo** e depois
+**salve a loja**. A seleção não modifica produtos já cadastrados automaticamente.
+
+| Modelo | Acabamento do verso | Arquivos e kit |
+| --- | --- | --- |
+| Botton | Alfinete do modelo original | `public/mockups/botton-25mm-v1/` |
+| Ímã | Disco magnético preto colado no centro | `public/mockups/ima-redondo-v1/` |
+| Espelho | Inserto circular refletivo | `public/mockups/espelho-redondo-v1/` |
+| Abridor | Abertura e lingueta para garrafas, sem alfinete | `public/mockups/abridor-redondo-v1/` |
+
+Todos compartilham exatamente a frente, a borda externa do verso, as máscaras e
+os acabamentos de dobra do Botton. Somente o centro do verso é substituído.
+As medidas do produto continuam determinando o diâmetro e as linhas de segurança,
+sangria e corte; não é preciso gerar um arquivo de modelo para cada diâmetro.
+Aplicar um modelo não muda preços, benefícios, regras de preparação ou PDF de produção.
+
+As três fotografias ilustrativas foram criadas com o `image_gen` embutido usando
+o verso original como referência. Os originais e o conjunto completo de prompts
+estão em `assets/mockup-sources/redondos-v1/`. A montagem técnica conserva os
+pixels da borda original e preserva a transparência da abertura do abridor, sem
+deixar o alfinete anterior aparecer por baixo. Os PNGs têm 1254 × 1254 px e menos
+de 3 MB por camada. O link **Baixar camadas PNG** corresponde ao modelo selecionado.
+
+Para reconstruir os arquivos e ZIPs usando os originais já incluídos no projeto:
+`node scripts/build-round-mockups.mjs` (requer o utilitário local `zip`). Esse
+comando não chama APIs de IA nem altera o banco. Os arquivos comuns são reutilizados
+por URL, sem duplicar a frente em cada diretório ou carregar os kits na navegação.
+
+Confira cada acabamento com uma peça física antes de publicar. A prévia mantém
+o aviso de imagem meramente ilustrativa, inclusive no verso e na ampliação.
+Nenhuma migration ou variável nova é necessária.
 
 ### Celebração da arte aprovada e composição do desconto
 

@@ -1,0 +1,19 @@
+{
+  "product": "Abridor",
+  "method": "Built-in image_gen edits of the original botton rear photograph; lossless technical replacement of only the central inset. Existing front, rear outer rim, masks and finish layers are reused.",
+  "prompt": "Use case: precise-object-edit. Asset type: BACK base photograph for the same round personalized button product, now with a bottle-opener back. Edit target: attached circular unbranded silver button rear with safety pin. REMOVE the safety pin, wire and both clasps completely. Replace ONLY the central inset hardware with a realistic stamped stainless-steel BOTTLE OPENER insert, as used on round promotional button badge bottle openers. It is a flat circular metal back with a clearly visible horizontal elongated rectangular/rounded cap-removal opening near the center and a raised inward curved metal lifting tooth/lip on one edge of that opening; the opening should occupy about 45 percent of the inner disc width so the function is unmistakable. Fine brushed steel and natural tiny shadows around the useful opening, no black magnet, no pin, no keyring, no handle, no screw, no extra item. Keep the existing outer rolled circular silver rim and every area outside the central inset EXACTLY unchanged, same silhouette, object center, size, square canvas, alpha transparency margins and upper-left studio lighting. Perfectly straight-on orthographic back view, one complete round object. Transparent background outside the object; no floor, no exterior cast shadow, no lettering, logos or watermark. Do not create an ordinary handheld long opener or a soda pull tab. Only the closure changes; the round product shell is identical.",
+  "sharedFront": {
+    "baseUrl": "/mockups/botton-25mm-v1/base-frente.png",
+    "maskUrl": "/mockups/botton-25mm-v1/mascara-frente.png",
+    "overlayUrl": "/mockups/botton-25mm-v1/acabamento-frente.png",
+    "x": 0.11244019138755981,
+    "y": 0.11642743221690591,
+    "width": 0.7575757575757576,
+    "height": 0.7767145135566188
+  },
+  "sharedRearMask": "/mockups/botton-25mm-v1/mascara-verso.png",
+  "sharedRearOverlay": "/mockups/botton-25mm-v1/acabamento-verso.png",
+  "notice": "Imagens meramente ilustrativas. Cores, acabamento, tamanho relativo do ímã, espelho, abertura e fecho podem variar na peça física. As medidas de segurança, sangria e corte continuam sendo as cadastradas no produto.",
+  "sizePx": 1254,
+  "technicalAssembly": "scripts/build-round-mockups.mjs"
+}

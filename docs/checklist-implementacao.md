@@ -470,6 +470,20 @@ node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 - [x] Suíte com 549 testes aprovados (21 integrações condicionais não executadas); tipos, lint e build aprovados.
 - [x] Sem migration ou variável de ambiente adicional.
 
+### Modelos circulares de ímã, espelho e abridor
+
+- [x] Versos ilustrativos gerados com `image_gen`; frente, borda externa e camadas de dobra compartilhadas com o Botton.
+- [x] Ímã preto, espelho refletivo e abridor com abertura transparente, sem alfinete residual.
+- [x] Seletor dos quatro modelos, aplicação explícita por produto e download do kit correspondente.
+- [x] Sem alteração automática dos produtos, preços, diâmetros, segurança, sangria, corte ou PDF de impressão.
+- [x] Montagem técnica reproduzível, originais/prompts preservados e testes dos pixels, transparência, dimensões, tamanho e URLs permitidas.
+- [x] Seleção, aplicação e simulação conferidas em 320/390/1440 px, temas claro/escuro e diâmetros de 25/35/45/55 mm; sem transbordamento, com frente e faixa externa da arte preservadas.
+- [x] Tipos e lint aprovados; 10 testes focados aprovados.
+- [x] Regressão geral: 599 testes aprovados; 24 testes de integração condicionais não executados.
+- [x] Build de produção aprovado com memória limitada (heap de 1024 MB, CPU única e sem servidor de desenvolvimento concorrente).
+- [x] Sem migration ou variável de ambiente adicional.
+- [ ] Escolher e salvar o modelo correto nos produtos da loja; conferir os acabamentos com peças físicas.
+
 ### Aviso na demonstração do produto
 
 - [x] Informação de imagem meramente ilustrativa e variações, com destaque para verso e fecho, no componente compartilhado.

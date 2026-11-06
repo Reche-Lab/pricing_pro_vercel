@@ -1,0 +1,19 @@
+{
+  "product": "Ímã",
+  "method": "Built-in image_gen edits of the original botton rear photograph; lossless technical replacement of only the central inset. Existing front, rear outer rim, masks and finish layers are reused.",
+  "prompt": "Use case: precise-object-edit. Asset type: rear base photograph for a reusable ecommerce round refrigerator-magnet mockup. Edit target: the attached unbranded silver circular button BACK base, transparent background. Change ONLY the hardware in the central inset disc: REMOVE the horizontal safety pin and both clasps completely, and replace that entire inner round inset with a single flat round BLACK ferrite/rubber magnet glued centrally to the metal back. It should read as a continuous opaque matte black magnetic disc, with only a fine realistic bevel and extremely subtle texture/highlight, not gray metal, not a small black dot. Keep the existing silver outer rolled rim and all areas outside the inner inset EXACTLY unchanged, preserve circular silhouette, orthographic camera, object center, same square canvas, same object diameter and transparent margins, same lighting from upper left. The magnet must fully hide all remnants of pin/clasps. One object, complete rear face, no perspective, no floor or external shadow, no lettering, no logo, no watermark, no checkerboard painted into the image. Real transparent alpha outside the object. This is a replacement back for the same circular product shell, not a new product shape.",
+  "sharedFront": {
+    "baseUrl": "/mockups/botton-25mm-v1/base-frente.png",
+    "maskUrl": "/mockups/botton-25mm-v1/mascara-frente.png",
+    "overlayUrl": "/mockups/botton-25mm-v1/acabamento-frente.png",
+    "x": 0.11244019138755981,
+    "y": 0.11642743221690591,
+    "width": 0.7575757575757576,
+    "height": 0.7767145135566188
+  },
+  "sharedRearMask": "/mockups/botton-25mm-v1/mascara-verso.png",
+  "sharedRearOverlay": "/mockups/botton-25mm-v1/acabamento-verso.png",
+  "notice": "Imagens meramente ilustrativas. Cores, acabamento, tamanho relativo do ímã, espelho, abertura e fecho podem variar na peça física. As medidas de segurança, sangria e corte continuam sendo as cadastradas no produto.",
+  "sizePx": 1254,
+  "technicalAssembly": "scripts/build-round-mockups.mjs"
+}

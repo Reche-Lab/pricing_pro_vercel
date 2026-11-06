@@ -1,0 +1,23 @@
+{
+  "front": {
+    "baseUrl": "/mockups/botton-25mm-v1/base-frente.png",
+    "maskUrl": "/mockups/botton-25mm-v1/mascara-frente.png",
+    "overlayUrl": "/mockups/botton-25mm-v1/acabamento-frente.png",
+    "x": 0.11244019138755981,
+    "y": 0.11642743221690591,
+    "width": 0.7575757575757576,
+    "height": 0.7767145135566188
+  },
+  "back": {
+    "baseUrl": "/mockups/espelho-redondo-v1/base-verso.png",
+    "maskUrl": "/mockups/botton-25mm-v1/mascara-verso.png",
+    "overlayUrl": "/mockups/botton-25mm-v1/acabamento-verso.png",
+    "x": 0.10047846889952153,
+    "y": 0.10047846889952153,
+    "width": 0.7902711323763956,
+    "height": 0.803030303030303
+  },
+  "frontFaceRatio": 0.9,
+  "backOpeningRatio": 0.82,
+  "frontWrapFraction": 0.35
+}

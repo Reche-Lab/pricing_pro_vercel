@@ -1,0 +1,7 @@
+Modelo ilustrativo: Abridor
+
+Frente, borda, máscaras e calibração são compartilhadas com o Botton.
+Somente o acabamento central do verso foi substituído.
+As medidas de segurança, sangria e corte são as cadastradas no produto; não são redefinidas por este modelo.
+Confira o acabamento com uma peça física antes de publicar.
+As imagens e máscaras do mockup não devem integrar o PDF de produção.
