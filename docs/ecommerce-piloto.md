@@ -503,6 +503,9 @@ Em **Loja online → Produtos → Preparação da arte, benefício e modelo do p
 A prévia tem frente/verso e ampliação. Usa a arte enquadrada no limite de corte:
 a área visível vai até a sangria; a faixa restante continua nas bordas e no verso.
 As máscaras e o acabamento **nunca** são incorporados ao arquivo de impressão.
+Um aviso visível esclarece que a imagem é meramente ilustrativa e que cores,
+acabamento e curvatura podem variar, principalmente no verso e no modelo do fecho.
+O aviso permanece na ampliação e na prévia geométrica, inclusive para leitores de tela.
 A fidelidade visual depende das imagens e da calibração do modelo de cada produto.
 
 ### Preparação interna após a compra

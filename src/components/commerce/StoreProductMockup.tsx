@@ -1,7 +1,7 @@
 "use client";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Eye, Loader2, RotateCw, ZoomIn, X } from "lucide-react";
+import { Eye, Info, Loader2, RotateCw, ZoomIn, X } from "lucide-react";
 import { calculatePrintGuideDimensions, createShapePath, type PrintGeometry, type PrintMargins } from "@/domain/artwork/geometry";
 import { defaultMockup, mockupSourcePoint, type ProductMockup } from "@/domain/commerce/artwork-options";
 
@@ -64,6 +64,7 @@ export async function drawProductMockup(canvas: HTMLCanvasElement, sourceUrl: st
 }
 
 export function StoreProductMockup({ sourceUrl, geometry, margins, model, name }: { sourceUrl: string; geometry: PrintGeometry; margins: PrintMargins; model?: ProductMockup; name: string }) {
+  const disclaimerId = useId();
   const [side, setSide] = useState<"front" | "back">("front");
   const [expanded, setExpanded] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -98,11 +99,12 @@ export function StoreProductMockup({ sourceUrl, geometry, margins, model, name }
     <div className="flex flex-wrap items-center justify-between gap-2"><strong className="inline-flex items-center gap-2 text-sm"><Eye size={16} />{model ? "Produto acabado" : "Prévia geométrica"}</strong>
       <div className="flex items-center gap-2"><div className="inline-flex rounded-md border border-current/25 p-1" role="group" aria-label="Face do produto">{(["front", "back"] as const).map(value => <button type="button" key={value} aria-pressed={side === value} onClick={() => setSide(value)} title={value === "front" ? "Visualizar frente" : "Visualizar verso e faixa dobrada"} className={`min-h-9 rounded px-3 text-xs ${side === value ? "bg-emerald-500 text-zinc-950" : "hover:bg-current/10"}`}>{value === "front" ? "Frente" : "Verso"}</button>)}</div><button type="button" title={expanded ? "Fechar ampliação" : "Ampliar produto"} aria-label={expanded ? "Fechar ampliação" : "Ampliar produto"} onClick={() => setExpanded(!expanded)} className="grid h-10 w-10 place-items-center rounded-md border border-current/25">{expanded ? <X size={18} /> : <ZoomIn size={18} />}</button></div></div>
     <div className="relative mx-auto mt-3 grid w-full max-w-xl min-w-0 place-items-center overflow-hidden rounded-lg bg-zinc-500/10" style={{ aspectRatio: "1" }}>
-      <canvas ref={canvas} aria-label={`${name}: ${side === "front" ? "frente" : "verso"} com a arte enquadrada`} className="max-h-full max-w-full object-contain" />
+      <canvas ref={canvas} aria-describedby={disclaimerId} aria-label={`${name}: ${side === "front" ? "frente" : "verso"} com a arte enquadrada`} className="max-h-full max-w-full object-contain" />
       {busy ? <Loader2 className="absolute animate-spin" size={22} /> : null}
       {error ? <p role="alert" className="absolute inset-x-3 rounded-md bg-zinc-950 p-3 text-sm text-rose-200">{error}<button title="Alternar face" type="button" onClick={() => setSide(side === "front" ? "back" : "front")}><RotateCw size={16} /></button></p> : null}
     </div>
-    <p className="mt-2 text-xs leading-5 opacity-70">{!model ? "Visualização esquemática, sem foto do acabamento. " : "Simulação do acabamento; cores e curvatura podem variar na peça física. "}{geometry.shape !== "circle" ? "Este formato usa uma projeção plana por máscara, sem simular a dobra física." : side === "back" ? "A faixa externa da arte dobra para o verso; o acabamento deve cobrir a região central." : "Textos e detalhes importantes devem permanecer na área de segurança."}</p>
+    <p id={disclaimerId} className="mt-3 flex items-start gap-2 text-xs leading-5"><Info size={15} aria-hidden="true" className="mt-0.5 shrink-0" /><span><strong className="font-semibold">Imagem meramente ilustrativa.</strong> Cores, acabamento e curvatura podem variar no produto final, principalmente na parte traseira e no modelo do fecho.</span></p>
+    <p className="mt-2 text-xs leading-5 opacity-70">{!model ? "Visualização esquemática, sem foto do acabamento. " : ""}{geometry.shape !== "circle" ? "Este formato usa uma projeção plana por máscara, sem simular a dobra física." : side === "back" ? "A faixa externa da arte dobra para o verso; o acabamento deve cobrir a região central." : "Textos e detalhes importantes devem permanecer na área de segurança."}</p>
   </section>;
   return expanded ? createPortal(content, document.body) : content;
 }

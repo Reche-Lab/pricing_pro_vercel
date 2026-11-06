@@ -470,6 +470,13 @@ node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 - [x] Suíte com 549 testes aprovados (21 integrações condicionais não executadas); tipos, lint e build aprovados.
 - [x] Sem migration ou variável de ambiente adicional.
 
+### Aviso na demonstração do produto
+
+- [x] Informação de imagem meramente ilustrativa e variações, com destaque para verso e fecho, no componente compartilhado.
+- [x] Aviso na frente, verso, ampliação e prévia sem modelo fotográfico, associado à descrição acessível do canvas.
+- [x] 16 testes direcionados aprovados; sem migration ou variável nova.
+- [x] TypeScript e lint direcionado aprovados; aviso e renderização conferidos em 320/390/1440 px, frente, verso e ampliação.
+
 ### Tonalidades e profundidade na loja clara
 
 - [x] Fundo neutro levemente tonalizado, superfícies brancas e destaques suaves em verde e rosa.
