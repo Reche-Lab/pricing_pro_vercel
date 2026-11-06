@@ -2,6 +2,14 @@
 
 Status atualizado durante a refatoracao inicial.
 
+## Hover Das Categorias Na Loja (2026-11-06)
+
+- [x] Reproduzir em teste a ausência de espaço para a expansão vertical das imagens no carrossel de categorias.
+- [x] Reservar folga interna acima das imagens sem remover a animação, alterar a navegação ou impedir a rolagem horizontal.
+- [x] Conferir hover em 1440/390/320 px, temas claro/escuro: borda inteira, animação preservada, links válidos e sem transbordamento horizontal; comparação visual antes/depois com dados fictícios.
+- [x] 11 testes focados aprovados; TypeScript e lint do novo teste aprovados.
+- [x] Sem migration ou variável de ambiente nova.
+
 ## Tipo Do Frete Na Edição Do Orçamento (2026-11-03)
 
 - [x] Reproduzir `inconsistent types deduced for parameter $5` em PostgreSQL 16 local descartável, usando as migrations do projeto e a consulta real do repositório.
