@@ -68,6 +68,7 @@ type Props = {
   path: string[];
   paused: boolean;
   preview?: boolean;
+  basePath?: string;
   institutionalLinks?: { slug: string; title: string }[];
   children?: ReactNode;
 };
@@ -79,12 +80,13 @@ export function Storefront({
   path,
   paused,
   preview = false,
+  basePath,
   institutionalLinks = [],
   children,
 }: Props) {
   const router = useRouter();
   const { theme, toggle } = useStoreTheme(slug, settings.theme);
-  const base = preview ? `/commerce/${slug}/preview` : `/loja/${slug}`;
+  const base = preview ? `/commerce/${slug}/preview` : (basePath ?? `/loja/${slug}`);
   const api = preview ? `/api/commerce/${slug}/preview` : `/api/store/${slug}`;
   const [buyerCart, setCart] = useState<Cart | null>(null);
   const simulation = useCommercePreview();
@@ -183,7 +185,7 @@ export function Storefront({
       ) : null}
       <header className={styles.header}>
         <div className={styles.headerInner}>
-          <Link className={styles.brand} href={base}>
+          <Link className={styles.brand} href={base || "/"}>
             {settings.logoUrl ? (
               <img
                 alt=""
@@ -537,6 +539,7 @@ export function Storefront({
             ) : (
               <Checkout
                 cart={cart}
+                api={api}
                 settings={settings}
                 base={base}
                 disabled={busy || paused}
@@ -1137,6 +1140,7 @@ function PreviewCheckout({
       ) : null}
       <Checkout
         cart={cart}
+        api={`/api${base}`}
         settings={settings}
         base={base}
         preview
@@ -1221,7 +1225,7 @@ function OrderDetail({
           </div>
         ))}
         <CommerceOrderArtworks endpoint={`${api}/orders/${order.id}/artworks`} />
-        <StoreOrderContactDetails billing={order.billing} address={order.address} same={order.deliveryAddressSameAsBilling}/>
+        <StoreOrderContactDetails billing={order.billing} address={order.address} same={order.deliveryAddressSameAsBilling} shippingOption={order.shippingOption}/>
       </div>
       <aside className={styles.summary}>
         <Summary

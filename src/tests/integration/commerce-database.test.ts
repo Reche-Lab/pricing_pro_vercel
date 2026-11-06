@@ -16,7 +16,9 @@ import {
   hashCommerceToken,
   calculateCommerceCart,
   geometryHash,
+  getCommerceAdmin,
 } from "@/repositories/commerce";
+import { savePaymentConnection } from "@/services/commerce/payments";
 import { authorizedCommerceOrder, mutateCommerceProof, readCommerceProofs, assertCommerceProofsReady } from "@/services/commerce/order-artworks";
 import { verifyBuyerCode } from "@/services/commerce/buyer-auth";
 import type { StoreAdminInput } from "@/domain/commerce/schemas";
@@ -131,6 +133,8 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
         },
       ],
     };
+    await saveCommerceStore(actorId, tenantId, { ...input, status: "draft" });
+    await getPool().query("insert into commerce_payment_connections(tenant_id,manual_enabled,manual_instructions) values($1,true,'Pagar na loja')", [tenantId]);
     await saveCommerceStore(actorId, tenantId, input);
     published = input;
     expect((await getCommerceStore("ground-shop"))?.tenant_id).toBe(tenantId);
@@ -175,7 +179,7 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
     );
     session.customer_id = customer;
     await getPool().query(
-      "insert into commerce_payment_connections(tenant_id,manual_enabled,manual_instructions) values($1,true,'Pagar na retirada')",
+      "insert into commerce_payment_connections(tenant_id,manual_enabled,manual_instructions) values($1,true,'Pagar na retirada') on conflict(tenant_id) do update set manual_enabled=true,manual_instructions=excluded.manual_instructions",
       [tenantId],
     );
     const lines = [
@@ -446,6 +450,49 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
     const client = await getPool().connect();
     try { await client.query("set role anon"); await expect(client.query("select * from commerce_order_reads")).rejects.toMatchObject({ code: "42501" }); }
     finally { await client.query("reset role"); client.release(); }
+  });
+  it("validates persisted carrier quotes by tenant, session, revision, cart, CEP and expiry before creating an order", async () => {
+    await getPool().query("update commerce_stores set settings=jsonb_set(settings,'{carrierEnabled}','true') where tenant_id=$1", [tenantId]);
+    await getPool().query("update commerce_products set snapshot=jsonb_set(snapshot,'{personalized}','false') where tenant_id=$1", [tenantId]);
+    const store = (await getCommerceStore("ground-shop"))!;
+    const products = await commerceProducts(tenantId);
+    const { session } = await createBuyerSession(tenantId);
+    const customer = (await getPool().query("select id from commerce_customers where tenant_id=$1 limit 1", [tenantId])).rows[0].id;
+    await getPool().query("update commerce_sessions set customer_id=$2 where id=$1", [session.id, customer]);
+    session.customer_id = customer;
+    const lines = [{ id: crypto.randomUUID(), productId: products[0].id, quantity: 10, artworkName: "", artworkId: null }];
+    await replaceCart(store, session, 0, lines); session.cart = lines; session.revision = 1;
+    const calculated = await calculateCommerceCart(tenantId, session.id, lines, products);
+    const option = { id: "melhor_envio:2", name: "Correios - SEDEX", priceCents: 1975, description: "3 dias úteis" };
+    const insert = async (t: string, s: string) => (await getPool().query("insert into commerce_shipping_quotes(tenant_id,session_id,cart_revision,store_revision,cart_hash,postal_code,option) values($1,$2,1,$3,$4,$5,$6) returning id", [t, s, store.revision, hashCommerceToken(JSON.stringify(calculated)), testCommerceBilling.postalCode, JSON.stringify(option)])).rows[0].id;
+    const input = { revision: 1, expectedTotalCents: calculated.totalCents + option.priceCents, billing: testCommerceBilling, delivery: "delivery" as const, deliveryAddressSameAsBilling: true, address: null, provider: "manual" as const, acceptedTerms: true as const };
+    const other = (await createBuyerSession(tenantId)).session;
+    await expect(createCommerceOrder(store, session, { ...input, shippingQuoteId: await insert(tenantId, other.id) })).rejects.toThrow("frete expirou");
+    const id = await insert(tenantId, session.id);
+    for (const mutation of ["expires_at=now()-interval '1 second'", "cart_revision=99", "store_revision=99", "cart_hash='wrong'", "postal_code='99999999'"]) {
+      await getPool().query(`update commerce_shipping_quotes set ${mutation} where id=$1`, [id]);
+      await expect(createCommerceOrder(store, session, { ...input, shippingQuoteId: id })).rejects.toThrow("frete expirou");
+      await getPool().query("update commerce_shipping_quotes set expires_at=now()+interval '15 minutes',cart_revision=1,store_revision=$2,cart_hash=$3,postal_code=$4 where id=$1", [id, store.revision, hashCommerceToken(JSON.stringify(calculated)), testCommerceBilling.postalCode]);
+    }
+    await expect(createCommerceOrder(store, session, { ...input, shippingQuoteId: id, expectedTotalCents: 1 })).rejects.toThrow("preço mudou");
+    const created = await createCommerceOrder(store, session, { ...input, shippingQuoteId: id });
+    expect((await getPool().query("select shipping_cents,total_cents,snapshot->'shippingOption' as option from commerce_orders where id=$1", [created.id])).rows[0]).toMatchObject({ shipping_cents: 1975, total_cents: calculated.totalCents + 1975, option });
+    expect(await createCommerceOrder(store, session, { ...input, shippingQuoteId: id })).toEqual(created);
+    const client = await getPool().connect();
+    try { await client.query("set role anon"); await expect(client.query("select * from commerce_shipping_quotes")).rejects.toMatchObject({ code: "42501" }); }
+    finally { await client.query("reset role"); client.release(); }
+    await getPool().query("update commerce_products set snapshot=jsonb_set(snapshot,'{personalized}','true') where tenant_id=$1", [tenantId]);
+  });
+  it("persists tenant payment settings and keeps them when a later request only changes manual instructions", async () => {
+    const checkoutSettings = { pix: true, credit: true, debit: false, boleto: false, maxInstallments: 4 };
+    await savePaymentConnection(tenantId, actorId, { manualEnabled: true, manualInstructions: "Pagamento combinado", mpEnabled: false, checkoutSettings });
+    await savePaymentConnection(tenantId, actorId, { manualEnabled: true, manualInstructions: "Novas instruções", mpEnabled: false });
+    const data = await getCommerceAdmin(actorId, tenantId);
+    expect(data.payments.checkout_settings).toEqual(checkoutSettings);
+    expect(data.readiness.paymentReady).toBe(true);
+    expect(data.urls.platform).toContain("/loja/ground-shop");
+    expect(data.payments).not.toHaveProperty("encrypted_credentials");
+    expect(data.payments).not.toHaveProperty("accessToken");
   });
   it("lets read-only production staff print only paid orders with all current artworks approved", async () => {
     const viewer = (await getPool().query("select id from app_users where email='worklist-viewer@example.test'")).rows[0].id;

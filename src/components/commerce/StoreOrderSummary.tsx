@@ -1,10 +1,11 @@
 import React from "react";
 import { storeMoney } from "./store-http";
 
-export function StoreOrderSummary({ subtotal, shipping, artworkDiscountCents = 0 }: {
+export function StoreOrderSummary({ subtotal, shipping, artworkDiscountCents = 0, shippingPending = false }: {
   subtotal: number;
   shipping?: number;
   artworkDiscountCents?: number;
+  shippingPending?: boolean;
 }) {
   return <dl className="space-y-3 pt-4">
     <div className="flex justify-between gap-3">
@@ -15,10 +16,10 @@ export function StoreOrderSummary({ subtotal, shipping, artworkDiscountCents = 0
       <dt>Desconto por arte pronta</dt><dd className="shrink-0 tabular-nums">−{storeMoney(artworkDiscountCents)}</dd>
     </div> : null}
     <div className="flex justify-between gap-3 text-sm text-zinc-500">
-      <dt>Entrega</dt><dd className="shrink-0 tabular-nums">{shipping === undefined ? "Na próxima etapa" : storeMoney(shipping)}</dd>
+      <dt>Entrega</dt><dd className="shrink-0 tabular-nums">{shippingPending ? "A calcular" : shipping === undefined ? "Na próxima etapa" : storeMoney(shipping)}</dd>
     </div>
     <div className="flex justify-between gap-3 border-t border-current/15 pt-4 text-xl font-semibold">
-      <dt>Total</dt><dd className="shrink-0 tabular-nums">{storeMoney(subtotal + (shipping ?? 0))}</dd>
+      <dt>{shippingPending ? "Total parcial" : "Total"}</dt><dd className="shrink-0 tabular-nums">{storeMoney(subtotal + (shipping ?? 0))}</dd>
     </div>
   </dl>;
 }

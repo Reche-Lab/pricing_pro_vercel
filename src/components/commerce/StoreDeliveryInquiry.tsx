@@ -48,7 +48,7 @@ export function StoreDeliveryInquiry({ api, lines, disabled, disabledReason }: {
         <strong>{option.priceCents === 0 ? "Grátis" : storeMoney(option.priceCents)}</strong>
       </div>)}
       {result.warnings?.map(warning => <p key={warning} className={styles.deliveryError}>{warning}</p>)}
-      {result.previewCarrier ? <p className={styles.muted}>Cotação real do Melhor Envio para conferência no preview. Estes serviços ainda não estão habilitados no checkout da loja; esta consulta não seleciona nem compra um frete.</p> : null}
+      {result.previewCarrier ? <p className={styles.muted}>Cotação real do Melhor Envio para conferência no preview. Para oferecer estes serviços aos compradores, habilite o frete Melhor Envio na loja. O checkout calcula novamente para todo o carrinho; esta consulta não compra um frete.</p> : null}
       {api.startsWith("/api/commerce/") ? <p className="flex flex-wrap gap-3 text-sm">
         <Link href="/settings?section=melhor-envio" target="_blank" rel="noopener noreferrer" className="underline">Configurar Melhor Envio</Link>
         <Link href="/commerce" target="_blank" rel="noopener noreferrer" className="underline">Configurar entrega da loja</Link>

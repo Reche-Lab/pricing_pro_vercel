@@ -6,14 +6,22 @@ import { estimatePackaging } from "@/repositories/packaging";
 import { getTenantShippingProfile } from "@/repositories/tenant-settings";
 import { melhorEnvioRequest, MelhorEnvioRequestError } from "@/services/melhor-envio/melhor-envio";
 import type { MelhorEnvioCredentials, MelhorEnvioSettings } from "@/services/melhor-envio/types";
+import type { IntegrationConnectionRow } from "@/repositories/integrations";
+import type { SelectedPackage } from "@/domain/shipping/types";
 
 // Only invoked after admin preview authorization; never impersonate an owner for public buyers.
 export async function previewCarrierDelivery(userId: string, tenantId: string, postalCode: string, lines: CartLine[], products: CommerceProduct[]) {
   const connection = await getIntegrationConnection(userId, tenantId, "melhor_envio");
+  const tenant = await getTenantShippingProfile(userId, tenantId);
+  return carrierDelivery(connection, tenant?.postal_code ?? "", postalCode, lines, products,
+    items => estimatePackaging(userId, tenantId, { items }));
+}
+
+export async function carrierDelivery(connection: IntegrationConnectionRow | null, originPostalCode: string, postalCode: string,
+  lines: CartLine[], products: CommerceProduct[], packagingFor: (items: { productVariantId: string; quantity: number }[]) => Promise<SelectedPackage | null>, declaredValueCents?: number) {
   if (!connection || connection.status === "disabled") return null;
   if (connection.status !== "active") throw new CommerceError("Reconecte o Melhor Envio em Configurações > Melhor Envio.", 409);
-  const tenant = await getTenantShippingProfile(userId, tenantId);
-  const origin = tenant?.postal_code?.replace(/\D/g, "") ?? "";
+  const origin = originPostalCode.replace(/\D/g, "");
   if (!/^\d{8}$/.test(origin) || origin === "00000000")
     throw new CommerceError("Cadastre o CEP de origem em Configurações > Geral > Dados do tenant e remetente.", 409);
   let credentials: MelhorEnvioCredentials;
@@ -22,6 +30,7 @@ export async function previewCarrierDelivery(userId: string, tenantId: string, p
   if (!credentials.accessToken) throw new CommerceError("Reconecte o Melhor Envio antes de consultar o frete.", 409);
 
   const priced = calculateCart(lines, products);
+  const insuranceCents = declaredValueCents ?? priced.totalCents;
   const quantities = new Map<string, number>();
   for (const line of lines) {
     const product = products.find(candidate => candidate.id === line.productId);
@@ -30,9 +39,7 @@ export async function previewCarrierDelivery(userId: string, tenantId: string, p
   }
   let packaging;
   try {
-    packaging = await estimatePackaging(userId, tenantId, {
-      items: [...quantities].map(([productVariantId, quantity]) => ({ productVariantId, quantity })),
-    });
+    packaging = await packagingFor([...quantities].map(([productVariantId, quantity]) => ({ productVariantId, quantity })));
   } catch (error) {
     if (error instanceof Error && ["At least one product item is required.", "Product variant not found.", "Product dimensions are required for intelligent packaging."].includes(error.message))
       throw new CommerceError("Confira as dimensões e o peso do produto e cadastre uma embalagem compatível em Embalagens.", 409);
@@ -41,7 +48,7 @@ export async function previewCarrierDelivery(userId: string, tenantId: string, p
   if (!packaging) throw new CommerceError("Nenhuma embalagem compatível. Cadastre uma caixa que comporte essa quantidade.", 409);
   const count = packaging.boxesNeeded;
   if (!Number.isInteger(count) || count < 1 || count > 50)
-    throw new CommerceError("A consulta do preview suporta até 50 volumes. Ajuste a quantidade ou as embalagens.", 409);
+    throw new CommerceError("A consulta suporta até 50 volumes. Ajuste a quantidade ou as embalagens.", 409);
   if (![packaging.box.widthCm, packaging.box.heightCm, packaging.box.lengthCm, packaging.grossWeightPerBoxKg, packaging.netWeightKg].every(value => Number.isFinite(value) && value > 0))
     throw new CommerceError("Confira as dimensões da caixa e os pesos cadastrados no produto e na embalagem.", 409);
   const settings = connection.settings as MelhorEnvioSettings;
@@ -49,7 +56,7 @@ export async function previewCarrierDelivery(userId: string, tenantId: string, p
   const volumes = Array.from({ length: count }, (_, index) => ({
     width: packaging.box.widthCm, height: packaging.box.heightCm, length: packaging.box.lengthCm,
     weight: packaging.grossWeightPerBoxKg,
-    insurance: (Math.floor(priced.totalCents / count) + (index < priced.totalCents % count ? 1 : 0)) / 100,
+    insurance: (Math.floor(insuranceCents / count) + (index < insuranceCents % count ? 1 : 0)) / 100,
   }));
   let response: unknown;
   try {

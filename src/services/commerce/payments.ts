@@ -2,6 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { getPool } from "@/lib/db/client";
 import { decryptTenantSecret, encryptTenantSecret } from "@/lib/crypto/secrets";
 import { CommerceError, validatePayment } from "@/domain/commerce/commerce";
+import { mercadoPagoPaymentMethods, type CommercePaymentSettings } from "@/domain/commerce/payment-settings";
+import { commerceStoreUrl } from "@/domain/commerce/domains";
 import {
   commerceTransaction,
   type CommerceOrder,
@@ -59,6 +61,7 @@ export async function savePaymentConnection(
     mpEnabled: boolean;
     accessToken?: string;
     webhookSecret?: string;
+    checkoutSettings?: CommercePaymentSettings;
   },
 ) {
   let credentials: Credentials | undefined;
@@ -87,13 +90,14 @@ export async function savePaymentConnection(
     );
   await commerceTransaction(async (client) => {
     await client.query(
-      `insert into commerce_payment_connections(tenant_id,manual_enabled,manual_instructions,mp_enabled,encrypted_credentials) values($1,$2,$3,$4,$5) on conflict(tenant_id) do update set manual_enabled=$2,manual_instructions=$3,mp_enabled=$4,encrypted_credentials=coalesce($5,commerce_payment_connections.encrypted_credentials),updated_at=now()`,
+      `insert into commerce_payment_connections(tenant_id,manual_enabled,manual_instructions,mp_enabled,encrypted_credentials,checkout_settings) values($1,$2,$3,$4,$5,coalesce($6::jsonb,'{}'::jsonb)) on conflict(tenant_id) do update set manual_enabled=$2,manual_instructions=$3,mp_enabled=$4,encrypted_credentials=coalesce($5,commerce_payment_connections.encrypted_credentials),checkout_settings=coalesce($6::jsonb,commerce_payment_connections.checkout_settings),updated_at=now()`,
       [
         tenantId,
         input.manualEnabled,
         input.manualInstructions,
         input.mpEnabled,
         credentials ? encryptTenantSecret(credentials) : null,
+        input.checkoutSettings ? JSON.stringify(input.checkoutSettings) : null,
       ],
     );
     await client.query(
@@ -135,7 +139,7 @@ export async function checkoutPayment(
     if (order.checkout_url) return { url: order.checkout_url };
     const account = (
       await client.query(
-        "select mp_enabled from commerce_payment_connections where tenant_id=$1",
+        "select mp_enabled,checkout_settings from commerce_payment_connections where tenant_id=$1",
         [store.tenant_id],
       )
     ).rows[0];
@@ -144,7 +148,7 @@ export async function checkoutPayment(
         "O pagamento online está temporariamente indisponível.",
         409,
       );
-    const back = `${base}/loja/${store.slug}/pedidos/${order.id}`;
+    const back = `${commerceStoreUrl(store.slug, base)}/pedidos/${order.id}`;
     const preference = await mpRequest(
       "/checkout/preferences",
       credentials.accessToken,
@@ -162,6 +166,7 @@ export async function checkoutPayment(
         payer: { email: order.snapshot.customer.email },
         back_urls: { success: back, pending: back, failure: back },
         auto_return: "approved",
+        payment_methods: mercadoPagoPaymentMethods(account.checkout_settings),
         notification_url: `${base}/api/store/${store.slug}/payment-webhook?source_news=webhooks`,
         expires: true,
         expiration_date_from: new Date().toISOString(),

@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
+import { commerceHostSlug } from "@/domain/commerce/domains";
 import type { Metadata } from "next";
 import {
   commerceProducts,
@@ -23,6 +25,7 @@ export default async function StorePage({ params }: Props) {
   const { slug, path = [] } = await params;
   const store = await loadStore(slug, true);
   if (!store) notFound();
+  const customDomain = commerceHostSlug((await headers()).get("host")) === slug;
   const institutional = storeInstitutionalPage(slug, path);
   const supported = Boolean(institutional) ||
     path.length === 0 ||
@@ -49,11 +52,12 @@ export default async function StorePage({ params }: Props) {
       products={products}
       path={path}
       paused={store.status !== "published"}
+      basePath={customDomain ? "" : undefined}
       institutionalLinks={storeInstitutionalPages(slug).map(({ slug, title }) => ({ slug, title }))}
     >
       {institutional ? <>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeStructuredData(institutionalStructuredData(slug, institutional.slug, store.settings)) }} />
-        <StoreInstitutionalPage slug={slug} page={institutional} settings={store.settings} featuredProduct={products.find(product => Boolean(product.imageUrl))} />
+        <StoreInstitutionalPage slug={slug} page={institutional} settings={store.settings} basePath={customDomain ? "" : undefined} featuredProduct={products.find(product => Boolean(product.imageUrl))} />
       </> : null}
     </Storefront>
   );

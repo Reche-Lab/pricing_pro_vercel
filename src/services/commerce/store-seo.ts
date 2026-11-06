@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { StoreSettings } from "@/domain/commerce/schemas";
 import { INSTITUTIONAL_UPDATED, storeInstitutionalPage } from "@/domain/commerce/institutional";
+import { commerceStoreUrl } from "@/domain/commerce/domains";
 
 export function commerceSiteOrigin(appUrl = process.env.APP_URL || "https://liaflow-calcula.vercel.app") {
   const url = new URL(appUrl);
@@ -10,7 +11,7 @@ export function commerceSiteOrigin(appUrl = process.env.APP_URL || "https://liaf
 
 export function storePageMetadata(slug: string, path: string[], settings: StoreSettings, published: boolean, origin = commerceSiteOrigin()): Metadata {
   const page = storeInstitutionalPage(slug, path);
-  const url = `${origin}/loja/${encodeURIComponent(slug)}${path.length ? `/${path.map(encodeURIComponent).join("/")}` : ""}`;
+  const url = `${commerceStoreUrl(slug, origin)}${path.length ? `/${path.map(encodeURIComponent).join("/")}` : ""}`;
   const title = page ? `${page.title} | ${settings.name}` : settings.name;
   const description = page?.description ?? settings.description;
   const image = settings.bannerUrl || settings.logoUrl;
@@ -31,7 +32,7 @@ export function storePageMetadata(slug: string, path: string[], settings: StoreS
 export function institutionalStructuredData(slug: string, pageSlug: string, settings: StoreSettings, origin = commerceSiteOrigin()) {
   const page = storeInstitutionalPage(slug, [pageSlug]);
   if (!page) return null;
-  const base = `${origin}/loja/${encodeURIComponent(slug)}`;
+  const base = commerceStoreUrl(slug, origin);
   const url = `${base}/${page.slug}`;
   return {
     "@context": "https://schema.org",

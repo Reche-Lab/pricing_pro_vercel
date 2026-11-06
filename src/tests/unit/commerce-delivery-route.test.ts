@@ -7,9 +7,11 @@ import { requireCommercePreview } from "@/services/commerce/preview";
 import { enforcePublicRateLimit } from "@/lib/security/public-rate-limit";
 import { getCurrentSession } from "@/lib/auth/session";
 import { previewCarrierDelivery } from "@/services/commerce/preview-delivery";
+import { publicCarrierDelivery } from "@/services/commerce/carrier-delivery";
 import { CommerceError } from "@/domain/commerce/commerce";
 vi.mock("@/lib/auth/session", () => ({ getCurrentSession: vi.fn() }));
 vi.mock("@/services/commerce/preview-delivery", () => ({ previewCarrierDelivery: vi.fn() }));
+vi.mock("@/services/commerce/carrier-delivery", () => ({ publicCarrierDelivery: vi.fn() }));
 vi.mock("@/repositories/commerce", () => ({ getCommerceStore: vi.fn(), commerceProducts: vi.fn() }));
 vi.mock("@/services/commerce/preview", () => ({ requireCommercePreview: vi.fn() }));
 vi.mock("@/lib/security/public-rate-limit", () => ({ enforcePublicRateLimit: vi.fn() }));
@@ -31,6 +33,15 @@ beforeEach(() => {
   vi.mocked(previewCarrierDelivery).mockResolvedValue(null);
 });
 describe("product delivery boundary", () => {
+  it("uses the published opt-in carrier for a public buyer without an administrator identity", async () => {
+    vi.mocked(getCommerceStore).mockResolvedValue({ ...store, settings: { ...store.settings, deliveryEnabled: false, carrierEnabled: true } } as never);
+    vi.mocked(publicCarrierDelivery).mockResolvedValue({ options: [{ id: "melhor_envio:1", name: "PAC", priceCents: 1250, description: "5 dias" }] });
+    const response = await POST(request(), context);
+    expect(await response.json()).toMatchObject({ options: [{ id: "melhor_envio:1", priceCents: 1250 }] });
+    expect(publicCarrierDelivery).toHaveBeenCalledWith("tenant-a", "12345678", body.lines, [product]);
+    expect(getCurrentSession).not.toHaveBeenCalled();
+    expect(previewCarrierDelivery).not.toHaveBeenCalled();
+  });
   it("isolates store products and returns only delivery details without issuing a buyer session", async () => {
     const response = await POST(request(), context);
     expect(response.status).toBe(200);

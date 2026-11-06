@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getSessionProfile } from "@/repositories/users";
 import { CommerceError } from "@/domain/commerce/commerce";
+import { commerceHostSlug } from "@/domain/commerce/domains";
 import {
   commerceEnabled,
   createBuyerSession,
@@ -38,12 +39,16 @@ export function checkCommerceOrigin(request: Request) {
   const local =
     process.env.NODE_ENV !== "production" &&
     origin === new URL(request.url).origin;
-  if (!origin || (origin !== expected && !local))
+  const url = new URL(request.url);
+  const host = request.headers.get("host") || url.host;
+  const domainSlug = commerceHostSlug(host);
+  const domainOrigin = Boolean(domainSlug && origin === `https://${host.toLowerCase()}` && url.pathname.startsWith(`/api/store/${domainSlug}/`));
+  if (!origin || (origin !== expected && !local && !domainOrigin) || (domainSlug && !domainOrigin))
     throw new CommerceError("Origem da solicitação não autorizada.", 403);
 }
 export async function readCommerceBody<T>(
   request: Request,
-  schema: z.ZodType<T>,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   limit = 128 * 1024,
 ): Promise<T> {
   const reader = request.body?.getReader();

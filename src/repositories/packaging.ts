@@ -1,6 +1,7 @@
 import { selectBestPackage } from "@/domain/shipping/packaging";
 import type { PackagingBox } from "@/domain/shipping/types";
 import { withTenantContext } from "@/lib/db/client";
+import type { PoolClient } from "pg";
 
 export type PackagingBoxRow = {
   id: string;
@@ -111,19 +112,20 @@ export async function createPackagingBox(userId: string, tenantId: string, input
   });
 }
 
-export async function estimatePackaging(
-  userId: string,
-  tenantId: string,
-  input: {
+export type PackagingEstimateInput = {
     productVariantId?: string;
     quantity?: number;
     items?: Array<{ productVariantId: string; quantity: number }>;
     selectedBoxId?: string | null;
     splitByProduct?: boolean;
     clearanceCm?: number;
-  }
-) {
-  return withTenantContext(userId, tenantId, async (client) => {
+};
+
+export async function estimatePackaging(userId: string, tenantId: string, input: PackagingEstimateInput) {
+  return withTenantContext(userId, tenantId, client => estimatePackagingWithClient(client, tenantId, input));
+}
+
+export async function estimatePackagingWithClient(client: Pick<PoolClient, "query">, tenantId: string, input: PackagingEstimateInput) {
     const requestedItems = input.items?.length
       ? input.items
       : input.productVariantId && input.quantity
@@ -210,5 +212,4 @@ export async function estimatePackaging(
       splitByProduct: input.splitByProduct,
       clearanceCm: input.clearanceCm
     });
-  });
 }

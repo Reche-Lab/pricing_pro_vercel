@@ -15,7 +15,7 @@ describe("product offers UI", () => {
     fireEvent.change(screen.getByLabelText("CEP de destino"), { target: { value: "12345678" } });
     fireEvent.click(screen.getByRole("button", { name: "Consultar" }));
     await screen.findByText("Correios - PAC");
-    expect(screen.getByText(/ainda não estão habilitados no checkout/)).toBeInTheDocument();
+    expect(screen.getByText(/habilite o frete Melhor Envio na loja/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Configurar Melhor Envio" })).toHaveAttribute("href", "/settings?section=melhor-envio");
   });
   it("explains why an invalid product selection blocks delivery", () => {

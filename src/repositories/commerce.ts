@@ -9,6 +9,9 @@ import type { ProductMedia } from "@/domain/commerce/product-media";
 import type { CommerceArtworkOptions } from "@/domain/commerce/artwork-options";
 import { checkoutSchema, type CommerceBillingSnapshot } from "@/domain/commerce/schemas";
 import { resolveCheckoutDelivery } from "@/domain/commerce/checkout";
+import { commerceLaunchReadiness } from "@/repositories/commerce-launch";
+import { commercePublicationIssues } from "@/domain/commerce/publication";
+import { commerceDomains, commerceStoreUrl } from "@/domain/commerce/domains";
 import {
   resolvePrintGeometry,
   resolvePrintMargins,
@@ -78,6 +81,7 @@ export type CommerceOrder = {
     billing?: CommerceBillingSnapshot;
     deliveryAddressSameAsBilling?: boolean;
     delivery: string;
+    shippingOption?: { id: string; name: string; priceCents: number; description?: string } | null;
     terms: string;
     customer: { name: string; email: string };
     storeRevision: number;
@@ -195,7 +199,7 @@ export function publicCommerceProduct(product: CommerceProduct) {
   };
 }
 export async function getCommerceAdmin(userId: string, tenantId: string) {
-  const [store, products, variants, platforms, payments, orders] =
+  const [store, products, variants, platforms, payments, orders, readiness] =
     await Promise.all([
       getPool().query(
         `select s.*,t.slug from tenants t left join commerce_stores s on s.tenant_id=t.id where t.id=$1`,
@@ -208,13 +212,14 @@ export async function getCommerceAdmin(userId: string, tenantId: string) {
       listProductVariants(userId, tenantId),
       listPlatformRules(userId, tenantId),
       getPool().query(
-        `select manual_enabled,manual_instructions,mp_enabled,encrypted_credentials is not null as mp_configured from commerce_payment_connections where tenant_id=$1`,
+        `select manual_enabled,manual_instructions,mp_enabled,checkout_settings,encrypted_credentials is not null as mp_configured from commerce_payment_connections where tenant_id=$1`,
         [tenantId],
       ),
       getPool().query(
         `select id,total_cents,payment_status,fulfillment_status,provider,created_at::text,snapshot->'customer' as customer from commerce_orders where tenant_id=$1 order by created_at desc limit 100`,
         [tenantId],
       ),
+      commerceLaunchReadiness(tenantId),
     ]);
   return {
     store: store.rows[0],
@@ -223,10 +228,18 @@ export async function getCommerceAdmin(userId: string, tenantId: string) {
       id: v.variant_id,
       name: `${v.product_name} - ${v.variant_name}`,
       category: v.product_category,
+      shippingReady: [v.height_cm, v.width_cm, v.length_cm, v.unit_weight_kg].every(value => Number(value) > 0),
     })),
     platforms: platforms.map((p) => ({ id: p.id, name: p.name })),
     payments: payments.rows[0] ?? null,
     orders: orders.rows,
+    readiness,
+    urls: {
+      public: commerceStoreUrl(store.rows[0].slug),
+      platform: `${new URL(process.env.APP_URL || "http://localhost:3000").origin}/loja/${store.rows[0].slug}`,
+      domains: Object.keys(commerceDomains()).filter(host => commerceDomains()[host] === store.rows[0].slug),
+      webhook: `${new URL(process.env.APP_URL || "http://localhost:3000").origin}/api/store/${store.rows[0].slug}/payment-webhook`,
+    },
   };
 }
 export async function saveCommerceStore(
@@ -246,21 +259,19 @@ export async function saveCommerceStore(
     input.products.length
   )
     throw new CommerceError("Produto duplicado na publicação.");
-  if (
-    input.status === "published" &&
-    (!input.products.some((p) => p.active) ||
-      !input.settings.terms ||
-      (!input.settings.pickupEnabled && !input.settings.deliveryEnabled))
-  )
-    throw new CommerceError(
-      "Para publicar, inclua produtos, condições de compra e uma opção de entrega.",
-    );
+  if (input.enabled && input.status === "published") {
+    const issues = commercePublicationIssues(input, await commerceLaunchReadiness(tenantId));
+    if (issues.length) throw new CommerceError(`Para publicar:\n${issues.map(issue => `• ${issue}`).join("\n")}`);
+  }
   const snapshots = input.products.map((publication) => {
     const variant = variants.find(
       (v) => v.variant_id === publication.variantId,
     );
     if (!variant)
       throw new CommerceError("Produto não disponível neste tenant.");
+    if (input.enabled && input.status === "published" && input.settings.carrierEnabled && publication.active &&
+      ![variant.height_cm, variant.width_cm, variant.length_cm, variant.unit_weight_kg].every(value => Number(value) > 0))
+      throw new CommerceError(`Complete largura, comprimento, altura e peso de ${publication.name} em Produtos antes de publicar com Melhor Envio.`);
     const curve = variant.platform_curves?.[platform.id];
     const anchors = curve?.anchors ?? variant.anchors;
     if (!anchors || !Object.keys(anchors).length)
@@ -463,11 +474,24 @@ export async function createCommerceOrder(
     const calculated = await calculateCommerceCart(store.tenant_id, session.id, current.cart, products, client);
     if (!current.cart.length || calculated.totalCents <= 0)
       throw new CommerceError("Inclua produtos no carrinho.");
-    const shipping = input.delivery === "pickup" ? 0 : settings.deliveryCents;
+    let shipping = input.delivery === "pickup" ? 0 : settings.deliveryCents;
+    type ShippingOption = { id: string; name: string; priceCents: number; description?: string };
+    let shippingOption: ShippingOption | null = null;
+    if (input.delivery === "delivery" && input.shippingQuoteId) {
+      if (!settings.carrierEnabled || !address) throw new CommerceError("O frete automático não está disponível.", 409);
+      const quote = (await client.query<{ option: ShippingOption }>(
+        `select option from commerce_shipping_quotes where id=$1 and tenant_id=$2 and session_id=$3 and cart_revision=$4
+         and store_revision=$5 and cart_hash=$6 and postal_code=$7 and expires_at>now()`,
+        [input.shippingQuoteId, store.tenant_id, session.id, current.revision, lockedStore.revision, hashCommerceToken(JSON.stringify(calculated)), address.postalCode])).rows[0];
+      if (!quote || !Number.isSafeInteger(quote.option.priceCents) || quote.option.priceCents < 0)
+        throw new CommerceError("O frete expirou ou o carrinho/endereço mudou. Calcule novamente antes de confirmar.", 409);
+      shipping = quote.option.priceCents;
+      shippingOption = quote.option;
+    }
     if (
       (input.delivery === "pickup" && !settings.pickupEnabled) ||
       (input.delivery === "delivery" &&
-        (!settings.deliveryEnabled || !address))
+        ((!settings.deliveryEnabled && !shippingOption) || !address))
     )
       throw new CommerceError("Escolha uma opção de entrega disponível.");
     if (calculated.totalCents + shipping !== input.expectedTotalCents)
@@ -526,6 +550,7 @@ export async function createCommerceOrder(
       billing: { ...input.billing, personType: input.billing.document.length === 14 ? "J" : "F" },
       deliveryAddressSameAsBilling: input.delivery === "delivery" && input.deliveryAddressSameAsBilling,
       delivery: input.delivery,
+      shippingOption,
       customer,
       terms: settings.terms,
       storeRevision: lockedStore.revision,
@@ -621,6 +646,7 @@ export async function buyerOrders(tenantId: string, customerId: string) {
       billing: snapshot.billing ?? null,
       deliveryAddressSameAsBilling: snapshot.deliveryAddressSameAsBilling ?? false,
       delivery: snapshot.delivery,
+      shippingOption: snapshot.shippingOption ?? null,
       artworkDiscountCents: snapshot.artworkDiscountCents ?? 0,
     }),
   );

@@ -13,6 +13,7 @@ import {
   CreditCard,
   Package,
   Loader2,
+  Globe,
 } from "lucide-react";
 import type { getCommerceAdmin } from "@/repositories/commerce";
 import type { StoreAdminInput, StoreSettings } from "@/domain/commerce/schemas";
@@ -22,6 +23,9 @@ import { StoreBannersEditor } from "./StoreBannersEditor";
 import { CommerceProductMediaEditor } from "./CommerceProductMediaEditor";
 import { CommerceCaption, CommerceThemePicker } from "./CommerceAdminControls";
 import { CommerceArtworkOptions } from "./CommerceArtworkOptions";
+import { CommerceLaunchPanel } from "./CommerceLaunchPanel";
+import { CommerceStoreAddress } from "./CommerceStoreAddress";
+import { defaultCommercePaymentSettings, type CommercePaymentSettings } from "@/domain/commerce/payment-settings";
 import styles from "./commerce-admin.module.css";
 type Data = Awaited<ReturnType<typeof getCommerceAdmin>>;
 const field =
@@ -114,6 +118,7 @@ export function CommerceAdmin({
   );
   const [token, setToken] = useState("");
   const [secret, setSecret] = useState("");
+  const [checkoutSettings, setCheckoutSettings] = useState<CommercePaymentSettings>({ ...defaultCommercePaymentSettings(), ...initial.payments?.checkout_settings });
   const [orderAction, setOrderAction] = useState<{
     id: string;
     action: string;
@@ -174,6 +179,7 @@ export function CommerceAdmin({
       });
     });
   }
+  const incompleteShipping = publications.filter(p => p.active && data.variants.find(v => v.id === p.variantId)?.shippingReady === false).map(p => p.name);
   return (
     <div className={`${styles.root} min-w-0 space-y-5`}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-4">
@@ -210,7 +216,7 @@ export function CommerceAdmin({
             <Link
               className={button}
               target="_blank"
-              href={`/loja/${data.store.slug}`}
+              href={data.urls?.public ?? `/loja/${data.store.slug}`}
             >
               Abrir loja
               <ExternalLink size={15} />
@@ -225,6 +231,7 @@ export function CommerceAdmin({
         {[
           ["store", "Loja e catálogo"],
           ["payments", "Pagamentos"],
+          ["address", "Endereço da loja"],
           ["orders", `Pedidos (${data.orders.length})`],
         ].map(([id, label]) => (
           <button
@@ -235,7 +242,7 @@ export function CommerceAdmin({
             onClick={() => setTab(id)}
             className={`${button} shrink-0 whitespace-nowrap ${tab === id ? "border-emerald-500 bg-emerald-500/10 text-emerald-200" : "text-zinc-400"}`}
           >
-            {id === "store" ? <Store size={16} /> : id === "payments" ? <CreditCard size={16} /> : <Package size={16} />}
+            {id === "store" ? <Store size={16} /> : id === "payments" ? <CreditCard size={16} /> : id === "address" ? <Globe size={16}/> : <Package size={16} />}
             {label}
           </button>
         ))}
@@ -251,13 +258,14 @@ export function CommerceAdmin({
       {error ? (
         <p
           role="alert"
-          className="rounded-md border border-rose-600/40 bg-rose-500/10 p-3 text-sm text-rose-200"
+          className="whitespace-pre-line rounded-md border border-rose-600/40 bg-rose-500/10 p-3 text-sm text-rose-200"
         >
           {error}
         </p>
       ) : null}
       {tab === "store" ? (
         <form onSubmit={save} className="space-y-6">
+          <CommerceLaunchPanel input={{ enabled, status, platformId, settings, products: publications }} readiness={data.readiness && incompleteShipping.length ? { ...data.readiness, carrierReady: false, carrierMessage: `Complete peso e dimensões: ${incompleteShipping.join(", ")}.` } : data.readiness} onPayments={() => setTab("payments")}/>
           <fieldset
             disabled={busy || pendingUploads > 0}
             className="min-w-0 space-y-6"
@@ -380,7 +388,14 @@ export function CommerceAdmin({
               onBusyChange={imageBusyChanged}
             />
             <section className="space-y-4 border-t border-zinc-800 pt-5">
-              <h2 className="font-semibold"><CommerceCaption label="Entrega e retirada" help="Estas opções são usadas no checkout. A cotação do Melhor Envio disponível na prévia é apenas uma consulta e ainda não se aplica ao checkout." /></h2>
+              <h2 id="commerce-delivery" className="font-semibold"><CommerceCaption label="Entrega e retirada" help="O checkout combina as opções habilitadas. Melhor Envio calcula o carrinho pelo CEP; entrega fixa usa a tarifa informada e retirada é gratuita." /></h2>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(settings.carrierEnabled)} onChange={e => updateSetting("carrierEnabled", e.target.checked)}/>Calcular frete pelo Melhor Envio no checkout</label>
+              {settings.carrierEnabled ? <div className="space-y-2 border-l-2 border-emerald-500/40 pl-3 text-sm">
+                <p className={data.readiness?.carrierReady ? "text-emerald-300" : "text-amber-200"}>{data.readiness?.carrierMessage ?? "Confira a conexão, o CEP de origem, as dimensões e os pesos dos produtos e embalagens."}</p>
+                <p className="text-xs text-zinc-400">O comprador escolhe entre os serviços retornados para o CEP e o carrinho. Cotar não compra nem emite etiqueta.</p>
+                {incompleteShipping.length ? <p className="text-xs text-amber-200">Complete peso e dimensões em Produtos: {incompleteShipping.join(", ")}.</p> : null}
+                <div className="flex flex-wrap gap-3 text-xs"><Link href="/settings?section=melhor-envio" target="_blank" className="underline">Conexão e serviços</Link><Link href="/settings" target="_blank" className="underline">CEP do remetente</Link><Link href="/packaging" target="_blank" className="underline">Embalagens</Link></div>
+              </div> : null}
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -444,13 +459,13 @@ export function CommerceAdmin({
                 </div>
               ) : null}
               <p className="text-xs text-zinc-500">
-                Esta versão não cota transportadoras automaticamente. Publique
-                somente uma modalidade que sua operação consiga atender.
+                Entrega fixa é cobrada igualmente para qualquer CEP. Ative somente se sua operação atender toda a área de venda por essa tarifa.
               </p>
               <label className="grid gap-1 text-sm">
                 Condições de compra, produção, entrega e privacidade
                 <textarea
                   className={`${field} min-h-28`}
+                  id="commerce-terms"
                   value={settings.terms}
                   onChange={(e) => updateSetting("terms", e.target.value)}
                 />
@@ -459,7 +474,7 @@ export function CommerceAdmin({
             <section className="space-y-4 border-t border-zinc-800 pt-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="font-semibold">
-                  Catálogo público ({publications.length})
+                  <span id="commerce-catalog">Catálogo público ({publications.length})</span>
                 </h2>
                 <div className="flex min-w-0 gap-2">
                   <select
@@ -659,6 +674,7 @@ export function CommerceAdmin({
                 mpEnabled,
                 accessToken: token || undefined,
                 webhookSecret: secret || undefined,
+                checkoutSettings,
               });
               setToken("");
               setSecret("");
@@ -700,6 +716,12 @@ export function CommerceAdmin({
                 ? "Credenciais armazenadas. Deixe os campos vazios para mantê-las."
                 : "Piloto por credencial do vendedor. OAuth será uma etapa posterior."}
             </p>
+            <fieldset className="space-y-3" disabled={busy || !mpEnabled}>
+              <legend className="mb-3 text-sm font-medium">Opções no pagamento seguro</legend>
+              <div className="grid grid-cols-2 gap-3">{([{ key: "pix", label: "Pix" }, { key: "credit", label: "Cartão de crédito" }, { key: "debit", label: "Cartão de débito" }, { key: "boleto", label: "Boleto" }] as const).map(item => <label key={item.key} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={checkoutSettings[item.key]} onChange={e => setCheckoutSettings(old => ({ ...old, [item.key]: e.target.checked }))}/>{item.label}</label>)}</div>
+              {checkoutSettings.credit ? <label className="grid gap-1 text-sm">Máximo de parcelas<select className={field} value={checkoutSettings.maxInstallments} onChange={e => setCheckoutSettings(old => ({ ...old, maxInstallments: Number(e.target.value) }))}>{Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}x</option>)}</select></label> : null}
+              <p className="text-xs leading-5 text-zinc-400">As opções são restrições enviadas ao Checkout Pro. A oferta final, os juros, as bandeiras e a elegibilidade do débito dependem da conta do vendedor e do Mercado Pago. Parcelas sem juros são configuradas na conta Mercado Pago. Saldo da carteira pode continuar disponível.</p>
+            </fieldset>
             <label htmlFor="commerce-payment-token" className="grid gap-1 text-sm">
               <CommerceCaption label="Access token do vendedor" help="Credencial da conta Mercado Pago que receberá as vendas deste tenant. Deixe vazio para manter a credencial já armazenada." />
               <input
@@ -724,8 +746,7 @@ export function CommerceAdmin({
             </label>
             <p className="break-all text-xs text-zinc-400">
               Webhook:{" "}
-              {typeof window !== "undefined" ? window.location.origin : ""}
-              /api/store/{data.store?.slug}/payment-webhook
+              {data.urls?.webhook ?? "Salve o rascunho da loja para obter a URL do webhook."}
             </p>
           </div>
           <button className={button} disabled={busy || !data.store?.tenant_id}>
@@ -734,6 +755,7 @@ export function CommerceAdmin({
           </button>
         </form>
       ) : null}
+      {tab === "address" ? <CommerceStoreAddress slug={data.store?.slug} urls={data.urls} value={settings.requestedDomain ?? ""} onChange={value => updateSetting("requestedDomain", value)} onSubmit={save} disabled={busy || pendingUploads > 0}/> : null}
       {tab === "orders" ? (
         <section className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">Últimos pedidos</h2><Link className={`${button} text-emerald-300`} href="/commerce/orders"><Package size={16} />Central de pedidos e produção</Link></div>

@@ -8,15 +8,18 @@ import { GET } from "@/app/loja/[slug]/sitemap.xml/route";
 import { commerceProducts, getCommerceStore, publishedCommerceSitemapStores } from "@/repositories/commerce";
 import { requireCommercePreview } from "@/services/commerce/preview";
 import { storeSettingsSchema } from "@/domain/commerce/schemas";
+import { headers } from "next/headers";
 
 vi.mock("@/repositories/commerce", () => ({ commerceProducts: vi.fn(), getCommerceStore: vi.fn(), publishedCommerceSitemapStores: vi.fn(), publicCommerceProduct: (product: unknown) => product }));
 vi.mock("@/services/commerce/preview", () => ({ requireCommercePreview: vi.fn() }));
+vi.mock("next/headers", () => ({ headers: vi.fn() }));
 vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("NOT_FOUND"); }, redirect: () => { throw new Error("REDIRECT"); } }));
 vi.mock("@/components/commerce/Storefront", () => ({ Storefront: ({ children }: { children: ReactNode }) => <main>{children}</main> }));
 afterEach(() => { vi.resetAllMocks(); vi.unstubAllEnvs(); });
 const settings = storeSettingsSchema.parse({ name: "Ground Shop", description: "Loja", logoUrl: "", bannerUrl: "", accent: "#047857", contactEmail: "loja@example.test", contactPhone: "", pickupEnabled: false, pickupAddress: "", deliveryEnabled: false, deliveryCents: 0, deliveryDescription: "", terms: "Condições" });
 function setup(slug = "ground-shop") {
   vi.stubEnv("APP_URL", "https://shop.example.test");
+  vi.mocked(headers).mockResolvedValue(new Headers({ host: "shop.example.test" }) as never);
   const store = { slug, tenant_id: "tenant", settings, status: "published", enabled: true, revision: 1, platform_id: "platform" };
   vi.mocked(getCommerceStore).mockResolvedValue(store);
   vi.mocked(requireCommercePreview).mockResolvedValue(store);
@@ -24,6 +27,18 @@ function setup(slug = "ground-shop") {
   return store;
 }
 describe("institutional storefront routes", () => {
+  it("renders clean root-relative navigation and canonical metadata on a verified custom domain", async () => {
+    setup();
+    vi.stubEnv("COMMERCE_CUSTOM_DOMAINS", '{"groundshop.com.br":"ground-shop"}');
+    vi.mocked(headers).mockResolvedValue(new Headers({ host: "groundshop.com.br" }) as never);
+    const params = Promise.resolve({ slug: "ground-shop", path: ["quem-somos"] });
+    const html = renderToStaticMarkup(await StorePage({ params }));
+    expect(html).toContain('href="/termos-de-uso"');
+    expect(html).not.toContain('href="/loja/ground-shop');
+    expect((await generateMetadata({ params })).alternates?.canonical).toBe("https://groundshop.com.br/quem-somos");
+    const xml = await GET(new Request("https://groundshop.com.br/sitemap.xml"), { params: Promise.resolve({ slug: "ground-shop" }) });
+    expect(await xml.text()).toContain("https://groundshop.com.br/quem-somos</loc>");
+  });
   it("includes the policy text and JSON-LD in the server HTML", async () => {
     setup();
     const params = Promise.resolve({ slug: "ground-shop", path: ["politica-de-privacidade"] });

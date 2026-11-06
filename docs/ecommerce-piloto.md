@@ -77,8 +77,9 @@ O sitemap geral fica em `/sitemap.xml`; o específico, em
 `/loja/ground-shop/sitemap.xml`. Somente lojas publicadas e ativas entram no sitemap;
 prévias, carrinhos, contas e pedidos não entram. `APP_URL` deve apontar para a origem
 de produção realmente usada. Não apontar o canonical para o domínio antigo enquanto
-ele ainda servir outra loja. A rota continua com `/loja/ground-shop`: domínio próprio
-sem esse prefixo depende do futuro módulo de domínios, não é ativado por esta entrega.
+ele ainda servir outra loja. Sem domínio autorizado, a rota continua com `/loja/ground-shop`.
+O roteamento por domínio próprio exige autorização explícita do operador após
+verificação no Vercel/DNS; veja [publicação e domínio](loja-publicacao-dominio.md).
 Após o deploy, cadastrar o sitemap no Google Search Console e conferir as URLs na
 ferramenta de inspeção e no validador do Schema.org. Metadados e sitemap não garantem
 indexação, posicionamento ou rich results; FAQ é interação de leitura, sem promessa
@@ -101,7 +102,7 @@ Nesta versão estão disponíveis:
 - Cálculo no servidor, centavos e confirmação do total no checkout.
 - Upload de JPEG, PNG e WebP, seleção de versão, retoque, enquadramento e aprovação no carrinho.
 - Conta do comprador por código enviado ao e-mail, separada dos usuários administrativos.
-- Checkout com retirada ou entrega de valor fixo, destinatário e aceite das condições.
+- Checkout com retirada, entrega fixa ou Melhor Envio habilitado pelo tenant, destinatário e aceite das condições.
 - Pagamento manual e Mercado Pago Checkout Pro, com credenciais próprias de cada vendedor.
 - Acompanhamento do pedido pelo comprador, confirmação manual e etapas de produção pela administração.
 - Download administrativo das artes e PDF A4 de produção após confirmação do pagamento.
@@ -400,14 +401,16 @@ com os responsáveis pelo negócio. Não publique o texto de exemplo dos testes.
 - [x] Pagamento manual e implementação de um provedor online por tenant.
 - [x] Testes unitários, de banco e fluxo básico desktop/mobile com dados fictícios.
 - [ ] Homologar SMTP, Storage, artes e pagamentos no ambiente real da Ground Shop.
-- [ ] Cotação automática, embalagens e etiquetas Melhor Envio no checkout da loja.
+- [x] Cotação automática e embalagens Melhor Envio no produto/checkout, com persistência e validação do frete por sessão (migration 0069).
+- [ ] Compra e emissão de etiquetas Melhor Envio a partir do pedido da loja.
 - [ ] Sincronização opcional dos pedidos da loja com Olist/ERP e financeiro existente.
 - [ ] Assistente criativo público com cotas e consumo de IA por comprador/tenant.
 - [x] Upload de logo, capa e imagem de produto com prévia, substituição e remoção da seleção.
 - [x] Galeria com até 10 mídias por produto, incluindo até 2 vídeos.
 - [ ] Endereço salvo e recuperação de carrinho entre dispositivos.
 - [ ] Onboarding OAuth dos vendedores e outros provedores de pagamento.
-- [ ] Domínio próprio, DNS/certificado e resolução segura por host.
+- [x] Resolução segura por host autorizado, domínio principal/www e SEO, com configuração do operador.
+- [ ] Autoatendimento para verificação de domínio e provisionamento automático de DNS/certificado via API Vercel.
 - [ ] Estoque/reservas, cancelamentos/estornos, outbox, reconciliação periódica e retenção de arquivos.
 - [ ] Editor de disposição de seções, métricas de funil e comparação de desempenho em produção.
 

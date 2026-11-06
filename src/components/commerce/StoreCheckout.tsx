@@ -1,13 +1,13 @@
 "use client";
 import React, { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, Copy, Loader2, MapPin, Search } from "lucide-react";
+import { Check, Copy, Loader2, MapPin, Search, Truck } from "lucide-react";
 import type { cartView } from "@/repositories/commerce";
 import { addressSchema, checkoutSchema, type StoreSettings } from "@/domain/commerce/schemas";
 import { formatCheckoutDocument, formatCheckoutPhone } from "@/domain/commerce/checkout";
 import { fetchCepAddress, formatCep, normalizeCep } from "@/lib/cep";
 import { StoreOrderSummary } from "./StoreOrderSummary";
-import { storeMoney } from "./store-http";
+import { storeMoney, storeRequest } from "./store-http";
 import styles from "./store.module.css";
 
 type Cart = Awaited<ReturnType<typeof cartView>>;
@@ -96,8 +96,8 @@ function ContactFields({ value, onChange, billing, errors, onBusyChange }: {
   </div>;
 }
 
-export function StoreCheckout({ cart, settings, base, disabled, onSubmit, preview = false }: {
-  cart: Cart; settings: StoreSettings; base: string; disabled: boolean; onSubmit: (input: unknown) => Promise<void>; preview?: boolean;
+export function StoreCheckout({ cart, settings, base, disabled, onSubmit, preview = false, api }: {
+  cart: Cart; settings: StoreSettings; base: string; disabled: boolean; onSubmit: (input: unknown) => Promise<void>; preview?: boolean; api?: string;
 }) {
   const [delivery, setDelivery] = useState(settings.pickupEnabled ? "pickup" : "delivery");
   const [provider, setProvider] = useState(cart.payments.mp_enabled ? "mercado_pago" : "manual");
@@ -107,12 +107,40 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
   const [errors, setErrors] = useState<Record<string, string>>({}), [error, setError] = useState("");
   const [billingCepBusy, setBillingCepBusy] = useState(false), [deliveryCepBusy, setDeliveryCepBusy] = useState(false);
   const form = useRef<HTMLFormElement>(null);
-  const shipping = delivery === "pickup" ? 0 : settings.deliveryCents;
+  type ShippingOption = { id: string; name: string; priceCents: number; description?: string; quoteId?: string };
+  const [freight, setFreight] = useState<{ key: string; expiresAt: number; options: ShippingOption[] } | null>(null);
+  const [serviceId, setServiceId] = useState("delivery"), [shippingBusy, setShippingBusy] = useState(false), [shippingError, setShippingError] = useState("");
+  const postalCode = (same ? billing.postalCode : address.postalCode);
+  const freightKey = `${postalCode}:${cart.revision}:${cart.calculation?.totalCents}`;
+  const latestFreightKey = useRef(freightKey); latestFreightKey.current = freightKey;
+  const quoteGeneration = useRef(0);
+  useEffect(() => { quoteGeneration.current++; setShippingBusy(false); setShippingError(""); }, [freightKey]);
+  useEffect(() => () => { quoteGeneration.current++; }, []);
+  const selectedFreight = freight?.key === freightKey && freight.expiresAt > Date.now() ? freight.options.find(option => option.id === serviceId) : undefined;
+  const requiresFreight = delivery === "delivery" && settings.carrierEnabled && serviceId !== "delivery";
+  const missingFreight = delivery === "delivery" && !selectedFreight && (!settings.deliveryEnabled || requiresFreight);
+  const shipping = delivery === "pickup" ? 0 : selectedFreight?.priceCents ?? (settings.deliveryEnabled && !requiresFreight ? settings.deliveryCents : 0);
+  async function quoteShipping() {
+    if (!api || shippingBusy || postalCode.length !== 8) return;
+    const key = freightKey, generation = ++quoteGeneration.current;
+    setShippingBusy(true); setShippingError(""); setFreight(null);
+    try {
+      const result = await storeRequest(`${api}/checkout-delivery`, "POST", { postalCode, revision: cart.revision, ...(preview ? { lines: cart.lines } : {}) });
+      if (latestFreightKey.current !== key || generation !== quoteGeneration.current) return;
+      const options: ShippingOption[] = result.options.filter((option: ShippingOption) => option.id !== "pickup");
+      setFreight({ key, options, expiresAt: Date.now() + 900000 });
+      setServiceId(options.find(option => option.id.startsWith("melhor_envio:"))?.id ?? "delivery");
+      if (result.warnings?.length) setShippingError(result.warnings.join(" "));
+    } catch (cause) { if (generation === quoteGeneration.current) setShippingError(cause instanceof Error ? cause.message : "Não foi possível calcular o frete."); }
+    finally { if (generation === quoteGeneration.current) setShippingBusy(false); }
+  }
   function changeDeliveryAddress(next: ContactDraft) { setAddress(next); setCustomEdited(true); }
   return <form ref={form} className={styles.columns} noValidate onSubmit={e => {
     e.preventDefault(); setError("");
+    if (missingFreight || (selectedFreight && freight && freight.expiresAt <= Date.now())) { setError("Calcule e selecione o frete para este endereço antes de confirmar."); return; }
     const parsed = checkoutSchema.safeParse({ revision: cart.revision, expectedTotalCents: (cart.calculation?.totalCents ?? 0) + shipping,
       billing: { ...postalContact(billing), email: billing.email }, delivery, deliveryAddressSameAsBilling: same,
+      ...(delivery === "delivery" && selectedFreight?.quoteId ? { shippingQuoteId: selectedFreight.quoteId } : {}),
       address: delivery === "delivery" && !same ? { ...postalContact(address), attention: address.attention } : null,
       provider, acceptedTerms: accepted,
     });
@@ -131,7 +159,7 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
       </section>
       <section className="mt-5 min-w-0 space-y-4 border-t border-current/15 pt-5" aria-labelledby="checkout-delivery"><h2 id="checkout-delivery" className="text-lg font-semibold">2. Como deseja receber?</h2>
         {settings.pickupEnabled ? <label className="!flex items-start gap-3"><input type="radio" name="delivery" checked={delivery === "pickup"} onChange={() => { setDeliveryCepBusy(false); setDelivery("pickup"); }}/><span>Retirar pessoalmente · Grátis<small className={`${styles.muted} mt-1 block`}>{settings.pickupAddress}</small></span></label> : null}
-        {settings.deliveryEnabled ? <label className="!flex items-start gap-3"><input type="radio" name="delivery" checked={delivery === "delivery"} onChange={() => setDelivery("delivery")}/><span>Entrega · {storeMoney(settings.deliveryCents)}<small className={`${styles.muted} mt-1 block`}>{settings.deliveryDescription}</small></span></label> : null}
+        {settings.deliveryEnabled || settings.carrierEnabled ? <label className="!flex items-start gap-3"><input type="radio" name="delivery" checked={delivery === "delivery"} onChange={() => setDelivery("delivery")}/><span>{settings.carrierEnabled ? "Receber no endereço" : `Entrega · ${storeMoney(settings.deliveryCents)}`}<small className={`${styles.muted} mt-1 block`}>{settings.carrierEnabled ? "Frete calculado para todos os itens do carrinho." : settings.deliveryDescription}</small></span></label> : null}
         {delivery === "delivery" ? <>
           <div className="grid min-w-0 gap-2 sm:grid-cols-2" role="group" aria-label="Endereço e destinatário da entrega">
             <button type="button" aria-pressed={same} className={`${same ? styles.primary : styles.secondary} min-h-11 !whitespace-normal !text-left`} onClick={() => { setDeliveryCepBusy(false); setSame(true); }}><Copy size={18} className="shrink-0"/>Usar dados do faturamento</button>
@@ -140,6 +168,16 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
           {same ? <address className="border-l-2 border-current/20 pl-3 text-sm not-italic leading-6" aria-label="Entrega com os dados do faturamento"><strong>{billing.name || "Destinatário do faturamento"}</strong><br/>{billing.street ? `${billing.street}${billing.number ? `, ${billing.number}` : ""}${billing.complement ? ` · ${billing.complement}` : ""}` : "Endereço de faturamento"}<br/>{[billing.district, billing.city, billing.state, formatCep(billing.postalCode)].filter(Boolean).join(" · ")}</address>
             : <ContactFields billing={false} value={address} onChange={changeDeliveryAddress} errors={errors} onBusyChange={setDeliveryCepBusy}/>}
           {errors.address ? <p role="alert" className="text-sm text-red-700">{errors.address}</p> : null}
+          {settings.carrierEnabled ? <div className="min-w-0 space-y-3 border-t border-current/15 pt-4" aria-label="Frete do carrinho">
+            <button type="button" className={styles.secondary} disabled={disabled || shippingBusy || postalCode.length !== 8 || !api} onClick={() => void quoteShipping()}>
+              {shippingBusy ? <Loader2 size={18} className="animate-spin"/> : <Truck size={18}/>} {shippingBusy ? "Calculando…" : "Calcular frete do carrinho"}
+            </button>
+            {postalCode.length !== 8 ? <p className={styles.muted}>Preencha o CEP da entrega para consultar PAC, SEDEX e os demais serviços habilitados.</p> : null}
+            {shippingError ? <p role="alert" className="text-sm text-amber-700">{shippingError}</p> : null}
+            {settings.deliveryEnabled ? <label className="!flex items-start gap-3"><input type="radio" name="shipping-service" checked={serviceId === "delivery"} onChange={() => setServiceId("delivery")}/><span>{settings.deliveryDescription} · {storeMoney(settings.deliveryCents)}</span></label> : null}
+            {freight?.key === freightKey ? freight.options.filter(option => option.id.startsWith("melhor_envio:")).map(option => <label key={option.id} className="!flex items-start gap-3"><input type="radio" name="shipping-service" checked={serviceId === option.id} onChange={() => setServiceId(option.id)}/><span>{option.name} · {storeMoney(option.priceCents)}<small className={`${styles.muted} block`}>{option.description}</small></span></label>) : null}
+            {freight?.key === freightKey ? <p className={styles.muted}>Cotação válida por 15 minutos. Mudanças no carrinho ou CEP exigem novo cálculo.</p> : null}
+          </div> : null}
         </> : null}
       </section>
       <section className="mt-5 min-w-0 space-y-4 border-t border-current/15 pt-5" aria-labelledby="checkout-payment"><h2 id="checkout-payment" className="text-lg font-semibold">3. Forma de pagamento</h2>
@@ -153,10 +191,11 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
     </div>
     <aside className={styles.summary}><h2 className="mb-4 text-lg font-semibold">4. Revise seu pedido</h2>
       {cart.calculation?.items.map(item => <div className="mb-3 flex justify-between gap-3 text-sm" key={item.id}><span>{item.quantity} × {item.name}<small className="block text-zinc-500">{item.artworkName}</small></span><span>{storeMoney(item.totalCents)}</span></div>)}
-      <StoreOrderSummary subtotal={cart.calculation?.totalCents ?? 0} shipping={shipping} artworkDiscountCents={cart.calculation?.artworkDiscountCents}/>
+      <StoreOrderSummary subtotal={cart.calculation?.totalCents ?? 0} shipping={shipping} shippingPending={Boolean(missingFreight)} artworkDiscountCents={cart.calculation?.artworkDiscountCents}/>
+      {missingFreight ? <p role="status" className="mt-2 text-sm text-amber-700">Frete a calcular. O total acima ainda não inclui a entrega.</p> : null}
       <label className="my-5 flex items-start gap-3"><input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} required/><span>Li e aceito as <Link target="_blank" href={`${base}/condicoes`} className="underline">condições de compra</Link>.</span></label>
       {error ? <p role="alert" className="mb-3 text-sm text-red-700">{error}</p> : null}
-      <button className={`${styles.primary} w-full`} disabled={disabled || billingCepBusy || deliveryCepBusy || !accepted || !cart.calculation || (!cart.payments.mp_enabled && !cart.payments.manual_enabled)}><Check size={17}/>{preview ? "Concluir simulação" : "Confirmar pedido"}</button>
+      <button className={`${styles.primary} w-full`} disabled={disabled || shippingBusy || missingFreight || billingCepBusy || deliveryCepBusy || !accepted || !cart.calculation || (!cart.payments.mp_enabled && !cart.payments.manual_enabled)}><Check size={17}/>{preview ? "Concluir simulação" : "Confirmar pedido"}</button>
       <p className="mt-3 text-sm text-zinc-500">{preview ? "Prévia privada. Nenhum pedido real será criado." : provider === "mercado_pago" ? "Após confirmar, abra o pagamento seguro no detalhe do pedido." : "A produção começa após a confirmação do pagamento pela loja."}</p>
     </aside>
   </form>;

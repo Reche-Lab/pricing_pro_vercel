@@ -20,6 +20,11 @@ function show() {
 }
 function submitForm() { fireEvent.click(screen.getByRole("checkbox")); fireEvent.click(screen.getByRole("button", { name: "Concluir simulação" })); }
 describe("checkout billing and recipient experience", () => {
+  it("shows the selected shipping service beside the delivery details for buyers and staff", () => {
+    render(<StoreOrderContactDetails address={{ ...testCommerceBilling, attention: "" }} shippingOption={{ name: "Correios - SEDEX", description: "Prazo estimado: 3 dias úteis" }}/>);
+    expect(screen.getByRole("region", { name: "Dados de entrega do pedido" })).toHaveTextContent("Correios - SEDEX");
+    expect(screen.getByText("Prazo estimado: 3 dias úteis")).toBeInTheDocument();
+  });
   it("requires fiscal details for pickup without inventing a delivery address", () => {
     const submit = show(); submitForm();
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({ delivery: "pickup", address: null, billing: expect.objectContaining({ document: "52998224725" }), expectedTotalCents: 9500 }));

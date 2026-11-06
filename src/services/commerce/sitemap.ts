@@ -1,9 +1,10 @@
 import type { MetadataRoute } from "next";
 import { INSTITUTIONAL_UPDATED, storeInstitutionalPages } from "@/domain/commerce/institutional";
 import { commerceSiteOrigin } from "./store-seo";
+import { commerceStoreUrl } from "@/domain/commerce/domains";
 
 export function commerceSitemapEntries(slug: string, productIds: string[], origin = commerceSiteOrigin()): MetadataRoute.Sitemap {
-  const base = `${origin}/loja/${encodeURIComponent(slug)}`;
+  const base = commerceStoreUrl(slug, origin);
   return [
     { url: base }, { url: `${base}/catalogo` },
     ...storeInstitutionalPages(slug).map(page => ({ url: `${base}/${page.slug}`, lastModified: INSTITUTIONAL_UPDATED })),

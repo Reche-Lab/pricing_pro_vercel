@@ -27,6 +27,7 @@ export const storeSettingsSchema = z
     logoUrl: safeImageUrl,
     bannerUrl: safeImageUrl,
     theme: z.enum(["light", "dark", "system"]).optional(),
+    requestedDomain: z.string().trim().toLowerCase().max(253).refine(value => !value || /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(value), "Informe somente o domínio, sem https:// ou caminhos.").optional(),
     banners: z
       .array(
         z
@@ -50,6 +51,7 @@ export const storeSettingsSchema = z
     pickupEnabled: z.boolean(),
     pickupAddress: z.string().trim().max(300),
     deliveryEnabled: z.boolean(),
+    carrierEnabled: z.boolean().optional(),
     deliveryCents: z.number().int().min(0).max(1000000),
     deliveryDescription: z.string().trim().max(200),
     terms: z.string().trim().max(10000),
@@ -163,6 +165,7 @@ export const checkoutSchema = z
     revision: z.number().int().nonnegative(),
     expectedTotalCents: z.number().int().positive(),
     delivery: z.enum(["pickup", "delivery"]),
+    shippingQuoteId: z.string().uuid().optional(),
     address: addressSchema.nullable(),
     billing: addressSchema.omit({ attention: true }).extend({
       name: z.string().trim().min(2, "Informe o nome completo ou a razão social.").max(100),

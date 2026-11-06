@@ -6,16 +6,16 @@ import type { StoreSettings } from "@/domain/commerce/schemas";
 import { INSTITUTIONAL_UPDATED, storeInstitutionalPages, type StoreInstitutionalPage as Page } from "@/domain/commerce/institutional";
 import styles from "./institutional.module.css";
 
-export function StoreInstitutionalPage({ slug, page, settings, preview = false, featuredProduct }: {
-  slug: string; page: Page; settings: StoreSettings; preview?: boolean;
+export function StoreInstitutionalPage({ slug, page, settings, preview = false, featuredProduct, basePath }: {
+  slug: string; page: Page; settings: StoreSettings; preview?: boolean; basePath?: string;
   featuredProduct?: { id: string; name: string; imageUrl: string };
 }) {
-  const base = preview ? `/commerce/${slug}/preview` : `/loja/${slug}`;
+  const base = preview ? `/commerce/${slug}/preview` : (basePath ?? `/loja/${slug}`);
   const about = page.slug === "quem-somos";
   const index = <ol>{page.sections.map((section, position) => <li key={section.id}><a href={`#${section.id}`}><span>{String(position + 1).padStart(2, "0")}</span>{section.title}</a></li>)}</ol>;
   return <article className={styles.page} aria-labelledby="institutional-title" id="inicio-do-conteudo">
     <nav aria-label="Caminho da página" className={styles.breadcrumb}>
-      <Link href={base}>{settings.name}</Link><ChevronRight size={13} aria-hidden="true" /><span aria-current="page">{page.title}</span>
+      <Link href={base || "/"}>{settings.name}</Link><ChevronRight size={13} aria-hidden="true" /><span aria-current="page">{page.title}</span>
     </nav>
     <header className={styles.heading}>
       <p className={styles.eyebrow}>{about ? <HeartHandshake size={17} aria-hidden="true" /> : <ShieldCheck size={17} aria-hidden="true" />} {about ? "Feito com pessoas. Para pessoas." : "Informação para comprar com confiança"}</p>

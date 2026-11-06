@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { savePaymentConnection } from "@/services/commerce/payments";
+import { commercePaymentSettingsSchema } from "@/domain/commerce/payment-settings";
 import {
   requireCommerceAdmin,
   checkCommerceOrigin,
@@ -14,6 +15,7 @@ const schema = z
     mpEnabled: z.boolean(),
     accessToken: z.string().trim().max(500).optional(),
     webhookSecret: z.string().trim().max(500).optional(),
+    checkoutSettings: commercePaymentSettingsSchema.optional(),
   })
   .strict();
 export async function PUT(request: Request) {

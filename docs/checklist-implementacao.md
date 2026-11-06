@@ -2,6 +2,23 @@
 
 Status atualizado durante a refatoracao inicial.
 
+## Publicação E Domínio Da Loja (2026-11-06)
+
+- [x] Identificar as pendências reais da publicação; exibir checklist com atalhos e mensagens específicas, incluindo pagamento salvo.
+- [x] Habilitar Melhor Envio por tenant no produto e checkout, reaproveitando embalagem e conexão sem assumir identidade administrativa para compradores públicos.
+- [x] Persistir cotação por tenant/sessão/carrinho/CEP/revisão por 15 minutos; validar valor e serviço no servidor e preservá-los no pedido.
+- [x] Controles de Pix/crédito/débito/boleto/parcelas do Checkout Pro por tenant, preservando credenciais e conciliação por webhook.
+- [x] URL pública e domínio desejado no painel; registro de hosts pelo operador, isolamento, redirecionamento principal/www, retorno de pagamento, SEO e sitemap.
+- [x] Criar e aplicar `0069_commerce_launch_settings.sql` somente em PostgreSQL 16 local descartável; 12 testes de integração aprovados, incluindo expiração, sessão, revisões, CEP, conteúdo/total, persistência do frete e opções de pagamento sem exposição de credenciais; banco descartável encerrado.
+- [x] Tipos e lint aprovados; configurações/publicação/domínio e checkout revisados em 1440/390/320 px, claro/escuro, sem transbordamento e com serviço/total corretos.
+- [x] Regressão geral: 625 testes aprovados; as 12 integrações de commerce também foram executadas separadamente no PostgreSQL. Outras 14 integrações condicionais não executadas.
+- [x] Build final de produção aprovado com heap de 1024 MB e CPU única; 31 regressões focadas adicionais aprovadas após ajuste de origem/HTTPS atrás de proxy.
+- [x] Conferência HTTP no servidor de produção local: raiz e navegação sem prefixo, metadados/sitemap/robots, redirecionamentos www/URL antiga, isolamento e origem das APIs; sem chamadas a provedores reais. Servidor de teste e PostgreSQL encerrados.
+- [ ] Aplicar `0069_commerce_launch_settings.sql` no Supabase do deploy, configurar e homologar frete/pagamentos/SMTP da loja.
+- [ ] Validar propriedade, DNS e HTTPS no Vercel antes de configurar `COMMERCE_CUSTOM_DOMAINS` e migrar `groundshop.com.br`/`www`.
+
+Instruções: [Publicação, frete, pagamentos e domínio](loja-publicacao-dominio.md). Não houve alteração no Supabase, DNS, Mercado Pago ou site atual de produção.
+
 ## Hover Das Categorias Na Loja (2026-11-06)
 
 - [x] Reproduzir em teste a ausência de espaço para a expansão vertical das imagens no carrossel de categorias.

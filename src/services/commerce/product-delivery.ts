@@ -5,6 +5,7 @@ import { enforcePublicRateLimit } from "@/lib/security/public-rate-limit";
 import { requireCommercePreview } from "./preview";
 import { getCurrentSession } from "@/lib/auth/session";
 import { previewCarrierDelivery } from "./preview-delivery";
+import { publicCarrierDelivery } from "./carrier-delivery";
 import { checkCommerceOrigin, readCommerceBody, commerceFailure, commerceJson } from "./http";
 
 export async function productDelivery(request: Request, slug: string, preview = false) {
@@ -32,8 +33,12 @@ export async function productDelivery(request: Request, slug: string, preview = 
         console.warn("Commerce preview carrier quote unavailable.", { tenantId: store.tenant_id, provider: "melhor_envio", status: error.status, message: error.message });
       }
     }
+    if (!preview && store.settings.carrierEnabled) {
+      try { const carrier = await publicCarrierDelivery(store.tenant_id, input.postalCode, input.lines, products); if (carrier) result.options.push(...carrier.options); }
+      catch (error) { if (!(error instanceof CommerceError)) throw error; result.warnings = [error.message]; }
+    }
     console.info("Commerce product delivery estimated.", { tenantId: store.tenant_id, preview, optionCount: result.options.length,
-      tariff: result.previewCarrier ? "melhor_envio_preview" : "store_fixed", warnings: result.warnings?.length ?? 0 });
+      tariff: result.previewCarrier ? "melhor_envio_preview" : store.settings.carrierEnabled ? "melhor_envio_and_store" : "store_fixed", warnings: result.warnings?.length ?? 0 });
     return commerceJson(result);
   } catch (error) { return commerceFailure(error, preview ? "preview.delivery" : "product.delivery"); }
 }

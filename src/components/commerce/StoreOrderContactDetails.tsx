@@ -9,8 +9,9 @@ function PostalAddress({ address }: { address: CommerceAddress | Omit<CommerceAd
     {address.district} · {address.city}/{address.state} · {formatCep(address.postalCode)}
   </address>;
 }
-export function StoreOrderContactDetails({ billing, address, same = false }: {
+export function StoreOrderContactDetails({ billing, address, same = false, shippingOption }: {
   billing?: CommerceBillingSnapshot | null; address: CommerceAddress | null; same?: boolean;
+  shippingOption?: { name: string; description?: string } | null;
 }) {
   return <div className="mt-5 min-w-0 space-y-4 border-t border-current/15 pt-4">
     {billing ? <section aria-label="Dados de faturamento do pedido" className="space-y-1 text-sm">
@@ -22,6 +23,7 @@ export function StoreOrderContactDetails({ billing, address, same = false }: {
     </section> : null}
     <section aria-label="Dados de entrega do pedido" className="space-y-1 text-sm">
       <h2 className="font-semibold">Recebimento</h2>
+      {shippingOption ? <p className="break-words"><strong>Serviço: </strong>{shippingOption.name}{shippingOption.description ? <small className="block">{shippingOption.description}</small> : null}</p> : null}
       {address ? <>
         {same && billing ? <p>Mesmo destinatário e endereço do faturamento.</p> : <><p className="break-words">{address.name}</p><p>{formatCheckoutPhone(address.phone)}</p><PostalAddress address={address}/></>}
         {address.attention ? <p>Aos cuidados de {address.attention}</p> : null}
