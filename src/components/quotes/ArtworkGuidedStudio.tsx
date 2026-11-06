@@ -27,6 +27,7 @@ export function ArtworkGuidedStudio({
   onApprove,
   onClose,
   renderProductPreview,
+  renderApprovalSuccess,
   proofMode = false,
 }: {
   initialAsset: ArtworkStudioAsset;
@@ -42,6 +43,7 @@ export function ArtworkGuidedStudio({
   onApprove: (asset: ArtworkStudioAsset) => Promise<void>;
   onClose: () => void;
   renderProductPreview?: (asset: ArtworkStudioAsset) => React.ReactNode;
+  renderApprovalSuccess?: (asset: ArtworkStudioAsset) => React.ReactNode;
   proofMode?: boolean;
 }) {
   const [asset, setAsset] = useState(initialAsset);
@@ -258,7 +260,7 @@ export function ArtworkGuidedStudio({
               {asset.notes ? (
                 <p className="text-sm text-amber-200">{asset.notes}</p>
               ) : null}
-              {complete ? (
+              {complete ? renderApprovalSuccess ? renderApprovalSuccess(asset) : (
                 <p
                   role="status"
                   className="flex items-center gap-2 text-emerald-300"

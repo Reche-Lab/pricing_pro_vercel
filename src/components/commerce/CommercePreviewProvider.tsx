@@ -5,6 +5,7 @@ import type { cartView } from "@/repositories/commerce";
 import type { CartLine } from "@/domain/commerce/schemas";
 import type { StoreArtwork } from "./StoreArtworkTools";
 import { storeRequest } from "./store-http";
+import { artworkDiscountForLines } from "@/domain/commerce/artwork-benefit";
 
 export type PreviewFile = {
   fileName: string;
@@ -25,7 +26,7 @@ type PreviewSession = {
   update: (lines: CartLine[]) => Promise<void>;
   upload: (productId: string, file: PreviewFile) => Promise<string>;
   prepare: (id: string, crop: PreviewCrop) => Promise<void>;
-  approve: (id: string) => Promise<void>;
+  approve: (id: string, lines?: CartLine[]) => Promise<{ newlyApproved: boolean; artworkDiscountCents: number | null }>;
   getArtwork: (id: string) => PreviewArtwork;
   reset: () => void;
 };
@@ -83,10 +84,11 @@ export function CommercePreviewProvider({
   }
   async function reprice() {
     const snapshot = current.current;
-    if (!snapshot.lines.length) return;
+    if (!snapshot.lines.length) return null;
     const version = epoch.current;
     const calculation = await storeRequest(`${api}/price`, "POST", { lines: snapshot.lines, readyArtworkIds: snapshot.artworks.filter(art => art.approved_at && art.preparedUrl).map(art => art.id) });
     if (version === epoch.current && snapshot === current.current) commit({ ...snapshot, calculation });
+    return calculation as Cart["calculation"];
   }
   return (
     <Context.Provider
@@ -156,12 +158,25 @@ export function CommercePreviewProvider({
           });
           await reprice();
         },
-        async approve(id) {
+        async approve(id, lines) {
           const art = getArt(id);
           if (!art.crop || !art.preparedUrl)
             throw new Error("Enquadre a arte antes de aprovar.");
-          saveArt({ ...art, approved_at: new Date().toISOString() });
-          await reprice();
+          const newlyApproved = !art.approved_at;
+          if (newlyApproved) saveArt({ ...art, approved_at: new Date().toISOString() });
+          const version = epoch.current;
+          let discount: number | null = null;
+          try {
+            const cartPrice = await reprice();
+            const calculation = lines ? await storeRequest(`${api}/price`, "POST", {
+              lines, readyArtworkIds: current.current.artworks.filter(a => a.approved_at && a.preparedUrl).map(a => a.id),
+            }) : cartPrice;
+            discount = artworkDiscountForLines(calculation, lines ?? current.current.lines, art.product_id, id);
+          } catch {
+            if (version === epoch.current) commit({ ...current.current, calculation: null });
+          }
+          if (version !== epoch.current) throw new Error("A simulação foi reiniciada.");
+          return { newlyApproved, artworkDiscountCents: discount };
         },
       }}
     >

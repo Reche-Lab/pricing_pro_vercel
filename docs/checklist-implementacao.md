@@ -447,6 +447,17 @@ node scripts/hash-password.mjs 'SUA_SENHA_FORTE'
 
 ## Observacoes
 
+### Celebração e benefício por arte aprovada na loja
+
+- [x] Confetes, brilho e fitas após nova aprovação com benefício positivo confirmado pelo servidor.
+- [x] Mensagem distingue seleção do produto de desconto no carrinho; sem anúncio de ganho quando o valor é zero ou indisponível.
+- [x] Aprovação idempotente e proteção contra celebração repetida; falha de atualização não descarta a aprovação salva.
+- [x] Resumo com produtos antes do benefício, desconto por arte pronta, entrega e total, no carrinho, checkout e pedido.
+- [x] Movimento reduzido respeitado, partículas sem interação e limpeza automática; navegação por teclado preservada.
+- [x] Verificação no navegador em 320/390/1440 px, com e sem animação; testes de valor, erros e repetição.
+- [x] Suíte com 549 testes aprovados (21 integrações condicionais não executadas); tipos, lint e build aprovados.
+- [x] Sem migration ou variável de ambiente adicional.
+
 ### E-commerce: preparação da arte e máscaras do produto
 
 - [x] Modelo Botton 2,5 cm reconstruído da referência: seis camadas PNG, transparência e calibração inicial; aplicação por botão e ZIP para download.

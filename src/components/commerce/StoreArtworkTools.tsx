@@ -7,6 +7,8 @@ import { StoreProductMockup } from "./StoreProductMockup";
 import type { publicCommerceProduct } from "@/repositories/commerce";
 import { storeRequest } from "./store-http";
 import { useCommercePreview } from "./CommercePreviewProvider";
+import type { CartLine } from "@/domain/commerce/schemas";
+import { StoreArtworkReward } from "./StoreArtworkReward";
 const GuidedStudio = dynamic(
   () =>
     import("../quotes/ArtworkGuidedStudio").then((m) => m.ArtworkGuidedStudio),
@@ -37,6 +39,8 @@ export function StoreArtworkTools({
   uploadLabel = "Enviar arte",
   preparation = "customer",
   onPreparationChange,
+  pricingLines,
+  benefitContext = "selection",
 }: {
   slug: string;
   product: ReturnType<typeof publicCommerceProduct>;
@@ -50,6 +54,8 @@ export function StoreArtworkTools({
   uploadLabel?: string;
   preparation?: "customer" | "team";
   onPreparationChange?: (value: "customer" | "team") => Promise<void> | void;
+  pricingLines?: CartLine[];
+  benefitContext?: "selection" | "cart";
 }) {
   const simulation = useCommercePreview();
   const [editor, setEditor] = useState<"crop" | "retouch" | "review" | null>(
@@ -57,6 +63,8 @@ export function StoreArtworkTools({
   );
   const [busy, setBusy] = useState(false);
   const [showProduct, setShowProduct] = useState(false);
+  const [reward, setReward] = useState<{ discountCents: number | null; celebrate: boolean; refreshFailed: boolean } | null>(null);
+  const celebrated = useRef(new Set<string>());
   const working = useRef(false);
   function setWorking(value: boolean) {
     working.current = value;
@@ -242,6 +250,7 @@ export function StoreArtworkTools({
         <GuidedStudio
           initialAsset={studioAsset(artwork)}
           initialStep={editor}
+          renderApprovalSuccess={() => reward ? <StoreArtworkReward {...reward} context={benefitContext} /> : <p role="status">Arte aprovada!</p>}
           renderProductPreview={asset => asset.geometry && asset.preparedUrl ? <StoreProductMockup name={product.name} sourceUrl={asset.preparedUrl} geometry={asset.geometry} margins={asset.margins} model={product.artworkOptions?.mockup} /> : null}
           onClose={() => setEditor(null)}
           onRetouch={async (_asset, file) => {
@@ -272,12 +281,17 @@ export function StoreArtworkTools({
             };
           }}
           onApprove={async (asset) => {
-            if (preview) await simulation!.approve(asset.id);
-            else
-              await storeRequest(`${base}/${asset.id}`, "POST", {
-                action: "approve",
-              });
-            await onRefresh();
+            const result = preview ? await simulation!.approve(asset.id, pricingLines) : await storeRequest(`${base}/${asset.id}`, "POST", {
+              action: "approve", ...(pricingLines ? { lines: pricingLines } : {}),
+            });
+            const celebrate = result.newlyApproved === true && !celebrated.current.has(asset.id);
+            if (celebrate) celebrated.current.add(asset.id);
+            let refreshFailed = false;
+            try { await onRefresh(); } catch { refreshFailed = true; }
+            setReward({
+              discountCents: Number.isSafeInteger(result.artworkDiscountCents) && result.artworkDiscountCents >= 0 ? result.artworkDiscountCents : null,
+              celebrate, refreshFailed,
+            });
           }}
         />
       ) : null}

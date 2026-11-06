@@ -1,0 +1,28 @@
+.reward {
+  border: 1px solid #34d39980;
+  border-radius: 8px;
+  background: #064e3b55;
+  padding: 18px;
+  color: #d1fae5;
+  overflow-wrap: anywhere;
+}
+.heading { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; }
+.heading svg { flex-shrink: 0; color: #fcd34d; }
+.amount { margin-top: 8px; font-size: 28px; line-height: 1.3; font-weight: 700; color: #6ee7b7; }
+.note { margin-top: 8px; font-size: 14px; line-height: 1.5; }
+.burst { position: fixed; inset: 0; z-index: 170; overflow: hidden; pointer-events: none; contain: strict; }
+.particle {
+  position: absolute; left: 50%; top: 40%; opacity: 0;
+  animation: artwork-burst 3300ms cubic-bezier(.12,.6,.5,1) both;
+  animation-delay: var(--delay);
+  will-change: transform, opacity;
+}
+.particle i { display: block; width: 5px; height: 5px; background: var(--color); transform: rotate(45deg); }
+.ribbon i { width: 6px; height: 19px; border-radius: 1px; }
+@keyframes artwork-burst {
+  0% { opacity: 0; transform: translate3d(0,0,0) rotate(0) scale(.4); }
+  8% { opacity: 1; }
+  38% { opacity: 1; transform: translate3d(var(--x), var(--rise), 0) rotate(var(--spin)) scale(1); }
+  100% { opacity: 0; transform: translate3d(var(--drift), 70vh, 0) rotate(calc(var(--spin) + 540deg)) scale(.75); }
+}
+@media (prefers-reduced-motion: reduce) { .burst { display: none; } .particle { animation: none; } }

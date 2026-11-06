@@ -512,3 +512,32 @@ Validação do modelo: 14 testes direcionados e 533 testes na suíte completa
 aprovados (21 integrações condicionais não executadas nesta etapa), TypeScript,
 lint e build de produção aprovados. Pixels e capturas conferidos em 320/390/1440 px,
 incluindo transparência e preservação do metal/alfinete no verso. ZIP verificado.
+
+### Celebração da arte aprovada e composição do desconto
+
+Depois de preparar e aprovar uma arte, o comprador recebe uma confirmação com
+o valor efetivamente calculado no servidor para essa arte e seleção, já limitado
+pelo teto percentual. Havendo benefício positivo em uma nova aprovação, uma
+explosão breve de confetes, brilho e fitas celebra a conclusão. Sem desconto ou
+com preço indisponível, a aprovação é confirmada sem prometer dinheiro.
+
+Na página do produto, a confirmação informa que o benefício acompanha a seleção
+ao adicionar ao carrinho; quando preparada no carrinho, já compõe seu total. Carrinho,
+checkout e pedido exibem produtos antes do benefício, desconto por arte pronta,
+entrega e total, sem subtrair o desconto uma segunda vez. O valor continua sujeito
+às quantidades e políticas vigentes até a confirmação do pedido.
+
+A aprovação é idempotente. Repeti-la não concede desconto adicional nem repete
+a celebração para a mesma arte aberta no estúdio. A aprovação não é perdida se
+a atualização visual do carrinho falhar; nesse caso a confirmação pede atualização.
+Uma arte enviada à equipe e aprovada depois da compra não recebe benefício
+retroativo. O comportamento dos estúdios de orçamento e produção não foi alterado.
+
+As partículas não recebem foco nem cliques, são removidas automaticamente e não
+são exibidas com preferência por movimento reduzido. O preview privado permite
+testar a mesma experiência sem cobrança. Sem migration ou variável adicional.
+
+Validação: 549 testes aprovados (21 integrações condicionais não executadas),
+TypeScript, lint e build aprovados. Conferência em navegador a 320/390/1440 px,
+com e sem movimento reduzido, incluindo descarte das partículas, ausência de
+rolagem horizontal e composição do total sem desconto duplicado.

@@ -10,7 +10,10 @@ import {
   commerceProducts,
   commerceTransaction,
   geometryHash,
+  calculateCommerceCart,
 } from "@/repositories/commerce";
+import { cartLineSchema } from "@/domain/commerce/schemas";
+import { artworkDiscountForLines } from "@/domain/commerce/artwork-benefit";
 import { CommerceError } from "@/domain/commerce/commerce";
 import {
   buyerContext,
@@ -28,8 +31,10 @@ const schema = z
     offsetX: z.number().min(-1).max(1).default(0),
     offsetY: z.number().min(-1).max(1).default(0),
     rotationDegrees: z.number().min(-180).max(180).default(0),
+    lines: z.array(cartLineSchema).max(40).optional(),
   })
-  .strict();
+  .strict()
+  .refine(input => input.action === "approve" || input.lines === undefined, { message: "Os itens são usados somente na aprovação.", path: ["lines"] });
 export async function GET(request: Request, { params }: Params) {
   try {
     const { slug, artworkId } = await params;
@@ -107,11 +112,12 @@ export async function POST(request: Request, { params }: Params) {
       if (!uploaded)
         throw new CommerceError("Armazenamento indisponível.", 503);
     }
-    await commerceTransaction(async (client) => {
-      await client.query(
-        "select id from commerce_sessions where tenant_id=$1 and id=$2 for update",
+    const approval = await commerceTransaction(async (client) => {
+      const locked = await client.query(
+        "select id,cart from commerce_sessions where tenant_id=$1 and id=$2 for update",
         [store.tenant_id, session.id],
       );
+      if (!locked.rows[0]) throw new CommerceError("Sessão expirada.", 401);
       const current = (
         await client.query(
           "select * from commerce_artworks where tenant_id=$1 and session_id=$2 and id=$3 for update",
@@ -127,9 +133,9 @@ export async function POST(request: Request, { params }: Params) {
           "Esta arte já pertence a um pedido e não pode ser alterada.",
           409,
         );
-      const currentProduct = (
-        await commerceProducts(store.tenant_id, client)
-      ).find((p) => p.id === art.product_id);
+      if (!current) throw new CommerceError("Arte não encontrada.", 404);
+      const currentProducts = await commerceProducts(store.tenant_id, client);
+      const currentProduct = currentProducts.find((p) => p.id === art.product_id);
       if (!currentProduct || geometryHash(currentProduct) !== fingerprint)
         throw new CommerceError(
           "As medidas do produto mudaram. Atualize o enquadramento.",
@@ -141,10 +147,21 @@ export async function POST(request: Request, { params }: Params) {
           current.crop?.geometryHash !== fingerprint
         )
           throw new CommerceError("Enquadre a arte antes de aprovar.", 409);
-        await client.query(
+        const newlyApproved = !current.approved_at;
+        if (newlyApproved) await client.query(
           "update commerce_artworks set approved_at=now() where tenant_id=$1 and id=$2",
           [store.tenant_id, artworkId],
         );
+        const lines = input.lines ?? locked.rows[0].cart;
+        let discount: number | null = null;
+        try {
+          const calculation = await calculateCommerceCart(store.tenant_id, session.id, lines, currentProducts, client);
+          discount = artworkDiscountForLines(calculation, lines, currentProduct.id, artworkId);
+        } catch (error) {
+          // An unavailable cart item must not discard an otherwise valid artwork approval.
+          if (!(error instanceof CommerceError)) throw error;
+        }
+        return { newlyApproved, artworkDiscountCents: discount };
       } else
         await client.query(
           "update commerce_artworks set prepared_path=$3,crop=$4,approved_at=null where tenant_id=$1 and id=$2",
@@ -157,7 +174,7 @@ export async function POST(request: Request, { params }: Params) {
         );
     });
     uploaded = null;
-    return commerceJson({ ok: true });
+    return commerceJson({ ok: true, ...approval });
   } catch (error) {
     await deleteArtworkObject(uploaded);
     return commerceFailure(error, "artwork.prepare");

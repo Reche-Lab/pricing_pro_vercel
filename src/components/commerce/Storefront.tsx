@@ -50,6 +50,7 @@ import { StorePriceBreakdown } from "./StorePriceBreakdown";
 import { StoreDeliveryInquiry } from "./StoreDeliveryInquiry";
 import { StoreArtworkGuide } from "./StoreArtworkGuide";
 import { CommerceOrderArtworks } from "./CommerceOrderArtworks";
+import { StoreOrderSummary as Summary } from "./StoreOrderSummary";
 import { useStoreTheme, accentForeground } from "./use-store-theme";
 import { useCommercePreview } from "./CommercePreviewProvider";
 import type { StoreArtwork } from "./StoreArtworkTools";
@@ -473,6 +474,8 @@ export function Storefront({
                               (a) => a.product_id === product.id,
                             )}
                             onRefresh={refresh}
+                            pricingLines={cart.lines}
+                            benefitContext="cart"
                             preparation={line.preparation ?? "customer"}
                             onPreparationChange={preparation => update(cart.lines.map(item => item.id === line.id ? { ...item, preparation } : item))}
                             onSelect={(id) =>
@@ -492,8 +495,7 @@ export function Storefront({
                 </div>
                 <aside className={styles.summary}>
                   <h2 className="text-xl font-semibold">Resumo</h2>
-                  {(cart.calculation?.artworkDiscountCents ?? 0) > 0 ? <p className="mt-3 text-sm text-emerald-600">Benefício por arte pronta: −{storeMoney(cart.calculation!.artworkDiscountCents!)}</p> : null}
-                  <Summary subtotal={cart.calculation?.totalCents ?? 0} />
+                  <Summary subtotal={cart.calculation?.totalCents ?? 0} artworkDiscountCents={cart.calculation?.artworkDiscountCents} />
                   <Link
                     className={`${styles.primary} mt-5 w-full`}
                     href={`${base}/checkout`}
@@ -940,6 +942,8 @@ function ProductDetail({
                         return next;
                       })}
                       onRefresh={onArtworkRefresh}
+                      pricingLines={lines}
+                      benefitContext="selection"
                       preparation={line.preparation}
                       onPreparationChange={value => setDraftPreparation(current => ({ ...current, [index]: value }))}
                       onSelect={async id => setDraftArtworks(current => ({ ...current, [index]: id }))}
@@ -1424,6 +1428,7 @@ function Checkout({
         <Summary
           subtotal={cart.calculation?.totalCents ?? 0}
           shipping={shipping}
+          artworkDiscountCents={cart.calculation?.artworkDiscountCents}
         />
         <label className="my-5 flex items-start gap-3 text-sm">
           <input
@@ -1534,8 +1539,8 @@ function OrderDetail({
         <Summary
           subtotal={order.subtotal_cents}
           shipping={order.shipping_cents}
+          artworkDiscountCents={order.artworkDiscountCents}
         />
-        {(order.artworkDiscountCents ?? 0) > 0 ? <p className="mt-3 text-sm text-emerald-600">Benefício por arte pronta já incluído: −{storeMoney(order.artworkDiscountCents!)}</p> : null}
         {order.payment_status === "pending" ? (
           order.provider === "mercado_pago" ? (
             <button
@@ -1558,32 +1563,6 @@ function OrderDetail({
           Atualizar situação
         </button>
       </aside>
-    </div>
-  );
-}
-function Summary({
-  subtotal,
-  shipping,
-}: {
-  subtotal: number;
-  shipping?: number;
-}) {
-  return (
-    <div className="space-y-3 pt-4">
-      <div className="flex justify-between">
-        <span>Produtos</span>
-        <span>{storeMoney(subtotal)}</span>
-      </div>
-      <div className="flex justify-between text-sm text-zinc-500">
-        <span>Entrega</span>
-        <span>
-          {shipping === undefined ? "Na próxima etapa" : storeMoney(shipping)}
-        </span>
-      </div>
-      <div className="flex justify-between border-t border-zinc-200 pt-4 text-xl font-semibold">
-        <span>Total</span>
-        <span>{storeMoney(subtotal + (shipping ?? 0))}</span>
-      </div>
     </div>
   );
 }
