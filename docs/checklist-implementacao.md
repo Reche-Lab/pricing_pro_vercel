@@ -602,6 +602,22 @@ Configuração e limites: `docs/ecommerce-piloto.md`, seção de preparação da
 
 Uso e limites documentados em `docs/modulo-financeiro.md`.
 
+### Pagamento dentro da loja (Mercado Pago)
+
+- [x] Pix com QR Code/copia e cola e cartão tokenizado pelo Card Payment Brick oficial.
+- [x] Orders API com valor do pedido validado no servidor; carteira/Checkout Pro preservada como alternativa.
+- [x] Public Key e ativação por tenant em Loja online > Pagamentos; sem novas variáveis globais.
+- [x] Tentativas persistidas, chave de idempotência, proteção contra concorrência e retomada após reload.
+- [x] Webhook assinado de Orders e validação de vendedor, valor, referência e transação antes de confirmar.
+- [x] Autenticação 3DS, mensagens humanizadas e consulta periódica enquanto a página estiver aberta.
+- [x] Testes de domínio, rotas e UI; integração com PostgreSQL local e revisão visual 320/390/1440 px, claro/escuro.
+- [x] Verificação de tipos, lint e build com memória limitada; validação sem cobranças reais.
+- [ ] Aplicar `0070_commerce_transparent_payments.sql` no Supabase antes do deploy.
+- [ ] Cadastrar Public Key, ativar a opção por tenant e habilitar o tópico Order no webhook Mercado Pago.
+- [ ] Homologar Pix, cartões e 3DS em HTTPS com credenciais de teste antes de receber pagamentos reais.
+
+Detalhes, limitações e checklist: `docs/checkout-transparente.md`.
+
 - O demo usa apenas dados ficticios.
 - A area autenticada ja espera dados no Supabase.
 - As curvas reais ja ficam no banco depois da migration de seed.

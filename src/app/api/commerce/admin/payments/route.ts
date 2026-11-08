@@ -15,6 +15,8 @@ const schema = z
     mpEnabled: z.boolean(),
     accessToken: z.string().trim().max(500).optional(),
     webhookSecret: z.string().trim().max(500).optional(),
+    publicKey: z.string().trim().max(200).regex(/^(?:APP_USR-[a-zA-Z0-9-]+|TEST-[a-zA-Z0-9-]+)?$/).optional(),
+    transparentEnabled: z.boolean().optional(),
     checkoutSettings: commercePaymentSettingsSchema.optional(),
   })
   .strict();

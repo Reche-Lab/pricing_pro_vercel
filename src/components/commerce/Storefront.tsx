@@ -54,6 +54,7 @@ import { StoreOrderContactDetails } from "./StoreOrderContactDetails";
 import { useStoreTheme, accentForeground } from "./use-store-theme";
 import { useCommercePreview } from "./CommercePreviewProvider";
 import type { StoreArtwork } from "./StoreArtworkTools";
+const StorePayment = dynamic(() => import("./StorePayment").then(module => module.StorePayment), { ssr: false });
 const ArtworkTools = dynamic(
   () => import("./StoreArtworkTools").then((m) => m.StoreArtworkTools),
   { ssr: false },
@@ -573,16 +574,6 @@ export function Storefront({
                   instructions={cart.payments.manual_instructions}
                   busy={busy}
                   onRefresh={async () => { await action(refreshOrders); }}
-                  onPay={async () => {
-                    await action(async () => {
-                      const result = await storeRequest(
-                        `${api}/payment`,
-                        "POST",
-                        { orderId: order.id },
-                      );
-                      window.location.assign(result.url);
-                    });
-                  }}
                 />
               ) : (
                 <p>Carregando pedido ou pedido não encontrado nesta conta.</p>
@@ -1176,14 +1167,12 @@ function OrderDetail({
   order,
   instructions,
   busy,
-  onPay,
   onRefresh,
   api,
 }: {
   order: Order;
   instructions: string;
   busy: boolean;
-  onPay: () => Promise<void>;
   onRefresh: () => Promise<void>;
   api: string;
 }) {
@@ -1235,25 +1224,18 @@ function OrderDetail({
         />
         {order.payment_status === "pending" ? (
           order.provider === "mercado_pago" ? (
-            <button
-              className={`${styles.primary} mt-5 w-full`}
-              disabled={busy}
-              onClick={() => void onPay()}
-            >
-              Abrir pagamento seguro
-              <ArrowRight size={17} />
-            </button>
+            <StorePayment key={order.id} api={api} orderId={order.id} onConfirmed={onRefresh}/>
           ) : (
             <p className="my-5 whitespace-pre-wrap text-sm">{instructions}</p>
           )
         ) : null}
-        <button
+        {!(order.payment_status === "pending" && order.provider === "mercado_pago") ? <button
           className={`${styles.secondary} mt-3 w-full`}
           disabled={busy}
           onClick={() => void onRefresh()}
         >
           Atualizar situação
-        </button>
+        </button> : null}
       </aside>
     </div>
   );

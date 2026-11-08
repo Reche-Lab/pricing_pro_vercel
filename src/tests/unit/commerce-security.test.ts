@@ -8,6 +8,14 @@ import {
 } from "@/services/commerce/http";
 import { z } from "zod";
 describe("commerce boundary validation", () => {
+  it("verifies alphanumeric Orders IDs with the lowercase signature manifest", () => {
+    const id = "ORD01J49MMW3SSBK5PSV3DFR32959";
+    const signature = createHmac("sha256", "secret").update(`id:${id.toLowerCase()};request-id:req;ts:1234567890;`).digest("hex");
+    const headers = new Headers({ "x-request-id": "req", "x-signature": `ts=1234567890,v1=${signature}` });
+    expect(verifyMpWebhook(headers, id, "secret")).toBe(true);
+    expect(verifyMpWebhook(headers, "ORD01J49MMW3SSBK5PSV3DFR32960", "secret")).toBe(false);
+    expect(verifyMpWebhook(headers, "../users/me", "secret")).toBe(false);
+  });
   it("verifies the canonical payment webhook manifest without accepting forged IDs", () => {
     const signature = createHmac("sha256", "secret")
       .update("id:123;request-id:request-42;ts:1234567890;")

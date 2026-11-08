@@ -6,6 +6,7 @@ import {
   verifyMpWebhook,
 } from "@/services/commerce/payments";
 import { commerceFailure, commerceJson } from "@/services/commerce/http";
+import { reconcileDirectPayment } from "@/services/commerce/transparent-payments";
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ slug: string }> },
@@ -17,7 +18,8 @@ export async function POST(
     const credentials = await paymentCredentials(tenantId);
     if (!verifyMpWebhook(request.headers, id, credentials.webhookSecret))
       throw new CommerceError("Assinatura inválida.", 401);
-    await reconcileCommercePayment(tenantId, id);
+    if (/^ORD/i.test(id)) await reconcileDirectPayment(tenantId, id);
+    else await reconcileCommercePayment(tenantId, id);
     return commerceJson({ ok: true });
   } catch (error) {
     return commerceFailure(error, "payment.webhook");

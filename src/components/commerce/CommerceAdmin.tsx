@@ -118,6 +118,8 @@ export function CommerceAdmin({
   );
   const [token, setToken] = useState("");
   const [secret, setSecret] = useState("");
+  const [publicKey, setPublicKey] = useState(initial.payments?.public_key ?? "");
+  const [transparentEnabled, setTransparentEnabled] = useState(Boolean(initial.payments?.transparent_enabled));
   const [checkoutSettings, setCheckoutSettings] = useState<CommercePaymentSettings>({ ...defaultCommercePaymentSettings(), ...initial.payments?.checkout_settings });
   const [orderAction, setOrderAction] = useState<{
     id: string;
@@ -674,6 +676,8 @@ export function CommerceAdmin({
                 mpEnabled,
                 accessToken: token || undefined,
                 webhookSecret: secret || undefined,
+                publicKey,
+                transparentEnabled: mpEnabled && transparentEnabled,
                 checkoutSettings,
               });
               setToken("");
@@ -709,18 +713,21 @@ export function CommerceAdmin({
                 checked={mpEnabled}
                 onChange={(e) => setMpEnabled(e.target.checked)}
               />
-              Mercado Pago Checkout Pro
+              Receber com Mercado Pago
             </label>
             <p className="text-xs text-zinc-500">
               {data.payments?.mp_configured
                 ? "Credenciais armazenadas. Deixe os campos vazios para mantê-las."
                 : "Piloto por credencial do vendedor. OAuth será uma etapa posterior."}
             </p>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!mpEnabled || busy} checked={transparentEnabled} onChange={e => setTransparentEnabled(e.target.checked)}/>Pix e cartão dentro da loja (Checkout Transparente)</label>
+            <p className="text-xs leading-5 text-zinc-400">O cliente paga sem entrar em uma conta Mercado Pago. A carteira fica como alternativa separada. Pedidos que já possuem link de pagamento continuam no fluxo original.</p>
+            <label htmlFor="commerce-payment-public-key" className="grid gap-1 text-sm"><CommerceCaption label="Public Key da aplicação" help="Chave pública da mesma aplicação e ambiente do Access Token. Usada pelo formulário oficial de cartão; nunca substitua pela chave privada."/><input id="commerce-payment-public-key" className={field} value={publicKey} onChange={e => setPublicKey(e.target.value)} placeholder="APP_USR-…" autoComplete="off" required={mpEnabled && transparentEnabled}/></label>
             <fieldset className="space-y-3" disabled={busy || !mpEnabled}>
               <legend className="mb-3 text-sm font-medium">Opções no pagamento seguro</legend>
               <div className="grid grid-cols-2 gap-3">{([{ key: "pix", label: "Pix" }, { key: "credit", label: "Cartão de crédito" }, { key: "debit", label: "Cartão de débito" }, { key: "boleto", label: "Boleto" }] as const).map(item => <label key={item.key} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={checkoutSettings[item.key]} onChange={e => setCheckoutSettings(old => ({ ...old, [item.key]: e.target.checked }))}/>{item.label}</label>)}</div>
               {checkoutSettings.credit ? <label className="grid gap-1 text-sm">Máximo de parcelas<select className={field} value={checkoutSettings.maxInstallments} onChange={e => setCheckoutSettings(old => ({ ...old, maxInstallments: Number(e.target.value) }))}>{Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}x</option>)}</select></label> : null}
-              <p className="text-xs leading-5 text-zinc-400">As opções são restrições enviadas ao Checkout Pro. A oferta final, os juros, as bandeiras e a elegibilidade do débito dependem da conta do vendedor e do Mercado Pago. Parcelas sem juros são configuradas na conta Mercado Pago. Saldo da carteira pode continuar disponível.</p>
+              <p className="text-xs leading-5 text-zinc-400">Pix, crédito e débito podem ser usados dentro da loja. Boleto e carteira são oferecidos no ambiente Mercado Pago. A oferta final, os juros, as bandeiras e a elegibilidade do débito dependem da conta do vendedor. Parcelas sem juros são configuradas no Mercado Pago.</p>
             </fieldset>
             <label htmlFor="commerce-payment-token" className="grid gap-1 text-sm">
               <CommerceCaption label="Access token do vendedor" help="Credencial da conta Mercado Pago que receberá as vendas deste tenant. Deixe vazio para manter a credencial já armazenada." />
@@ -748,6 +755,7 @@ export function CommerceAdmin({
               Webhook:{" "}
               {data.urls?.webhook ?? "Salve o rascunho da loja para obter a URL do webhook."}
             </p>
+            <p className="text-xs leading-5 text-amber-200">No Mercado Pago, habilite o evento de webhook “Order (Mercado Pago)” para o Checkout Transparente e mantenha “Payment” para a carteira. Use a assinatura secreta dessa configuração. O recebimento por Pix exige uma chave Pix cadastrada na conta do vendedor.</p>
           </div>
           <button className={button} disabled={busy || !data.store?.tenant_id}>
             <Save size={16} />

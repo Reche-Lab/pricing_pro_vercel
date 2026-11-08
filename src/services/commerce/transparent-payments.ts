@@ -1,0 +1,146 @@
+import { createHash, randomUUID } from "node:crypto";
+import { z } from "zod";
+import { getPool } from "@/lib/db/client";
+import { CommerceError } from "@/domain/commerce/commerce";
+import { commercePaymentSettingsSchema } from "@/domain/commerce/payment-settings";
+import { amountString, assertPaymentAllowed, validateProviderOrder, type BuyerPaymentState, type directPaymentSchema, type PaymentAttemptStatus, type PaymentResult } from "@/domain/commerce/transparent-payment";
+import { commerceTransaction, type CommerceOrder } from "@/repositories/commerce";
+import { paymentCredentials } from "./payments";
+
+type Attempt = {
+  id: string; tenant_id: string; order_id: string; request_id: string; fingerprint: string;
+  seller_id: string; method: "pix" | "card"; status: PaymentAttemptStatus;
+  provider_order_id: string | null; result: PaymentResult;
+};
+const providerId = /^ORD[A-Z0-9]{10,60}$/i;
+const activeStatuses = ["submitting", "unknown", "pending", "paid", "refunded"];
+const uncertainMessage = "Estamos verificando o pagamento. Não realize outra cobrança. Atualize a situação em instantes ou entre em contato com a loja.";
+
+async function ownedOrder(tenantId: string, customerId: string, orderId: string) {
+  const order = (await getPool().query<CommerceOrder>(
+    "select * from commerce_orders where tenant_id=$1 and customer_id=$2 and id=$3 and provider='mercado_pago'",
+    [tenantId, customerId, orderId],
+  )).rows[0];
+  if (!order) throw new CommerceError("Pedido não encontrado.", 404);
+  return order;
+}
+
+export async function buyerPaymentState(tenantId: string, customerId: string, orderId: string): Promise<BuyerPaymentState> {
+  const order = await ownedOrder(tenantId, customerId, orderId);
+  const account = (await getPool().query("select mp_enabled,transparent_enabled,public_key,checkout_settings from commerce_payment_connections where tenant_id=$1", [tenantId])).rows[0];
+  const attempt = (await getPool().query<Attempt>("select * from commerce_payment_attempts where tenant_id=$1 and order_id=$2 order by created_at desc,id desc limit 1", [tenantId, orderId])).rows[0];
+  return {
+    enabled: Boolean(account?.mp_enabled && account?.transparent_enabled && account?.public_key),
+    publicKey: account?.public_key ?? "", amountCents: order.total_cents,
+    settings: commercePaymentSettingsSchema.parse(account?.checkout_settings ?? {}),
+    hosted: Boolean(order.checkout_url), paymentStatus: order.payment_status,
+    payer: { email: order.snapshot.billing?.email ?? order.snapshot.customer.email, ...(order.snapshot.billing?.document ? { identification: { type: order.snapshot.billing.personType === "J" ? "CNPJ" as const : "CPF" as const, number: order.snapshot.billing.document.replace(/\D/g, "") } } : {}) },
+    attempt: attempt ? { id: attempt.id, method: attempt.method, status: attempt.status, result: attempt.result } : null,
+  };
+}
+
+export async function startDirectPayment(tenantId: string, customerId: string, input: z.infer<typeof directPaymentSchema>) {
+  const credentials = await paymentCredentials(tenantId);
+  const fingerprint = createHash("sha256").update(JSON.stringify(input.payment)).digest("hex");
+  // Reserve under the order lock, then call the provider outside the transaction.
+  // A crash or timeout leaves a visible, blocking attempt, not a second charge.
+  const reservation = await commerceTransaction(async client => {
+    const order = (await client.query<CommerceOrder>("select * from commerce_orders where tenant_id=$1 and customer_id=$2 and id=$3 for update", [tenantId, customerId, input.orderId])).rows[0];
+    if (!order || order.provider !== "mercado_pago") throw new CommerceError("Pedido não encontrado.", 404);
+    if (order.payment_status !== "pending") throw new CommerceError("Este pedido já teve seu pagamento processado.", 409);
+    if (order.checkout_url) throw new CommerceError("Este pedido já possui um pagamento na carteira Mercado Pago. Continue pelo link emitido.", 409);
+    const previous = (await client.query<Attempt>("select * from commerce_payment_attempts where tenant_id=$1 and order_id=$2 and (request_id=$3 or status=any($4::text[])) order by created_at desc limit 1", [tenantId, order.id, input.requestId, activeStatuses])).rows[0];
+    if (previous) {
+      if (previous.request_id === input.requestId && previous.fingerprint === fingerprint) return null;
+      throw new CommerceError("Já existe um pagamento em andamento. Atualize a situação antes de continuar.", 409);
+    }
+    const account = (await client.query("select mp_enabled,transparent_enabled,public_key,checkout_settings from commerce_payment_connections where tenant_id=$1", [tenantId])).rows[0];
+    if (!account?.mp_enabled || !account?.transparent_enabled || !account?.public_key) throw new CommerceError("O pagamento dentro da loja não está disponível.", 409);
+    assertPaymentAllowed(input.payment, account.checkout_settings);
+    const id = randomUUID();
+    await client.query("insert into commerce_payment_attempts(id,tenant_id,order_id,request_id,fingerprint,seller_id,method) values($1,$2,$3,$4,$5,$6,$7)", [id, tenantId, order.id, input.requestId, fingerprint, credentials.sellerId, input.payment.method]);
+    await client.query("insert into commerce_order_events(tenant_id,order_id,type,metadata) values($1,$2,'payment.attempt_started',$3)", [tenantId, order.id, JSON.stringify({ attemptId: id, method: input.payment.method })]);
+    return { id, order };
+  });
+  if (!reservation) return;
+  const { id, order } = reservation;
+  const card = input.payment.method === "card" ? input.payment : null;
+  const billing = order.snapshot.billing;
+  const payload = {
+    type: "online", processing_mode: "automatic", external_reference: id,
+    total_amount: amountString(order.total_cents),
+    config: {
+      ...(billing?.state ? { location: { state_id: `BR-${billing.state}` } } : {}),
+      ...(card ? { online: { transaction_security: { validation: "on_fraud_risk", liability_shift: "required" } } } : {}),
+    },
+    payer: { email: billing?.email ?? order.snapshot.customer.email, ...(card?.identification ? { identification: card.identification } : billing?.document ? { identification: { type: billing.personType === "J" ? "CNPJ" : "CPF", number: billing.document.replace(/\D/g, "") } } : {}) },
+    transactions: { payments: [{
+      amount: amountString(order.total_cents),
+      payment_method: card ? { id: card.paymentMethodId, type: card.paymentType, token: card.token, installments: card.installments } : { id: "pix", type: "bank_transfer" },
+      ...(!card ? { expiration_time: "PT30M" } : {}),
+    }] },
+  };
+  try {
+    const response = await fetch("https://api.mercadopago.com/v1/orders", {
+      method: "POST", headers: { authorization: `Bearer ${credentials.accessToken}`, "content-type": "application/json", "X-Idempotency-Key": id },
+      body: JSON.stringify(payload), cache: "no-store", signal: AbortSignal.timeout(15000),
+    });
+    const data = await response.json().catch(() => null);
+    const rawCode = data?.errors?.[0]?.code ?? data?.error;
+    const providerCode = typeof rawCode === "string" && /^[a-zA-Z0-9_:-]{1,120}$/.test(rawCode) ? rawCode : undefined;
+    console.info("Commerce direct payment submitted.", { tenantId, orderId: order.id, attemptId: id, method: input.payment.method, httpStatus: response.status, providerCode });
+    if (typeof data?.id === "string" && providerId.test(data.id)) {
+      await getPool().query("update commerce_payment_attempts set provider_order_id=$3,updated_at=now() where tenant_id=$1 and id=$2 and provider_order_id is null", [tenantId, id, data.id]);
+      // Creation can include a token and incomplete seller data. Only reconcile
+      // the authoritative GET response, never persist the raw provider response.
+      await reconcileDirectPayment(tenantId, data.id);
+      return;
+    }
+    const definiteFailure = [400, 401, 403, 404, 422].includes(response.status);
+    await getPool().query("update commerce_payment_attempts set status=$3,result=$4,updated_at=now() where tenant_id=$1 and id=$2 and status in ('submitting','unknown')", [tenantId, id, definiteFailure ? "failed" : "unknown", JSON.stringify({ message: definiteFailure ? "O pagamento não foi iniciado. Confira os dados ou entre em contato com a loja." : uncertainMessage })]);
+  } catch (error) {
+    console.error("Commerce direct payment awaiting reconciliation.", { tenantId, orderId: order.id, attemptId: id, errorType: error instanceof Error ? error.name : "unknown" });
+    await getPool().query("update commerce_payment_attempts set status=$3,result=$4,updated_at=now() where tenant_id=$1 and id=$2 and status in ('submitting','unknown')", [tenantId, id, "unknown", JSON.stringify({ message: uncertainMessage })]);
+  }
+}
+
+export async function reconcileDirectPayment(tenantId: string, id: string) {
+  if (!providerId.test(id)) throw new CommerceError("Identificador de pagamento inválido.");
+  const credentials = await paymentCredentials(tenantId);
+  const response = await fetch(`https://api.mercadopago.com/v1/orders/${encodeURIComponent(id)}`, {
+    headers: { authorization: `Bearer ${credentials.accessToken}` }, cache: "no-store", signal: AbortSignal.timeout(15000),
+  });
+  console.info("Commerce direct payment lookup.", { tenantId, providerOrderId: id, httpStatus: response.status });
+  if (!response.ok) throw new CommerceError("Não foi possível confirmar o pagamento. Aguarde e atualize a situação.", 502);
+  const data = await response.json();
+  const reference = z.string().uuid().safeParse(data?.external_reference);
+  if (!reference.success) return;
+  const candidate = (await getPool().query<Attempt>("select * from commerce_payment_attempts where tenant_id=$1 and id=$2", [tenantId, reference.data])).rows[0];
+  if (!candidate) return;
+  // Lock order first everywhere (including hosted checkout) to avoid deadlocks.
+  await commerceTransaction(async client => {
+    const order = (await client.query<CommerceOrder>("select * from commerce_orders where tenant_id=$1 and id=$2 for update", [tenantId, candidate.order_id])).rows[0];
+    const attempt = (await client.query<Attempt>("select * from commerce_payment_attempts where tenant_id=$1 and id=$2 for update", [tenantId, candidate.id])).rows[0];
+    if (!order || !attempt) return;
+    const verified = validateProviderOrder(data, { id: attempt.id, sellerId: attempt.seller_id, totalCents: order.total_cents, method: attempt.method });
+    if (verified.providerId !== id || (attempt.provider_order_id && attempt.provider_order_id !== id) || (order.provider_payment_id && order.provider_payment_id !== id) || order.checkout_url)
+      throw new CommerceError("Pagamento divergente. A loja precisa revisar este pedido.", 409);
+    if (attempt.status === "refunded" || (attempt.status === "paid" && verified.status !== "refunded")) return;
+    if (order.payment_status === "refunded" || (order.payment_status === "paid" && !["paid", "refunded"].includes(verified.status))) return;
+    await client.query("update commerce_payment_attempts set provider_order_id=$3,status=$4,result=$5,updated_at=now() where tenant_id=$1 and id=$2", [tenantId, attempt.id, id, verified.status, JSON.stringify(verified.result)]);
+    if (["paid", "refunded"].includes(verified.status)) {
+      await client.query("update commerce_orders set payment_status=$3,provider_payment_id=$4,updated_at=now() where tenant_id=$1 and id=$2", [tenantId, order.id, verified.status, id]);
+    }
+    if (attempt.status !== verified.status) {
+      await client.query("insert into commerce_order_events(tenant_id,order_id,type,metadata) values($1,$2,$3,$4)", [tenantId, order.id, `payment.${verified.status}`, JSON.stringify({ attemptId: attempt.id, providerOrderId: id, method: attempt.method })]);
+      console.info("Commerce direct payment reconciled.", { tenantId, orderId: order.id, attemptId: attempt.id, status: verified.status });
+    }
+  });
+}
+
+export async function refreshDirectPayment(tenantId: string, customerId: string, orderId: string) {
+  await ownedOrder(tenantId, customerId, orderId);
+  const attempt = (await getPool().query<Attempt>("select * from commerce_payment_attempts where tenant_id=$1 and order_id=$2 order by created_at desc,id desc limit 1", [tenantId, orderId])).rows[0];
+  if (attempt?.provider_order_id) await reconcileDirectPayment(tenantId, attempt.provider_order_id);
+  return buyerPaymentState(tenantId, customerId, orderId);
+}

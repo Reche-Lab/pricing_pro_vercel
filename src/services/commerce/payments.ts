@@ -61,6 +61,8 @@ export async function savePaymentConnection(
     mpEnabled: boolean;
     accessToken?: string;
     webhookSecret?: string;
+    publicKey?: string;
+    transparentEnabled?: boolean;
     checkoutSettings?: CommercePaymentSettings;
   },
 ) {
@@ -84,6 +86,12 @@ export async function savePaymentConnection(
     credentials = { accessToken, webhookSecret, sellerId: String(seller.id) };
   }
   if (input.mpEnabled && !credentials) await paymentCredentials(tenantId);
+  if (input.transparentEnabled) {
+    const current = (await getPool().query("select public_key from commerce_payment_connections where tenant_id=$1", [tenantId])).rows[0];
+    if (!(input.publicKey ?? current?.public_key)) throw new CommerceError("Informe a Public Key para receber Pix e cartão dentro da loja.");
+    if (!input.mpEnabled) throw new CommerceError("Habilite o Mercado Pago antes de ativar o pagamento dentro da loja.");
+    if (input.checkoutSettings && !input.checkoutSettings.pix && !input.checkoutSettings.credit && !input.checkoutSettings.debit) throw new CommerceError("Habilite Pix ou cartão para receber dentro da loja.");
+  }
   if (input.manualEnabled && !input.manualInstructions.trim())
     throw new CommerceError(
       "Informe como o comprador deverá realizar o pagamento manual.",
@@ -100,6 +108,7 @@ export async function savePaymentConnection(
         input.checkoutSettings ? JSON.stringify(input.checkoutSettings) : null,
       ],
     );
+    await client.query("update commerce_payment_connections set public_key=coalesce($2,public_key),transparent_enabled=coalesce($3,transparent_enabled) where tenant_id=$1", [tenantId, input.publicKey ?? null, input.transparentEnabled ?? null]);
     await client.query(
       `insert into audit_logs(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) values($1,$2,'commerce.payments.configure','commerce_store',$1,$3)`,
       [
@@ -108,6 +117,7 @@ export async function savePaymentConnection(
         JSON.stringify({
           manualEnabled: input.manualEnabled,
           mpEnabled: input.mpEnabled,
+          transparentEnabled: input.transparentEnabled,
         }),
       ],
     );
@@ -137,6 +147,8 @@ export async function checkoutPayment(
         409,
       );
     if (order.checkout_url) return { url: order.checkout_url };
+    const active = (await client.query("select id from commerce_payment_attempts where tenant_id=$1 and order_id=$2 and status in ('submitting','unknown','pending','paid','refunded') limit 1", [store.tenant_id, order.id])).rows[0];
+    if (active) throw new CommerceError("Já existe um pagamento em andamento dentro da loja. Atualize a situação antes de continuar.", 409);
     const account = (
       await client.query(
         "select mp_enabled,checkout_settings from commerce_payment_connections where tenant_id=$1",
@@ -210,13 +222,13 @@ export function verifyMpWebhook(headers: Headers, id: string, secret: string) {
   const requestId = headers.get("x-request-id");
   if (
     !/^\d+$/.test(timestamp) ||
-    !/^\d+$/.test(id) ||
+    !/^(?:\d+|ORD[A-Z0-9]{10,60})$/i.test(id) ||
     !requestId ||
     !/^[a-f0-9]{64}$/i.test(signature)
   )
     return false;
   const expected = createHmac("sha256", secret)
-    .update(`id:${id};request-id:${requestId};ts:${timestamp};`)
+    .update(`id:${id.toLowerCase()};request-id:${requestId};ts:${timestamp};`)
     .digest();
   return timingSafeEqual(expected, Buffer.from(signature, "hex"));
 }

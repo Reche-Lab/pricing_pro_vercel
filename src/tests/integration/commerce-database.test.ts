@@ -18,7 +18,8 @@ import {
   geometryHash,
   getCommerceAdmin,
 } from "@/repositories/commerce";
-import { savePaymentConnection } from "@/services/commerce/payments";
+import { checkoutPayment, savePaymentConnection } from "@/services/commerce/payments";
+import { buyerPaymentState, refreshDirectPayment, startDirectPayment } from "@/services/commerce/transparent-payments";
 import { authorizedCommerceOrder, mutateCommerceProof, readCommerceProofs, assertCommerceProofsReady } from "@/services/commerce/order-artworks";
 import { verifyBuyerCode } from "@/services/commerce/buyer-auth";
 import type { StoreAdminInput } from "@/domain/commerce/schemas";
@@ -511,5 +512,59 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
     expect(Buffer.from(await response.arrayBuffer()).subarray(0,4).toString()).toBe('%PDF');
     vi.mocked(getCurrentSession).mockResolvedValue({ userId: viewer, tenantId: otherTenant, role: 'viewer', email: 'worklist-viewer@example.test' });
     expect((await request()).status).toBe(403);
+  });
+  it("persists isolated transparent payments, serializes charges and confirms only the seller's full amount", async () => {
+    vi.stubEnv("APP_URL", "https://panel.example.test");
+    const customerId = (await getPool().query("select id from commerce_customers where tenant_id=$1 limit 1", [tenantId])).rows[0].id;
+    const { session } = await createBuyerSession(tenantId);
+    const store = (await getCommerceStore("ground-shop"))!;
+    const createOrder = async () => (await getPool().query("insert into commerce_orders(tenant_id,customer_id,session_id,cart_revision,snapshot,subtotal_cents,shipping_cents,total_cents,provider) values($1,$2,$3,$4,$5,12990,0,12990,'mercado_pago') returning id", [tenantId, customerId, session.id, Math.floor(Math.random() * 1000000), JSON.stringify({ customer: { email: "buyer@example.test", name: "Buyer" }, billing: { ...testCommerceBilling, personType: "F" } })])).rows[0].id;
+    const orderId = await createOrder();
+    const providerOrderId = "ORD01J49MMW3SSBK5PSV3DFR32959";
+    let reference = "", paid = false, seller = "123", amount = "129.90";
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const provider = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/users/me")) return Response.json({ id: 123 });
+      if (init?.method === "POST") { reference = JSON.parse(String(init.body)).external_reference; await gate; return Response.json({ id: providerOrderId }, { status: 201 }); }
+      return Response.json({ id: providerOrderId, user_id: seller, country_code: "BRA", external_reference: reference, total_amount: amount, total_paid_amount: paid ? amount : "0.00", status: paid ? "processed" : "action_required", status_detail: paid ? "accredited" : "waiting_payment", transactions: { payments: [{ amount, status: paid ? "processed" : "action_required", status_detail: paid ? "accredited" : "waiting_payment", payment_method: { id: "pix", type: "bank_transfer", qr_code: "pix-test", token: "must-not-be-persisted" }, date_of_expiration: new Date(Date.now() + 1800000).toISOString() }] } });
+    });
+    vi.stubGlobal("fetch", provider);
+    try {
+      await savePaymentConnection(tenantId, actorId, { manualEnabled: true, manualInstructions: "Manual", mpEnabled: true, accessToken: "fake-private-token", webhookSecret: "fake-secret", publicKey: "APP_USR-public-test", transparentEnabled: true });
+      const request = { orderId, requestId: crypto.randomUUID(), payment: { method: "pix" as const } };
+      const first = startDirectPayment(tenantId, customerId, request);
+      await vi.waitFor(() => expect(reference).toBeTruthy());
+      await startDirectPayment(tenantId, customerId, request);
+      await expect(startDirectPayment(tenantId, customerId, { ...request, requestId: crypto.randomUUID() })).rejects.toThrow("andamento");
+      await expect(checkoutPayment(store, customerId, orderId)).rejects.toThrow("andamento");
+      release!(); await first;
+      expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+      const pending = await buyerPaymentState(tenantId, customerId, orderId);
+      expect(pending.attempt?.status).toBe("pending");
+      expect(pending.attempt?.result.qrCode).toBe("pix-test");
+      expect(JSON.stringify(pending)).not.toMatch(/fake-private|fake-secret|must-not-be-persisted|fingerprint/);
+      await expect(buyerPaymentState(otherTenant, customerId, orderId)).rejects.toThrow("não encontrado");
+      await expect(buyerPaymentState(tenantId, crypto.randomUUID(), orderId)).rejects.toThrow("não encontrado");
+      paid = true; seller = "another-seller";
+      await expect(refreshDirectPayment(tenantId, customerId, orderId)).rejects.toThrow("não correspondem");
+      seller = "123"; amount = "1.00";
+      await expect(refreshDirectPayment(tenantId, customerId, orderId)).rejects.toThrow("não correspondem");
+      amount = "129.90";
+      expect((await refreshDirectPayment(tenantId, customerId, orderId)).paymentStatus).toBe("paid");
+      expect((await refreshDirectPayment(tenantId, customerId, orderId)).paymentStatus).toBe("paid");
+      expect((await getPool().query("select count(*)::int as count from commerce_order_events where tenant_id=$1 and order_id=$2 and type='payment.paid'", [tenantId, orderId])).rows[0].count).toBe(1);
+      const snapshot = (await getPool().query("select * from commerce_payment_attempts where tenant_id=$1 and order_id=$2", [tenantId, orderId])).rows[0];
+      expect(JSON.stringify(snapshot)).not.toContain("must-not-be-persisted");
+      const unknownOrderId = await createOrder();
+      provider.mockRejectedValue(new Error("network failure"));
+      const unknown = { orderId: unknownOrderId, requestId: crypto.randomUUID(), payment: { method: "pix" as const } };
+      await startDirectPayment(tenantId, customerId, unknown);
+      expect((await buyerPaymentState(tenantId, customerId, unknownOrderId)).attempt?.status).toBe("unknown");
+      await expect(startDirectPayment(tenantId, customerId, { ...unknown, requestId: crypto.randomUUID() })).rejects.toThrow("andamento");
+      const client = await getPool().connect();
+      try { await client.query("set role anon"); await expect(client.query("select * from commerce_payment_attempts")).rejects.toMatchObject({ code: "42501" }); }
+      finally { await client.query("reset role"); client.release(); }
+    } finally { release?.(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
   });
 });

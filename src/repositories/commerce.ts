@@ -212,7 +212,7 @@ export async function getCommerceAdmin(userId: string, tenantId: string) {
       listProductVariants(userId, tenantId),
       listPlatformRules(userId, tenantId),
       getPool().query(
-        `select manual_enabled,manual_instructions,mp_enabled,checkout_settings,encrypted_credentials is not null as mp_configured from commerce_payment_connections where tenant_id=$1`,
+        `select manual_enabled,manual_instructions,mp_enabled,checkout_settings,public_key,transparent_enabled,encrypted_credentials is not null as mp_configured from commerce_payment_connections where tenant_id=$1`,
         [tenantId],
       ),
       getPool().query(
