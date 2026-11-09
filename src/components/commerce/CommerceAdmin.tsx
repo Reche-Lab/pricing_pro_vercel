@@ -27,6 +27,7 @@ import { CommerceCaption, CommerceThemePicker } from "./CommerceAdminControls";
 import { CommerceArtworkOptions } from "./CommerceArtworkOptions";
 import { CommerceLaunchPanel } from "./CommerceLaunchPanel";
 import { CommerceStoreAddress } from "./CommerceStoreAddress";
+import { CommercePaymentDiagnostics } from "./CommercePaymentDiagnostics";
 import { defaultCommercePaymentSettings, type CommercePaymentSettings } from "@/domain/commerce/payment-settings";
 import type { PaymentEnvironment } from "@/domain/commerce/payment-settings";
 import styles from "./commerce-admin.module.css";
@@ -45,6 +46,7 @@ export function CommerceAdmin({
   const [data, setData] = useState(initial);
   const [tab, setTab] = useState("store");
   const [busy, setBusy] = useState(false);
+  const [paymentDiagnosisRevision, setPaymentDiagnosisRevision] = useState(0);
   const [pendingUploads, setPendingUploads] = useState(0);
   const imageBusyChanged = (uploading: boolean) =>
     setPendingUploads((count) => Math.max(0, count + (uploading ? 1 : -1)));
@@ -694,6 +696,7 @@ export function CommerceAdmin({
               setToken("");
               setSecret("");
               setTestCredentials(old => ({ ...old, accessToken: "", webhookSecret: "", sellerId: "", confirmed: false }));
+              setPaymentDiagnosisRevision(value => value + 1);
             });
           }}
         >
@@ -777,6 +780,12 @@ export function CommerceAdmin({
             <Save size={16} />
             Salvar meios de pagamento
           </button>
+          <CommercePaymentDiagnostics
+            key={`${paymentEnvironment}:${paymentDiagnosisRevision}`}
+            environment={paymentEnvironment}
+            configured={Boolean(data.store?.tenant_id && (paymentEnvironment === "test" ? data.payments?.test_configured : data.payments?.mp_configured))}
+            disabled={busy || Boolean(token || secret || testCredentials.accessToken || testCredentials.webhookSecret || testCredentials.sellerId || publicKey !== (data.payments?.public_key ?? "") || testCredentials.publicKey !== (data.payments?.test_public_key ?? ""))}
+          />
         </form>
       ) : null}
       {tab === "address" ? <CommerceStoreAddress slug={data.store?.slug} urls={data.urls} value={settings.requestedDomain ?? ""} onChange={value => updateSetting("requestedDomain", value)} onSubmit={save} disabled={busy || pendingUploads > 0}/> : null}

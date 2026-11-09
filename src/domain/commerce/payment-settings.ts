@@ -4,6 +4,20 @@ export const paymentEnvironmentSchema = z.enum(["production", "test"]);
 export type PaymentEnvironment = z.infer<typeof paymentEnvironmentSchema>;
 export const paymentEnvironment = (value: unknown): PaymentEnvironment => value === "test" ? "test" : "production";
 
+export type PaymentConnectionCheck = {
+  key: "identity" | "orders_read";
+  endpoint: string;
+  outcome: "ok" | "failed" | "unavailable";
+  httpStatus: number | null;
+  message: string;
+  code?: string;
+  supportReference?: string;
+};
+export type PaymentConnectionDiagnosis = {
+  environment: PaymentEnvironment;
+  checks: PaymentConnectionCheck[];
+};
+
 export const commercePaymentSettingsSchema = z.object({
   pix: z.boolean().default(true),
   credit: z.boolean().default(true),

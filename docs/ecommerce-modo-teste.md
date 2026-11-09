@@ -78,6 +78,40 @@ as chaves de teste. Criar pedidos novos para vendas reais. Usar o filtro **Teste
 central de pedidos para consultar as simulações; o histórico anterior à migration é
 preservado, sem reclassificação automática.
 
+## Comparar checkout externo e transparente
+
+Nesta implementação, o checkout externo usa `POST /checkout/preferences` com as
+credenciais de Produção. O transparente usa `POST /v1/orders` com as credenciais
+do ambiente persistido no pedido. O sucesso do externo em Produção não comprova
+que as credenciais de Teste funcionam, nem comprova bloqueio geral da conta se
+somente o transparente em Teste falhar. O externo permanece bloqueado em Teste
+para não abrir um checkout com credenciais de Produção por engano.
+
+Em **Loja online > Pagamentos**, selecionar o ambiente e clicar em
+**Diagnosticar conexão sem cobrança**. O diagnóstico:
+
+- Usa somente as credenciais salvas do ambiente selecionado. Selecionar outro
+  ambiente para consultar, sem salvar o formulário, não muda o ambiente ativo.
+- Consulta `GET /users/me` e confere a identidade com o vendedor salvo.
+- Consulta `GET /v1/orders` com datas, paginação mínima e uma referência aleatória
+  nova; descarta o corpo da consulta e não expõe dados de compradores ou transações.
+- Mostra cada resultado separadamente: HTTP, código seguro e referência para suporte.
+- Não cria preferências, pedidos, pagamentos ou cancelamentos. Não há fallback para
+  outro ambiente, e **consulta autorizada não garante autorização para cobrar**.
+- Exige administrador do tenant e mesma origem; limita o diagnóstico a seis
+  solicitações por minuto por tenant/endereço. Campos privados não saem do servidor.
+
+Se o vendedor for consultado e Orders retornar 403, reportar ao suporte essa
+diferença, o ambiente e os IDs de requisição. Se ambas as consultas responderem
+200 mas o POST continuar recusado, informar também o ID da tentativa de criação.
+Não interpretar um diagnóstico de leitura bem-sucedido como pagamento homologado.
+
+Validação deste diagnóstico em 09/11/2026: TDD com 50 testes focados; suíte geral
+com 688 testes aprovados e 28 condicionais ignorados; TypeScript, lint, build e
+revisão no Chrome em 1440/390/320 px aprovados. Não exige migration adicional.
+As chamadas Mercado Pago foram simuladas nesses testes: o resultado real da conta
+deve ser consultado pelo administrador após o deploy.
+
 ## Recusa 403 por políticas de autorização
 
 `PA_UNAUTHORIZED_RESULT_FROM_POLICIES` não é uma recusa específica do cartão ou

@@ -604,6 +604,13 @@ Uso e limites documentados em `docs/modulo-financeiro.md`.
 
 ### Homologação do e-commerce
 
+- [x] Diagnóstico administrativo sem cobrança por ambiente: identidade do vendedor,
+  consulta à Orders API, resultados humanizados, proteção de origem/tenant e limite
+  de chamadas; distinção entre externo em Produção e transparente em Teste.
+- [x] TDD do diagnóstico e regressões focadas: 50 testes, TypeScript e lint aprovados.
+- [x] Diagnóstico sem cobrança: 688 testes de regressão aprovados (28 condicionais
+  ignorados), UI em 1440/390/320 px sem overflow, tipos, lint e build aprovados em
+  09/11/2026. Sem nova migration; respostas do provedor simuladas na validação local.
 - [x] Modo Teste por tenant e campos de credenciais separados de Produção.
 - [x] Pedidos/tentativas com ambiente persistido, Pix APRO, avisos e webhooks específicos.
 - [x] Filtro Testes, exclusão da fila normal e bloqueio de produção/expedição de simulações.

@@ -8,6 +8,23 @@ vi.mock("@/components/commerce/store-http", () => ({ storeRequest: vi.fn(), stor
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("commerce configuration controls", () => {
+  it("compares saved environments without saving the store or reusing a stale diagnostic", async () => {
+    const initial = { store: { tenant_id: "tenant" }, products: [], variants: [], platforms: [], orders: [], payments: { mp_enabled: true, mp_configured: true, public_key: "APP_USR-production", test_configured: true, test_public_key: "APP_USR-sandbox", transparent_enabled: true } };
+    vi.mocked(storeRequest).mockResolvedValue({ environment: "production", checks: [{ key: "orders_read", endpoint: "/v1/orders", outcome: "failed", httpStatus: 403, message: "Consulta recusada." }] });
+    render(<CommerceAdmin initial={initial as never} tenantName="Ground Shop"/>);
+    fireEvent.click(screen.getByRole("button", { name: "Pagamentos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Diagnosticar conexão sem cobrança" }));
+    expect(await screen.findByText("HTTP 403")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Teste" }));
+    expect(screen.queryByText("HTTP 403")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Diagnosticar conexão sem cobrança" }));
+    await waitFor(() => expect(storeRequest).toHaveBeenLastCalledWith("/api/commerce/admin/payments/diagnostics", "POST", { environment: "test" }));
+    await screen.findByText("HTTP 403");
+    fireEvent.change(screen.getByLabelText("Access Token de teste", { selector: "input" }), { target: { value: "unsaved-token" } });
+    expect(screen.getByRole("button", { name: "Diagnosticar conexão sem cobrança" })).toBeDisabled();
+    expect(screen.queryByText("HTTP 403")).not.toBeInTheDocument();
+    expect(vi.mocked(storeRequest).mock.calls.every(([url]) => url.endsWith("/diagnostics"))).toBe(true);
+  });
   it("saves test credentials separately and never exposes the stored private keys", async () => {
     const initial = { store: { tenant_id: "tenant" }, products: [], variants: [], platforms: [], orders: [], payments: { mp_enabled: true, mp_configured: true, public_key: "APP_USR-production", transparent_enabled: true } };
     vi.mocked(storeRequest).mockResolvedValue(initial);
