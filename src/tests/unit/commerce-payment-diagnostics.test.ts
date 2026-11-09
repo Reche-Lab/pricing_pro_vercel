@@ -51,6 +51,16 @@ describe("Mercado Pago safe diagnostics", () => {
     expect(paymentFailureMessage(400)).toContain("dados");
     expect(paymentFailureMessage(500)).toContain("Não realize outra cobrança");
   });
+  it("explains a policy denial in the selected environment without claiming which policy failed", () => {
+    const codes = ["PA_UNAUTHORIZED_RESULT_FROM_POLICIES"];
+    const message = paymentFailureMessage(403, codes, "test");
+    expect(message).toContain("aplicação de teste");
+    expect(message).toContain("Orders API");
+    expect(message).toContain("suporte");
+    expect(message).not.toContain("Confira os dados");
+    expect(paymentFailureMessage(403, codes, "production")).not.toContain("aplicação de teste");
+    expect(paymentFailureMessage(500, codes, "test")).toContain("Não realize outra cobrança");
+  });
   it("bounds oversized bodies instead of exposing or accepting their content", async () => {
     const result = await readPaymentProviderResponse(new Response("x".repeat(2 * 1024 * 1024 + 1), { status: 403 }));
     expect(result.data).toBeNull();

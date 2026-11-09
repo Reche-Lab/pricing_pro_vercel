@@ -23,6 +23,7 @@ export type PaymentAttemptStatus = "submitting" | "unknown" | "pending" | "paid"
 export type PaymentResult = {
   message?: string; qrCode?: string; qrImage?: string; expiresAt?: string;
   challengeUrl?: string; providerStatus?: string;
+  failureCode?: string; supportReference?: string;
 };
 export type BuyerPaymentState = {
   environment?: PaymentEnvironment; canStart?: boolean;

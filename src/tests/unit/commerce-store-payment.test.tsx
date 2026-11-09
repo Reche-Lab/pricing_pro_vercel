@@ -26,6 +26,13 @@ describe("buyer payment experience", () => {
     expect(screen.queryByDisplayValue("do-not-pay")).toBeNull();
     expect(screen.queryByRole("button", { name: "Gerar Pix" })).toBeNull();
   });
+  it("restores a policy failure with its support reference after reloading", async () => {
+    vi.mocked(storeRequest).mockResolvedValue({ ...initial(), environment: "test", attempt: { id: "attempt", status: "failed", method: "pix", result: { message: "O Mercado Pago bloqueou a autorização da aplicação de teste.", failureCode: "PA_UNAUTHORIZED_RESULT_FROM_POLICIES", supportReference: "support-request-123" } } });
+    render(<StorePayment api="/api/store/shop" orderId="order" onConfirmed={onConfirmed}/>);
+    expect(await screen.findByText(/bloqueou a autorização/)).toBeTruthy();
+    expect(screen.getByText(/support-request-123/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Pagar no Mercado Pago" })).toBeNull();
+  });
   it("generates Pix without sending amounts and shows copy-and-paste", async () => {
     render(<StorePayment api="/api/store/shop" orderId="order" onConfirmed={onConfirmed}/>);
     await screen.findByRole("button", { name: "Gerar Pix" });

@@ -1,3 +1,5 @@
+import type { PaymentEnvironment } from "@/domain/commerce/payment-settings";
+
 type JsonObject = Record<string, unknown>;
 type PaymentDiagnostics = {
   codes: string[];
@@ -76,7 +78,11 @@ export async function readPaymentProviderResponse(response: Response, secrets: s
   return { data: asObject(parsed), diagnostics };
 }
 
-export function paymentFailureMessage(status: number) {
+export function paymentFailureMessage(status: number, codes: readonly string[] = [], environment: PaymentEnvironment = "production") {
+  if (status === 403 && codes.includes("PA_UNAUTHORIZED_RESULT_FROM_POLICIES")) {
+    if (environment === "test") return "O Mercado Pago recusou o pagamento por políticas de autorização da aplicação de teste. Confira a conta e as credenciais em Integrações > sua aplicação > Teste. Se estiverem corretas, solicite análise ao suporte do Mercado Pago para a Orders API com a referência da solicitação, quando disponível.";
+    return "O Mercado Pago recusou o pagamento por políticas de autorização da conta da loja. A loja precisa revisar a conta e as credenciais com o suporte do Mercado Pago. Entre em contato com a loja e informe a referência da solicitação, quando disponível.";
+  }
   if (status === 403) return "O Mercado Pago não autorizou a criação do pagamento. A loja precisa revisar a habilitação do recebimento online. Entre em contato com a loja ou escolha outra opção de pagamento.";
   if (status === 401) return "Não foi possível autenticar a conexão de pagamento da loja com o Mercado Pago. Entre em contato com a loja ou escolha outra opção de pagamento.";
   if ([400, 404, 422].includes(status)) return "O pagamento não foi iniciado. Confira os dados ou entre em contato com a loja.";

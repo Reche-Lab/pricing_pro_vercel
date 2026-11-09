@@ -607,6 +607,10 @@ Uso e limites documentados em `docs/modulo-financeiro.md`.
 - [x] Modo Teste por tenant e campos de credenciais separados de Produção.
 - [x] Pedidos/tentativas com ambiente persistido, Pix APRO, avisos e webhooks específicos.
 - [x] Filtro Testes, exclusão da fila normal e bloqueio de produção/expedição de simulações.
+- [x] Diagnóstico específico de `PA_UNAUTHORIZED_RESULT_FROM_POLICIES` e referência
+  segura do Mercado Pago persistida na tentativa e exibida no checkout (09/11/2026).
+- [x] Ajuste de diagnóstico validado com TDD: 29 testes focados, TypeScript e lint;
+  sem chamadas de cobrança reais e sem nova migration.
 - [x] Verificação local: 673 testes de regressão, 14 testes em PostgreSQL isolado,
   UI em desktop/mobile, TypeScript, lint e build de produção aprovados em 09/11/2026.
 - [ ] Aplicar `0071_commerce_payment_test_mode.sql`, cadastrar as chaves do ambiente Teste e homologar no Mercado Pago.

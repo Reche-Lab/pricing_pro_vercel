@@ -59,7 +59,7 @@ describe("persisted payment attempts", () => {
     expect(info).not.toHaveBeenCalled();
     const update = query.mock.calls.find(([sql]) => sql.startsWith("update commerce_payment_attempts") && sql.includes("status=$3"))!;
     expect(update[1][2]).toBe("failed");
-    expect(JSON.parse(update[1][3]).message).toContain("habilitação");
+    expect(JSON.parse(update[1][3]).message).toContain("políticas de autorização");
     expect(fetcher).toHaveBeenCalledOnce();
     expect(fetcher.mock.calls[0][0]).toBe("https://api.mercadopago.com/v1/orders");
   });
@@ -67,6 +67,24 @@ describe("persisted payment attempts", () => {
     query.mockImplementation(async (sql: string) => ({ rows: sql.includes("from commerce_orders") ? [{ ...order, checkout_url: "https://www.mercadopago.com.br/checkout" }] : [] }));
     await expect(startDirectPayment(tenant, buyer, { orderId, requestId, payment: { method: "pix" } })).rejects.toThrow("carteira");
     expect(fetcher).not.toHaveBeenCalled();
+  });
+  it.each(["pix", "card"] as const)("persists a humanized test authorization failure and safe support reference for %s", async method => {
+    const base = query.getMockImplementation()!;
+    query.mockImplementation(async (sql: string, ...args: unknown[]) => {
+      if (sql.includes("from commerce_orders")) return { rows: [{ ...order, payment_environment: "test" }] };
+      if (sql.includes("from commerce_payment_connections")) return { rows: [{ mp_enabled: true, transparent_enabled: true, test_public_key: "APP_USR-test", payment_environment: "test", checkout_settings: {} }] };
+      return base(sql, ...args);
+    });
+    fetcher.mockResolvedValue(Response.json({ code: "PA_UNAUTHORIZED_RESULT_FROM_POLICIES", message: "At least one policy returned UNAUTHORIZED." }, { status: 403, headers: { "x-request-id": "support-request-123" } }));
+    await startDirectPayment(tenant, buyer, { orderId, requestId, payment: method === "pix" ? { method } : { method, token: "card-token-private-1234", paymentMethodId: "visa", paymentType: "credit_card", installments: 1 } });
+    const update = query.mock.calls.find(([sql]) => sql.startsWith("update commerce_payment_attempts") && sql.includes("status=$3"))!;
+    const result = JSON.parse(update[1][3]);
+    expect(update[1][2]).toBe("failed");
+    expect(result).toMatchObject({ failureCode: "PA_UNAUTHORIZED_RESULT_FROM_POLICIES", supportReference: "support-request-123" });
+    expect(result.message).toContain("aplicação de teste");
+    expect(JSON.stringify(result)).not.toContain("card-token-private-1234");
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(paymentCredentials).toHaveBeenCalledWith(tenant, "test");
   });
   it("never starts a second charge while a previous outcome is unknown", async () => {
     const base = query.getMockImplementation()!;

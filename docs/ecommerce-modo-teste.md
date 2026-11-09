@@ -78,6 +78,34 @@ as chaves de teste. Criar pedidos novos para vendas reais. Usar o filtro **Teste
 central de pedidos para consultar as simulações; o histórico anterior à migration é
 preservado, sem reclassificação automática.
 
+## Recusa 403 por políticas de autorização
+
+`PA_UNAUTHORIZED_RESULT_FROM_POLICIES` não é uma recusa específica do cartão ou
+dos dados do Pix. A documentação de erros do Mercado Pago associa esse código a
+bloqueio de conta/revogação de chaves e orienta procurar o suporte. O corpo genérico
+não identifica qual política foi acionada; não é possível confirmar o estado da
+conta apenas pelos logs da plataforma.
+
+1. Abrir Mercado Pago Developers > Integrações > aplicação > Teste > Credenciais.
+   Conferir que Public Key e Access Token vieram da mesma aplicação e ambiente.
+2. Não procurar um botão de "habilitar Orders API": essa não é uma exigência
+   documentada para resolver esse código. Verificar a conta e eventuais pendências
+   no painel; não trocar para as credenciais reais para contornar a recusa.
+3. Se as credenciais estiverem corretas, abrir um chamado informando: Brasil,
+   ambiente Teste, `POST /v1/orders`, HTTP 403, código retornado, horário com fuso
+   e o `providerRequestId` dos logs (o `x-request-id` do Mercado Pago).
+   O suporte pode precisar do ID público da aplicação, mas nunca enviar Access Token.
+4. A página passa a mostrar a mensagem específica e a referência da solicitação,
+   quando disponível. Esses dados ficam no resultado da tentativa e reaparecem
+   após recarregar. Essa mudança não desbloqueia a conta no provedor.
+
+As instruções de [credenciais](https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/resources/credentials)
+descrevem o seletor Teste. A [tabela oficial de erros](https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/payment-management/integration-errors/api)
+distingue `PA_UNAUTHORIZED_RESULT_FROM_POLICIES` de `forbidden` (permissões/escopos)
+e `invalid_credentials`. Ela ainda contém uma orientação de credenciais legada
+diferente da página de credenciais atual: confirmar o fluxo da conta com o suporte
+em vez de usar uma chave real ou inferir o ambiente pelo prefixo.
+
 ## Referências
 
 - https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/integration-test/pix

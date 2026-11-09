@@ -113,7 +113,11 @@ export async function startDirectPayment(tenantId: string, customerId: string, i
       return;
     }
     const definiteFailure = [400, 401, 403, 404, 422].includes(response.status);
-    await getPool().query("update commerce_payment_attempts set status=$3,result=$4,updated_at=now() where tenant_id=$1 and id=$2 and status in ('submitting','unknown')", [tenantId, id, definiteFailure ? "failed" : "unknown", JSON.stringify({ message: paymentFailureMessage(response.status) })]);
+    const result: PaymentResult = {
+      message: paymentFailureMessage(response.status, diagnostics.codes, environment),
+      ...(definiteFailure ? { failureCode: diagnostics.codes[0], supportReference: diagnostics.providerRequestId } : {}),
+    };
+    await getPool().query("update commerce_payment_attempts set status=$3,result=$4,updated_at=now() where tenant_id=$1 and id=$2 and status in ('submitting','unknown')", [tenantId, id, definiteFailure ? "failed" : "unknown", JSON.stringify(result)]);
   } catch (error) {
     console.error("Commerce direct payment awaiting reconciliation.", { tenantId, orderId: order.id, attemptId: id, errorType: error instanceof Error ? error.name : "unknown" });
     await getPool().query("update commerce_payment_attempts set status=$3,result=$4,updated_at=now() where tenant_id=$1 and id=$2 and status in ('submitting','unknown')", [tenantId, id, "unknown", JSON.stringify({ message: uncertainMessage })]);

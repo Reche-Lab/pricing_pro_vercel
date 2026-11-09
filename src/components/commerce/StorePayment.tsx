@@ -95,6 +95,7 @@ export function StorePayment({ api, orderId, onConfirmed }: { api: string; order
         <button type="button" className={styles.secondary} disabled={busy} onClick={() => void refresh()}><RefreshCw size={16} className={busy ? "animate-spin" : ""}/>{busy ? "Verificando…" : "Verificar pagamento"}</button>
       </div> : state.enabled && !state.hosted ? <>
         {attempt?.result.message ? <p role="status" className={styles.paymentError}>{attempt.result.message}</p> : null}
+        {attempt?.result.supportReference ? <p className="min-w-0 text-xs leading-5"><span>Referência Mercado Pago: </span><code className="break-all">{attempt.result.supportReference}</code></p> : null}
         <div className={styles.paymentModes} role="group" aria-label="Forma de pagamento">
           {state.settings.pix ? <button type="button" aria-pressed={mode === "pix"} disabled={busy} onClick={() => setMode("pix")}><QrCode size={20}/><span>Pix<small>Sem sair da loja</small></span></button> : null}
           {state.settings.credit || state.settings.debit ? <button type="button" aria-pressed={mode === "card"} disabled={busy} onClick={() => setMode("card")}><CreditCard size={20}/><span>Cartão<small>{state.settings.credit ? "Crédito" : ""}{state.settings.credit && state.settings.debit ? " ou " : ""}{state.settings.debit ? "débito" : ""}</small></span></button> : null}
