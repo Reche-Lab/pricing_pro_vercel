@@ -55,9 +55,45 @@ TypeScript, lint e build com um worker aprovados. Capturas e verificações em
 320/390/1440 px, claro e escuro, com cartão e QR simulados e retomada após reload.
 As outras 14 integrações condicionais não foram executadas nesta entrega.
 
+## Diagnóstico de recusa HTTP 403
+
+- [x] Recusas da Orders API registradas como erro, não como operação bem-sucedida.
+- [x] Código, causas e mensagens sanitizadas, duração, operação, ID da tentativa e
+  `x-request-id` do provedor nos logs. Sem corpo bruto, token, dados de cartão ou pagador.
+- [x] Mensagem de autorização da loja separada de erro nos dados do comprador.
+- [x] Respostas HTML, vazias ou inválidas identificadas sem expor seu conteúdo.
+- [x] Tentativas incertas continuam bloqueando novas cobranças; sem fallback automático.
+- [ ] Homologar novamente com a aplicação e as credenciais do vendedor em produção.
+
+`403` confirma uma recusa de autorização, mas sozinho não informa qual permissão
+faltou. A documentação diferencia `forbidden` (permissão da aplicação/Access Token)
+de `PA_UNAUTHORIZED_RESULT_FROM_POLICIES` (restrição da conta; verificar com suporte).
+Só identificar o código real da resposta permite distinguir essas situações.
+
+O Pix usa o Access Token privado do tenant na chamada do servidor. A Public Key
+não é enviada nessa operação; ela inicializa o componente de cartão no navegador.
+Alterar somente a Public Key mantém o Access Token anterior se o campo ficar vazio.
+Se houver troca de aplicação, atualizar o par de credenciais da mesma aplicação e
+ambiente. Confirmar a habilitação da aplicação para Checkout Transparente/Orders e
+a ativação das credenciais de produção no painel Mercado Pago, acessado pelo titular
+ou por alguém com as permissões necessárias. Não compartilhar as chaves em logs ou chat.
+
+Não é necessária outra migration para este ajuste. Após deploy, uma tentativa nova
+registra `Commerce direct payment rejected.` com `providerCode`, `providerCodes`,
+`providerMessages`, `providerRequestId` e `responseBodyKind`. Se a recusa continuar,
+usar essas informações sanitizadas para revisar a aplicação ou acionar o suporte.
+
+Validação do ajuste em 09/11/2026: 37 testes direcionados aprovados, incluindo
+403 na criação e consulta, redação de dados sensíveis, tamanho máximo de resposta,
+pagamento pendente preservado e orientação correta para Pix aguardando transferência.
+TypeScript, lint e build de produção aprovados. Nenhuma cobrança real ou alteração
+de credenciais do vendedor foi realizada durante os testes.
+
 ## Referências oficiais
 
 - https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/payment-integration/websites/cards
 - https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/payment-integration/websites/pix
 - https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/notifications
 - https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/payment-management/integrate-3ds
+- https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/payment-management/integration-errors/api
+- https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/go-to-production

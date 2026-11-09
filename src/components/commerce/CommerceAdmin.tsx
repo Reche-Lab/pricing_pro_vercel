@@ -730,7 +730,7 @@ export function CommerceAdmin({
               <p className="text-xs leading-5 text-zinc-400">Pix, crédito e débito podem ser usados dentro da loja. Boleto e carteira são oferecidos no ambiente Mercado Pago. A oferta final, os juros, as bandeiras e a elegibilidade do débito dependem da conta do vendedor. Parcelas sem juros são configuradas no Mercado Pago.</p>
             </fieldset>
             <label htmlFor="commerce-payment-token" className="grid gap-1 text-sm">
-              <CommerceCaption label="Access token do vendedor" help="Credencial da conta Mercado Pago que receberá as vendas deste tenant. Deixe vazio para manter a credencial já armazenada." />
+              <CommerceCaption label="Access token do vendedor" help="Credencial privada da mesma aplicação da Public Key, habilitada para Checkout Transparente/Orders. É ela que autoriza o Pix. Se trocar de aplicação, atualize também este campo; deixá-lo vazio mantém o token anterior." />
               <input
                 id="commerce-payment-token"
                 type="password"

@@ -604,6 +604,8 @@ Uso e limites documentados em `docs/modulo-financeiro.md`.
 
 ### Pagamento dentro da loja (Mercado Pago)
 
+- [x] Ajuste de diagnóstico de recusas 403: log de erro com causas sanitizadas e ID do provedor, sem expor credenciais; orientação de conferir o Access Token junto da Public Key.
+
 - [x] Pix com QR Code/copia e cola e cartão tokenizado pelo Card Payment Brick oficial.
 - [x] Orders API com valor do pedido validado no servidor; carteira/Checkout Pro preservada como alternativa.
 - [x] Public Key e ativação por tenant em Loja online > Pagamentos; sem novas variáveis globais.

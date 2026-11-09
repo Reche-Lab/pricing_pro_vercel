@@ -6,6 +6,7 @@ import { commercePaymentSettingsSchema } from "@/domain/commerce/payment-setting
 import { amountString, assertPaymentAllowed, validateProviderOrder, type BuyerPaymentState, type directPaymentSchema, type PaymentAttemptStatus, type PaymentResult } from "@/domain/commerce/transparent-payment";
 import { commerceTransaction, type CommerceOrder } from "@/repositories/commerce";
 import { paymentCredentials } from "./payments";
+import { paymentFailureMessage, readPaymentProviderResponse } from "./payment-diagnostics";
 
 type Attempt = {
   id: string; tenant_id: string; order_id: string; request_id: string; fingerprint: string;
@@ -14,7 +15,7 @@ type Attempt = {
 };
 const providerId = /^ORD[A-Z0-9]{10,60}$/i;
 const activeStatuses = ["submitting", "unknown", "pending", "paid", "refunded"];
-const uncertainMessage = "Estamos verificando o pagamento. Não realize outra cobrança. Atualize a situação em instantes ou entre em contato com a loja.";
+const uncertainMessage = paymentFailureMessage(502);
 
 async function ownedOrder(tenantId: string, customerId: string, orderId: string) {
   const order = (await getPool().query<CommerceOrder>(
@@ -80,15 +81,23 @@ export async function startDirectPayment(tenantId: string, customerId: string, i
       ...(!card ? { expiration_time: "PT30M" } : {}),
     }] },
   };
+  const secrets = [credentials.accessToken, credentials.webhookSecret, card?.token, billing?.email, billing?.document, billing?.document?.replace(/\D/g, ""), card?.identification?.number, order.snapshot.customer.email].filter((value): value is string => Boolean(value));
+  const startedAt = Date.now();
   try {
     const response = await fetch("https://api.mercadopago.com/v1/orders", {
       method: "POST", headers: { authorization: `Bearer ${credentials.accessToken}`, "content-type": "application/json", "X-Idempotency-Key": id },
       body: JSON.stringify(payload), cache: "no-store", signal: AbortSignal.timeout(15000),
     });
-    const data = await response.json().catch(() => null);
-    const rawCode = data?.errors?.[0]?.code ?? data?.error;
-    const providerCode = typeof rawCode === "string" && /^[a-zA-Z0-9_:-]{1,120}$/.test(rawCode) ? rawCode : undefined;
-    console.info("Commerce direct payment submitted.", { tenantId, orderId: order.id, attemptId: id, method: input.payment.method, httpStatus: response.status, providerCode });
+    const { data, diagnostics } = await readPaymentProviderResponse(response, secrets);
+    const context = {
+      tenantId, orderId: order.id, attemptId: id, method: input.payment.method,
+      operation: "orders.create", endpoint: "/v1/orders", httpStatus: response.status,
+      durationMs: Date.now() - startedAt, providerCode: diagnostics.codes[0] ?? `http_${response.status}`,
+      providerCodes: diagnostics.codes, providerMessages: diagnostics.messages,
+      providerRequestId: diagnostics.providerRequestId, responseBodyKind: diagnostics.bodyKind,
+    };
+    if (response.ok) console.info("Commerce direct payment submitted.", context);
+    else console.error("Commerce direct payment rejected.", context);
     if (typeof data?.id === "string" && providerId.test(data.id)) {
       await getPool().query("update commerce_payment_attempts set provider_order_id=$3,updated_at=now() where tenant_id=$1 and id=$2 and provider_order_id is null", [tenantId, id, data.id]);
       // Creation can include a token and incomplete seller data. Only reconcile
@@ -97,7 +106,7 @@ export async function startDirectPayment(tenantId: string, customerId: string, i
       return;
     }
     const definiteFailure = [400, 401, 403, 404, 422].includes(response.status);
-    await getPool().query("update commerce_payment_attempts set status=$3,result=$4,updated_at=now() where tenant_id=$1 and id=$2 and status in ('submitting','unknown')", [tenantId, id, definiteFailure ? "failed" : "unknown", JSON.stringify({ message: definiteFailure ? "O pagamento não foi iniciado. Confira os dados ou entre em contato com a loja." : uncertainMessage })]);
+    await getPool().query("update commerce_payment_attempts set status=$3,result=$4,updated_at=now() where tenant_id=$1 and id=$2 and status in ('submitting','unknown')", [tenantId, id, definiteFailure ? "failed" : "unknown", JSON.stringify({ message: paymentFailureMessage(response.status) })]);
   } catch (error) {
     console.error("Commerce direct payment awaiting reconciliation.", { tenantId, orderId: order.id, attemptId: id, errorType: error instanceof Error ? error.name : "unknown" });
     await getPool().query("update commerce_payment_attempts set status=$3,result=$4,updated_at=now() where tenant_id=$1 and id=$2 and status in ('submitting','unknown')", [tenantId, id, "unknown", JSON.stringify({ message: uncertainMessage })]);
@@ -107,12 +116,15 @@ export async function startDirectPayment(tenantId: string, customerId: string, i
 export async function reconcileDirectPayment(tenantId: string, id: string) {
   if (!providerId.test(id)) throw new CommerceError("Identificador de pagamento inválido.");
   const credentials = await paymentCredentials(tenantId);
+  const startedAt = Date.now();
   const response = await fetch(`https://api.mercadopago.com/v1/orders/${encodeURIComponent(id)}`, {
     headers: { authorization: `Bearer ${credentials.accessToken}` }, cache: "no-store", signal: AbortSignal.timeout(15000),
   });
-  console.info("Commerce direct payment lookup.", { tenantId, providerOrderId: id, httpStatus: response.status });
+  const { data, diagnostics } = await readPaymentProviderResponse(response, [credentials.accessToken, credentials.webhookSecret]);
+  const context = { tenantId, providerOrderId: id, operation: "orders.get", httpStatus: response.status, durationMs: Date.now() - startedAt, providerCodes: diagnostics.codes, providerMessages: diagnostics.messages, providerRequestId: diagnostics.providerRequestId, responseBodyKind: diagnostics.bodyKind };
+  if (response.ok) console.info("Commerce direct payment lookup.", context);
+  else console.error("Commerce direct payment lookup rejected.", context);
   if (!response.ok) throw new CommerceError("Não foi possível confirmar o pagamento. Aguarde e atualize a situação.", 502);
-  const data = await response.json();
   const reference = z.string().uuid().safeParse(data?.external_reference);
   if (!reference.success) return;
   const candidate = (await getPool().query<Attempt>("select * from commerce_payment_attempts where tenant_id=$1 and id=$2", [tenantId, reference.data])).rows[0];

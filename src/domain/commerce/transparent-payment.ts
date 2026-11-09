@@ -94,7 +94,7 @@ export function validateProviderOrder(raw: unknown, expected: {
     if (image && /^[A-Za-z0-9+/=\r\n]+$/.test(image) && image.startsWith("iVBOR")) result.qrImage = `data:image/png;base64,${image}`;
     if (payment.date_of_expiration && Number.isFinite(Date.parse(payment.date_of_expiration))) result.expiresAt = new Date(payment.date_of_expiration).toISOString();
   }
-  if (status === "pending" && order.status === "action_required") {
+  if (status === "pending" && expected.method === "card" && order.status === "action_required") {
     result.challengeUrl = safeChallengeUrl(payment.payment_method.transaction_security?.url);
     result.message = "Confirme sua identidade com o banco para concluir o pagamento.";
   }

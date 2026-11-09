@@ -6,6 +6,15 @@ const id = "674663df-1a12-4217-a05a-2475fd98ff7e";
 const expected = { id, sellerId: "123", totalCents: 12990, method: "pix" as const };
 const response = () => ({ id: "ORD01J49MMW3SSBK5PSV3DFR32959", user_id: "123", country_code: "BRA", external_reference: id, total_amount: "129.90", total_paid_amount: "129.90", status: "processed", status_detail: "accredited", transactions: { payments: [{ amount: "129.90", paid_amount: "120.00", status: "processed", status_detail: "accredited", payment_method: { id: "pix", type: "bank_transfer", token: "never-persist-this" } }] } });
 describe("transparent payment boundary", () => {
+  it("does not instruct Pix buyers to authenticate a card when awaiting a transfer", () => {
+    const raw = response();
+    raw.status = "action_required"; raw.status_detail = "waiting_transfer";
+    raw.transactions.payments[0].status = "action_required";
+    const result = validateProviderOrder(raw, expected);
+    expect(result.status).toBe("pending");
+    expect(result.result.message).toContain("Aguardando");
+    expect(result.result.message).not.toContain("identidade");
+  });
   it("confirms the gross amount, not the net amount, and discards sensitive data", () => {
     const result = validateProviderOrder(response(), expected);
     expect(result.status).toBe("paid");
