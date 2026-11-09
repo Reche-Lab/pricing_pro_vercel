@@ -602,6 +602,17 @@ Configuração e limites: `docs/ecommerce-piloto.md`, seção de preparação da
 
 Uso e limites documentados em `docs/modulo-financeiro.md`.
 
+### Homologação do e-commerce
+
+- [x] Modo Teste por tenant e campos de credenciais separados de Produção.
+- [x] Pedidos/tentativas com ambiente persistido, Pix APRO, avisos e webhooks específicos.
+- [x] Filtro Testes, exclusão da fila normal e bloqueio de produção/expedição de simulações.
+- [x] Verificação local: 673 testes de regressão, 14 testes em PostgreSQL isolado,
+  UI em desktop/mobile, TypeScript, lint e build de produção aprovados em 09/11/2026.
+- [ ] Aplicar `0071_commerce_payment_test_mode.sql`, cadastrar as chaves do ambiente Teste e homologar no Mercado Pago.
+
+Instruções: `docs/ecommerce-modo-teste.md`.
+
 ### Pagamento dentro da loja (Mercado Pago)
 
 - [x] Ajuste de diagnóstico de recusas 403: log de erro com causas sanitizadas e ID do provedor, sem expor credenciais; orientação de conferir o Access Token junto da Public Key.

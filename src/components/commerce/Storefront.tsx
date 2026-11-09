@@ -184,6 +184,7 @@ export function Storefront({
           </Link>
         </div>
       ) : null}
+      {!preview && cart?.payments?.payment_environment === "test" ? <div role="status" className={styles.testNotice}><strong>Loja em modo de teste</strong><span>Use somente dados e cartões de teste do Mercado Pago. Pedidos simulados não são enviados para produção.</span></div> : null}
       <header className={styles.header}>
         <div className={styles.headerInner}>
           <Link className={styles.brand} href={base || "/"}>
@@ -592,7 +593,7 @@ export function Storefront({
                       </strong>
                       <span className="mt-1 block text-sm text-zinc-500">
                         {new Date(item.created_at).toLocaleDateString("pt-BR")}{" "}
-                        · {paymentLabel(item.payment_status)}
+                        · {item.payment_environment === "test" ? "TESTE · " : ""}{paymentLabel(item.payment_status)}
                       </span>
                     </span>
                     <span className="flex items-center gap-3 font-semibold">
@@ -1179,6 +1180,7 @@ function OrderDetail({
   return (
     <div className={styles.columns}>
       <div>
+        {order.payment_environment === "test" ? <p className={styles.testNotice}>Pedido de teste · Validação de pagamento, sem produção ou envio.</p> : null}
         <p className="mb-5 text-sm text-zinc-500">
           Pedido {order.id.toUpperCase()}
         </p>

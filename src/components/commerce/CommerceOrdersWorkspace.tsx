@@ -6,7 +6,7 @@ import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, Eye, PackageCheck, Paintbr
 import { orderProductionState, type OrderFilter, type OrderWorkspace } from "@/domain/commerce/order-workflow";
 import { storeMoney } from "./store-http";
 
-const filters: [OrderFilter, string][] = [["all", "Todos"], ["unread", "Não vistos"], ["payment", "Pagamento pendente"], ["preparation", "Preparar artes"], ["approval", "Aguardando aprovação"], ["ready", "Prontos para produção"], ["production", "Em produção"], ["shipped", "Enviados"], ["completed", "Concluídos"]];
+const filters: [OrderFilter, string][] = [["all", "Todos"], ["unread", "Não vistos"], ["payment", "Pagamento pendente"], ["preparation", "Preparar artes"], ["approval", "Aguardando aprovação"], ["ready", "Prontos para produção"], ["production", "Em produção"], ["shipped", "Enviados"], ["completed", "Concluídos"], ["test", "Testes"]];
 export function CommerceOrdersWorkspace({ data, filter }: { data: OrderWorkspace; filter: OrderFilter }) {
   const router = useRouter();
   const href = (next: OrderFilter, page = 1) => `/commerce/orders?filter=${next}&page=${page}`;

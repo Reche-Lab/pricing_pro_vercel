@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { savePaymentConnection } from "@/services/commerce/payments";
-import { commercePaymentSettingsSchema } from "@/domain/commerce/payment-settings";
+import { commercePaymentSettingsSchema, paymentEnvironmentSchema } from "@/domain/commerce/payment-settings";
 import {
   requireCommerceAdmin,
   checkCommerceOrigin,
@@ -18,6 +18,12 @@ const schema = z
     publicKey: z.string().trim().max(200).regex(/^(?:APP_USR-[a-zA-Z0-9-]+|TEST-[a-zA-Z0-9-]+)?$/).optional(),
     transparentEnabled: z.boolean().optional(),
     checkoutSettings: commercePaymentSettingsSchema.optional(),
+    paymentEnvironment: paymentEnvironmentSchema.optional(),
+    testPublicKey: z.string().trim().max(200).regex(/^(?:APP_USR-[a-zA-Z0-9-]+|TEST-[a-zA-Z0-9-]+)?$/).optional(),
+    testAccessToken: z.string().trim().max(500).optional(),
+    testWebhookSecret: z.string().trim().max(500).optional(),
+    testSellerId: z.string().trim().regex(/^\d*$/).max(30).optional(),
+    testCredentialsConfirmed: z.boolean().optional(),
   })
   .strict();
 export async function PUT(request: Request) {

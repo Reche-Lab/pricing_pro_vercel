@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+export const paymentEnvironmentSchema = z.enum(["production", "test"]);
+export type PaymentEnvironment = z.infer<typeof paymentEnvironmentSchema>;
+export const paymentEnvironment = (value: unknown): PaymentEnvironment => value === "test" ? "test" : "production";
+
 export const commercePaymentSettingsSchema = z.object({
   pix: z.boolean().default(true),
   credit: z.boolean().default(true),

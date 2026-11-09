@@ -8,6 +8,19 @@ vi.mock("@/components/commerce/store-http", () => ({ storeRequest: vi.fn(), stor
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("commerce configuration controls", () => {
+  it("saves test credentials separately and never exposes the stored private keys", async () => {
+    const initial = { store: { tenant_id: "tenant" }, products: [], variants: [], platforms: [], orders: [], payments: { mp_enabled: true, mp_configured: true, public_key: "APP_USR-production", transparent_enabled: true } };
+    vi.mocked(storeRequest).mockResolvedValue(initial);
+    render(<CommerceAdmin initial={initial as never} tenantName="Ground Shop"/>);
+    fireEvent.click(screen.getByRole("button", { name: "Pagamentos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Teste" }));
+    fireEvent.change(screen.getByLabelText("Public Key de teste", { selector: "input" }), { target: { value: "APP_USR-test" } });
+    fireEvent.change(screen.getByLabelText("Access Token de teste", { selector: "input" }), { target: { value: "sandbox-private" } });
+    fireEvent.click(screen.getByLabelText(/Confirmo que copiei/));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar meios de pagamento" }));
+    await waitFor(() => expect(storeRequest).toHaveBeenCalledWith("/api/commerce/admin/payments", "PUT", expect.objectContaining({ paymentEnvironment: "test", publicKey: "APP_USR-production", accessToken: undefined, testPublicKey: "APP_USR-test", testAccessToken: "sandbox-private", testCredentialsConfirmed: true })));
+    await waitFor(() => expect(screen.getByLabelText("Access Token de teste", { selector: "input" })).toHaveValue(""));
+  });
   it("opens help on focus or touch, closes on Escape and never submits the form", () => {
     const submit = vi.fn();
     render(<form onSubmit={submit}><CommerceHelp label="Canal" text="Usa os preços publicados do canal selecionado." /></form>);

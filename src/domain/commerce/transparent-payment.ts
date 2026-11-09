@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { CommerceError } from "./commerce";
-import { commercePaymentSettingsSchema } from "./payment-settings";
+import { commercePaymentSettingsSchema, type PaymentEnvironment } from "./payment-settings";
 import { isValidCpfOrCnpj } from "@/lib/validation/documents";
 
 export const directPaymentSchema = z.object({
@@ -25,6 +25,7 @@ export type PaymentResult = {
   challengeUrl?: string; providerStatus?: string;
 };
 export type BuyerPaymentState = {
+  environment?: PaymentEnvironment; canStart?: boolean;
   enabled: boolean; publicKey: string; amountCents: number;
   settings: z.infer<typeof commercePaymentSettingsSchema>;
   hosted: boolean; paymentStatus: string;
@@ -42,6 +43,7 @@ export function assertPaymentAllowed(payment: DirectPayment, rawSettings: unknow
 
 const money = z.string().regex(/^\d+(\.\d{1,2})?$/);
 const providerOrderSchema = z.object({
+  live_mode: z.boolean().optional(),
   id: z.string().regex(/^ORD[A-Z0-9]{10,60}$/i),
   user_id: z.union([z.string(), z.number()]).transform(String),
   country_code: z.literal("BRA"), currency: z.literal("BRL").optional(), currency_id: z.literal("BRL").optional(),
@@ -75,10 +77,13 @@ export function safeChallengeUrl(value?: string | null) {
 
 export function validateProviderOrder(raw: unknown, expected: {
   id: string; sellerId: string; totalCents: number; method: "pix" | "card";
+  environment?: PaymentEnvironment;
 }): { providerId: string; status: PaymentAttemptStatus; result: PaymentResult } {
   const parsed = providerOrderSchema.safeParse(raw);
   if (!parsed.success) throw new CommerceError("Resposta de pagamento não reconhecida. Aguarde a confirmação.", 502);
   const order = parsed.data, payment = order.transactions.payments[0];
+  if (order.live_mode !== undefined && order.live_mode !== (expected.environment !== "test"))
+    throw new CommerceError("O ambiente retornado pelo Mercado Pago não corresponde ao pedido. Revise as credenciais antes de continuar.", 409);
   if (order.user_id !== expected.sellerId || order.external_reference !== expected.id || toCents(order.total_amount) !== expected.totalCents || toCents(payment.amount) !== expected.totalCents ||
     (expected.method === "pix" ? payment.payment_method.id !== "pix" || payment.payment_method.type !== "bank_transfer" : !["credit_card", "debit_card"].includes(payment.payment_method.type)))
     throw new CommerceError("Os dados do pagamento não correspondem ao pedido. Revisão necessária.", 409);
@@ -88,6 +93,7 @@ export function validateProviderOrder(raw: unknown, expected: {
   if (["refunded", "charged_back"].includes(order.status)) status = "refunded";
   const result: PaymentResult = { providerStatus: order.status };
   result.message = status === "paid" ? "Pagamento confirmado. Seu pedido está pago." : status === "failed" ? "O pagamento não foi concluído. Escolha uma forma de pagamento para tentar novamente." : status === "refunded" ? "Pagamento estornado. Entre em contato com a loja." : "Aguardando a confirmação do Mercado Pago.";
+  if (expected.environment === "test" && status === "paid") result.message = "Pagamento de teste aprovado. Nenhuma produção ou expedição foi liberada.";
   if (status === "pending" && expected.method === "pix") {
     if (payment.payment_method.qr_code) result.qrCode = payment.payment_method.qr_code;
     const image = payment.payment_method.qr_code_base64;

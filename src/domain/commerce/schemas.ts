@@ -162,6 +162,7 @@ export const addressSchema = z
   .strict();
 export const checkoutSchema = z
   .object({
+    paymentEnvironment: z.enum(["production", "test"]).optional(),
     revision: z.number().int().nonnegative(),
     expectedTotalCents: z.number().int().positive(),
     delivery: z.enum(["pickup", "delivery"]),

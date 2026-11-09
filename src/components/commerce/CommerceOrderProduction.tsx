@@ -13,7 +13,7 @@ export function CommerceOrderProduction({ order, canManage }: { order: OrderWork
   useEffect(() => { if (action) dialog.current?.showModal?.(); }, [action]);
   const state = orderProductionState(order);
   const labels: Record<string, string> = { confirm_manual: "Confirmar pagamento recebido", production: "Iniciar produção", shipped: "Marcar como enviado", completed: "Concluir pedido" };
-  const next = order.payment_status === "pending" && order.provider === "manual" ? "confirm_manual"
+  const next = order.payment_environment === "test" ? null : order.payment_status === "pending" && order.provider === "manual" ? "confirm_manual"
     : order.payment_status !== "paid" ? null
     : order.fulfillment_status === "received" ? "production"
     : order.fulfillment_status === "production" ? "shipped"

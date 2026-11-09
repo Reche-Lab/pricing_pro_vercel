@@ -8,7 +8,8 @@ export async function commerceLaunchReadiness(tenantId: string): Promise<Commerc
     has_boxes: boolean; payment_ready: boolean; carrier_settings: Record<string, unknown> | null;
   }>(`select t.postal_code,i.status as carrier_status,i.settings as carrier_settings,i.credentials_encrypted is not null as carrier_credentials,
     exists(select 1 from packaging_boxes b where b.tenant_id=t.id and b.active and b.height_cm>0 and b.width_cm>0 and b.length_cm>0) as has_boxes,
-    coalesce((p.mp_enabled and p.encrypted_credentials is not null) or (p.manual_enabled and length(trim(p.manual_instructions))>0),false) as payment_ready
+    coalesce(case when p.payment_environment='test' then p.mp_enabled and p.transparent_enabled and p.test_encrypted_credentials is not null and length(p.test_public_key)>0
+      else (p.mp_enabled and p.encrypted_credentials is not null) or (p.manual_enabled and length(trim(p.manual_instructions))>0) end,false) as payment_ready
     from tenants t left join integration_connections i on i.tenant_id=t.id and i.provider='melhor_envio'
     left join commerce_payment_connections p on p.tenant_id=t.id where t.id=$1`, [tenantId]);
   const row = result.rows[0];

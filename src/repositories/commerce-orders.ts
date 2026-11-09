@@ -3,7 +3,7 @@ import type { OrderFilter, OrderWorkspace, OrderWorkspaceItem } from "@/domain/c
 
 // Every join and read marker is tenant-scoped; only summary data leaves this query.
 const workspace = `with facts as (
-  select o.id,o.payment_status,o.fulfillment_status,o.provider,o.total_cents,o.created_at,
+  select o.id,o.payment_status,o.fulfillment_status,o.provider,o.total_cents,o.created_at,o.payment_environment,
     coalesce(o.snapshot->'customer'->>'name','Cliente') as customer_name,
     jsonb_array_length(o.snapshot->'lines') as item_count,
     art.required_artworks,art.prepared_artworks,art.approved_artworks,
@@ -23,7 +23,7 @@ const workspace = `with facts as (
   where o.tenant_id=$1
 ), orders as (
   select *, (seen_through is null or seen_through<activity_at) as unread,
-    case when payment_status='refunded' then 'refunded'
+    case when payment_environment='test' then 'test' when payment_status='refunded' then 'refunded'
       when fulfillment_status<>'received' then fulfillment_status
       when payment_status<>'paid' then 'payment'
       when prepared_artworks<required_artworks then 'preparation'
@@ -35,9 +35,9 @@ export async function getOrderWorkspace(tenantId: string, userId: string, input:
   const page = Math.max(1, Math.trunc(input.page ?? 1));
   const pageSize = Math.max(1, Math.min(50, Math.trunc(input.pageSize ?? 20)));
   const result = await getPool().query(`${workspace}, filtered as (
-      select * from orders where $3='all' or ($3='unread' and unread) or stage=$3
+      select * from orders where ($3='all' and payment_environment='production') or ($3='unread' and unread and payment_environment='production') or stage=$3
     ) select
-      (select jsonb_build_object('total',count(*),'unread',count(*) filter(where unread),
+      (select jsonb_build_object('total',count(*) filter(where payment_environment='production'),'unread',count(*) filter(where unread and payment_environment='production'),
         'payment',count(*) filter(where stage='payment'),'preparation',count(*) filter(where stage='preparation'),
         'approval',count(*) filter(where stage='approval'),'ready',count(*) filter(where stage='ready'),
         'production',count(*) filter(where stage='production')) from orders) as summary,

@@ -31,6 +31,7 @@ export async function GET(
     if (!order) throw new CommerceError("Pedido não encontrado.", 404);
     const query = new URL(request.url).searchParams;
     const pdf = query.get("pdf") === "1";
+    if (pdf && order.payment_environment === "test") throw new CommerceError("O PDF de produção não é liberado para pedidos de teste.", 409);
     const ids = order.snapshot.lines.map((l) => l.artworkId).filter(Boolean);
     if (!pdf && !ids.includes(query.get("artworkId")))
       throw new CommerceError("Arte não encontrada.", 404);

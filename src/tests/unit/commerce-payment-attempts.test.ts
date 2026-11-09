@@ -2,10 +2,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { startDirectPayment, reconcileDirectPayment } from "@/services/commerce/transparent-payments";
 import { getPool } from "@/lib/db/client";
+import { paymentCredentials } from "@/services/commerce/payments";
 import { commerceTransaction } from "@/repositories/commerce";
 vi.mock("@/lib/db/client", () => ({ getPool: vi.fn() }));
 vi.mock("@/repositories/commerce", () => ({ commerceTransaction: vi.fn() }));
-vi.mock("@/services/commerce/payments", () => ({ paymentCredentials: async () => ({ accessToken: "secret", webhookSecret: "secret", sellerId: "123" }) }));
+vi.mock("@/services/commerce/payments", () => ({ paymentCredentials: vi.fn(async () => ({ accessToken: "secret", webhookSecret: "secret", sellerId: "123" })) }));
 const query = vi.fn(), fetcher = vi.fn();
 const tenant = "tenant", buyer = "buyer", orderId = "674663df-1a12-4217-a05a-2475fd98ff7e";
 const requestId = "16cd6914-a8a2-4003-a139-e889e0f99eee";
@@ -23,6 +24,30 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe("persisted payment attempts", () => {
+  it("uses only test credentials and the documented APRO payer in test mode", async () => {
+    const base = query.getMockImplementation()!;
+    query.mockImplementation(async (sql: string, ...args: unknown[]) => {
+      if (sql.includes("from commerce_orders")) return { rows: [{ ...order, payment_environment: "test" }] };
+      if (sql.includes("from commerce_payment_connections")) return { rows: [{ mp_enabled: true, transparent_enabled: true, test_public_key: "APP_USR-test", payment_environment: "test", checkout_settings: {} }] };
+      return base(sql, ...args);
+    });
+    fetcher.mockRejectedValue(new Error("simulated timeout"));
+    await startDirectPayment(tenant, buyer, { orderId, requestId, payment: { method: "pix" } });
+    expect(paymentCredentials).toHaveBeenCalledWith(tenant, "test");
+    expect(vi.mocked(paymentCredentials).mock.calls.every(([, environment]) => environment === "test")).toBe(true);
+    const payload = JSON.parse(fetcher.mock.calls[0][1].body);
+    expect(payload.payer).toEqual({ email: "test_payer@example.com", first_name: "APRO" });
+    expect(payload.total_amount).toBe("129.90");
+    const insert = query.mock.calls.find(([sql]) => sql.startsWith("insert into commerce_payment_attempts"))!;
+    expect(insert[1][7]).toBe("test");
+  });
+  it("cannot begin a production payment while the shop is in test mode", async () => {
+    const base = query.getMockImplementation()!;
+    query.mockImplementation(async (sql: string, ...args: unknown[]) => sql.includes("from commerce_payment_connections") ? { rows: [{ payment_environment: "test", mp_enabled: true, transparent_enabled: true, test_public_key: "test" }] } : base(sql, ...args));
+    await expect(startDirectPayment(tenant, buyer, { orderId, requestId, payment: { method: "pix" } })).rejects.toThrow("outro ambiente");
+    expect(paymentCredentials).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it("logs rejected Pix as an error with redacted provider diagnostics, not as a success", async () => {
     const failed = vi.spyOn(console, "error").mockImplementation(() => {});
     const info = vi.spyOn(console, "info").mockImplementation(() => {});

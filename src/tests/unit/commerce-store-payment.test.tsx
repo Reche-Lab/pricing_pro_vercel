@@ -11,6 +11,21 @@ const onConfirmed = vi.fn().mockResolvedValue(undefined);
 beforeEach(() => { vi.clearAllMocks(); vi.mocked(storeRequest).mockResolvedValue(initial()); });
 afterEach(() => { cleanup(); delete window.MercadoPago; });
 describe("buyer payment experience", () => {
+  it("identifies test payments and never offers a production wallet fallback", async () => {
+    vi.mocked(storeRequest).mockResolvedValue({ ...initial(), environment: "test", canStart: true });
+    render(<StorePayment api="/api/store/shop" orderId="order" onConfirmed={onConfirmed}/>);
+    expect(await screen.findByText("Pagamento de teste")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Pagar no Mercado Pago" })).toBeNull();
+    fireEvent.click(screen.getByText("Dados para testar cartão"));
+    expect(screen.getByRole("link", { name: "Ver cartões de teste" })).toBeTruthy();
+  });
+  it("does not expose a payable QR from a different active environment", async () => {
+    vi.mocked(storeRequest).mockResolvedValue({ ...initial(), canStart: false, attempt: { id: "attempt", status: "pending", method: "pix", result: { qrCode: "do-not-pay" } } });
+    render(<StorePayment api="/api/store/shop" orderId="order" onConfirmed={onConfirmed}/>);
+    expect(await screen.findByText(/outro ambiente de pagamento/)).toBeTruthy();
+    expect(screen.queryByDisplayValue("do-not-pay")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Gerar Pix" })).toBeNull();
+  });
   it("generates Pix without sending amounts and shows copy-and-paste", async () => {
     render(<StorePayment api="/api/store/shop" orderId="order" onConfirmed={onConfirmed}/>);
     await screen.findByRole("button", { name: "Gerar Pix" });

@@ -6,6 +6,7 @@ import { listPlatformRules } from "@/repositories/platforms";
 import { commercePriceSummary } from "@/domain/commerce/offers";
 import { assertCommerceVideosReady } from "@/repositories/commerce-media";
 import type { ProductMedia } from "@/domain/commerce/product-media";
+import { paymentEnvironment, type PaymentEnvironment } from "@/domain/commerce/payment-settings";
 import type { CommerceArtworkOptions } from "@/domain/commerce/artwork-options";
 import { checkoutSchema, type CommerceBillingSnapshot } from "@/domain/commerce/schemas";
 import { resolveCheckoutDelivery } from "@/domain/commerce/checkout";
@@ -62,6 +63,7 @@ export type BuyerSession = {
   revision: number;
 };
 export type CommerceOrder = {
+  payment_environment?: PaymentEnvironment;
   id: string;
   tenant_id: string;
   customer_id: string;
@@ -212,11 +214,11 @@ export async function getCommerceAdmin(userId: string, tenantId: string) {
       listProductVariants(userId, tenantId),
       listPlatformRules(userId, tenantId),
       getPool().query(
-        `select manual_enabled,manual_instructions,mp_enabled,checkout_settings,public_key,transparent_enabled,encrypted_credentials is not null as mp_configured from commerce_payment_connections where tenant_id=$1`,
+        `select manual_enabled,manual_instructions,mp_enabled,checkout_settings,public_key,transparent_enabled,payment_environment,test_public_key,test_encrypted_credentials is not null as test_configured,encrypted_credentials is not null as mp_configured from commerce_payment_connections where tenant_id=$1`,
         [tenantId],
       ),
       getPool().query(
-        `select id,total_cents,payment_status,fulfillment_status,provider,created_at::text,snapshot->'customer' as customer from commerce_orders where tenant_id=$1 order by created_at desc limit 100`,
+        `select id,total_cents,payment_status,fulfillment_status,provider,payment_environment,created_at::text,snapshot->'customer' as customer from commerce_orders where tenant_id=$1 order by created_at desc limit 100`,
         [tenantId],
       ),
       commerceLaunchReadiness(tenantId),
@@ -375,7 +377,7 @@ export async function cartView(store: CommerceStore, session: BuyerSession) {
     : null;
   const payments = (
     await getPool().query(
-      `select manual_enabled,mp_enabled,manual_instructions from commerce_payment_connections where tenant_id=$1`,
+      `select case when payment_environment='test' then false else manual_enabled end as manual_enabled,mp_enabled,manual_instructions,payment_environment from commerce_payment_connections where tenant_id=$1`,
       [store.tenant_id],
     )
   ).rows[0];
@@ -501,10 +503,13 @@ export async function createCommerceOrder(
       );
     const connections = (
       await client.query(
-        "select manual_enabled,mp_enabled from commerce_payment_connections where tenant_id=$1",
+        "select manual_enabled,mp_enabled,payment_environment from commerce_payment_connections where tenant_id=$1 for share",
         [store.tenant_id],
       )
     ).rows[0];
+    const environment = paymentEnvironment(connections?.payment_environment);
+    if ((input.paymentEnvironment ?? "production") !== environment) throw new CommerceError("O ambiente de pagamento da loja mudou. Atualize o carrinho antes de confirmar.", 409);
+    if (environment === "test" && input.provider !== "mercado_pago") throw new CommerceError("Use Pix ou cartão de teste para validar o pagamento.", 409);
     if (
       !connections ||
       !(input.provider === "manual"
@@ -557,7 +562,7 @@ export async function createCommerceOrder(
       artworkDiscountCents: calculated.artworkDiscountCents ?? 0,
     };
     const result = await client.query<{ id: string }>(
-      `insert into commerce_orders(tenant_id,customer_id,session_id,cart_revision,snapshot,subtotal_cents,shipping_cents,total_cents,provider) values($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
+      `insert into commerce_orders(tenant_id,customer_id,session_id,cart_revision,snapshot,subtotal_cents,shipping_cents,total_cents,provider,payment_environment) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
       [
         store.tenant_id,
         current.customer_id,
@@ -568,6 +573,7 @@ export async function createCommerceOrder(
         shipping,
         calculated.totalCents + shipping,
         input.provider,
+        environment,
       ],
     );
     await client.query(
@@ -631,6 +637,7 @@ export async function buyerOrders(tenantId: string, customerId: string) {
       checkout_url,
       created_at,
       snapshot,
+      payment_environment,
     }) => ({
       id,
       total_cents,
@@ -642,6 +649,7 @@ export async function buyerOrders(tenantId: string, customerId: string) {
       checkout_url,
       created_at,
       items: snapshot.items,
+      payment_environment: paymentEnvironment(payment_environment),
       address: snapshot.address,
       billing: snapshot.billing ?? null,
       deliveryAddressSameAsBilling: snapshot.deliveryAddressSameAsBilling ?? false,

@@ -35,6 +35,9 @@ import { getOrderWorkspace, getOrderWorkspaceItem, markOrderSeen } from "@/repos
 import { userHasPermission } from "@/repositories/users";
 import { getCurrentSession } from "@/lib/auth/session";
 import { GET as orderFiles } from "@/app/api/commerce/admin/orders/[orderId]/files/route";
+import { POST as orderAction } from "@/app/api/commerce/admin/orders/[orderId]/route";
+import { POST as paymentWebhook } from "@/app/api/store/[slug]/payment-webhook/route";
+import { createHmac } from "node:crypto";
 vi.mock("@/lib/auth/session", () => ({ getCurrentSession: vi.fn() }));
 const objects = vi.hoisted(() => new Map<string, { bytes: Uint8Array; contentType: string }>());
 vi.mock("@/services/storage/artwork-storage", async importOriginal => ({
@@ -566,5 +569,56 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
       try { await client.query("set role anon"); await expect(client.query("select * from commerce_payment_attempts")).rejects.toMatchObject({ code: "42501" }); }
       finally { await client.query("reset role"); client.release(); }
     } finally { release?.(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
+  });
+  it("isolates sandbox keys and orders and reconciles test webhooks after switching back to production", async () => {
+    vi.stubEnv("APP_URL", "https://panel.example.test");
+    await savePaymentConnection(tenantId, actorId, { manualEnabled: false, manualInstructions: "", mpEnabled: true, transparentEnabled: true, paymentEnvironment: "test", testPublicKey: "APP_USR-sandbox-public", testAccessToken: "fake-sandbox-token", testWebhookSecret: "sandbox-signature", testSellerId: "456", testCredentialsConfirmed: true });
+    await getPool().query("update commerce_products set snapshot=jsonb_set(snapshot,'{personalized}','false') where tenant_id=$1", [tenantId]);
+    const store = (await getCommerceStore("ground-shop"))!, products = await commerceProducts(tenantId);
+    const { session } = await createBuyerSession(tenantId);
+    const customerId = (await getPool().query("select id from commerce_customers where tenant_id=$1 limit 1", [tenantId])).rows[0].id;
+    await getPool().query("update commerce_sessions set customer_id=$2 where id=$1", [session.id, customerId]); session.customer_id = customerId;
+    const lines = [{ id: crypto.randomUUID(), productId: products[0].id, quantity: 10, artworkName: "", artworkId: null }];
+    await replaceCart(store, session, 0, lines); session.cart = lines; session.revision = 1;
+    const calculated = await calculateCommerceCart(tenantId, session.id, lines, products);
+    const checkout = { revision: 1, expectedTotalCents: calculated.totalCents, billing: testCommerceBilling, delivery: "pickup" as const, deliveryAddressSameAsBilling: true, address: null, provider: "mercado_pago" as const, acceptedTerms: true as const };
+    await expect(createCommerceOrder(store, session, checkout)).rejects.toThrow("ambiente de pagamento");
+    const order = await createCommerceOrder(store, session, { ...checkout, paymentEnvironment: "test" });
+    expect((await buyerOrders(tenantId, customerId)).find(o => o.id === order.id)?.payment_environment).toBe("test");
+    expect((await getCommerceAdmin(actorId, tenantId)).readiness.paymentReady).toBe(true);
+    let reference = "", approved = false;
+    const mpId = "ORD01J49MMW3SSBK5PSV3DFR32961";
+    const provider = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer fake-sandbox-token");
+      if (init?.method === "POST") {
+        const payload = JSON.parse(String(init.body)); reference = payload.external_reference;
+        expect(payload.payer).toEqual({ email: "test_payer@example.com", first_name: "APRO" });
+        return Response.json({ id: mpId }, { status: 201 });
+      }
+      expect(url).toContain(`/v1/orders/${mpId}`);
+      return Response.json({ id: mpId, user_id: "456", live_mode: false, country_code: "BRA", external_reference: reference, total_amount: (calculated.totalCents / 100).toFixed(2), total_paid_amount: approved ? (calculated.totalCents / 100).toFixed(2) : "0.00", status: approved ? "processed" : "action_required", status_detail: approved ? "accredited" : "waiting_transfer", transactions: { payments: [{ amount: (calculated.totalCents / 100).toFixed(2), status: approved ? "processed" : "action_required", status_detail: approved ? "accredited" : "waiting_transfer", payment_method: { id: "pix", type: "bank_transfer", qr_code: "simulated-pix" } }] } });
+    });
+    vi.stubGlobal("fetch", provider);
+    try {
+      await startDirectPayment(tenantId, customerId, { orderId: order.id, requestId: crypto.randomUUID(), payment: { method: "pix" } });
+      expect((await buyerPaymentState(tenantId, customerId, order.id)).environment).toBe("test");
+      expect((await getOrderWorkspace(tenantId, actorId)).orders.some(o => o.id === order.id)).toBe(false);
+      expect((await getOrderWorkspace(tenantId, actorId, { filter: "test" })).orders.some(o => o.id === order.id)).toBe(true);
+      await savePaymentConnection(tenantId, actorId, { manualEnabled: false, manualInstructions: "", mpEnabled: true, transparentEnabled: true, paymentEnvironment: "production" });
+      approved = true;
+      const state = await refreshDirectPayment(tenantId, customerId, order.id);
+      expect(state).toMatchObject({ environment: "test", canStart: false, paymentStatus: "paid" });
+      expect((await getPool().query("select count(*)::int as count from commerce_order_events where tenant_id=$1 and order_id=$2 and type='payment.paid'", [tenantId, order.id])).rows[0].count).toBe(0);
+      expect(JSON.stringify(state)).not.toMatch(/fake-sandbox-token|sandbox-signature/);
+      const signature = createHmac("sha256", "sandbox-signature").update(`id:${mpId.toLowerCase()};request-id:req-sandbox;ts:1234567890;`).digest("hex");
+      const webhookRequest = (test = true) => new Request(`https://panel.example.test/api/store/ground-shop/payment-webhook?data.id=${mpId}${test ? "&environment=test" : ""}`, { method: "POST", headers: { "x-signature": `ts=1234567890,v1=${signature}`, "x-request-id": "req-sandbox" } });
+      expect((await paymentWebhook(webhookRequest(), { params: Promise.resolve({ slug: "ground-shop" }) })).status).toBe(200);
+      expect((await paymentWebhook(webhookRequest(false), { params: Promise.resolve({ slug: "ground-shop" }) })).status).toBe(401);
+      vi.mocked(getCurrentSession).mockResolvedValue({ userId: actorId, tenantId, role: "owner", email: "commerce-admin@example.test" });
+      const action = await orderAction(new Request(`https://panel.example.test/api/commerce/admin/orders/${order.id}`, { method: "POST", headers: { origin: "https://panel.example.test", "content-type": "application/json" }, body: JSON.stringify({ action: "production", note: "Test must never release real production" }) }), { params: Promise.resolve({ orderId: order.id }) });
+      expect(action.status).toBe(409);
+      expect((await orderFiles(new Request(`https://panel.example.test/api/commerce/admin/orders/${order.id}/files?pdf=1`), { params: Promise.resolve({ orderId: order.id }) })).status).toBe(409);
+      expect((await getPool().query("select payment_environment,fulfillment_status from commerce_orders where id=$1", [order.id])).rows[0]).toMatchObject({ payment_environment: "test", fulfillment_status: "received" });
+    } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
   });
 });

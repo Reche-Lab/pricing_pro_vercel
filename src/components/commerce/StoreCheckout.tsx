@@ -142,7 +142,7 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
       billing: { ...postalContact(billing), email: billing.email }, delivery, deliveryAddressSameAsBilling: same,
       ...(delivery === "delivery" && selectedFreight?.quoteId ? { shippingQuoteId: selectedFreight.quoteId } : {}),
       address: delivery === "delivery" && !same ? { ...postalContact(address), attention: address.attention } : null,
-      provider, acceptedTerms: accepted,
+      provider, acceptedTerms: accepted, paymentEnvironment: cart.payments.payment_environment ?? "production",
     });
     if (!parsed.success) {
       setErrors(Object.fromEntries(parsed.error.issues.map(issue => [issue.path.join("."), issue.message])));
@@ -196,7 +196,7 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
       <label className="my-5 flex items-start gap-3"><input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} required/><span>Li e aceito as <Link target="_blank" href={`${base}/condicoes`} className="underline">condições de compra</Link>.</span></label>
       {error ? <p role="alert" className="mb-3 text-sm text-red-700">{error}</p> : null}
       <button className={`${styles.primary} w-full`} disabled={disabled || shippingBusy || missingFreight || billingCepBusy || deliveryCepBusy || !accepted || !cart.calculation || (!cart.payments.mp_enabled && !cart.payments.manual_enabled)}><Check size={17}/>{preview ? "Concluir simulação" : "Confirmar pedido"}</button>
-      <p className="mt-3 text-sm text-zinc-500">{preview ? "Prévia privada. Nenhum pedido real será criado." : provider === "mercado_pago" ? "Após confirmar, escolha como pagar no detalhe do pedido." : "A produção começa após a confirmação do pagamento pela loja."}</p>
+      <p className="mt-3 text-sm text-zinc-500">{preview ? "Prévia privada. Nenhum pedido real será criado." : cart.payments.payment_environment === "test" ? "Pedido de teste: utilize apenas os dados e cartões de teste do Mercado Pago. Não haverá liberação de produção ou envio." : provider === "mercado_pago" ? "Após confirmar, escolha como pagar no detalhe do pedido." : "A produção começa após a confirmação do pagamento pela loja."}</p>
     </aside>
   </form>;
 }

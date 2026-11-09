@@ -62,10 +62,10 @@ export function StorePayment({ api, orderId, onConfirmed }: { api: string; order
   const challenge = attempt?.result.challengeUrl;
   const challengeFrame = useRef<HTMLIFrameElement>(null);
   useEffect(() => {
-    if (!blocked || paid || state?.paymentStatus !== "pending") return;
+    if (!blocked || paid || state?.paymentStatus !== "pending" || state.canStart === false) return;
     const timer = window.setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 20000);
     return () => window.clearInterval(timer);
-  }, [blocked, paid, state?.paymentStatus, refresh]);
+  }, [blocked, paid, state?.paymentStatus, state?.canStart, refresh]);
   useEffect(() => {
     if (!challenge) return;
     const listener = (event: MessageEvent) => {
@@ -76,9 +76,10 @@ export function StorePayment({ api, orderId, onConfirmed }: { api: string; order
   }, [challenge, refresh]);
   return <section className={styles.payment} aria-label="Pagamento do pedido" aria-busy={busy}>
     <h2 className={styles.paymentHeading}><LockKeyhole size={18}/>Pagamento seguro</h2>
+    {state?.environment === "test" ? <div className={styles.testNotice}><strong>Pagamento de teste</strong><span>Não utilize cartão real nem pague o Pix em um aplicativo bancário. No Pix, o cenário de aprovação é automático.</span></div> : null}
     {error ? <p role="alert" className={styles.paymentError}>{error}</p> : null}
     {!state ? <button type="button" className={styles.secondary} disabled={busy} onClick={() => void refresh()}>{error ? <RefreshCw size={16}/> : <Loader2 size={16} className="animate-spin"/>}{error ? "Carregar pagamento" : "Carregando pagamento"}</button> : paid ? <p className={styles.paymentSuccess} role="status"><ShieldCheck size={20}/>Pagamento confirmado. Obrigado!</p> : <>
-      {blocked ? <div className={styles.paymentPending}>
+      {state.canStart === false ? <div className={styles.paymentIntro}><p>Este pedido pertence a outro ambiente de pagamento. Crie um novo pedido para testar no ambiente atual da loja.</p><button className={styles.secondary} type="button" disabled={busy} onClick={() => void refresh()}><RefreshCw size={16}/>Verificar situação deste pedido</button></div> : blocked ? <div className={styles.paymentPending}>
         <p role="status">{attempt?.result.message || "Estamos verificando seu pagamento. Aguarde e atualize a situação antes de tentar novamente."}</p>
         {attempt?.result.qrImage ? <>
           {/* Provider-generated base64 QR must not be resized by an image proxy. */}
@@ -99,8 +100,8 @@ export function StorePayment({ api, orderId, onConfirmed }: { api: string; order
           {state.settings.credit || state.settings.debit ? <button type="button" aria-pressed={mode === "card"} disabled={busy} onClick={() => setMode("card")}><CreditCard size={20}/><span>Cartão<small>{state.settings.credit ? "Crédito" : ""}{state.settings.credit && state.settings.debit ? " ou " : ""}{state.settings.debit ? "débito" : ""}</small></span></button> : null}
         </div>
         {mode === "pix" && state.settings.pix ? <div className={styles.paymentIntro}><p>Pague {storeMoney(state.amountCents)} por Pix. O QR Code fica disponível aqui e a confirmação é feita pelo Mercado Pago.</p><button type="button" className={styles.primary} disabled={busy} onClick={() => void submit({ method: "pix" })}>{busy ? <Loader2 size={17} className="animate-spin"/> : <QrCode size={17}/>}Gerar Pix</button></div> : <CardPayment key={attempt?.id ?? "initial"} state={state} onSubmit={submit}/>}
-        <details className={styles.paymentWallet}><summary>Outras opções de pagamento</summary><p>Use sua carteira Mercado Pago ou consulte as opções disponíveis no ambiente do provedor.</p><button type="button" className={styles.secondary} disabled={busy} onClick={() => void wallet()}><ExternalLink size={16}/>Pagar no Mercado Pago</button><small>Uma conta de colaborador pode não ter permissão para pagar. Prefira Pix ou cartão aqui na loja.</small></details>
-      </> : <div className={styles.paymentIntro}><p>Conclua o pagamento no ambiente seguro do Mercado Pago.</p><button type="button" className={styles.primary} disabled={busy} onClick={() => void wallet()}><ExternalLink size={16}/>Abrir pagamento seguro</button><button type="button" className={styles.secondary} disabled={busy} onClick={() => void refresh()}><RefreshCw size={16}/>Atualizar situação</button></div>}
+        {state.environment === "test" ? <details className={styles.paymentWallet}><summary>Dados para testar cartão</summary><p>Utilize um cartão oficial de teste. Para aprovar, preencha o titular com APRO e CPF 12345678909. Para simular recusa, use OTHE.</p><a className={styles.secondary} href="https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/resources/test-cards" target="_blank" rel="noopener noreferrer"><ExternalLink size={16}/>Ver cartões de teste</a></details> : <details className={styles.paymentWallet}><summary>Outras opções de pagamento</summary><p>Use sua carteira Mercado Pago ou consulte as opções disponíveis no ambiente do provedor.</p><button type="button" className={styles.secondary} disabled={busy} onClick={() => void wallet()}><ExternalLink size={16}/>Pagar no Mercado Pago</button><small>Uma conta de colaborador pode não ter permissão para pagar. Prefira Pix ou cartão aqui na loja.</small></details>}
+      </> : state.environment === "test" ? <p className={styles.paymentError}>O pagamento de teste está indisponível. A loja precisa revisar as credenciais de teste.</p> : <div className={styles.paymentIntro}><p>Conclua o pagamento no ambiente seguro do Mercado Pago.</p><button type="button" className={styles.primary} disabled={busy} onClick={() => void wallet()}><ExternalLink size={16}/>Abrir pagamento seguro</button><button type="button" className={styles.secondary} disabled={busy} onClick={() => void refresh()}><RefreshCw size={16}/>Atualizar situação</button></div>}
     </>}
     <p className={styles.paymentFootnote}><ShieldCheck size={14}/>Processado pelo Mercado Pago. A loja não armazena os dados do cartão.</p>
   </section>;

@@ -14,6 +14,8 @@ import {
   Package,
   Loader2,
   Globe,
+  FlaskConical,
+  ShieldCheck,
 } from "lucide-react";
 import type { getCommerceAdmin } from "@/repositories/commerce";
 import type { StoreAdminInput, StoreSettings } from "@/domain/commerce/schemas";
@@ -26,6 +28,7 @@ import { CommerceArtworkOptions } from "./CommerceArtworkOptions";
 import { CommerceLaunchPanel } from "./CommerceLaunchPanel";
 import { CommerceStoreAddress } from "./CommerceStoreAddress";
 import { defaultCommercePaymentSettings, type CommercePaymentSettings } from "@/domain/commerce/payment-settings";
+import type { PaymentEnvironment } from "@/domain/commerce/payment-settings";
 import styles from "./commerce-admin.module.css";
 type Data = Awaited<ReturnType<typeof getCommerceAdmin>>;
 const field =
@@ -120,6 +123,8 @@ export function CommerceAdmin({
   const [secret, setSecret] = useState("");
   const [publicKey, setPublicKey] = useState(initial.payments?.public_key ?? "");
   const [transparentEnabled, setTransparentEnabled] = useState(Boolean(initial.payments?.transparent_enabled));
+  const [paymentEnvironment, setPaymentEnvironment] = useState<PaymentEnvironment>(initial.payments?.payment_environment ?? "production");
+  const [testCredentials, setTestCredentials] = useState({ publicKey: initial.payments?.test_public_key ?? "", accessToken: "", webhookSecret: "", sellerId: "", confirmed: false });
   const [checkoutSettings, setCheckoutSettings] = useState<CommercePaymentSettings>({ ...defaultCommercePaymentSettings(), ...initial.payments?.checkout_settings });
   const [orderAction, setOrderAction] = useState<{
     id: string;
@@ -679,9 +684,16 @@ export function CommerceAdmin({
                 publicKey,
                 transparentEnabled: mpEnabled && transparentEnabled,
                 checkoutSettings,
+                paymentEnvironment,
+                testPublicKey: testCredentials.publicKey,
+                testAccessToken: testCredentials.accessToken || undefined,
+                testWebhookSecret: testCredentials.webhookSecret || undefined,
+                testSellerId: testCredentials.sellerId || undefined,
+                testCredentialsConfirmed: testCredentials.confirmed,
               });
               setToken("");
               setSecret("");
+              setTestCredentials(old => ({ ...old, accessToken: "", webhookSecret: "", sellerId: "", confirmed: false }));
             });
           }}
         >
@@ -690,7 +702,8 @@ export function CommerceAdmin({
             Salve a loja antes de configurar pagamentos. A conexão abaixo é
             exclusiva deste tenant e não utiliza o Mercado Pago da assinatura.
           </p>
-          <label className="flex items-center gap-2 text-sm">
+          <fieldset className="space-y-3" disabled={busy}><legend className="mb-2 text-sm font-medium">Ambiente da loja</legend><div className="grid grid-cols-2 gap-2" role="group" aria-label="Ambiente de pagamento">{(["production", "test"] as const).map(mode => <button type="button" key={mode} aria-pressed={paymentEnvironment === mode} title={mode === "test" ? "Usa somente credenciais de teste e mantém os pedidos fora da produção." : "Recebe pagamentos reais com as credenciais de produção."} onClick={() => { setPaymentEnvironment(mode); if (mode === "test") setTransparentEnabled(true); }} className={`${button} w-full ${paymentEnvironment === mode ? mode === "test" ? "border-amber-500 bg-amber-500/10 text-amber-200" : "border-emerald-500 bg-emerald-500/10 text-emerald-200" : "text-zinc-400"}`}>{mode === "test" ? <FlaskConical size={17}/> : <ShieldCheck size={17}/>} {mode === "test" ? "Teste" : "Produção"}</button>)}</div><p className="text-xs leading-5 text-zinc-400">{paymentEnvironment === "test" ? "A loja exibirá o aviso de teste. Novos pedidos serão simulados e não poderão iniciar produção ou expedição. Confira que as credenciais abaixo foram obtidas no ambiente Teste do Mercado Pago." : "Novos pedidos usam as credenciais de produção e podem gerar cobranças reais. As credenciais de teste permanecem guardadas separadamente."}</p></fieldset>
+          {paymentEnvironment === "production" ? <><label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={manualEnabled}
@@ -706,6 +719,7 @@ export function CommerceAdmin({
               onChange={(e) => setInstructions(e.target.value)}
             />
           </label>
+          </> : null}
           <div className="space-y-4 border-t border-zinc-800 pt-5">
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -715,21 +729,22 @@ export function CommerceAdmin({
               />
               Receber com Mercado Pago
             </label>
-            <p className="text-xs text-zinc-500">
+            {paymentEnvironment === "production" ? <p className="text-xs text-zinc-500">
               {data.payments?.mp_configured
                 ? "Credenciais armazenadas. Deixe os campos vazios para mantê-las."
                 : "Piloto por credencial do vendedor. OAuth será uma etapa posterior."}
-            </p>
+            </p> : null}
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!mpEnabled || busy} checked={transparentEnabled} onChange={e => setTransparentEnabled(e.target.checked)}/>Pix e cartão dentro da loja (Checkout Transparente)</label>
-            <p className="text-xs leading-5 text-zinc-400">O cliente paga sem entrar em uma conta Mercado Pago. A carteira fica como alternativa separada. Pedidos que já possuem link de pagamento continuam no fluxo original.</p>
-            <label htmlFor="commerce-payment-public-key" className="grid gap-1 text-sm"><CommerceCaption label="Public Key da aplicação" help="Chave pública da mesma aplicação e ambiente do Access Token. Usada pelo formulário oficial de cartão; nunca substitua pela chave privada."/><input id="commerce-payment-public-key" className={field} value={publicKey} onChange={e => setPublicKey(e.target.value)} placeholder="APP_USR-…" autoComplete="off" required={mpEnabled && transparentEnabled}/></label>
+            <p className="text-xs leading-5 text-zinc-400">{paymentEnvironment === "test" ? "O Pix usa o cenário de aprovação automática e o cartão usa os dados oficiais de teste. Carteira externa, boleto e pagamento manual ficam indisponíveis neste modo." : "O cliente paga sem entrar em uma conta Mercado Pago. A carteira fica como alternativa separada. Pedidos que já possuem link de pagamento continuam no fluxo original."}</p>
+            {paymentEnvironment === "production" ? <label htmlFor="commerce-payment-public-key" className="grid gap-1 text-sm"><CommerceCaption label="Public Key da aplicação" help="Chave pública da mesma aplicação e ambiente do Access Token. Usada pelo formulário oficial de cartão; nunca substitua pela chave privada."/><input id="commerce-payment-public-key" className={field} value={publicKey} onChange={e => setPublicKey(e.target.value)} placeholder="APP_USR-…" autoComplete="off" required={mpEnabled && transparentEnabled}/></label> : null}
+            {paymentEnvironment === "test" ? <fieldset className="min-w-0 space-y-4 border-y border-amber-500/25 py-4" disabled={busy}><legend className="px-1 text-sm font-semibold text-amber-200">Credenciais de teste</legend><p className="text-xs leading-5 text-zinc-400">{data.payments?.test_configured ? "Token de teste armazenado. Deixe os campos privados vazios para mantê-los." : "No Mercado Pago Developers, selecione sua aplicação e o ambiente Teste. Nenhuma chave é gerada automaticamente pela plataforma."} O prefixo APP_USR também pode aparecer no token de teste; confira o ambiente no painel.</p><label className="grid gap-1 text-sm" htmlFor="commerce-test-public-key"><CommerceCaption label="Public Key de teste" help="Copie do ambiente Teste da aplicação. Não reutilize a Public Key de produção."/><input id="commerce-test-public-key" className={field} autoComplete="off" value={testCredentials.publicKey} onChange={e => setTestCredentials(old => ({ ...old, publicKey: e.target.value }))} required={mpEnabled}/></label><label className="grid gap-1 text-sm" htmlFor="commerce-test-access-token"><CommerceCaption label="Access Token de teste" help="Chave privada do ambiente Teste. Fica cifrada e não substitui o token de produção."/><input id="commerce-test-access-token" className={field} type="password" autoComplete="new-password" value={testCredentials.accessToken} onChange={e => setTestCredentials(old => ({ ...old, accessToken: e.target.value, confirmed: false }))}/></label>{testCredentials.accessToken ? <label className="flex items-start gap-2 text-xs leading-5 text-amber-200"><input className="mt-1" type="checkbox" required checked={testCredentials.confirmed} onChange={e => setTestCredentials(old => ({ ...old, confirmed: e.target.checked }))}/>Confirmo que copiei estas credenciais do ambiente Teste do Mercado Pago, e não de Produção.</label> : null}<label className="grid gap-1 text-sm" htmlFor="commerce-test-webhook"><CommerceCaption label="Assinatura secreta do webhook de teste (opcional)" help="Assinatura do webhook configurado no ambiente Teste. Sem ela, o status ainda pode ser consultado por Verificar pagamento."/><input id="commerce-test-webhook" className={field} type="password" autoComplete="new-password" value={testCredentials.webhookSecret} onChange={e => setTestCredentials(old => ({ ...old, webhookSecret: e.target.value }))}/></label><details className="text-sm"><summary className="cursor-pointer py-2 text-zinc-300">Identificação do vendedor de teste</summary><label className="mt-2 grid gap-1 text-sm" htmlFor="commerce-test-seller-id"><CommerceCaption label="User ID do vendedor (se a consulta automática falhar)" help="ID numérico da conta usada pelo token de teste. Deve corresponder ao user_id retornado pela Orders API; divergências bloqueiam a confirmação."/><input id="commerce-test-seller-id" className={field} inputMode="numeric" value={testCredentials.sellerId} onChange={e => setTestCredentials(old => ({ ...old, sellerId: e.target.value.replace(/\D/g, "") }))}/></label></details></fieldset> : null}
             <fieldset className="space-y-3" disabled={busy || !mpEnabled}>
               <legend className="mb-3 text-sm font-medium">Opções no pagamento seguro</legend>
-              <div className="grid grid-cols-2 gap-3">{([{ key: "pix", label: "Pix" }, { key: "credit", label: "Cartão de crédito" }, { key: "debit", label: "Cartão de débito" }, { key: "boleto", label: "Boleto" }] as const).map(item => <label key={item.key} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={checkoutSettings[item.key]} onChange={e => setCheckoutSettings(old => ({ ...old, [item.key]: e.target.checked }))}/>{item.label}</label>)}</div>
+              <div className="grid grid-cols-2 gap-3">{([{ key: "pix", label: "Pix" }, { key: "credit", label: "Cartão de crédito" }, { key: "debit", label: "Cartão de débito" }, { key: "boleto", label: "Boleto" }] as const).filter(item => paymentEnvironment !== "test" || item.key !== "boleto").map(item => <label key={item.key} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={checkoutSettings[item.key]} onChange={e => setCheckoutSettings(old => ({ ...old, [item.key]: e.target.checked }))}/>{item.label}</label>)}</div>
               {checkoutSettings.credit ? <label className="grid gap-1 text-sm">Máximo de parcelas<select className={field} value={checkoutSettings.maxInstallments} onChange={e => setCheckoutSettings(old => ({ ...old, maxInstallments: Number(e.target.value) }))}>{Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}x</option>)}</select></label> : null}
               <p className="text-xs leading-5 text-zinc-400">Pix, crédito e débito podem ser usados dentro da loja. Boleto e carteira são oferecidos no ambiente Mercado Pago. A oferta final, os juros, as bandeiras e a elegibilidade do débito dependem da conta do vendedor. Parcelas sem juros são configuradas no Mercado Pago.</p>
             </fieldset>
-            <label htmlFor="commerce-payment-token" className="grid gap-1 text-sm">
+            {paymentEnvironment === "production" ? <fieldset className="space-y-4"><label htmlFor="commerce-payment-token" className="grid gap-1 text-sm">
               <CommerceCaption label="Access token do vendedor" help="Credencial privada da mesma aplicação da Public Key, habilitada para Checkout Transparente/Orders. É ela que autoriza o Pix. Se trocar de aplicação, atualize também este campo; deixá-lo vazio mantém o token anterior." />
               <input
                 id="commerce-payment-token"
@@ -751,11 +766,12 @@ export function CommerceAdmin({
                 onChange={(e) => setSecret(e.target.value)}
               />
             </label>
+            </fieldset> : null}
             <p className="break-all text-xs text-zinc-400">
               Webhook:{" "}
-              {data.urls?.webhook ?? "Salve o rascunho da loja para obter a URL do webhook."}
+              {data.urls?.webhook ? `${data.urls.webhook}${paymentEnvironment === "test" ? "?environment=test" : ""}` : "Salve o rascunho da loja para obter a URL do webhook."}
             </p>
-            <p className="text-xs leading-5 text-amber-200">No Mercado Pago, habilite o evento de webhook “Order (Mercado Pago)” para o Checkout Transparente e mantenha “Payment” para a carteira. Use a assinatura secreta dessa configuração. O recebimento por Pix exige uma chave Pix cadastrada na conta do vendedor.</p>
+            <p className="text-xs leading-5 text-amber-200">{paymentEnvironment === "test" ? "Configure o evento “Order (Mercado Pago)” no ambiente Teste com a URL acima. Sem webhook, a página consulta o pagamento enquanto estiver aberta. No Pix simulado, a aprovação é automática; não efetue uma transferência real." : "No Mercado Pago, habilite o evento de webhook “Order (Mercado Pago)” para o Checkout Transparente e mantenha “Payment” para a carteira. Use a assinatura secreta dessa configuração. O recebimento por Pix exige uma chave Pix cadastrada na conta do vendedor."}</p>
           </div>
           <button className={button} disabled={busy || !data.store?.tenant_id}>
             <Save size={16} />
@@ -783,7 +799,7 @@ export function CommerceAdmin({
                     {order.id.slice(0, 8).toUpperCase()}
                   </h3>
                   <p className="mt-1 text-sm text-zinc-500">
-                    {order.payment_status === "paid"
+                    {order.payment_environment === "test" ? "TESTE · " : ""}{order.payment_status === "paid"
                       ? "Pago"
                       : order.payment_status === "refunded"
                         ? "Estornado"

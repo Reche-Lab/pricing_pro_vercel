@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { getPool } from "@/lib/db/client";
 import { decryptTenantSecret, encryptTenantSecret } from "@/lib/crypto/secrets";
 import { CommerceError, validatePayment } from "@/domain/commerce/commerce";
-import { mercadoPagoPaymentMethods, type CommercePaymentSettings } from "@/domain/commerce/payment-settings";
+import { mercadoPagoPaymentMethods, paymentEnvironment, type PaymentEnvironment, type CommercePaymentSettings } from "@/domain/commerce/payment-settings";
 import { commerceStoreUrl } from "@/domain/commerce/domains";
 import {
   commerceTransaction,
@@ -10,23 +10,25 @@ import {
   type CommerceStore,
 } from "@/repositories/commerce";
 
-type Credentials = {
+export type CommercePaymentCredentials = {
   accessToken: string;
   webhookSecret: string;
   sellerId: string;
 };
 export async function paymentCredentials(
   tenantId: string,
-): Promise<Credentials> {
+  environment: PaymentEnvironment = "production",
+): Promise<CommercePaymentCredentials> {
+  const column = environment === "test" ? "test_encrypted_credentials" : "encrypted_credentials";
   const row = (
     await getPool().query(
-      "select encrypted_credentials from commerce_payment_connections where tenant_id=$1",
+      `select ${column} as encrypted_credentials from commerce_payment_connections where tenant_id=$1`,
       [tenantId],
     )
   ).rows[0];
   if (!row?.encrypted_credentials)
-    throw new CommerceError("O pagamento online não está configurado.", 409);
-  return decryptTenantSecret<Credentials>(row.encrypted_credentials);
+    throw new CommerceError(environment === "test" ? "Cadastre as credenciais de teste desta loja. As de produção não serão utilizadas como alternativa." : "O pagamento online não está configurado.", 409);
+  return decryptTenantSecret<CommercePaymentCredentials>(row.encrypted_credentials);
 }
 async function mpRequest(path: string, accessToken: string, body?: unknown) {
   const response = await fetch(`https://api.mercadopago.com${path}`, {
@@ -64,11 +66,19 @@ export async function savePaymentConnection(
     publicKey?: string;
     transparentEnabled?: boolean;
     checkoutSettings?: CommercePaymentSettings;
+    paymentEnvironment?: PaymentEnvironment;
+    testPublicKey?: string;
+    testAccessToken?: string;
+    testWebhookSecret?: string;
+    testSellerId?: string;
+    testCredentialsConfirmed?: boolean;
   },
 ) {
-  let credentials: Credentials | undefined;
+  const current = (await getPool().query("select payment_environment,public_key,test_public_key,test_encrypted_credentials from commerce_payment_connections where tenant_id=$1", [tenantId])).rows[0];
+  const environment = input.paymentEnvironment ?? paymentEnvironment(current?.payment_environment);
+  let credentials: CommercePaymentCredentials | undefined;
   if (input.accessToken || input.webhookSecret) {
-    let old: Credentials | undefined;
+    let old: CommercePaymentCredentials | undefined;
     try {
       old = await paymentCredentials(tenantId);
     } catch {
@@ -85,14 +95,36 @@ export async function savePaymentConnection(
       throw new CommerceError("Não foi possível validar a conta do vendedor.");
     credentials = { accessToken, webhookSecret, sellerId: String(seller.id) };
   }
-  if (input.mpEnabled && !credentials) await paymentCredentials(tenantId);
+  let testCredentials: CommercePaymentCredentials | undefined;
+  if (input.testAccessToken || input.testWebhookSecret || input.testSellerId) {
+    if (input.testAccessToken && !input.testCredentialsConfirmed) throw new CommerceError("Confirme que as credenciais foram copiadas do ambiente Teste do Mercado Pago.");
+    const old = current?.test_encrypted_credentials ? decryptTenantSecret<CommercePaymentCredentials>(current.test_encrypted_credentials) : undefined;
+    const accessToken = input.testAccessToken || old?.accessToken;
+    if (!accessToken) throw new CommerceError("Informe o Access Token de teste.");
+    let production: CommercePaymentCredentials | undefined = credentials;
+    if (!production) { try { production = await paymentCredentials(tenantId); } catch { /* Store may be configured for tests only. */ } }
+    if (production?.accessToken === accessToken) throw new CommerceError("O Access Token de teste deve ser diferente do token de produção cadastrado.");
+    let sellerId = input.testSellerId || (!input.testAccessToken ? old?.sellerId : undefined);
+    if (!sellerId) {
+      try { sellerId = String((await mpRequest("/users/me", accessToken)).id ?? ""); }
+      catch { throw new CommerceError("Não foi possível consultar a identidade com o token de teste. Informe o User ID do vendedor exibido no painel Mercado Pago, em Identificação do vendedor de teste."); }
+    }
+    if (!/^\d+$/.test(sellerId)) throw new CommerceError("Informe o User ID numérico do vendedor usado no teste.");
+    testCredentials = { accessToken, sellerId, webhookSecret: input.testWebhookSecret || old?.webhookSecret || "" };
+  }
+  if (input.mpEnabled && environment === "production" && !credentials) await paymentCredentials(tenantId);
+  if (credentials && current?.test_encrypted_credentials && decryptTenantSecret<CommercePaymentCredentials>(current.test_encrypted_credentials).accessToken === credentials.accessToken) throw new CommerceError("As credenciais de produção não podem reutilizar o Access Token de teste cadastrado.");
+  if (input.mpEnabled && environment === "test" && !testCredentials && !current?.test_encrypted_credentials) throw new CommerceError("Cadastre o Access Token de teste antes de habilitar o modo de teste.");
+  if (environment === "test" && input.mpEnabled && !(input.testPublicKey ?? current?.test_public_key)) throw new CommerceError("Informe a Public Key de teste.");
+  if ((input.testPublicKey ?? current?.test_public_key) && (input.testPublicKey ?? current?.test_public_key) === (input.publicKey ?? current?.public_key)) throw new CommerceError("Cadastre Public Keys diferentes para teste e produção.");
   if (input.transparentEnabled) {
-    const current = (await getPool().query("select public_key from commerce_payment_connections where tenant_id=$1", [tenantId])).rows[0];
-    if (!(input.publicKey ?? current?.public_key)) throw new CommerceError("Informe a Public Key para receber Pix e cartão dentro da loja.");
+    const key = environment === "test" ? input.testPublicKey ?? current?.test_public_key : input.publicKey ?? current?.public_key;
+    if (!key) throw new CommerceError("Informe a Public Key do ambiente selecionado para receber Pix e cartão dentro da loja.");
     if (!input.mpEnabled) throw new CommerceError("Habilite o Mercado Pago antes de ativar o pagamento dentro da loja.");
     if (input.checkoutSettings && !input.checkoutSettings.pix && !input.checkoutSettings.credit && !input.checkoutSettings.debit) throw new CommerceError("Habilite Pix ou cartão para receber dentro da loja.");
   }
-  if (input.manualEnabled && !input.manualInstructions.trim())
+  if (input.mpEnabled && environment === "test" && !input.transparentEnabled) throw new CommerceError("O modo de teste utiliza Pix e cartão dentro da loja. Habilite o Checkout Transparente.");
+  if (environment === "production" && input.manualEnabled && !input.manualInstructions.trim())
     throw new CommerceError(
       "Informe como o comprador deverá realizar o pagamento manual.",
     );
@@ -109,6 +141,7 @@ export async function savePaymentConnection(
       ],
     );
     await client.query("update commerce_payment_connections set public_key=coalesce($2,public_key),transparent_enabled=coalesce($3,transparent_enabled) where tenant_id=$1", [tenantId, input.publicKey ?? null, input.transparentEnabled ?? null]);
+    await client.query("update commerce_payment_connections set payment_environment=$2,test_public_key=coalesce($3,test_public_key),test_encrypted_credentials=coalesce($4,test_encrypted_credentials) where tenant_id=$1", [tenantId, environment, input.testPublicKey ?? null, testCredentials ? encryptTenantSecret(testCredentials) : null]);
     await client.query(
       `insert into audit_logs(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) values($1,$2,'commerce.payments.configure','commerce_store',$1,$3)`,
       [
@@ -118,6 +151,7 @@ export async function savePaymentConnection(
           manualEnabled: input.manualEnabled,
           mpEnabled: input.mpEnabled,
           transparentEnabled: input.transparentEnabled,
+          paymentEnvironment: environment,
         }),
       ],
     );
@@ -128,7 +162,6 @@ export async function checkoutPayment(
   customerId: string,
   orderId: string,
 ) {
-  const credentials = await paymentCredentials(store.tenant_id);
   const base = process.env.APP_URL?.replace(/\/$/, "");
   if (!base || !base.startsWith("https://"))
     throw new CommerceError("O pagamento online exige APP_URL com HTTPS.", 409);
@@ -146,6 +179,9 @@ export async function checkoutPayment(
         "Este pedido já teve seu pagamento processado.",
         409,
       );
+    const mode = (await client.query("select payment_environment from commerce_payment_connections where tenant_id=$1 for share", [store.tenant_id])).rows[0];
+    if (paymentEnvironment(order.payment_environment) === "test" || paymentEnvironment(mode?.payment_environment) === "test") throw new CommerceError("O modo de teste permite apenas Pix e cartão dentro da loja. A carteira de produção não será aberta.", 409);
+    const credentials = await paymentCredentials(store.tenant_id);
     if (order.checkout_url) return { url: order.checkout_url };
     const active = (await client.query("select id from commerce_payment_attempts where tenant_id=$1 and order_id=$2 and status in ('submitting','unknown','pending','paid','refunded') limit 1", [store.tenant_id, order.id])).rows[0];
     if (active) throw new CommerceError("Já existe um pagamento em andamento dentro da loja. Atualize a situação antes de continuar.", 409);
@@ -254,6 +290,7 @@ export async function reconcileCommercePayment(
       )
     ).rows[0];
     if (!row) return;
+    if (payment.live_mode === false || row.payment_environment === "test") throw new CommerceError("Uma notificação de teste não pode confirmar um pagamento de produção.", 409);
     const status = validatePayment(
       { ...row, sellerId: row.seller_id },
       payment,
