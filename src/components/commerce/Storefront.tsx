@@ -30,6 +30,7 @@ import {
   ImagePlus,
   Loader2,
   X,
+  Download,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import type {
@@ -610,15 +611,6 @@ export function Storefront({
                 label="Ver produtos"
               />
             )}
-          </>
-        ) : null}
-        {view === "condicoes" ? (
-          <>
-            <h1 className={styles.title}>Condições de compra</h1>
-            <div className="max-w-3xl whitespace-pre-wrap leading-7">
-              {settings.terms}
-            </div>
-            {institutionalLinks.length ? <nav aria-label="Políticas da loja" className="mt-6 flex flex-wrap gap-4 text-sm underline">{institutionalLinks.map(link => <Link key={link.slug} href={`${base}/${link.slug}`}>{link.title}</Link>)}</nav> : null}
           </>
         ) : null}
       </div>
@@ -1217,6 +1209,7 @@ function OrderDetail({
         ))}
         <CommerceOrderArtworks endpoint={`${api}/orders/${order.id}/artworks`} />
         <StoreOrderContactDetails billing={order.billing} address={order.address} same={order.deliveryAddressSameAsBilling} shippingOption={order.shippingOption}/>
+        {order.hasTerms ? <section className="mt-6 space-y-3 border-t border-current/10 pt-5"><h2 className="text-sm font-semibold">Condições desta compra</h2><p className={styles.muted}>Consulte o texto registrado neste pedido{order.termsVersion ? `, versão ${order.termsVersion}` : ""}. Alterações posteriores na loja não mudam este registro.</p><a href={`${api}/orders/${order.id}/conditions`} className={styles.secondary}><Download size={16}/>Baixar condições aceitas</a></section> : null}
       </div>
       <aside className={styles.summary}>
         <Summary

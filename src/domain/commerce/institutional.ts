@@ -4,6 +4,8 @@ export type StoreInstitutionalPage = {
   description: string;
   intro: string;
   highlights: string[];
+  updatedAt?: string;
+  version?: string;
   sections: { id: string; title: string; paragraphs: string[]; items?: string[] }[];
   questions: { question: string; answer: string }[];
 };

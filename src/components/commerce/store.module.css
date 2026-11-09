@@ -34,6 +34,12 @@
   --highlight: #6fd0c9;
   color-scheme: dark;
 }
+@media print {
+  .store:has([data-purchase-conditions]) { min-height: 0; background: white; color: black; color-scheme: light; }
+  .store:has([data-purchase-conditions]) > :not(.wrap),
+  .store:has([data-purchase-conditions]) > .wrap > :not([data-purchase-conditions]) { display: none !important; }
+  .store:has([data-purchase-conditions]) > .wrap { width: 100%; max-width: none; padding: 0; }
+}
 .store:not([data-theme="dark"]) .header {
   background: #ffffff;
   box-shadow: 0 6px 20px -16px rgba(30, 55, 65, 0.35);

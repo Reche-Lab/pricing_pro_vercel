@@ -5,6 +5,7 @@ import { getPool } from "@/lib/db/client";
 import { calculateCart } from "@/domain/commerce/commerce";
 import {
   buyerOrders,
+  buyerOrderConditions,
   commerceProducts,
   commercePaymentTenant,
   createBuyerSession,
@@ -38,6 +39,7 @@ import { GET as orderFiles } from "@/app/api/commerce/admin/orders/[orderId]/fil
 import { POST as orderAction } from "@/app/api/commerce/admin/orders/[orderId]/route";
 import { POST as paymentWebhook } from "@/app/api/store/[slug]/payment-webhook/route";
 import { createHmac } from "node:crypto";
+import { PURCHASE_CONDITIONS_VERSION } from "@/domain/commerce/purchase-conditions";
 vi.mock("@/lib/auth/session", () => ({ getCurrentSession: vi.fn() }));
 const objects = vi.hoisted(() => new Map<string, { bytes: Uint8Array; contentType: string }>());
 vi.mock("@/services/storage/artwork-storage", async importOriginal => ({
@@ -225,6 +227,16 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
     ).rows[0];
     expect(order.total_cents).toBe(total);
     expect(order.payment_status).toBe("pending");
+    expect(order.snapshot.termsVersion).toBe(PURCHASE_CONDITIONS_VERSION);
+    expect(order.snapshot.terms).toContain("Quem participa da compra");
+    expect(order.snapshot.terms).toContain(store.settings.terms);
+    expect(Number.isFinite(Date.parse(order.snapshot.termsAcceptedAt))).toBe(true);
+    const recorded = order.snapshot.terms;
+    await getPool().query("update commerce_stores set settings=jsonb_set(settings,'{terms}',to_jsonb($2::text)) where tenant_id=$1", [tenantId, "Texto alterado após a compra"]);
+    expect(await buyerOrderConditions(tenantId, customer, a.id)).toBe(recorded);
+    await expect(buyerOrderConditions(otherTenant, customer, a.id)).rejects.toThrow("não encontradas");
+    await expect(buyerOrderConditions(tenantId, crypto.randomUUID(), a.id)).rejects.toThrow("não encontradas");
+    await getPool().query("update commerce_stores set settings=jsonb_set(settings,'{terms}',to_jsonb($2::text)) where tenant_id=$1", [tenantId, store.settings.terms]);
     expect(
       (
         await getPool().query(

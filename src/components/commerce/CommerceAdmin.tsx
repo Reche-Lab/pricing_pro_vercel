@@ -475,10 +475,12 @@ export function CommerceAdmin({
                 <textarea
                   className={`${field} min-h-28`}
                   id="commerce-terms"
+                  aria-describedby="commerce-terms-help"
                   value={settings.terms}
                   onChange={(e) => updateSetting("terms", e.target.value)}
                 />
               </label>
+              <p id="commerce-terms-help" className="text-xs leading-5 text-zinc-400">Este texto aparece em “Condições específicas desta loja”, junto às condições gerais de compra. Informe prazos e combinações da sua operação, sem reduzir direitos legais. Cada novo pedido guarda o texto completo vigente no aceite.</p>
             </section>
             <section className="space-y-4 border-t border-zinc-800 pt-5">
               <div className="flex flex-wrap items-center justify-between gap-3">

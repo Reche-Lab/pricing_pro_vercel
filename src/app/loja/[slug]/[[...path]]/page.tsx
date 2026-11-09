@@ -12,6 +12,7 @@ import React, { cache } from "react";
 import { storeInstitutionalPage, storeInstitutionalPages } from "@/domain/commerce/institutional";
 import { StoreInstitutionalPage } from "@/components/commerce/StoreInstitutionalPage";
 import { institutionalStructuredData, serializeStructuredData, storePageMetadata } from "@/services/commerce/store-seo";
+import { purchaseConditionsPage } from "@/domain/commerce/purchase-conditions";
 export const dynamic = "force-dynamic";
 const loadStore = cache(getCommerceStore);
 type Props = { params: Promise<{ slug: string; path?: string[] }> };
@@ -26,7 +27,7 @@ export default async function StorePage({ params }: Props) {
   const store = await loadStore(slug, true);
   if (!store) notFound();
   const customDomain = commerceHostSlug((await headers()).get("host")) === slug;
-  const institutional = storeInstitutionalPage(slug, path);
+  const institutional = storeInstitutionalPage(slug, path) ?? (path.length === 1 && path[0] === "condicoes" ? purchaseConditionsPage(slug, store.settings) : undefined);
   const supported = Boolean(institutional) ||
     path.length === 0 ||
     (path.length === 1 &&

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { StoreSettings } from "@/domain/commerce/schemas";
 import { INSTITUTIONAL_UPDATED, storeInstitutionalPage } from "@/domain/commerce/institutional";
 import { commerceStoreUrl } from "@/domain/commerce/domains";
+import { purchaseConditionsPage } from "@/domain/commerce/purchase-conditions";
 
 export function commerceSiteOrigin(appUrl = process.env.APP_URL || "https://liaflow-calcula.vercel.app") {
   const url = new URL(appUrl);
@@ -10,7 +11,7 @@ export function commerceSiteOrigin(appUrl = process.env.APP_URL || "https://liaf
 }
 
 export function storePageMetadata(slug: string, path: string[], settings: StoreSettings, published: boolean, origin = commerceSiteOrigin()): Metadata {
-  const page = storeInstitutionalPage(slug, path);
+  const page = storeInstitutionalPage(slug, path) ?? (path.length === 1 && path[0] === "condicoes" ? purchaseConditionsPage(slug, settings) : undefined);
   const url = `${commerceStoreUrl(slug, origin)}${path.length ? `/${path.map(encodeURIComponent).join("/")}` : ""}`;
   const title = page ? `${page.title} | ${settings.name}` : settings.name;
   const description = page?.description ?? settings.description;
@@ -30,7 +31,7 @@ export function storePageMetadata(slug: string, path: string[], settings: StoreS
 }
 
 export function institutionalStructuredData(slug: string, pageSlug: string, settings: StoreSettings, origin = commerceSiteOrigin()) {
-  const page = storeInstitutionalPage(slug, [pageSlug]);
+  const page = storeInstitutionalPage(slug, [pageSlug]) ?? (pageSlug === "condicoes" ? purchaseConditionsPage(slug, settings) : undefined);
   if (!page) return null;
   const base = commerceStoreUrl(slug, origin);
   const url = `${base}/${page.slug}`;
@@ -39,7 +40,7 @@ export function institutionalStructuredData(slug: string, pageSlug: string, sett
     "@graph": [
       { "@type": "Organization", "@id": `${base}#organization`, name: settings.name, url: base, email: settings.contactEmail, ...(settings.logoUrl ? { logo: settings.logoUrl } : {}) },
       { "@type": page.slug === "quem-somos" ? "AboutPage" : "WebPage", "@id": `${url}#webpage`, url, name: `${page.title} | ${settings.name}`, description: page.description,
-        inLanguage: "pt-BR", dateModified: INSTITUTIONAL_UPDATED,
+        inLanguage: "pt-BR", dateModified: page.updatedAt ?? INSTITUTIONAL_UPDATED,
         about: { "@id": `${base}#organization` }, publisher: { "@id": `${base}#organization` },
         breadcrumb: { "@id": `${url}#breadcrumb` }, isPartOf: { "@type": "WebSite", "@id": `${base}#website`, url: base, name: settings.name } },
       { "@type": "BreadcrumbList", "@id": `${url}#breadcrumb`, itemListElement: [

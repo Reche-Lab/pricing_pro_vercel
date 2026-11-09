@@ -27,6 +27,17 @@ function setup(slug = "ground-shop") {
   return store;
 }
 describe("institutional storefront routes", () => {
+  it("renders complete purchase conditions in server HTML, including other tenants and preview", async () => {
+    setup("other");
+    const params = Promise.resolve({ slug: "other", path: ["condicoes"] });
+    const html = renderToStaticMarkup(await StorePage({ params }));
+    expect(html).toContain("Quem participa da compra");
+    expect(html).toContain("Pricing Pro");
+    expect(html).not.toContain("38.265.820/0001-88");
+    expect(html).toContain('type="application/ld+json"');
+    expect((await generateMetadata({ params })).title).toEqual({ absolute: "Condições de compra | Ground Shop" });
+    expect(renderToStaticMarkup(await PreviewPage({ params }))).toContain("Quem participa da compra");
+  });
   it("renders clean root-relative navigation and canonical metadata on a verified custom domain", async () => {
     setup();
     vi.stubEnv("COMMERCE_CUSTOM_DOMAINS", '{"groundshop.com.br":"ground-shop"}');

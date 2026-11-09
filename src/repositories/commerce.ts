@@ -7,6 +7,7 @@ import { commercePriceSummary } from "@/domain/commerce/offers";
 import { assertCommerceVideosReady } from "@/repositories/commerce-media";
 import type { ProductMedia } from "@/domain/commerce/product-media";
 import { paymentEnvironment, type PaymentEnvironment } from "@/domain/commerce/payment-settings";
+import { purchaseConditionsText, PURCHASE_CONDITIONS_VERSION } from "@/domain/commerce/purchase-conditions";
 import type { CommerceArtworkOptions } from "@/domain/commerce/artwork-options";
 import { checkoutSchema, type CommerceBillingSnapshot } from "@/domain/commerce/schemas";
 import { resolveCheckoutDelivery } from "@/domain/commerce/checkout";
@@ -85,6 +86,8 @@ export type CommerceOrder = {
     delivery: string;
     shippingOption?: { id: string; name: string; priceCents: number; description?: string } | null;
     terms: string;
+    termsVersion?: string;
+    termsAcceptedAt?: string;
     customer: { name: string; email: string };
     storeRevision: number;
     artworkDiscountCents?: number;
@@ -557,7 +560,9 @@ export async function createCommerceOrder(
       delivery: input.delivery,
       shippingOption,
       customer,
-      terms: settings.terms,
+      terms: purchaseConditionsText(lockedStore.slug, settings),
+      termsVersion: PURCHASE_CONDITIONS_VERSION,
+      termsAcceptedAt: new Date().toISOString(),
       storeRevision: lockedStore.revision,
       artworkDiscountCents: calculated.artworkDiscountCents ?? 0,
     };
@@ -656,6 +661,17 @@ export async function buyerOrders(tenantId: string, customerId: string) {
       delivery: snapshot.delivery,
       shippingOption: snapshot.shippingOption ?? null,
       artworkDiscountCents: snapshot.artworkDiscountCents ?? 0,
+      hasTerms: Boolean(snapshot.terms),
+      termsVersion: snapshot.termsVersion ?? null,
     }),
   );
+}
+
+export async function buyerOrderConditions(tenantId: string, customerId: string, orderId: string) {
+  const row = (await getPool().query<{ terms: string | null }>(
+    "select snapshot->>'terms' as terms from commerce_orders where tenant_id=$1 and customer_id=$2 and id=$3",
+    [tenantId, customerId, orderId],
+  )).rows[0];
+  if (!row?.terms) throw new CommerceError("Condições registradas não encontradas para este pedido.", 404);
+  return row.terms;
 }

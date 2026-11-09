@@ -10,6 +10,7 @@ import { requireCommercePreview } from "@/services/commerce/preview";
 import { CommerceError } from "@/domain/commerce/commerce";
 import { storeInstitutionalPage, storeInstitutionalPages } from "@/domain/commerce/institutional";
 import { StoreInstitutionalPage } from "@/components/commerce/StoreInstitutionalPage";
+import { purchaseConditionsPage } from "@/domain/commerce/purchase-conditions";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -22,8 +23,8 @@ export default async function CommercePreviewPage({
   params: Promise<{ slug: string; path?: string[] }>;
 }) {
   const { slug, path = [] } = await params;
-  const institutional = storeInstitutionalPage(slug, path);
-  const valid = Boolean(institutional) ||
+  const page = storeInstitutionalPage(slug, path);
+  const valid = Boolean(page) ||
     path.length === 0 ||
     (path.length === 1 && ["catalogo", "condicoes", "carrinho", "checkout"].includes(path[0])) ||
     (path.length === 2 && path[0] === "produto");
@@ -35,6 +36,7 @@ export default async function CommercePreviewPage({
     }
     throw error;
   });
+  const institutional = page ?? (path.length === 1 && path[0] === "condicoes" ? purchaseConditionsPage(slug, store.settings) : undefined);
   const products = (await commerceProducts(store.tenant_id)).map(
     publicCommerceProduct,
   );

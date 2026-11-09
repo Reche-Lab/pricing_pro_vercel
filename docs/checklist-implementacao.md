@@ -602,6 +602,20 @@ Configuração e limites: `docs/ecommerce-piloto.md`, seção de preparação da
 
 Uso e limites documentados em `docs/modulo-financeiro.md`.
 
+### Condições de compra do e-commerce
+
+- [x] Condições de compra organizadas e multi-tenant: responsabilidades, artes,
+  produção, pagamento, entrega, garantia, cancelamento e dados pessoais; condições
+  específicas preservadas e versão completa registrada nos novos pedidos.
+- [x] Impressão e download autenticado do texto aceito, sem reescrever pedidos
+  anteriores; metadados próprios e prévia/domínio personalizado compatíveis.
+- [x] Condições validadas em 09/11/2026: 698 testes gerais, 14 com PostgreSQL isolado,
+  TypeScript, lint e build; tela em 1440/390/320 px (claro/escuro) e impressão A4
+  conferidas. Sem nova migration; revisão jurídica e dados da loja ficam a cargo
+  do responsável antes da adoção definitiva.
+
+Orientações e limites jurídicos: `docs/ecommerce-condicoes-de-compra.md`.
+
 ### Homologação do e-commerce
 
 - [x] Diagnóstico administrativo sem cobrança por ambiente: identidade do vendedor,

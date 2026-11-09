@@ -5,6 +5,7 @@ import { ArrowRight, ArrowUp, Check, ChevronDown, ChevronRight, HeartHandshake, 
 import type { StoreSettings } from "@/domain/commerce/schemas";
 import { INSTITUTIONAL_UPDATED, storeInstitutionalPages, type StoreInstitutionalPage as Page } from "@/domain/commerce/institutional";
 import styles from "./institutional.module.css";
+import { StoreConditionsPrintButton } from "./StoreConditionsPrintButton";
 
 export function StoreInstitutionalPage({ slug, page, settings, preview = false, featuredProduct, basePath }: {
   slug: string; page: Page; settings: StoreSettings; preview?: boolean; basePath?: string;
@@ -12,8 +13,10 @@ export function StoreInstitutionalPage({ slug, page, settings, preview = false, 
 }) {
   const base = preview ? `/commerce/${slug}/preview` : (basePath ?? `/loja/${slug}`);
   const about = page.slug === "quem-somos";
+  const updated = page.updatedAt ?? INSTITUTIONAL_UPDATED;
+  const related = storeInstitutionalPages(slug).filter(item => item.slug !== page.slug);
   const index = <ol>{page.sections.map((section, position) => <li key={section.id}><a href={`#${section.id}`}><span>{String(position + 1).padStart(2, "0")}</span>{section.title}</a></li>)}</ol>;
-  return <article className={styles.page} aria-labelledby="institutional-title" id="inicio-do-conteudo">
+  return <article className={styles.page} data-purchase-conditions={page.slug === "condicoes" ? "true" : undefined} aria-labelledby="institutional-title" id="inicio-do-conteudo">
     <nav aria-label="Caminho da página" className={styles.breadcrumb}>
       <Link href={base || "/"}>{settings.name}</Link><ChevronRight size={13} aria-hidden="true" /><span aria-current="page">{page.title}</span>
     </nav>
@@ -22,7 +25,7 @@ export function StoreInstitutionalPage({ slug, page, settings, preview = false, 
       <h1 id="institutional-title">{page.title}</h1>
       <p className={styles.intro}>{page.intro}</p>
       <ul className={styles.highlights}>{page.highlights.map(item => <li key={item}><Check size={15} aria-hidden="true" />{item}</li>)}</ul>
-      <p className={styles.updated}>Revisão editorial: <time dateTime={INSTITUTIONAL_UPDATED}>19 de outubro de 2026</time></p>
+      <div className={styles.documentTools}><p className={styles.updated}>Revisão editorial: <time dateTime={updated}>{new Date(`${updated}T00:00:00Z`).toLocaleDateString("pt-BR", { timeZone: "UTC", day: "numeric", month: "long", year: "numeric" })}</time>{page.version ? <span> · Versão {page.version}</span> : null}</p>{page.slug === "condicoes" ? <StoreConditionsPrintButton/> : null}</div>
     </header>
     <div className={styles.layout}>
       <aside className={styles.sidebar}>
@@ -42,6 +45,6 @@ export function StoreInstitutionalPage({ slug, page, settings, preview = false, 
         <a href="#inicio-do-conteudo" className={styles.backTop}><ArrowUp size={15} aria-hidden="true" />Voltar ao início</a>
       </div>
     </div>
-    <nav className={styles.related} aria-label="Outras informações da loja"><h2>Continue por aqui</h2><div>{storeInstitutionalPages(slug).filter(item => item.slug !== page.slug).map(item => <Link key={item.slug} href={`${base}/${item.slug}`}>{item.title}<ArrowRight size={16} aria-hidden="true" /></Link>)}</div></nav>
+    {related.length ? <nav className={styles.related} aria-label="Outras informações da loja"><h2>Continue por aqui</h2><div>{related.map(item => <Link key={item.slug} href={`${base}/${item.slug}`}>{item.title}<ArrowRight size={16} aria-hidden="true" /></Link>)}</div></nav> : null}
   </article>;
 }
