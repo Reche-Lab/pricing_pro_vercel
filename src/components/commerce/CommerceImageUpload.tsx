@@ -9,12 +9,14 @@ export function CommerceImageUpload({
   value,
   onChange,
   onBusyChange,
+  saveHint = "Salve a loja para aplicar.",
 }: {
   label: string;
   purpose: "logo" | "cover" | "product";
   value: string;
   onChange: (url: string) => void;
   onBusyChange: (busy: boolean) => void;
+  saveHint?: string;
 }) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -53,7 +55,7 @@ export function CommerceImageUpload({
         dataUrl,
       });
       onChange(result.url);
-      setMessage("Imagem enviada. Salve a loja para aplicar.");
+      setMessage(`Imagem enviada. ${saveHint}`);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -132,7 +134,7 @@ export function CommerceImageUpload({
                 onChange("");
                 setError("");
                 setMessage(
-                  "Imagem removida da seleção. Salve a loja para aplicar.",
+                  `Imagem removida da seleção. ${saveHint}`,
                 );
               }}
             >

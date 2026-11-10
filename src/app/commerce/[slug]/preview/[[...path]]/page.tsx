@@ -11,6 +11,8 @@ import { CommerceError } from "@/domain/commerce/commerce";
 import { storeInstitutionalPage, storeInstitutionalPages } from "@/domain/commerce/institutional";
 import { StoreInstitutionalPage } from "@/components/commerce/StoreInstitutionalPage";
 import { purchaseConditionsPage } from "@/domain/commerce/purchase-conditions";
+import { readCommerceLibrary } from "@/repositories/commerce-library";
+import { libraryQuerySchema } from "@/domain/commerce/library";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -24,7 +26,8 @@ export default async function CommercePreviewPage({
 }) {
   const { slug, path = [] } = await params;
   const page = storeInstitutionalPage(slug, path);
-  const valid = Boolean(page) ||
+  const libraryPath = (path.length === 1 && ["artes", "campanhas"].includes(path[0])) || (path.length === 2 && path[0] === "campanhas" && libraryQuerySchema.safeParse({ campaign: path[1] }).success);
+  const valid = libraryPath || Boolean(page) ||
     path.length === 0 ||
     (path.length === 1 && ["catalogo", "condicoes", "carrinho", "checkout"].includes(path[0])) ||
     (path.length === 2 && path[0] === "produto");
@@ -37,6 +40,8 @@ export default async function CommercePreviewPage({
     throw error;
   });
   const institutional = page ?? (path.length === 1 && path[0] === "condicoes" ? purchaseConditionsPage(slug, store.settings) : undefined);
+  const library = libraryPath ? await readCommerceLibrary(store.tenant_id, libraryQuerySchema.parse(path[1] ? { campaign: path[1] } : {}), "preview") : undefined;
+  if (libraryPath && path[1] && !library?.campaigns.some(c => c.slug === path[1])) notFound();
   const products = (await commerceProducts(store.tenant_id)).map(
     publicCommerceProduct,
   );
@@ -50,6 +55,8 @@ export default async function CommercePreviewPage({
       slug={slug}
       settings={store.settings}
       products={products}
+      libraryEnabled={Boolean(store.art_library_enabled) || libraryPath}
+      libraryInitial={library}
       path={path}
       paused={false}
       preview

@@ -2,7 +2,8 @@
 import dynamic from "next/dynamic";
 import { useRef, useState } from "react";
 import type { ArtworkStudioAsset } from "../quotes/artwork-studio-types";
-import { Check, Crop, Eye, Paintbrush, Upload } from "lucide-react";
+import { Check, Crop, Eye, Paintbrush, Upload, Images } from "lucide-react";
+import type { LibraryCrop } from "@/domain/commerce/library";
 import { StoreProductMockup } from "./StoreProductMockup";
 import type { publicCommerceProduct } from "@/repositories/commerce";
 import { storeRequest } from "./store-http";
@@ -14,11 +15,14 @@ const GuidedStudio = dynamic(
     import("../quotes/ArtworkGuidedStudio").then((m) => m.ArtworkGuidedStudio),
   { ssr: false },
 );
+const LibraryPicker = dynamic(() => import("./StoreLibrary").then(m => m.LibraryArtworkPicker), { ssr: false });
 export type StoreArtwork = {
   id: string;
   product_id: string;
   file_name: string;
   approved_at: string | null;
+  initial_crop?: LibraryCrop | null;
+  editing_allowed?: boolean;
   crop?: {
     scale: number;
     offsetX: number;
@@ -41,12 +45,14 @@ export function StoreArtworkTools({
   onPreparationChange,
   pricingLines,
   benefitContext = "selection",
+  libraryEnabled = false,
+  initialLibraryId,
 }: {
   slug: string;
   product: ReturnType<typeof publicCommerceProduct>;
   artwork?: StoreArtwork;
   artworks: StoreArtwork[];
-  onSelect: (id: string) => Promise<void>;
+  onSelect: (id: string, title?: string) => Promise<void>;
   onRefresh: () => Promise<void>;
   preview?: boolean;
   disabled?: boolean;
@@ -56,8 +62,11 @@ export function StoreArtworkTools({
   onPreparationChange?: (value: "customer" | "team") => Promise<void> | void;
   pricingLines?: CartLine[];
   benefitContext?: "selection" | "cart";
+  libraryEnabled?: boolean;
+  initialLibraryId?: string;
 }) {
   const simulation = useCommercePreview();
+  const [libraryOpen, setLibraryOpen] = useState(Boolean(initialLibraryId && libraryEnabled));
   const [editor, setEditor] = useState<"crop" | "retouch" | "review" | null>(
     null,
   );
@@ -93,7 +102,7 @@ export function StoreArtworkTools({
           : undefined,
       geometry: product.geometry,
       margins: product.margins,
-      crop: art.crop ?? {
+      crop: art.crop ?? art.initial_crop ?? {
         scale: 1,
         offsetX: 0,
         offsetY: 0,
@@ -150,6 +159,7 @@ export function StoreArtworkTools({
     <div className="mt-3 space-y-3">
       {product.artworkOptions?.allowTeamPreparation && onPreparationChange ? <fieldset className="grid gap-2 rounded-md border border-current/20 p-3"><legend className="px-1 text-sm font-medium">Como deseja preparar esta arte?</legend>{([ ["team", "Prefiro que a equipe prepare"], ["customer", "Quero preparar e aprovar"] ] as const).map(([value, label]) => <label key={value} className="flex cursor-pointer items-start gap-2 text-sm"><input type="radio" checked={preparation === value} disabled={busy || disabled} onChange={() => { setWorking(true); void Promise.resolve(onPreparationChange(value)).catch(e => setError(e.message)).finally(() => setWorking(false)); }} /><span>{label}{value === "customer" && product.artworkOptions!.discountFixedCents > 0 ? <small className="block text-emerald-600">Benefício de até {(product.artworkOptions!.discountFixedCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por arte, limitado a {product.artworkOptions!.maxDiscountPercent}% do grupo.</small> : null}</span></label>)}</fieldset> : null}
       <div className="flex flex-wrap items-center gap-2">
+        {libraryEnabled ? <button type="button" disabled={busy || disabled} title="Escolher uma arte da biblioteca da loja" className="inline-flex min-h-11 items-center gap-2 rounded-md border border-current/25 px-3 py-2 text-sm" onClick={() => setLibraryOpen(true)}><Images size={16}/>Escolher arte pronta</button> : null}
         <label className={`inline-flex items-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-sm ${busy || disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}>
           <Upload size={15} />
           {busy ? "Enviando…" : uploadLabel}
@@ -208,7 +218,7 @@ export function StoreArtworkTools({
           />
           <div className="flex flex-wrap gap-2">
             {preparation === "team" ? <p className="text-sm">Arte enviada para preparação pela equipe. A prova será disponibilizada no seu pedido antes da impressão.</p> : <>
-            <button
+            {artwork.editing_allowed !== false ? <button
               type="button"
               disabled={busy || disabled}
               className="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-3 py-2 text-sm"
@@ -216,7 +226,7 @@ export function StoreArtworkTools({
             >
               <Paintbrush size={15} />
               Retocar
-            </button>
+            </button> : null}
             <button
               type="button"
               disabled={busy || disabled}
@@ -248,6 +258,7 @@ export function StoreArtworkTools({
       ) : null}
       {artwork && editor ? (
         <GuidedStudio
+          allowRetouch={artwork.editing_allowed !== false}
           initialAsset={studioAsset(artwork)}
           initialStep={editor}
           renderApprovalSuccess={() => reward ? <StoreArtworkReward {...reward} context={benefitContext} /> : <p role="status">Arte aprovada!</p>}
@@ -295,6 +306,11 @@ export function StoreArtworkTools({
           }}
         />
       ) : null}
+      {libraryOpen && libraryEnabled ? <LibraryPicker slug={slug} productId={product.id} preview={preview} initialArtworkId={initialLibraryId} onClose={() => setLibraryOpen(false)} onSelect={async (id, title) => {
+        setWorking(true);
+        try { await onSelect(id, title); await onRefresh(); setLibraryOpen(false); setEditor("crop"); }
+        finally { setWorking(false); }
+      }}/> : null}
     </div>
   );
 }

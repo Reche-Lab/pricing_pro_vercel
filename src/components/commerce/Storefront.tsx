@@ -55,6 +55,9 @@ import { StoreOrderContactDetails } from "./StoreOrderContactDetails";
 import { useStoreTheme, accentForeground } from "./use-store-theme";
 import { useCommercePreview } from "./CommercePreviewProvider";
 import type { StoreArtwork } from "./StoreArtworkTools";
+import type { LibraryResult } from "@/domain/commerce/library";
+const StoreLibrary = dynamic(() => import("./StoreLibrary").then(m => m.StoreLibrary));
+const FeaturedLibraryCampaigns = dynamic(() => import("./StoreLibrary").then(m => m.FeaturedLibraryCampaigns));
 const StorePayment = dynamic(() => import("./StorePayment").then(module => module.StorePayment), { ssr: false });
 const ArtworkTools = dynamic(
   () => import("./StoreArtworkTools").then((m) => m.StoreArtworkTools),
@@ -72,6 +75,8 @@ type Props = {
   preview?: boolean;
   basePath?: string;
   institutionalLinks?: { slug: string; title: string }[];
+  libraryEnabled?: boolean;
+  libraryInitial?: LibraryResult;
   children?: ReactNode;
 };
 
@@ -84,6 +89,8 @@ export function Storefront({
   preview = false,
   basePath,
   institutionalLinks = [],
+  libraryEnabled = false,
+  libraryInitial,
   children,
 }: Props) {
   const router = useRouter();
@@ -271,6 +278,7 @@ export function Storefront({
               </Link>
             ),
           )}
+          {libraryEnabled ? <><Link href={`${base}/artes`} aria-current={view === "artes" ? "page" : undefined}>Artes prontas</Link><Link href={`${base}/campanhas`} aria-current={view === "campanhas" ? "page" : undefined}>Campanhas</Link></> : null}
         </nav>
       </header>
       {view === "home" ? (
@@ -278,7 +286,7 @@ export function Storefront({
       ) : null}
       <div
         className={
-          view === "home" && !error && !message && !paused
+          view === "home" && !libraryEnabled && !error && !message && !paused
             ? styles.emptyWrap
             : styles.wrap
         }
@@ -312,6 +320,8 @@ export function Storefront({
           </p>
         ) : null}
         {children}
+        {view === "home" && libraryEnabled ? <FeaturedLibraryCampaigns slug={slug} preview={preview} base={base}/> : null}
+        {libraryInitial && ["artes", "campanhas"].includes(view) ? <StoreLibrary slug={slug} preview={preview} base={base} products={products} initial={libraryInitial} campaignSlug={view === "campanhas" ? path[1] : undefined} campaignsOnly={view === "campanhas" && !path[1]}/> : null}
         {view === "catalogo" ? (
           <Catalog
             products={products}
@@ -326,6 +336,7 @@ export function Storefront({
             slug={slug}
             preview={preview}
             artworks={cart?.artworks ?? []}
+            libraryEnabled={libraryEnabled}
             onArtworkRefresh={refresh}
             base={base}
             api={api}
@@ -471,6 +482,7 @@ export function Storefront({
                           <ArtworkTools
                             preview={preview}
                             slug={slug}
+                            libraryEnabled={libraryEnabled}
                             product={product}
                             artwork={cart.artworks.find(
                               (a) => a.id === line.artworkId,
@@ -483,11 +495,11 @@ export function Storefront({
                             benefitContext="cart"
                             preparation={line.preparation ?? "customer"}
                             onPreparationChange={preparation => update(cart.lines.map(item => item.id === line.id ? { ...item, preparation } : item))}
-                            onSelect={(id) =>
+                            onSelect={(id, title) =>
                               update(
                                 cart.lines.map((item) =>
                                   item.id === line.id
-                                    ? { ...item, artworkId: id }
+                                    ? { ...item, artworkId: id, ...(title ? { artworkName: title, preparation: "customer" as const } : {}) }
                                     : item,
                                 ),
                               )
@@ -738,6 +750,7 @@ function ProductDetail({
   api,
   disabled,
   onAdd,
+  libraryEnabled,
 }: {
   product: Product;
   slug: string;
@@ -748,12 +761,15 @@ function ProductDetail({
   api: string;
   disabled: boolean;
   onAdd: (lines: CartLine[]) => Promise<boolean>;
+  libraryEnabled: boolean;
 }) {
   const [quantity, setQuantity] = useState(String(product.minQuantity));
   const [groups, setGroups] = useState("1");
   const [draftArtworks, setDraftArtworks] = useState<Record<number, string>>({});
+  const [draftNames, setDraftNames] = useState<Record<number, string>>({});
+  const initialLibraryId = useSearchParams().get("arte") ?? undefined;
   const [draftPreparation, setDraftPreparation] = useState<Record<number, "team" | "customer">>({});
-  const [artworksOpen, setArtworksOpen] = useState(false);
+  const [artworksOpen, setArtworksOpen] = useState(Boolean(initialLibraryId && libraryEnabled));
   const [uploadingGroups, setUploadingGroups] = useState<Set<number>>(new Set());
   const [adding, setAdding] = useState(false);
   const addingRef = useRef(false);
@@ -775,14 +791,14 @@ function ProductDetail({
         id: crypto.randomUUID(),
         productId: product.id,
         quantity: q,
-        artworkName: product.personalized ? `Arte ${i + 1}` : "",
+        artworkName: product.personalized ? draftNames[i] ?? `Arte ${i + 1}` : "",
         artworkId: product.personalized ? draftArtworks[i] ?? null : null,
         preparation: draftPreparation[i] ?? (product.artworkOptions?.allowTeamPreparation ? "team" as const : "customer" as const),
       }));
     } catch {
       return [];
     }
-  }, [quantity, groups, product.id, product.personalized, product.artworkOptions, draftArtworks, draftPreparation]);
+  }, [quantity, groups, product.id, product.personalized, product.artworkOptions, draftArtworks, draftPreparation, draftNames]);
   const approvalRevision = artworks.map(art => `${art.id}:${art.approved_at ?? ""}:${JSON.stringify(art.crop)}`).join("|");
   const previewPriceEvidence = JSON.stringify({ readyArtworkIds: artworks.filter(art => art.approved_at && art.crop).map(art => art.id) });
   const attachedCount = lines.filter(line => line.artworkId).length;
@@ -800,6 +816,7 @@ function ProductDetail({
       setQuantity("");
       setGroups("");
       setDraftArtworks({});
+      setDraftNames({});
       setDraftPreparation({});
       setArtworksOpen(false);
     } finally {
@@ -919,6 +936,8 @@ function ProductDetail({
                   <div className={styles.productArtworkGroup} key={index}>
                     <div className={styles.artworkGroupHeading}><strong>{line.artworkName}</strong><span>{line.quantity} un.</span></div>
                     <ArtworkTools slug={slug} product={product} preview={preview}
+                      libraryEnabled={libraryEnabled}
+                      initialLibraryId={index === 0 ? initialLibraryId : undefined}
                       uploadLabel={`Enviar ${line.artworkName.toLowerCase()}`}
                       artwork={artworks.find(art => art.id === line.artworkId)}
                       artworks={artworks.filter(art => art.product_id === product.id)}
@@ -933,7 +952,7 @@ function ProductDetail({
                       benefitContext="selection"
                       preparation={line.preparation}
                       onPreparationChange={value => setDraftPreparation(current => ({ ...current, [index]: value }))}
-                      onSelect={async id => setDraftArtworks(current => ({ ...current, [index]: id }))}
+                      onSelect={async (id, title) => { setDraftArtworks(current => ({ ...current, [index]: id })); if (title) { setDraftNames(current => ({ ...current, [index]: title })); setDraftPreparation(current => ({ ...current, [index]: "customer" })); } }}
                     />
                   </div>
                 )) : <p className={styles.muted}>Informe a quantidade de produtos para anexar sua arte.</p>}

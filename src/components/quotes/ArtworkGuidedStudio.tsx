@@ -29,6 +29,7 @@ export function ArtworkGuidedStudio({
   renderProductPreview,
   renderApprovalSuccess,
   proofMode = false,
+  allowRetouch = true,
 }: {
   initialAsset: ArtworkStudioAsset;
   initialStep?: ArtworkStudioStep;
@@ -45,9 +46,10 @@ export function ArtworkGuidedStudio({
   renderProductPreview?: (asset: ArtworkStudioAsset) => React.ReactNode;
   renderApprovalSuccess?: (asset: ArtworkStudioAsset) => React.ReactNode;
   proofMode?: boolean;
+  allowRetouch?: boolean;
 }) {
   const [asset, setAsset] = useState(initialAsset);
-  const [step, setStep] = useState(initialStep);
+  const [step, setStep] = useState(initialStep === "retouch" && !allowRetouch ? "crop" : initialStep);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [accepted, setAccepted] = useState(false);
@@ -92,7 +94,7 @@ export function ArtworkGuidedStudio({
       aria-label="Etapas da arte"
       className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs"
     >
-      {(["retouch", "crop", "review"] as const).map((value, index) => (
+      {(["retouch", "crop", "review"] as const).filter(value => allowRetouch || value !== "retouch").map((value, index) => (
         <li
           key={value}
           aria-current={step === value ? "step" : undefined}
@@ -203,7 +205,7 @@ export function ArtworkGuidedStudio({
           itemId=""
           quoteId=""
           navigation={navigation}
-          onRetouch={() => navigate("retouch")}
+          onRetouch={allowRetouch ? () => navigate("retouch") : undefined}
           onPrepare={async (crop) => {
             const next = await onPrepare(asset, crop);
             setAsset({ ...next, crop, approved: false });

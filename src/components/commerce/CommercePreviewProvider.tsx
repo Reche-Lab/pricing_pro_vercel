@@ -25,6 +25,7 @@ type PreviewSession = {
   cart: Cart;
   update: (lines: CartLine[]) => Promise<void>;
   upload: (productId: string, file: PreviewFile) => Promise<string>;
+  chooseLibrary: (artworkId: string, productId: string) => Promise<string>;
   prepare: (id: string, crop: PreviewCrop) => Promise<void>;
   approve: (id: string, lines?: CartLine[]) => Promise<{ newlyApproved: boolean; artworkDiscountCents: number | null }>;
   getArtwork: (id: string) => PreviewArtwork;
@@ -119,6 +120,14 @@ export function CommercePreviewProvider({
             calculation,
             revision: revision + 1,
           });
+        },
+        async chooseLibrary(artworkId, productId) {
+          const version = epoch.current;
+          const result = await storeRequest(`${api}/library/select`, "POST", { artworkId, productId });
+          if (version !== epoch.current) throw new Error("A simulação foi reiniciada.");
+          const id = crypto.randomUUID();
+          saveArt({ id, product_id: productId, file_name: result.fileName, approved_at: null, crop: null, initial_crop: result.initialCrop, editing_allowed: result.editingAllowed, source: { fileName: result.fileName, mimeType: result.mimeType, fileSize: result.fileSize, dataUrl: result.dataUrl } });
+          return id;
         },
         async upload(productId, file) {
           const version = epoch.current;

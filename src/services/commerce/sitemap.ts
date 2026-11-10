@@ -3,10 +3,11 @@ import { INSTITUTIONAL_UPDATED, storeInstitutionalPages } from "@/domain/commerc
 import { commerceSiteOrigin } from "./store-seo";
 import { commerceStoreUrl } from "@/domain/commerce/domains";
 
-export function commerceSitemapEntries(slug: string, productIds: string[], origin = commerceSiteOrigin()): MetadataRoute.Sitemap {
+export function commerceSitemapEntries(slug: string, productIds: string[], origin = commerceSiteOrigin(), library?: { campaigns: string[] }): MetadataRoute.Sitemap {
   const base = commerceStoreUrl(slug, origin);
   return [
     { url: base }, { url: `${base}/catalogo` },
+    ...(library ? [{ url: `${base}/artes` }, { url: `${base}/campanhas` }, ...library.campaigns.map(campaign => ({ url: `${base}/campanhas/${encodeURIComponent(campaign)}` }))] : []),
     ...storeInstitutionalPages(slug).map(page => ({ url: `${base}/${page.slug}`, lastModified: INSTITUTIONAL_UPDATED })),
     ...productIds.map(id => ({ url: `${base}/produto/${encodeURIComponent(id)}` }))
   ];

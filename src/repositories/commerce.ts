@@ -48,6 +48,7 @@ export type CommerceProduct = PriceProduct & {
   artworkOptions?: CommerceArtworkOptions;
 };
 export type CommerceStore = {
+  art_library_enabled?: boolean;
   tenant_id: string;
   slug: string;
   enabled: boolean;
@@ -386,7 +387,7 @@ export async function cartView(store: CommerceStore, session: BuyerSession) {
   ).rows[0];
   const artworks = (
     await getPool().query(
-      `select id,product_id,file_name,crop,approved_at::text from commerce_artworks where tenant_id=$1 and session_id=$2 order by created_at`,
+      `select id,product_id,file_name,crop,initial_crop,editing_allowed,approved_at::text from commerce_artworks where tenant_id=$1 and session_id=$2 order by created_at`,
       [store.tenant_id, session.id],
     )
   ).rows;
