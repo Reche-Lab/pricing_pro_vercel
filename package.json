@@ -23,6 +23,7 @@
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
     "@types/nodemailer": "^8.0.1",
+    "@vercel/schedules": "^0.0.3",
     "bcryptjs": "^2.4.3",
     "exceljs": "^4.4.0",
     "file-type": "^21.3.4",

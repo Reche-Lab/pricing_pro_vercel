@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "src/app/api/schedules/commerce-olist/route.ts": {
+      "maxDuration": 60,
+      "experimentalTriggers": [{ "type": "schedule/v1beta" }]
+    }
+  },
+  "schedules": {
+    "commerce-olist": {
+      "schedule": "* * * * *",
+      "timezone": "America/Sao_Paulo",
+      "jitter": 1,
+      "function": "api/schedules/commerce-olist"
+    }
+  }
+}

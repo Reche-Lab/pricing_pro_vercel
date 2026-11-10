@@ -18,10 +18,11 @@
 - [x] Etapas, IDs externos, falhas humanizadas e referência de diagnóstico persistidos no pedido.
 - [x] Reconexão OAuth em modal, sem sair do pedido, e retomada explícita após autorização.
 - [x] Fila durável, leases compatíveis com pooler transacional do Supabase e reconciliação antes de recriar registros.
+- [x] Vercel Schedule `commerce-olist`, com função privada, execução a cada minuto e deduplicação por executionId.
 - [x] Pedidos de teste, excluídos e estornados não iniciam novas operações no ERP.
 - [x] Testes de domínio, componentes, permissões e Postgres isolado; revisão Playwright em 1440/390/320 px, sem chamadas reais ao ERP.
 - [ ] Aplicar a migration 0074 no Supabase correto antes do deploy.
-- [ ] Configurar CRON_SECRET e agendador; ativar e homologar a integração no tenant-piloto.
+- [ ] Fazer deploy da configuração de Schedules e conferir o primeiro processamento em produção; ativar e homologar a integração no tenant-piloto.
 
 ## Ativação
 
@@ -31,10 +32,18 @@
 4. Configure as correspondências de envio/SEDEX/PAC na integração Olist e confira pesos, dimensões e caixas.
 5. Em Loja online > Olist, sincronize as opções de recebimento, escolha as correspondências e ative a automação. Não use formas que gerem uma nova cobrança para valores já recebidos na loja.
 6. Mantenha certificado, natureza de operação, tributação dos produtos e ambiente fiscal configurados no ERP. Valide essas regras com a contabilidade.
-7. Configure um `CRON_SECRET` aleatório de ao menos 32 caracteres na Vercel e no ambiente local. Exemplo de geração: `openssl rand -hex 32`. Nunca use tokens Olist ou chaves de compradores como segredo do agendador.
-8. Configure um agendador confiável para chamar, a cada minuto, `GET https://SEU_APP_URL/api/cron/commerce-olist`, com `Authorization: Bearer SEU_CRON_SECRET`. Não coloque o segredo na URL. O endpoint processa um pedido por chamada, com limite de etapas; ajuste a frequência se houver fila. Pode usar Vercel Cron se o plano permitir, enviando `CRON_SECRET` conforme a documentação da Vercel, ou um agendador externo autenticado. Nenhum cron foi ativado automaticamente nesta entrega.
+7. Publique o `vercel.json` desta entrega no projeto `brunos-projects-1302295e/liaflow-calcula`. Ele declara o schedule estático **commerce-olist**, a cada minuto, com timezone `America/Sao_Paulo` e jitter de um minuto. A equipe foi consultada pela CLI e está no plano Pro. Em uma transferência futura para Hobby, altere a expressão para `*/15 * * * *` e o jitter para `15` antes do deploy.
+8. No painel do projeto, abra **Schedules** e confira o alvo privado **api/schedules/commerce-olist**. Novos schedules estáticos de produção começam ativos quando o deploy se torna atual; Preview começa inativo. O handler também bloqueia processamento de ERP fora de `VERCEL_ENV=production`.
+9. Configure/homologue a integração do tenant antes de usar **Run Schedule**, pois essa ação processa a fila real. Confira o histórico e os logs pelo `executionId`. A ausência de pedidos elegíveis é um sucesso sem operação no ERP. O schedule não importa pedidos históricos automaticamente.
+10. Desative eventuais agendadores externos antigos para esta mesma fila. Não cadastre simultaneamente uma entrada `crons` nem um schedule com `path`: o alvo principal é privado e não depende de `CRON_SECRET`.
 
-Localmente, `npm run commerce:olist:worker` consulta esse endpoint a cada minuto usando `.env`. Exige o servidor Next rodando. Esse comando é auxiliar, não deve depender de um computador pessoal para automação em produção.
+Não foi feito deploy nem invocação de schedule em produção durante a configuração local. A declaração será registrada quando você publicar esta versão. Detalhes operacionais: `docs/vercel-schedules-olist.md`.
+
+### Alternativa manual/externa
+
+A rota `GET /api/cron/commerce-olist` continua protegida por `Authorization: Bearer CRON_SECRET`, para diagnóstico ou um ambiente fora da Vercel. Apenas nesse caso configure um segredo aleatório com 32+ caracteres, gerado por `openssl rand -hex 32`. Não use tokens Olist, não envie o segredo na URL e não mantenha esse agendador em paralelo ao Schedule privado.
+
+Localmente, `npm run commerce:olist:worker` consulta a rota alternativa a cada minuto usando `.env` e exige `CRON_SECRET` e o servidor Next rodando. Esse comando é auxiliar, não deve depender de um computador pessoal para automação em produção.
 
 A confirmação do pagamento e a conclusão da produção também iniciam um processamento pós-resposta via `next/server.after`. O agendador continua necessário para retomar falhas, processar a fila restante e consultar autorizações assíncronas mesmo quando ninguém estiver com a página aberta.
 
