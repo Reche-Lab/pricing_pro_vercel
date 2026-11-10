@@ -24,7 +24,7 @@ export async function GET(
       throw new CommerceError("Pedido não encontrado.", 404);
     const order = (
       await getPool().query<CommerceOrder>(
-        "select * from commerce_orders where tenant_id=$1 and id=$2",
+        "select * from commerce_orders where tenant_id=$1 and id=$2 and deleted_at is null",
         [session.tenantId, orderId],
       )
     ).rows[0];

@@ -40,6 +40,8 @@ import { POST as orderAction } from "@/app/api/commerce/admin/orders/[orderId]/r
 import { POST as paymentWebhook } from "@/app/api/store/[slug]/payment-webhook/route";
 import { createHmac } from "node:crypto";
 import { PURCHASE_CONDITIONS_VERSION } from "@/domain/commerce/purchase-conditions";
+import { deleteCommerceOrder } from "@/repositories/commerce-orders";
+import { orderDeletionConfirmation } from "@/domain/commerce/order-deletion";
 vi.mock("@/lib/auth/session", () => ({ getCurrentSession: vi.fn() }));
 const objects = vi.hoisted(() => new Map<string, { bytes: Uint8Array; contentType: string }>());
 vi.mock("@/services/storage/artwork-storage", async importOriginal => ({
@@ -513,7 +515,7 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
   it("lets read-only production staff print only paid orders with all current artworks approved", async () => {
     const viewer = (await getPool().query("select id from app_users where email='worklist-viewer@example.test'")).rows[0].id;
     vi.mocked(getCurrentSession).mockResolvedValue({ userId: viewer, tenantId, role: 'viewer', email: 'worklist-viewer@example.test' });
-    const order = (await getPool().query("select * from commerce_orders where tenant_id=$1 and snapshot->'customer'->>'email'='proof-buyer@example.test'", [tenantId])).rows[0];
+    const order = (await getPool().query("select o.* from commerce_orders o where o.tenant_id=$1 and o.snapshot->'customer'->>'email'='proof-buyer@example.test' and exists(select 1 from commerce_artwork_proofs p where p.tenant_id=o.tenant_id and p.order_id=o.id) order by o.created_at limit 1", [tenantId])).rows[0];
     await getPool().query("update commerce_orders set payment_status='paid',fulfillment_status='received',updated_at=clock_timestamp() where tenant_id=$1 and id=$2", [tenantId, order.id]);
     const request = () => orderFiles(new Request(`http://localhost/api/commerce/admin/orders/${order.id}/files?pdf=1&cutLines=0`), { params: Promise.resolve({ orderId: order.id }) });
     expect((await getOrderWorkspace(tenantId, viewer, { filter: 'approval' })).orders.some(o => o.id === order.id)).toBe(true);
@@ -632,5 +634,38 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
       expect((await orderFiles(new Request(`https://panel.example.test/api/commerce/admin/orders/${order.id}/files?pdf=1`), { params: Promise.resolve({ orderId: order.id }) })).status).toBe(409);
       expect((await getPool().query("select payment_environment,fulfillment_status from commerce_orders where id=$1", [order.id])).rows[0]).toMatchObject({ payment_environment: "test", fulfillment_status: "received" });
     } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
+  });
+  it("administratively deletes only its tenant's order, retaining buyer, payment and artwork records with a single audit trail", async () => {
+    const pool = getPool();
+    const order = (await pool.query("select o.* from commerce_orders o where o.tenant_id=$1 and o.payment_status='paid' and o.payment_environment='production' and exists(select 1 from commerce_artwork_proofs p where p.tenant_id=o.tenant_id and p.order_id=o.id) order by o.created_at limit 1", [tenantId])).rows[0];
+    expect(order).toBeTruthy();
+    const input = { confirmation: orderDeletionConfirmation(order.id), reason: "Pedido duplicado removido pela administração" };
+    const before = await getOrderWorkspace(tenantId, actorId);
+    const proofCount = (await pool.query("select count(*)::int total from commerce_artwork_proofs where tenant_id=$1 and order_id=$2", [tenantId, order.id])).rows[0].total;
+    expect(proofCount).toBeGreaterThan(0);
+    await expect(deleteCommerceOrder(otherTenant, actorId, order.id, input)).rejects.toMatchObject({ status: 404 });
+    await expect(deleteCommerceOrder(tenantId, actorId, order.id, { ...input, confirmation: "excluir" })).rejects.toMatchObject({ status: 400 });
+    expect((await pool.query("select deleted_at from commerce_orders where id=$1", [order.id])).rows[0].deleted_at).toBeNull();
+    const results = await Promise.all([deleteCommerceOrder(tenantId, actorId, order.id, input), deleteCommerceOrder(tenantId, actorId, order.id, input)]);
+    expect(results.filter(result => result.alreadyDeleted)).toHaveLength(1);
+    const archived = (await pool.query("select * from commerce_orders where id=$1", [order.id])).rows[0];
+    expect(archived.deleted_by).toBe(actorId); expect(archived.deletion_reason).toBe(input.reason); expect(archived.deleted_at).toBeInstanceOf(Date);
+    expect(archived.payment_status).toBe(order.payment_status); expect(archived.snapshot).toEqual(order.snapshot); expect(archived.total_cents).toBe(order.total_cents);
+    expect((await getOrderWorkspace(tenantId, actorId)).summary.total).toBe(before.summary.total - 1);
+    expect(await getOrderWorkspaceItem(tenantId, actorId, order.id)).toBeNull();
+    expect((await getCommerceAdmin(actorId, tenantId)).orders.some(item => item.id === order.id)).toBe(false);
+    expect(await markOrderSeen(tenantId, actorId, order.id, new Date().toISOString())).toBe(false);
+    expect((await buyerOrders(tenantId, order.customer_id)).some(item => item.id === order.id)).toBe(true);
+    await expect(authorizedCommerceOrder(tenantId, order.id, null)).rejects.toMatchObject({ status: 404 });
+    expect((await authorizedCommerceOrder(tenantId, order.id, order.customer_id)).id).toBe(order.id);
+    expect((await pool.query("select count(*)::int total from commerce_artwork_proofs where tenant_id=$1 and order_id=$2", [tenantId, order.id])).rows[0].total).toBe(proofCount);
+    expect((await pool.query("select count(*)::int total from audit_logs where tenant_id=$1 and entity_id=$2 and action='commerce.order.deleted'", [tenantId, order.id])).rows[0].total).toBe(1);
+    expect((await pool.query("select count(*)::int total from commerce_order_events where tenant_id=$1 and order_id=$2 and type='order.admin_deleted'", [tenantId, order.id])).rows[0].total).toBe(1);
+    vi.stubEnv("APP_URL", "https://panel.example.test");
+    vi.mocked(getCurrentSession).mockResolvedValue({ userId: actorId, tenantId, role: "owner", email: "commerce-admin@example.test" });
+    try {
+      expect((await orderAction(new Request(`https://panel.example.test/api/commerce/admin/orders/${order.id}`, { method: "POST", headers: { origin: "https://panel.example.test" }, body: JSON.stringify({ action: "production", note: "Pedido excluído não deve avançar" }) }), { params: Promise.resolve({ orderId: order.id }) })).status).toBe(404);
+      expect((await orderFiles(new Request(`https://panel.example.test/api/commerce/admin/orders/${order.id}/files?pdf=1`), { params: Promise.resolve({ orderId: order.id }) })).status).toBe(404);
+    } finally { vi.unstubAllEnvs(); }
   });
 });

@@ -67,5 +67,12 @@ describe("staff purchase and production UX", () => {
     expect(screen.getByRole("link", { name: "Prontos para produção" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Abrir pedido" })).toHaveAttribute("href", `/commerce/orders/${order.id}`);
     expect(screen.getByText(/2\/2 artes aprovadas/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Excluir pedido #11111111" })).not.toBeInTheDocument();
+  });
+  it("offers deletion only when administrative access was granted by the server", () => {
+    render(<CommerceOrdersWorkspace data={workspace} filter="ready" canDelete />);
+    fireEvent.click(screen.getByRole("button", { name: "Excluir pedido #11111111" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("EXCLUIR 11111111");
+    expect(screen.getByRole("button", { name: "Excluir da gestão" })).toBeDisabled();
   });
 });

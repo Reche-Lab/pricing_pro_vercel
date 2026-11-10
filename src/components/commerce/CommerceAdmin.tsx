@@ -30,6 +30,7 @@ import { CommerceArtworkOptions } from "./CommerceArtworkOptions";
 import { CommerceLaunchPanel } from "./CommerceLaunchPanel";
 import { CommerceStoreAddress } from "./CommerceStoreAddress";
 import { CommercePaymentDiagnostics } from "./CommercePaymentDiagnostics";
+import { DeleteCommerceOrderButton } from "./DeleteCommerceOrderButton";
 import { defaultCommercePaymentSettings, type CommercePaymentSettings } from "@/domain/commerce/payment-settings";
 import type { PaymentEnvironment } from "@/domain/commerce/payment-settings";
 import styles from "./commerce-admin.module.css";
@@ -832,6 +833,7 @@ export function CommerceAdmin({
                   </Link>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <DeleteCommerceOrderButton orderId={order.id} customerName={order.customer?.name} totalCents={order.total_cents} compact onDeleted={() => { setData(current => ({ ...current, orders: current.orders.filter(item => item.id !== order.id) })); setMessage("Pedido excluído da gestão administrativa."); }}/>
                   {order.provider === "manual" &&
                   order.payment_status === "pending" ? (
                     <button

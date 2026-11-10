@@ -7,7 +7,10 @@ import {
   readCommerceBody,
   commerceJson,
   commerceFailure,
+  requireCommerceAdmin,
 } from "@/services/commerce/http";
+import { deleteCommerceOrder } from "@/repositories/commerce-orders";
+import { orderDeletionSchema, assertOrderDeletionConfirmation } from "@/domain/commerce/order-deletion";
 import { requireCommerceOrderAccess } from "@/services/commerce/order-access";
 const schema = z
   .object({
@@ -30,7 +33,7 @@ export async function POST(
     await commerceTransaction(async (client) => {
       const order = (
         await client.query(
-          "select * from commerce_orders where tenant_id=$1 and id=$2 for update",
+          "select * from commerce_orders where tenant_id=$1 and id=$2 and deleted_at is null for update",
           [session.tenantId, orderId],
         )
       ).rows[0];
@@ -80,4 +83,18 @@ export async function POST(
   } catch (error) {
     return commerceFailure(error, "order.admin_action");
   }
+}
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ orderId: string }> }) {
+  try {
+    checkCommerceOrigin(request);
+    const { session } = await requireCommerceAdmin();
+    const { orderId } = await params;
+    if (!z.string().uuid().safeParse(orderId).success) throw new CommerceError("Pedido não encontrado.", 404);
+    const input = await readCommerceBody(request, orderDeletionSchema, 4096);
+    assertOrderDeletionConfirmation(orderId, input.confirmation);
+    const result = await deleteCommerceOrder(session.tenantId, session.userId, orderId, input);
+    console.info("Commerce order administratively deleted.", { tenantId: session.tenantId, orderId, actorId: session.userId, alreadyDeleted: result.alreadyDeleted, financialRecordsPreserved: true });
+    return commerceJson({ ok: true, ...result });
+  } catch (error) { return commerceFailure(error, "order.delete"); }
 }

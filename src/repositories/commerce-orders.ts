@@ -1,4 +1,7 @@
 import { getPool } from "@/lib/db/client";
+import { commerceTransaction } from "./commerce";
+import { CommerceError } from "@/domain/commerce/commerce";
+import { assertOrderDeletionConfirmation, orderDeletionSchema, type OrderDeletionInput } from "@/domain/commerce/order-deletion";
 import type { OrderFilter, OrderWorkspace, OrderWorkspaceItem } from "@/domain/commerce/order-workflow";
 
 // Every join and read marker is tenant-scoped; only summary data leaves this query.
@@ -20,7 +23,7 @@ const workspace = `with facts as (
     left join lateral (select product as p from jsonb_array_elements(o.snapshot->'products') product where product->>'id'=l->>'productId' limit 1) product on true
     left join commerce_artwork_proofs a on a.tenant_id=o.tenant_id and a.order_id=o.id and a.line_id=(l->>'id')::uuid
   ) art
-  where o.tenant_id=$1
+  where o.tenant_id=$1 and o.deleted_at is null
 ), orders as (
   select *, (seen_through is null or seen_through<activity_at) as unread,
     case when payment_environment='test' then 'test' when payment_status='refunded' then 'refunded'
@@ -56,8 +59,23 @@ export async function getOrderWorkspaceItem(tenantId: string, userId: string, or
 
 export async function markOrderSeen(tenantId: string, userId: string, orderId: string, seenThrough: string) {
   const result = await getPool().query(`insert into commerce_order_reads(tenant_id,order_id,user_id,seen_through)
-    select tenant_id,id,$2,least($4::timestamptz,clock_timestamp()) from commerce_orders where tenant_id=$1 and id=$3
+    select tenant_id,id,$2,least($4::timestamptz,clock_timestamp()) from commerce_orders where tenant_id=$1 and id=$3 and deleted_at is null
     on conflict(tenant_id,order_id,user_id) do update set seen_through=greatest(commerce_order_reads.seen_through,excluded.seen_through)
     returning order_id`, [tenantId, userId, orderId, seenThrough]);
   return Boolean(result.rowCount);
+}
+
+export async function deleteCommerceOrder(tenantId: string, actorId: string, orderId: string, input: OrderDeletionInput) {
+  const parsed = orderDeletionSchema.safeParse(input);
+  if (!parsed.success) throw new CommerceError(parsed.error.issues[0]?.message ?? "Confira os dados de confirmação.");
+  assertOrderDeletionConfirmation(orderId, parsed.data.confirmation);
+  return commerceTransaction(async client => {
+    const order = (await client.query("select id,deleted_at,payment_status,fulfillment_status,total_cents,provider,payment_environment from commerce_orders where tenant_id=$1 and id=$2 for update", [tenantId, orderId])).rows[0];
+    if (!order) throw new CommerceError("Pedido não encontrado.", 404);
+    if (order.deleted_at) return { alreadyDeleted: true };
+    await client.query("update commerce_orders set deleted_at=now(),deleted_by=$3::uuid,deletion_reason=$4,updated_at=now() where tenant_id=$1 and id=$2", [tenantId, orderId, actorId, parsed.data.reason]);
+    await client.query("insert into commerce_order_events(tenant_id,order_id,type,metadata) values($1,$2,'order.admin_deleted',$3)", [tenantId, orderId, JSON.stringify({ actor: actorId, note: parsed.data.reason })]);
+    await client.query("insert into audit_logs(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) values($1,$2,'commerce.order.deleted','commerce_order',$3,$4)", [tenantId, actorId, orderId, JSON.stringify({ reason: parsed.data.reason, paymentStatus: order.payment_status, fulfillmentStatus: order.fulfillment_status, totalCents: order.total_cents, provider: order.provider, paymentEnvironment: order.payment_environment, financialRecordsPreserved: true })]);
+    return { alreadyDeleted: false };
+  });
 }

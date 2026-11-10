@@ -20,7 +20,7 @@ export type CommerceProofView = { lineId: string; artworkId?: string; revision: 
 
 export async function authorizedCommerceOrder(tenantId: string, orderId: string, customerId: string | null) {
   if (!z.string().uuid().safeParse(orderId).success) throw new CommerceError("Pedido não encontrado.", 404);
-  const result = await getPool().query<CommerceOrder>("select * from commerce_orders where tenant_id=$1 and id=$2 and ($3::uuid is null or customer_id=$3::uuid)", [tenantId, orderId, customerId]);
+  const result = await getPool().query<CommerceOrder>("select * from commerce_orders where tenant_id=$1 and id=$2 and ($3::uuid is null or customer_id=$3::uuid) and ($3::uuid is not null or deleted_at is null)", [tenantId, orderId, customerId]);
   if (!result.rows[0]) throw new CommerceError("Pedido não encontrado.", 404);
   return result.rows[0];
 }
@@ -45,7 +45,7 @@ export async function readCommerceProofs(request: Request, order: CommerceOrder,
     if (!proof || !product) continue;
     proofs.push({ lineId: line.id, artworkId: proof.artwork_id, revision: proof.revision, approvedAt: proof.approved_at?.toISOString() ?? null, prepared: Boolean(proof.prepared_path && (admin || proof.published_at)), crop: proof.crop, artworkName: line.artworkName, quantity: line.quantity, product: publicCommerceProduct(product) });
   }
-  return commerceJson({ proofs, editable: (!admin || canEdit) && order.fulfillment_status === "received" && order.payment_status !== "refunded" });
+  return commerceJson({ proofs, editable: !order.deleted_at && (!admin || canEdit) && order.fulfillment_status === "received" && order.payment_status !== "refunded" });
 }
 
 export async function mutateCommerceProof(request: Request, order: CommerceOrder, actorId: string | null) {
@@ -73,8 +73,8 @@ export async function mutateCommerceProof(request: Request, order: CommerceOrder
     }
     if (["source", "prepare"].includes(input.action) && !uploaded) throw new CommerceError("Armazenamento indisponível.", 503);
     const revision = await commerceTransaction(async client => {
-      const lockedOrder = (await client.query("select payment_status,fulfillment_status from commerce_orders where tenant_id=$1 and id=$2 for update", [order.tenant_id, order.id])).rows[0];
-      if (!lockedOrder || lockedOrder.fulfillment_status !== "received" || lockedOrder.payment_status === "refunded") throw new CommerceError("Este pedido não permite mais alterações de arte.", 409);
+      const lockedOrder = (await client.query("select payment_status,fulfillment_status,deleted_at from commerce_orders where tenant_id=$1 and id=$2 for update", [order.tenant_id, order.id])).rows[0];
+      if (!lockedOrder || lockedOrder.deleted_at || lockedOrder.fulfillment_status !== "received" || lockedOrder.payment_status === "refunded") throw new CommerceError("Este pedido não permite mais alterações de arte.", 409);
       const proof = (await client.query("select * from commerce_artwork_proofs where tenant_id=$1 and order_id=$2 and line_id=$3 for update", [order.tenant_id, order.id, input.lineId])).rows[0];
       if (!proof || proof.revision !== input.revision || proof.revision !== current.revision) throw new CommerceError("A prova mudou. Atualize e revise a versão mais recente.", 409);
       if (input.action === "approve" || input.action === "publish") {

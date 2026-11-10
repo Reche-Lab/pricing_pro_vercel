@@ -65,6 +65,7 @@ export type BuyerSession = {
   revision: number;
 };
 export type CommerceOrder = {
+  deleted_at?: string | Date | null;
   payment_environment?: PaymentEnvironment;
   id: string;
   tenant_id: string;
@@ -222,7 +223,7 @@ export async function getCommerceAdmin(userId: string, tenantId: string) {
         [tenantId],
       ),
       getPool().query(
-        `select id,total_cents,payment_status,fulfillment_status,provider,payment_environment,created_at::text,snapshot->'customer' as customer from commerce_orders where tenant_id=$1 order by created_at desc limit 100`,
+        `select id,total_cents,payment_status,fulfillment_status,provider,payment_environment,created_at::text,snapshot->'customer' as customer from commerce_orders where tenant_id=$1 and deleted_at is null order by created_at desc limit 100`,
         [tenantId],
       ),
       commerceLaunchReadiness(tenantId),

@@ -25,6 +25,7 @@ export function orderProductionState(order: OrderProductionFacts) {
   return { key, label, editable, printable };
 }
 export function orderEventLabel(event: string) {
+  if (event === "order.admin_deleted") return "Pedido excluído da gestão administrativa";
   if (event === "payment.test_paid") return "Pagamento de teste aprovado";
   if (event === "payment.test_pending") return "Pagamento de teste pendente";
   if (event === "payment.test_refunded") return "Pagamento de teste estornado";

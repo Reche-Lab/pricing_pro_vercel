@@ -13,6 +13,7 @@ import { CommerceOrderArtworks } from "@/components/commerce/CommerceOrderArtwor
 import { CommerceOrderProduction } from "@/components/commerce/CommerceOrderProduction";
 import { CommerceOrderSeen } from "@/components/commerce/CommerceOrderAlerts";
 import { StoreOrderContactDetails } from "@/components/commerce/StoreOrderContactDetails";
+import { DeleteCommerceOrderButton } from "@/components/commerce/DeleteCommerceOrderButton";
 export const dynamic = "force-dynamic";
 export default async function OrderPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { session, profile, access } = await requireCommerceOrderAccess().catch(error => {
@@ -28,7 +29,7 @@ export default async function OrderPage({ params }: { params: Promise<{ orderId:
   const events = (await getPool().query("select type,metadata,created_at::text from commerce_order_events where tenant_id=$1 and order_id=$2 order by created_at desc limit 100", [session.tenantId, orderId])).rows;
   return <AppShell title={`Pedido #${order.id.slice(0, 8).toUpperCase()}`} subtitle={`Compra recebida em ${new Date(order.created_at).toLocaleString("pt-BR")}`} tenantName={profile.tenant_name} tenantLogoUrl={profile.tenant_logo_url} isSuperAdmin={profile.is_super_admin}>
     <CommerceOrderSeen orderId={order.id} seenThrough={fact.activity_at} />
-    <Link href="/commerce/orders" className="mb-5 inline-block text-sm text-emerald-300 hover:underline">Voltar aos pedidos da loja</Link>
+    <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><Link href="/commerce/orders" className="text-sm text-emerald-300 hover:underline">Voltar aos pedidos da loja</Link>{access.configure ? <DeleteCommerceOrderButton orderId={order.id} customerName={order.snapshot.customer.name} totalCents={order.total_cents} redirectTo="/commerce/orders"/> : null}</div>
     <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
       <section className="min-w-0 space-y-5">
         <div><h2 className="font-semibold">Itens da compra</h2><div className="mt-3 divide-y divide-zinc-800 border-y border-zinc-800">{order.snapshot.items.map(item => <div key={item.id} className="flex min-w-0 flex-wrap justify-between gap-3 py-4"><div className="min-w-0"><h3 className="break-words text-sm font-medium">{item.name}</h3><p className="mt-1 text-xs text-zinc-400">{item.quantity} un. × {storeMoney(item.unitCents)}{item.artworkName ? ` · ${item.artworkName}` : ""}</p></div><strong className="text-sm tabular-nums">{storeMoney(item.totalCents)}</strong></div>)}</div></div>

@@ -17,5 +17,5 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const filter = z.enum(orderFilters).catch("all").parse(params.filter);
   const page = z.coerce.number().int().min(1).max(100000).catch(1).parse(params.page ?? 1);
   const data = await getOrderWorkspace(context.session.tenantId, context.session.userId, { filter, page });
-  return <AppShell title="Pedidos da loja" subtitle="Compras, aprovação das artes e produção." tenantName={context.profile.tenant_name} tenantLogoUrl={context.profile.tenant_logo_url} isSuperAdmin={context.profile.is_super_admin}><CommerceOrdersWorkspace data={data} filter={filter} /></AppShell>;
+  return <AppShell title="Pedidos da loja" subtitle="Compras, aprovação das artes e produção." tenantName={context.profile.tenant_name} tenantLogoUrl={context.profile.tenant_logo_url} isSuperAdmin={context.profile.is_super_admin}><CommerceOrdersWorkspace data={data} filter={filter} canDelete={context.access.configure} /></AppShell>;
 }
