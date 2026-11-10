@@ -10,7 +10,8 @@ export async function olistRequest<T = unknown>({
   credentials,
   path,
   body,
-  method = "POST"
+  method = "POST",
+  signal
 }: OlistRequestOptions): Promise<T> {
   if (!settings.api_base_url) throw new Error("Olist api_base_url is required.");
   if (!credentials.accessToken && !credentials.apiToken) throw new Error("Olist accessToken is required.");
@@ -33,6 +34,7 @@ export async function olistRequest<T = unknown>({
   const response = await fetch(url, {
     method,
     headers,
+    signal,
     body: method === "GET" || body === undefined ? undefined : multipartBody ? body : JSON.stringify(body)
   });
 
@@ -150,13 +152,14 @@ export async function exchangeOlistAuthorizationCode(
 
 export async function refreshOlistToken(
   settings: OlistSettings,
-  credentials: OlistCredentials
+  credentials: OlistCredentials,
+  signal?: AbortSignal
 ): Promise<OlistOAuthTokenResponse> {
   if (!credentials.refreshToken) throw new Error("Olist refreshToken is required.");
   return requestOlistToken(settings, credentials, {
     grant_type: "refresh_token",
     refresh_token: credentials.refreshToken
-  });
+  }, signal);
 }
 
 function getOlistRedirectUri() {
@@ -166,7 +169,8 @@ function getOlistRedirectUri() {
 async function requestOlistToken(
   settings: OlistSettings,
   credentials: OlistCredentials,
-  params: Record<string, string>
+  params: Record<string, string>,
+  signal?: AbortSignal
 ): Promise<OlistOAuthTokenResponse> {
   if (!credentials.clientId) throw new Error("Olist clientId is required.");
   if (!credentials.clientSecret) throw new Error("Olist clientSecret is required.");
@@ -181,6 +185,7 @@ async function requestOlistToken(
 
   const response = await fetch(tokenUrl, {
     method: "POST",
+    signal,
     headers: {
       accept: "application/json",
       "content-type": "application/x-www-form-urlencoded"

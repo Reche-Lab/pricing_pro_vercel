@@ -327,6 +327,7 @@ export async function reconcileCommercePayment(
         JSON.stringify({
           paymentId: String(payment.id),
           status: payment.status,
+          paymentKind: payment.payment_method_id === "pix" ? "pix" : ["credit_card", "debit_card", "prepaid_card"].includes(String(payment.payment_type_id)) ? "card" : "other",
         }),
       ],
     );

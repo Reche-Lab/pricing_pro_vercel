@@ -8,6 +8,8 @@ import {
 import { commerceFailure, commerceJson } from "@/services/commerce/http";
 import { reconcileDirectPayment } from "@/services/commerce/transparent-payments";
 import { paymentEnvironmentSchema } from "@/domain/commerce/payment-settings";
+import { scheduleCommerceOlist } from "@/services/commerce/olist-schedule";
+export const maxDuration = 60;
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ slug: string }> },
@@ -26,6 +28,7 @@ export async function POST(
     if (/^ORD/i.test(id)) await reconcileDirectPayment(tenantId, id, environment);
     else if (environment === "production") await reconcileCommercePayment(tenantId, id);
     else throw new CommerceError("O ambiente de teste utiliza notificações de Orders.");
+    if (environment === "production") scheduleCommerceOlist(tenantId);
     return commerceJson({ ok: true });
   } catch (error) {
     return commerceFailure(error, "payment.webhook");

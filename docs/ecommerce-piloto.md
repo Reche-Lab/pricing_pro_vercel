@@ -403,7 +403,8 @@ com os responsáveis pelo negócio. Não publique o texto de exemplo dos testes.
 - [ ] Homologar SMTP, Storage, artes e pagamentos no ambiente real da Ground Shop.
 - [x] Cotação automática e embalagens Melhor Envio no produto/checkout, com persistência e validação do frete por sessão (migration 0069).
 - [ ] Compra e emissão de etiquetas Melhor Envio a partir do pedido da loja.
-- [ ] Sincronização opcional dos pedidos da loja com Olist/ERP e financeiro existente.
+- [x] Sincronização opcional dos pedidos pagos da loja com Olist: cliente, pedido, conclusão da produção, NF-e com solicitação de e-mail e expedição (migration 0074; ativação por tenant e agendador necessários). Consulte `docs/ecommerce-olist-automacao.md`.
+- [ ] Conciliação automática dos pedidos da loja com o financeiro existente, sem duplicar recebimentos do gateway e lançamentos do ERP.
 - [ ] Assistente criativo público com cotas e consumo de IA por comprador/tenant.
 - [x] Upload de logo, capa e imagem de produto com prévia, substituição e remoção da seleção.
 - [x] Galeria com até 10 mídias por produto, incluindo até 2 vídeos.

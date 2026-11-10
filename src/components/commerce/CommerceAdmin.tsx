@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, type FormEvent } from "react";
+import React, { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
@@ -18,6 +18,7 @@ import {
   FlaskConical,
   ShieldCheck,
   Images,
+  Link2,
 } from "lucide-react";
 import type { getCommerceAdmin } from "@/repositories/commerce";
 import type { StoreAdminInput, StoreSettings } from "@/domain/commerce/schemas";
@@ -36,6 +37,7 @@ import type { PaymentEnvironment } from "@/domain/commerce/payment-settings";
 import styles from "./commerce-admin.module.css";
 type Data = Awaited<ReturnType<typeof getCommerceAdmin>>;
 const CommerceLibraryAdmin = dynamic(() => import("./CommerceLibraryAdmin").then(m => m.CommerceLibraryAdmin));
+const CommerceOlistSettings = dynamic(() => import("./CommerceOlistSettings").then(m => m.CommerceOlistSettings));
 const field =
   "min-w-0 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100";
 const button =
@@ -49,6 +51,7 @@ export function CommerceAdmin({
 }) {
   const [data, setData] = useState(initial);
   const [tab, setTab] = useState("store");
+  useEffect(() => { if (initial.olistConfigured && new URLSearchParams(window.location.search).get("tab") === "olist") setTab("olist"); }, [initial.olistConfigured]);
   const [busy, setBusy] = useState(false);
   const [libraryBusy, setLibraryBusy] = useState(false);
   const [paymentDiagnosisRevision, setPaymentDiagnosisRevision] = useState(0);
@@ -247,6 +250,7 @@ export function CommerceAdmin({
           ["payments", "Pagamentos"],
           ["address", "Endereço da loja"],
           ["library", "Campanhas e artes"],
+          ...(data.olistConfigured ? [["olist", "Olist"]] : []),
           ["orders", `Pedidos (${data.orders.length})`],
         ].map(([id, label]) => (
           <button
@@ -257,7 +261,7 @@ export function CommerceAdmin({
             onClick={() => setTab(id)}
             className={`${button} shrink-0 whitespace-nowrap ${tab === id ? "border-emerald-500 bg-emerald-500/10 text-emerald-200" : "text-zinc-400"}`}
           >
-            {id === "store" ? <Store size={16} /> : id === "payments" ? <CreditCard size={16} /> : id === "address" ? <Globe size={16}/> : id === "library" ? <Images size={16}/> : <Package size={16} />}
+            {id === "store" ? <Store size={16} /> : id === "payments" ? <CreditCard size={16} /> : id === "address" ? <Globe size={16}/> : id === "library" ? <Images size={16}/> : id === "olist" ? <Link2 size={16}/> : <Package size={16} />}
             {label}
           </button>
         ))}
@@ -798,6 +802,7 @@ export function CommerceAdmin({
       ) : null}
       {tab === "address" ? <CommerceStoreAddress slug={data.store?.slug} urls={data.urls} value={settings.requestedDomain ?? ""} onChange={value => updateSetting("requestedDomain", value)} onSubmit={save} disabled={busy || pendingUploads > 0}/> : null}
       {tab === "library" ? <CommerceLibraryAdmin products={data.products} slug={data.store?.slug} onBusyChange={setLibraryBusy}/> : null}
+      {tab === "olist" && data.olistConfigured ? <CommerceOlistSettings/> : null}
       {tab === "orders" ? (
         <section className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">Últimos pedidos</h2><Link className={`${button} text-emerald-300`} href="/commerce/orders"><Package size={16} />Central de pedidos e produção</Link></div>

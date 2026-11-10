@@ -160,6 +160,13 @@ export const addressSchema = z
     attention: z.string().trim().max(100),
   })
   .strict();
+export const billingSchema = addressSchema.omit({ attention: true }).extend({
+  name: z.string().trim().min(2, "Informe o nome completo ou a razão social.").max(100),
+  email: z.string().trim().max(254).email("Informe um e-mail válido para faturamento."),
+  document: z.string().trim().min(1, "Informe o CPF ou CNPJ para faturamento.").max(20)
+    .refine(value => /\d/.test(value) && isValidCpfOrCnpj(value), "Informe um CPF ou CNPJ válido para faturamento.")
+    .transform(value => value.replace(/\D/g, "")),
+}).strict();
 export const checkoutSchema = z
   .object({
     paymentEnvironment: z.enum(["production", "test"]).optional(),
@@ -168,13 +175,7 @@ export const checkoutSchema = z
     delivery: z.enum(["pickup", "delivery"]),
     shippingQuoteId: z.string().uuid().optional(),
     address: addressSchema.nullable(),
-    billing: addressSchema.omit({ attention: true }).extend({
-      name: z.string().trim().min(2, "Informe o nome completo ou a razão social.").max(100),
-      email: z.string().trim().max(254).email("Informe um e-mail válido para faturamento."),
-      document: z.string().trim().min(1, "Informe o CPF ou CNPJ para faturamento.").max(20)
-        .refine(value => /\d/.test(value) && isValidCpfOrCnpj(value), "Informe um CPF ou CNPJ válido para faturamento.")
-        .transform(value => value.replace(/\D/g, "")),
-    }).strict(),
+    billing: billingSchema,
     deliveryAddressSameAsBilling: z.boolean(),
     provider: z.enum(["manual", "mercado_pago"]),
     acceptedTerms: z.literal(true),

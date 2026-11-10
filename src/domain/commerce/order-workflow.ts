@@ -25,6 +25,7 @@ export function orderProductionState(order: OrderProductionFacts) {
   return { key, label, editable, printable };
 }
 export function orderEventLabel(event: string) {
+  if (event.startsWith("olist.")) return ({ "olist.queued": "Sincronização Olist solicitada", "olist.customer": "Cliente vinculado no Olist", "olist.sales_order": "Pedido de venda Olist vinculado", "olist.production_ready": "Produção concluída para faturamento", "olist.invoice_create": "Nota fiscal gerada", "olist.invoice_authorize": "Autorização fiscal solicitada", "olist.invoice_status": "Situação fiscal conferida", "olist.dispatch": "Expedição vinculada no Olist", "olist.tracking": "Rastreio atualizado no Olist", "olist.error": "Integração Olist precisa de atenção" } as Record<string, string>)[event] ?? "Integração Olist atualizada";
   if (event === "order.admin_deleted") return "Pedido excluído da gestão administrativa";
   if (event === "payment.test_paid") return "Pagamento de teste aprovado";
   if (event === "payment.test_pending") return "Pagamento de teste pendente";

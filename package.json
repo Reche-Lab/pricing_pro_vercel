@@ -17,6 +17,7 @@
     "import:boxes": "node --env-file=.env scripts/import-boxes.mjs",
     "configure:correios": "node --env-file=.env scripts/configure-correios.mjs",
     "configure:melhor-envio": "node --env-file=.env scripts/configure-melhor-envio.mjs",
+    "commerce:olist:worker": "node --env-file=.env scripts/commerce-olist-worker.mjs",
     "create:agent-key": "node --env-file=.env scripts/create-agent-api-key.mjs"
   },
   "dependencies": {

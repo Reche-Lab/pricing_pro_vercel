@@ -206,7 +206,7 @@ export function publicCommerceProduct(product: CommerceProduct) {
   };
 }
 export async function getCommerceAdmin(userId: string, tenantId: string) {
-  const [store, products, variants, platforms, payments, orders, readiness] =
+  const [store, products, variants, platforms, payments, orders, readiness, olist] =
     await Promise.all([
       getPool().query(
         `select s.*,t.slug from tenants t left join commerce_stores s on s.tenant_id=t.id where t.id=$1`,
@@ -227,6 +227,7 @@ export async function getCommerceAdmin(userId: string, tenantId: string) {
         [tenantId],
       ),
       commerceLaunchReadiness(tenantId),
+      getPool().query("select exists(select 1 from integration_connections where tenant_id=$1 and provider='olist' and status<>'disabled' and credentials_encrypted is not null) as configured", [tenantId]),
     ]);
   return {
     store: store.rows[0],
@@ -241,6 +242,7 @@ export async function getCommerceAdmin(userId: string, tenantId: string) {
     payments: payments.rows[0] ?? null,
     orders: orders.rows,
     readiness,
+    olistConfigured: Boolean(olist.rows[0]?.configured),
     urls: {
       public: commerceStoreUrl(store.rows[0].slug),
       platform: `${new URL(process.env.APP_URL || "http://localhost:3000").origin}/loja/${store.rows[0].slug}`,

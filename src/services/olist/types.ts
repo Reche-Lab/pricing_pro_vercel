@@ -49,6 +49,7 @@ export type OlistRequestOptions = {
   path: string;
   body?: unknown;
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  signal?: AbortSignal;
 };
 
 export type OlistOAuthTokenResponse = {
