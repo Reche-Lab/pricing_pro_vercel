@@ -173,7 +173,13 @@ export function ArtworkCropEditor({
             <button aria-label="Fechar enquadramento" disabled={saving} className="focus-ring rounded-md p-2 text-zinc-500 hover:bg-zinc-900 hover:text-white" type="button" onClick={() => exit.request(onClose)}><X size={18} /></button>
           </div>
           {navigation}
-          {renderPreview ? <details open className="mt-4 min-w-0 rounded-md border border-zinc-700 p-2 text-zinc-200"><summary className="cursor-pointer text-sm font-semibold">Seu produto em tempo real · frente e verso</summary><p className="my-2 text-xs leading-5 text-zinc-400">A linha amarela coincide com a borda da frente. A faixa até o corte continua no verso.</p>{renderPreview({ scale, offsetX, offsetY, rotationDegrees: rotation, ...(backgroundColor !== undefined ? { backgroundColor } : {}) })}</details> : null}
+          <section aria-label="Prévia do produto e zoom" className="mt-4 min-w-0 space-y-3 rounded-md border border-zinc-700 p-3 text-zinc-200">
+            {renderPreview ? <details open className="min-w-0"><summary className="cursor-pointer text-sm font-semibold">Seu produto em tempo real · frente e verso</summary><p className="my-2 text-xs leading-5 text-zinc-400">A linha amarela coincide com a borda da frente. A faixa até o corte continua no verso.</p>{renderPreview({ scale, offsetX, offsetY, rotationDegrees: rotation, ...(backgroundColor !== undefined ? { backgroundColor } : {}) })}</details> : null}
+            <div className={renderPreview ? "border-t border-zinc-800 pt-3" : ""}>
+              <Slider label="Zoom" min={0.1} max={5} step={0.05} value={scale} onChange={setScale} display={`${scale.toFixed(2)}x`} />
+              <p className="mt-1 text-[11px] leading-4 text-zinc-500">Áreas sem imagem recebem {backgroundColor ? "a cor de fundo escolhida" : "branco, a menos que você escolha uma cor de fundo"}.</p>
+            </div>
+          </section>
           <div ref={backgroundPanel} className="mt-4"><ArtworkBackgroundControls value={backgroundColor} disabled={saving} sampling={sampling} onChange={value => { captureGeneration.current++; setBackgroundColor(value); setSampling(false); setError(""); }} onSample={() => { captureGeneration.current++; setSampling(!sampling); setError(""); }}/></div>
           {onRetouch ? <button className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900 disabled:opacity-40" disabled={saving} type="button" onClick={() => exit.request(onRetouch)}><Paintbrush size={15} /> Retocar arte</button> : null}
           <div className="mt-4 grid gap-2 rounded-md border border-zinc-800 bg-zinc-900/55 p-3 text-xs leading-5">
@@ -183,10 +189,6 @@ export function ArtworkCropEditor({
             <GuideHelp color="rose" title={`3. Corte efetivo · ${cutAbsolute}`}>É o limite físico de corte. Continue o mesmo fundo por toda a faixa entre a sangria e esta linha para evitar bordas brancas e compensar pequenas variações do corte. Não coloque elementos importantes nessa faixa, pois ela ficará oculta.</GuideHelp>
           </div>
           <div className="mt-5 grid gap-5">
-            <div>
-              <Slider label="Zoom" min={0.1} max={5} step={0.05} value={scale} onChange={setScale} display={`${scale.toFixed(2)}x`} />
-              <p className="mt-1 text-[11px] leading-4 text-zinc-500">Áreas sem imagem recebem {backgroundColor ? "a cor de fundo escolhida" : "branco, a menos que você escolha uma cor de fundo"}.</p>
-            </div>
             <Slider label="Posição horizontal" min={-1} max={1} step={0.01} value={offsetX} onChange={setOffsetX} display={`${Math.round(offsetX * 100)}%`} />
             <Slider label="Posição vertical" min={-1} max={1} step={0.01} value={offsetY} onChange={setOffsetY} display={`${Math.round(offsetY * 100)}%`} />
             <p className="-mt-3 text-[11px] leading-4 text-zinc-600">O deslocamento move a imagem em relação ao corte em qualquer nível de zoom, inclusive em 1x.</p>

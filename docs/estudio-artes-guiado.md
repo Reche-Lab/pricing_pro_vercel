@@ -5,6 +5,10 @@ loja (incluindo a prévia privada): **Retocar (opcional) → Enquadrar → Aprov
 
 ## Posição da imagem
 
+- [x] Zoom junto da simulação frente/verso, antes das opções de fundo e geometria. O controle permanece disponível quando a simulação é recolhida e atualiza o produto em tempo real.
+
+Reposicionamento do zoom validado por 18 testes focados, TypeScript, lint e navegador em 1440/390/320 px, com conferência dos pixels e atualização das duas prévias. Esta alteração de layout não exige nova migration.
+
 O retoque e o enquadramento permitem deslocar a imagem horizontal e verticalmente,
 inclusive no tamanho de 100%. Os controles de posição são independentes do zoom de
 visualização; **Centralizar** zera apenas o deslocamento.

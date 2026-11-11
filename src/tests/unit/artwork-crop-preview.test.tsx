@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ArtworkCropEditor } from "@/components/quotes/ArtworkCropEditor";
@@ -43,6 +44,18 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("crop preparation adapters", () => {
+  it("keeps zoom next to the live product preview and updates the preview immediately", () => {
+    const renderPreview = vi.fn(() => <div>Simulação frente e verso</div>);
+    render(<ArtworkCropEditor {...props} renderPreview={renderPreview}/>);
+    const preview = screen.getByRole("region", { name: "Prévia do produto e zoom" });
+    expect(within(preview).getByText("Simulação frente e verso")).toBeInTheDocument();
+    const zoom = within(preview).getByRole("slider", { name: /^Zoom/ });
+    expect(screen.getAllByRole("slider", { name: /^Zoom/ })).toHaveLength(1);
+    fireEvent.change(zoom, { target: { value: "1.5" } });
+    expect(renderPreview).toHaveBeenLastCalledWith(expect.objectContaining({ scale: 1.5 }));
+    fireEvent.click(within(preview).getByText("Seu produto em tempo real · frente e verso"));
+    expect(zoom).toBeVisible();
+  });
   it("previews a removable background and submits it with the frame without incorporating the image", async () => {
     const onPrepare = vi.fn().mockResolvedValue(undefined), renderPreview = vi.fn(() => null);
     render(<ArtworkCropEditor {...props} onPrepare={onPrepare} renderPreview={renderPreview}/>);
