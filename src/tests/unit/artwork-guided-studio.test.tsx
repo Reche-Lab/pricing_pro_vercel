@@ -27,6 +27,21 @@ function callbacks() {
     onApprove: vi.fn().mockResolvedValue(undefined), onClose: vi.fn() };
 }
 describe("guided artwork workflow", () => {
+  it("takes an uncovered artwork straight to reversible background completion", async () => {
+    vi.mocked(inspectArtworkCoverage).mockResolvedValueOnce({ warning: true, uncoveredPercent: 18 });
+    const handlers = callbacks();
+    render(<ArtworkGuidedStudio initialAsset={{ ...asset, preparedUrl: "/prepared.png" }} initialStep="review" {...handlers}/>);
+    fireEvent.load(screen.getByAltText("Arte final para aprovação"));
+    fireEvent.click(screen.getByRole("checkbox")); fireEvent.click(screen.getByRole("button", { name: "Aprovar arte" }));
+    await screen.findByRole("alertdialog");
+    fireEvent.click(screen.getByRole("button", { name: "Completar bordas no enquadramento" }));
+    expect(await screen.findByLabelText("Cor do fundo")).toHaveFocus();
+    fireEvent.change(screen.getByLabelText("Cor do fundo"), { target: { value: "#247a9f" } });
+    fireEvent.click(screen.getByRole("button", { name: "Revisar e aprovar" }));
+    await screen.findByAltText("Arte final para aprovação");
+    expect(handlers.onPrepare).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ backgroundColor: "#247a9f" }));
+    expect(handlers.onApprove).not.toHaveBeenCalled();
+  });
   it("requires explicit confirmation for uncovered regions and offers the editor", async () => {
     vi.mocked(inspectArtworkCoverage).mockResolvedValueOnce({ warning: true, uncoveredPercent: 18 });
     const handlers = callbacks();

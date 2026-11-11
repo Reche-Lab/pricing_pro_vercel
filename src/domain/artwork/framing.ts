@@ -1,4 +1,14 @@
-export type ArtworkFrame = { scale: number; offsetX: number; offsetY: number; rotationDegrees: number };
+import { z } from "zod";
+
+export const artworkBackgroundColorSchema = z.string().length(7).regex(/^#[0-9a-f]{6}$/i).nullable().optional();
+export const artworkFrameSchema = z.object({
+  scale: z.number().finite().min(.1).max(5).default(1),
+  offsetX: z.number().finite().min(-1).max(1).default(0),
+  offsetY: z.number().finite().min(-1).max(1).default(0),
+  rotationDegrees: z.number().finite().min(-180).max(180).default(0),
+  backgroundColor: artworkBackgroundColorSchema,
+});
+export type ArtworkFrame = z.infer<typeof artworkFrameSchema>;
 
 export function artworkFramePlacement(width: number, height: number, frame: ArtworkFrame) {
   const imageWidth = width * frame.scale;

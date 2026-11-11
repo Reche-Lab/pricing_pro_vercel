@@ -508,6 +508,7 @@ export function CommerceLibraryAdmin({
                 id: framing.art.id,
                 artwork_name: framing.art.title,
                 file_name: framing.art.file_name,
+                crop_background_color: framing.art.bindings?.find(b => b.product_id === framing.product.id)?.initial_crop?.backgroundColor,
                 crop_scale: String(
                   framing.art.bindings?.find(
                     (b) => b.product_id === framing.product.id,

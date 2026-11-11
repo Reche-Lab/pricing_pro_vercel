@@ -64,6 +64,17 @@ async function call(
   );
 }
 describe("private preview artwork processing", () => {
+  it("preserves a selected background in the temporary print-ready image and rejects unsafe colors", async () => {
+    expect((await call({ crop: { ...crop, backgroundColor: "url(test)" } })).status).toBe(400);
+    const response = await call({ crop: { ...crop, scale: .3, backgroundColor: "#247a9f" } });
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    const { data, info } = await sharp(Buffer.from(result.dataUrl.split(",")[1], "base64")).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const offset = (Math.floor(info.height * .15) * info.width + Math.floor(info.width / 2)) * 4;
+    expect(Math.abs(data[offset] - 36)).toBeLessThan(8);
+    expect(Math.abs(data[offset + 1] - 122)).toBeLessThan(8);
+    expect(data[offset + 3]).toBe(255);
+  });
   it("requires admin authentication before reading product data", async () => {
     vi.mocked(requireCommercePreview).mockRejectedValue(
       new CommerceError("Entre na conta", 401),

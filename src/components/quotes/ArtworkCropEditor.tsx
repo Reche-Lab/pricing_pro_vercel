@@ -1,11 +1,14 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { LocateFixed, Loader2, Paintbrush, RotateCcw, X } from "lucide-react";
 import { useArtworkExitGuard } from "./useArtworkExitGuard";
 import { createPrintGuideLayout, type PrintGeometry } from "@/domain/artwork/geometry";
 import type { QuoteItemArtworkRow } from "@/repositories/quotes";
-import { artworkFramePlacement } from "@/domain/artwork/framing";
+import { artworkFramePlacement, type ArtworkFrame } from "@/domain/artwork/framing";
+import { drawArtworkFrame } from "./artwork-frame-canvas";
+import { sampledRgbToHex } from "@/domain/artwork/retouch";
+import { ArtworkBackgroundControls } from "./ArtworkBackgroundControls";
 import { useArtworkViewport } from "./useArtworkViewport";
 
 export function ArtworkCropEditor({
@@ -22,9 +25,10 @@ export function ArtworkCropEditor({
   onRetouch,
   renderPreview,
   onClose,
-  onSaved
+  onSaved,
+  focusBackground = false
 }: {
-  artwork: Pick<QuoteItemArtworkRow, "id" | "artwork_name" | "file_name" | "crop_scale" | "crop_offset_x" | "crop_offset_y" | "rotation_degrees">;
+  artwork: Pick<QuoteItemArtworkRow, "id" | "artwork_name" | "file_name" | "crop_scale" | "crop_offset_x" | "crop_offset_y" | "rotation_degrees"> & { crop_background_color?: string | null };
   geometry: PrintGeometry;
   bleedMm: number;
   safeMarginMm: number;
@@ -32,25 +36,38 @@ export function ArtworkCropEditor({
   itemId: string;
   quoteId: string;
   prepareUrl?: string;
-  onPrepare?: (crop: { scale: number; offsetX: number; offsetY: number; rotationDegrees: number }) => Promise<void>;
+  onPrepare?: (crop: ArtworkFrame) => Promise<void>;
   navigation?: React.ReactNode;
   onRetouch?: () => void;
-  renderPreview?: (frame: { scale: number; offsetX: number; offsetY: number; rotationDegrees: number }) => React.ReactNode;
+  renderPreview?: (frame: ArtworkFrame) => React.ReactNode;
   onClose: () => void;
   onSaved: () => void;
+  focusBackground?: boolean;
 }) {
   const [scale, setScale] = useState(Number(artwork.crop_scale || 1));
   const [offsetX, setOffsetX] = useState(Number(artwork.crop_offset_x || 0));
   const [offsetY, setOffsetY] = useState(Number(artwork.crop_offset_y || 0));
   const [rotation, setRotation] = useState(Number(artwork.rotation_degrees || 0));
+  const [backgroundColor, setBackgroundColor] = useState<string | null | undefined>(artwork.crop_background_color);
+  const [sampling, setSampling] = useState(false);
+  const captureGeneration = useRef(0);
+  const sampleSource = useRef<{ url: string; image: HTMLImageElement } | null>(null);
+  useEffect(() => () => { captureGeneration.current++; }, [imageUrl]);
+  const backgroundPanel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!focusBackground) return;
+    backgroundPanel.current?.scrollIntoView?.({ block: "nearest" });
+    backgroundPanel.current?.querySelector<HTMLInputElement>('input[type="color"]')?.focus({ preventScroll: true });
+  }, [focusBackground]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   async function prepare() {
+    captureGeneration.current++;
     setSaving(true);
     setError("");
     try {
-      const crop = { scale, offsetX, offsetY, rotationDegrees: rotation };
+      const crop = { scale, offsetX, offsetY, rotationDegrees: rotation, ...(backgroundColor !== undefined ? { backgroundColor } : {}) };
       if (onPrepare) await onPrepare(crop);
       else {
         const response = await fetch(prepareUrl ?? `/api/quotes/${quoteId}/items/${itemId}/artworks/${artwork.id}/prepare`, {
@@ -73,11 +90,13 @@ export function ArtworkCropEditor({
     }
   }
 
-  const dirty = scale !== Number(artwork.crop_scale || 1) || offsetX !== Number(artwork.crop_offset_x || 0) || offsetY !== Number(artwork.crop_offset_y || 0) || rotation !== Number(artwork.rotation_degrees || 0);
+  const dirty = scale !== Number(artwork.crop_scale || 1) || offsetX !== Number(artwork.crop_offset_x || 0) || offsetY !== Number(artwork.crop_offset_y || 0) || rotation !== Number(artwork.rotation_degrees || 0) || (backgroundColor ?? null) !== (artwork.crop_background_color ?? null);
   const exit = useArtworkExitGuard({ dirty, busy: saving, save: prepare });
 
   function reset() {
+    captureGeneration.current++;
     setScale(1); setOffsetX(0); setOffsetY(0); setRotation(0);
+    setBackgroundColor(null); setSampling(false);
   }
 
   function centerArtwork() {
@@ -102,15 +121,40 @@ export function ArtworkCropEditor({
   const sangriaAbsolute = formatAbsoluteSize(guides.sangriaWidthMm, guides.sangriaHeightMm, oneDimension);
   const cutAbsolute = formatAbsoluteSize(guides.outputWidthMm, guides.outputHeightMm, oneDimension);
 
+  async function captureBackground(event: React.MouseEvent<SVGSVGElement>) {
+    if (!sampling || saving) return;
+    const generation = ++captureGeneration.current;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = Math.max(0, Math.min(viewWidth - 1, Math.floor((event.clientX - bounds.left) / bounds.width * viewWidth)));
+    const y = Math.max(0, Math.min(Math.round(viewHeight) - 1, Math.floor((event.clientY - bounds.top) / bounds.height * viewHeight)));
+    try {
+      const loaded = sampleSource.current?.url === imageUrl ? sampleSource.current.image : await new Promise<HTMLImageElement>((resolve, reject) => {
+        const source = new Image(); source.crossOrigin = "anonymous";
+        source.onload = () => resolve(source); source.onerror = () => reject(new Error("Não foi possível capturar a cor. Use o seletor de cores.")); source.src = imageUrl;
+      });
+      if (generation !== captureGeneration.current) return;
+      sampleSource.current = { url: imageUrl, image: loaded };
+      const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) throw new Error("Use o seletor de cores para completar o fundo.");
+      // Sample one transformed pixel without allocating a full-size canvas for tall products.
+      context.translate(-x, -y);
+      drawArtworkFrame(context, loaded, loaded.naturalWidth, loaded.naturalHeight, viewWidth, viewHeight, { scale, offsetX, offsetY, rotationDegrees: rotation });
+      const pixel = context.getImageData(0, 0, 1, 1).data;
+      if (!pixel[3]) { setError("Esta região está transparente. Selecione uma cor dentro da imagem."); return; }
+      setBackgroundColor(sampledRgbToHex(pixel[0], pixel[1], pixel[2])); setSampling(false); setError("");
+    } catch { if (generation === captureGeneration.current) setError("Não foi possível capturar esta cor. Use o seletor de cores para completar o fundo."); }
+  }
+
   return (
     <div className="fixed inset-0 z-[70] grid place-items-center overflow-hidden bg-black/80 p-0 backdrop-blur-sm sm:p-3 lg:p-6">
       <div className="grid h-dvh w-full min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(210px,42dvh)_minmax(0,1fr)] overflow-hidden border border-zinc-700 bg-zinc-950 shadow-2xl sm:h-[94dvh] sm:rounded-lg lg:max-w-4xl lg:grid-cols-[minmax(320px,1fr)_360px] lg:grid-rows-1">
         <div className="grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-zinc-900 p-3 sm:p-5 lg:p-8">
           <div ref={previewRef} className="grid min-h-0 min-w-0 place-items-center">
           <div className="max-h-full max-w-full overflow-hidden bg-zinc-800 shadow-[0_0_0_5px_rgba(34,211,238,0.12)] sm:shadow-[0_0_0_8px_rgba(34,211,238,0.12)]" style={{ width: fitted.width, height: fitted.height }}>
-            <svg aria-label={artwork.artwork_name ?? artwork.file_name} className="h-full w-full" viewBox={`0 0 ${viewWidth} ${viewHeight}`}>
+            <svg aria-label={artwork.artwork_name ?? artwork.file_name} className={`h-full w-full ${sampling ? "cursor-crosshair" : ""}`} viewBox={`0 0 ${viewWidth} ${viewHeight}`} onClick={event => void captureBackground(event)}>
               <defs><clipPath id={`artwork-shape-${artwork.id}`}><path d={clipPath} /></clipPath></defs>
-              <path d={clipPath} fill="white" />
+              <path data-artwork-background d={clipPath} fill={backgroundColor ?? "white"} />
               <g clipPath={`url(#artwork-shape-${artwork.id})`}>
                 <image height={image.height} href={imageUrl} preserveAspectRatio="xMidYMid slice" transform={`rotate(${rotation} ${viewWidth / 2} ${viewHeight / 2})`} width={image.width} x={image.x} y={image.y} />
               </g>
@@ -129,7 +173,8 @@ export function ArtworkCropEditor({
             <button aria-label="Fechar enquadramento" disabled={saving} className="focus-ring rounded-md p-2 text-zinc-500 hover:bg-zinc-900 hover:text-white" type="button" onClick={() => exit.request(onClose)}><X size={18} /></button>
           </div>
           {navigation}
-          {renderPreview ? <details open className="mt-4 min-w-0 rounded-md border border-zinc-700 p-2 text-zinc-200"><summary className="cursor-pointer text-sm font-semibold">Seu produto em tempo real · frente e verso</summary><p className="my-2 text-xs leading-5 text-zinc-400">A linha amarela coincide com a borda da frente. A faixa até o corte continua no verso.</p>{renderPreview({ scale, offsetX, offsetY, rotationDegrees: rotation })}</details> : null}
+          {renderPreview ? <details open className="mt-4 min-w-0 rounded-md border border-zinc-700 p-2 text-zinc-200"><summary className="cursor-pointer text-sm font-semibold">Seu produto em tempo real · frente e verso</summary><p className="my-2 text-xs leading-5 text-zinc-400">A linha amarela coincide com a borda da frente. A faixa até o corte continua no verso.</p>{renderPreview({ scale, offsetX, offsetY, rotationDegrees: rotation, ...(backgroundColor !== undefined ? { backgroundColor } : {}) })}</details> : null}
+          <div ref={backgroundPanel} className="mt-4"><ArtworkBackgroundControls value={backgroundColor} disabled={saving} sampling={sampling} onChange={value => { captureGeneration.current++; setBackgroundColor(value); setSampling(false); setError(""); }} onSample={() => { captureGeneration.current++; setSampling(!sampling); setError(""); }}/></div>
           {onRetouch ? <button className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900 disabled:opacity-40" disabled={saving} type="button" onClick={() => exit.request(onRetouch)}><Paintbrush size={15} /> Retocar arte</button> : null}
           <div className="mt-4 grid gap-2 rounded-md border border-zinc-800 bg-zinc-900/55 p-3 text-xs leading-5">
             <p className="mb-1 font-semibold text-zinc-200">Geometria de impressão e corte</p>
@@ -140,7 +185,7 @@ export function ArtworkCropEditor({
           <div className="mt-5 grid gap-5">
             <div>
               <Slider label="Zoom" min={0.1} max={5} step={0.05} value={scale} onChange={setScale} display={`${scale.toFixed(2)}x`} />
-              <p className="mt-1 text-[11px] leading-4 text-zinc-600">Abaixo de 1x, a área sem imagem será preenchida em branco.</p>
+              <p className="mt-1 text-[11px] leading-4 text-zinc-500">Áreas sem imagem recebem {backgroundColor ? "a cor de fundo escolhida" : "branco, a menos que você escolha uma cor de fundo"}.</p>
             </div>
             <Slider label="Posição horizontal" min={-1} max={1} step={0.01} value={offsetX} onChange={setOffsetX} display={`${Math.round(offsetX * 100)}%`} />
             <Slider label="Posição vertical" min={-1} max={1} step={0.01} value={offsetY} onChange={setOffsetY} display={`${Math.round(offsetY * 100)}%`} />

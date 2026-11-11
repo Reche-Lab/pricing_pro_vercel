@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { artworkBackgroundColorSchema } from "@/domain/artwork/framing";
 import { CommerceError } from "./commerce";
 import { safeCommerceMediaUrl } from "./product-media";
 export const librarySlug = (value: string) =>
@@ -38,6 +39,7 @@ export const libraryCropSchema = z
     offsetX: z.number().min(-1).max(1),
     offsetY: z.number().min(-1).max(1),
     rotationDegrees: z.number().min(-180).max(180),
+    backgroundColor: artworkBackgroundColorSchema,
   })
   .strict();
 export type LibraryCrop = z.infer<typeof libraryCropSchema>;

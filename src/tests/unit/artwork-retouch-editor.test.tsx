@@ -20,7 +20,7 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => viewport.width);
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(() => viewport.height);
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(function (this: HTMLCanvasElement) {
-    return { canvas: this, clearRect: vi.fn(), drawImage, save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn() } as unknown as CanvasRenderingContext2D;
+    return { canvas: this, fillRect: vi.fn(), clearRect: vi.fn(), drawImage, save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn() } as unknown as CanvasRenderingContext2D;
   });
   vi.stubGlobal("ResizeObserver", class {
     constructor(callback: () => void) { resize = callback; }
@@ -36,6 +36,24 @@ async function loaded() {
 }
 
 describe("retouch framing and fitted viewport", () => {
+  it("can remove a background inherited from framing without treating the original as already flattened", async () => {
+    render(<ArtworkRetouchEditor {...props} initialCrop={{ ...initialCrop, backgroundColor: "#247a9f" }} initialBackground onContinue={undefined}/>);
+    await loaded();
+    expect(screen.getByRole("button", { name: "Salvar versão" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Remover cor de fundo" }));
+    expect(screen.getByRole("button", { name: "Salvar versão" })).toBeEnabled();
+    expect(drawArtworkFrame).toHaveBeenCalledWith(expect.anything(), expect.anything(), 1200, 800, 800, 800, { ...initialCrop, backgroundColor: null });
+  });
+  it("completes transparent edges directly and lets the user remove the color without incorporating", async () => {
+    render(<ArtworkRetouchEditor {...props} onContinue={undefined}/>);
+    await loaded();
+    fireEvent.click(screen.getByRole("button", { name: "Completar bordas" }));
+    fireEvent.change(screen.getByLabelText("Cor do fundo"), { target: { value: "#247a9f" } });
+    expect(screen.getByRole("button", { name: "Salvar versão" })).toBeEnabled();
+    expect(screen.queryByText("Desfazer incorporação")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remover cor de fundo" }));
+    expect(screen.getByRole("button", { name: "Salvar versão" })).toBeDisabled();
+  });
   it("moves the image at 100% without moving the guides or changing the viewport zoom", async () => {
     render(<ArtworkRetouchEditor {...props} onContinue={undefined} />);
     const canvas = await loaded();

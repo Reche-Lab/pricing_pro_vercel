@@ -5,15 +5,10 @@ import { requireWritableBilling } from "@/lib/billing/guard";
 import { getArtworkPreparationSource, getArtworkProductionData, resolveArtworkGeometry, resolveArtworkMargins, savePreparedArtwork } from "@/repositories/artwork-production";
 import { prepareArtwork } from "@/services/artwork/production";
 import { decodeDataUrl, loadArtworkDataUrl, uploadArtworkObject } from "@/services/storage/artwork-storage";
+import { artworkFrameSchema } from "@/domain/artwork/framing";
 
 const paramsSchema = z.object({ quoteId: z.string().uuid(), itemId: z.string().uuid(), artworkId: z.string().uuid() });
-const bodySchema = z.object({
-  diameterMm: z.number().min(10).max(300).optional(),
-  scale: z.number().min(0.1).max(5).default(1),
-  offsetX: z.number().min(-1).max(1).default(0),
-  offsetY: z.number().min(-1).max(1).default(0),
-  rotationDegrees: z.number().min(-180).max(180).default(0)
-});
+const bodySchema = artworkFrameSchema.extend({ diameterMm: z.number().min(10).max(300).optional() });
 
 export async function POST(request: Request, context: { params: Promise<{ quoteId: string; itemId: string; artworkId: string }> }) {
   const session = await getCurrentSession();
@@ -43,7 +38,8 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
       scale: body.data.scale,
       offsetX: body.data.offsetX,
       offsetY: body.data.offsetY,
-      rotationDegrees: body.data.rotationDegrees
+      rotationDegrees: body.data.rotationDegrees,
+      backgroundColor: body.data.backgroundColor
     });
     const decodedPrepared = decodeDataUrl(prepared.dataUrl);
     const preparedStoragePath = await uploadArtworkObject({
@@ -59,7 +55,7 @@ export async function POST(request: Request, context: { params: Promise<{ quoteI
       prepared,
       preparedDataUrl: preparedStoragePath ? null : prepared.dataUrl,
       preparedStoragePath,
-      crop: { scale: body.data.scale, offsetX: body.data.offsetX, offsetY: body.data.offsetY, rotationDegrees: body.data.rotationDegrees }
+      crop: body.data
     });
     return NextResponse.json({ ok: true, artwork });
   } catch (error) {

@@ -1,4 +1,5 @@
 import { withTenantContext } from "@/lib/db/client";
+import type { ArtworkFrame } from "@/domain/artwork/framing";
 import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
 import { resolvePrintGeometry, resolvePrintMargins, type PrintGeometry, type PrintMargins } from "@/domain/artwork/geometry";
 import {
@@ -41,6 +42,7 @@ export type ArtworkProductionRow = {
   crop_offset_x: string;
   crop_offset_y: string;
   rotation_degrees: string;
+  crop_background_color?: string | null;
   quantity: number;
   item_description: string;
   variant_print_diameter_mm: string | null;
@@ -163,6 +165,7 @@ export async function getArtworkProductionData(userId: string, tenantId: string,
           a.crop_offset_x,
           a.crop_offset_y,
           a.rotation_degrees,
+          a.crop_background_color,
           qi.quantity,
           qi.description as item_description,
           to_jsonb(pv)->>'print_diameter_mm' as variant_print_diameter_mm,
@@ -246,7 +249,7 @@ export async function savePreparedArtwork(input: {
   prepared: PreparedArtwork;
   preparedDataUrl: string | null;
   preparedStoragePath: string | null;
-  crop: { scale: number; offsetX: number; offsetY: number; rotationDegrees: number };
+  crop: ArtworkFrame;
 }) {
   return withTenantContext(input.userId, input.tenantId, async (client) => {
     await assertInternalArtworkEditingAllowed(client, input.tenantId, input.quoteId, input.itemId);
@@ -278,6 +281,7 @@ export async function savePreparedArtwork(input: {
             target_corner_radius_mm = $25,
             target_shape_rotation_degrees = $26,
             target_allow_print_rotation = $27,
+            crop_background_color = $28,
             prepared_at = now(),
             approved_at = null,
             approved_by = null,
@@ -312,7 +316,8 @@ export async function savePreparedArtwork(input: {
         input.geometry.cornerStyle,
         input.geometry.cornerRadiusMm,
         input.geometry.rotationDegrees,
-        input.geometry.allowPrintRotation
+        input.geometry.allowPrintRotation,
+        input.crop.backgroundColor ?? null
       ]
     );
     if (!result.rows[0]) throw new Error("Arte não encontrada.");

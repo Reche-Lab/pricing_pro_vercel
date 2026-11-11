@@ -3,6 +3,9 @@ import { artworkFramePlacement, type ArtworkFrame } from "@/domain/artwork/frami
 export function drawArtworkFrame(context: CanvasRenderingContext2D, source: CanvasImageSource, sourceWidth: number, sourceHeight: number, width: number, height: number, frame: ArtworkFrame) {
   const placement = artworkFramePlacement(width, height, frame);
   const cover = Math.max(placement.width / sourceWidth, placement.height / sourceHeight);
+  if (frame.backgroundColor) {
+    context.save(); context.fillStyle = frame.backgroundColor; context.fillRect(0, 0, width, height); context.restore();
+  }
   context.save();
   context.translate(width / 2, height / 2);
   context.rotate(placement.rotationDegrees * Math.PI / 180);

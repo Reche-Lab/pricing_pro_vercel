@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import type { ArtworkFrame } from "@/domain/artwork/framing";
 import { getArtworkAiAttemptsRemaining, normalizeArtworkAiGenerationLimit } from "@/domain/artwork/ai-generation-limit";
 import { resolvePrintGeometry, resolvePrintMargins, type PrintGeometry, type PrintMargins } from "@/domain/artwork/geometry";
 import { getPool } from "@/lib/db/client";
@@ -216,7 +217,7 @@ export async function savePublicPreparedArtwork(input: {
   prepared: PreparedArtwork;
   preparedDataUrl: string | null;
   preparedStoragePath: string | null;
-  crop: { scale: number; offsetX: number; offsetY: number; rotationDegrees: number };
+  crop: ArtworkFrame;
 }) {
   const client = await getPool().connect();
   try {
@@ -232,6 +233,7 @@ export async function savePublicPreparedArtwork(input: {
            target_shape = $21, target_width_mm = $22, target_height_mm = $23,
            target_corner_style = $24, target_corner_radius_mm = $25,
            target_shape_rotation_degrees = $26, target_allow_print_rotation = $27,
+           crop_background_color = $29,
            prepared_at = now(), approved_at = null, approved_by = null, version = version + 1
        where tenant_id = $1 and quote_id = $2 and quote_item_id = $3 and id = $4 and is_active = true
          and exists (
@@ -248,7 +250,7 @@ export async function savePublicPreparedArtwork(input: {
         input.prepared.qualityStatus, input.prepared.notes, input.crop.scale, input.crop.offsetX,
         input.crop.offsetY, input.crop.rotationDegrees, input.geometry.shape, input.geometry.widthMm,
         input.geometry.heightMm, input.geometry.cornerStyle, input.geometry.cornerRadiusMm,
-        input.geometry.rotationDegrees, input.geometry.allowPrintRotation, input.context.tokenHash]
+        input.geometry.rotationDegrees, input.geometry.allowPrintRotation, input.context.tokenHash, input.crop.backgroundColor ?? null]
     );
     if (!result.rows[0]) throw new Error("Arte não encontrada.");
     await recordPublicEvent(client, input.context, "artworks.public_prepare", input.artworkId, { geometry: input.geometry, qualityStatus: input.prepared.qualityStatus });

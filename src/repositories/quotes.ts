@@ -185,6 +185,7 @@ export type QuoteItemArtworkRow = {
   crop_offset_x?: string | null;
   crop_offset_y?: string | null;
   rotation_degrees?: string | null;
+  crop_background_color?: string | null;
 };
 
 export type QuoteSnapshotRow = {
@@ -470,7 +471,8 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           crop_scale,
           crop_offset_x,
           crop_offset_y,
-          rotation_degrees
+          rotation_degrees,
+          crop_background_color
         from quote_item_artworks
         where tenant_id = $1 and quote_id = $2
         order by created_at asc
@@ -791,6 +793,7 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           crop_offset_x,
           crop_offset_y,
           rotation_degrees,
+          crop_background_color,
           version,
           production_quantity
         from quote_item_artworks

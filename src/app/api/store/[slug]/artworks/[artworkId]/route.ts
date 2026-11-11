@@ -23,6 +23,7 @@ import {
   commerceJson,
 } from "@/services/commerce/http";
 import { enforcePublicRateLimit } from "@/lib/security/public-rate-limit";
+import { artworkBackgroundColorSchema } from "@/domain/artwork/framing";
 type Params = { params: Promise<{ slug: string; artworkId: string }> };
 const schema = z
   .object({
@@ -31,6 +32,7 @@ const schema = z
     offsetX: z.number().min(-1).max(1).default(0),
     offsetY: z.number().min(-1).max(1).default(0),
     rotationDegrees: z.number().min(-180).max(180).default(0),
+    backgroundColor: artworkBackgroundColorSchema,
     lines: z.array(cartLineSchema).max(40).optional(),
     acceptUncovered: z.boolean().optional(),
   })
@@ -174,7 +176,7 @@ export async function POST(request: Request, { params }: Params) {
             store.tenant_id,
             artworkId,
             uploaded,
-            JSON.stringify({ scale: input.scale, offsetX: input.offsetX, offsetY: input.offsetY, rotationDegrees: input.rotationDegrees, coverage, geometryHash: fingerprint }),
+            JSON.stringify({ scale: input.scale, offsetX: input.offsetX, offsetY: input.offsetY, rotationDegrees: input.rotationDegrees, backgroundColor: input.backgroundColor ?? null, coverage, geometryHash: fingerprint }),
           ],
         );
     });

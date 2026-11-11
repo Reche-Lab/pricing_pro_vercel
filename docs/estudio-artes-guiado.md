@@ -15,7 +15,8 @@ use **Incorporar** antes. O deslocamento integra o rascunho (quando disponível)
 a versão exportada, sem modificar o original. Rascunhos antigos continuam válidos.
 
 Os mesmos controles estão disponíveis na produção interna, no orçamento público,
-na loja e na prévia. Nenhuma migration adicional é necessária.
+na loja e na prévia. Os controles de posição não exigem migration; o novo preenchimento
+de fundo exige a migration indicada ao final deste documento.
 
 ## Planejado x realizado
 
@@ -37,4 +38,15 @@ A simulação de navegador utilizou um banco local isolado e não acionou pagame
 ou armazenamento de artes reais. Os adaptadores de orçamento administrativo e
 público foram cobertos por testes de componentes com respostas de API simuladas.
 
-Nenhuma migration ou variável de ambiente adicional é necessária.
+## Completar fundo e bordas
+
+- [x] Preenchimento reversível no enquadramento, atrás da imagem, até o corte.
+- [x] Cor sólida, conta-gotas e remoção sem incorporar nem alterar o arquivo original.
+- [x] Cor acompanha simulação, preparo, aprovação e arquivo usado no PDF de produção.
+- [x] Retoque oferece completar bordas, continuar fundo e ajustar tamanho sem incorporação obrigatória.
+- [x] Aviso de cobertura permite voltar diretamente ao preenchimento ou ao retoque.
+- [x] Regressões de APIs/persistência e validação em navegador desktop/mobile.
+
+Aplicar **0076_artwork_background_color.sql** antes do deploy desta melhoria. Não há novas variáveis de ambiente. A coluna opcional guarda a cor do enquadramento dos orçamentos internos e públicos; loja, provas e biblioteca usam seus campos JSON de enquadramento existentes. Artes antigas sem preenchimento continuam compatíveis. Transparência parcial é composta com a cor; branco opaco da imagem nunca é removido automaticamente.
+
+Validação desta revisão: 784 testes unitários, 28 testes de integração em Postgres local vazio (incluindo round-trip interno/público da cor, remoção e preservação do original), lint/tipos e build de produção aprovados. O PDF A4 foi gerado a partir da arte com preenchimento. Playwright verificou captura de cor, pixels do fundo no retoque sem incorporar, remoção, reabertura e aprovação sem áreas descobertas em 320/390/1440 px. As ferramentas de retoque são recolhidas ao completar bordas, priorizando a cor no celular. O conta-gotas amostra apenas um pixel transformado, sem criar um canvas grande para produtos alongados; operações canceladas não sobrescrevem a cor escolhida depois. Nenhuma alteração, upload, cobrança ou chamada de IA foi feita em produção.

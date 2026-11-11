@@ -8,6 +8,7 @@ import { normalizePublicArtworkUpload } from "@/services/artwork/public-upload";
 import { prepareArtwork } from "@/services/artwork/production";
 import { uploadArtworkObject, deleteArtworkObject, downloadArtworkObject } from "@/services/storage/artwork-storage";
 import { commerceJson, readCommerceBody } from "./http";
+import { artworkBackgroundColorSchema, type ArtworkFrame } from "@/domain/artwork/framing";
 
 export const proofBodySchema = z.object({
   action: z.enum(["source", "prepare", "publish", "approve"]), lineId: z.string().uuid(), revision: z.number().int().positive(),
@@ -15,8 +16,9 @@ export const proofBodySchema = z.object({
   fileName: z.string().max(180).optional(), mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]).optional(),
   fileSize: z.number().int().positive().max(3145728).optional(), dataUrl: z.string().max(4200000).optional(),
   scale: z.number().min(0.1).max(5).optional(), offsetX: z.number().min(-1).max(1).optional(), offsetY: z.number().min(-1).max(1).optional(), rotationDegrees: z.number().min(-180).max(180).optional(),
+  backgroundColor: artworkBackgroundColorSchema,
 }).strict();
-export type CommerceProofView = { lineId: string; artworkId?: string; revision: number; approvedAt: string | null; prepared: boolean; crop: { scale: number; offsetX: number; offsetY: number; rotationDegrees: number } | null; artworkName: string; quantity: number; product: ReturnType<typeof publicCommerceProduct> };
+export type CommerceProofView = { lineId: string; artworkId?: string; revision: number; approvedAt: string | null; prepared: boolean; crop: ArtworkFrame | null; artworkName: string; quantity: number; product: ReturnType<typeof publicCommerceProduct> };
 
 export async function authorizedCommerceOrder(tenantId: string, orderId: string, customerId: string | null) {
   if (!z.string().uuid().safeParse(orderId).success) throw new CommerceError("Pedido não encontrado.", 404);
@@ -67,7 +69,7 @@ export async function mutateCommerceProof(request: Request, order: CommerceOrder
     } else if (input.action === "prepare") {
       const file = await downloadArtworkObject(current.source_path);
       if (!file) throw new CommerceError("Original indisponível.", 404);
-      crop = { scale: input.scale ?? 1, offsetX: input.offsetX ?? 0, offsetY: input.offsetY ?? 0, rotationDegrees: input.rotationDegrees ?? 0, geometryHash: geometryHash(product) };
+      crop = { scale: input.scale ?? 1, offsetX: input.offsetX ?? 0, offsetY: input.offsetY ?? 0, rotationDegrees: input.rotationDegrees ?? 0, backgroundColor: input.backgroundColor ?? null, geometryHash: geometryHash(product) };
       const prepared = await prepareArtwork({ dataUrl: `data:${file.contentType};base64,${Buffer.from(file.bytes).toString("base64")}`, geometry: product.geometry, ...product.margins, ...crop, dpi: 300 });
       uploaded = await uploadArtworkObject({ path: `${order.tenant_id}/commerce/proofs/${order.id}/${randomUUID()}.png`, contentType: "image/png", bytes: Buffer.from(prepared.dataUrl.split(",")[1], "base64") });
     }

@@ -411,13 +411,14 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
     await expect(authorizedCommerceOrder(otherTenant, order.id, customer)).rejects.toMatchObject({ status: 404 });
     await expect(authorizedCommerceOrder(tenantId, order.id, crypto.randomUUID())).rejects.toMatchObject({ status: 404 });
     await expect(assertCommerceProofsReady(getPool(), order)).rejects.toMatchObject({ status: 409 });
-    const mutate = (action: string, revision: number, actor: string | null = actorId) => mutateCommerceProof(new Request("https://store.test/proof", { method: "POST", body: JSON.stringify({ action, lineId: line.id, revision, ...(actor ? { note: "Preparação de teste da equipe." } : {}) }) }), order, actor);
+    const mutate = (action: string, revision: number, actor: string | null = actorId, frame: Record<string, unknown> = {}) => mutateCommerceProof(new Request("https://store.test/proof", { method: "POST", body: JSON.stringify({ action, lineId: line.id, revision, ...frame, ...(actor ? { note: "Preparação de teste da equipe." } : {}) }) }), order, actor);
     await expect(mutate("prepare", 1, null)).rejects.toMatchObject({ status: 403 });
     await expect(mutate("approve", 1)).rejects.toMatchObject({ status: 403 });
-    expect(await (await mutate("prepare", 1)).json()).toMatchObject({ revision: 2 });
+    expect(await (await mutate("prepare", 1, actorId, { scale: .5, backgroundColor: "#247a9f" })).json()).toMatchObject({ revision: 2 });
     await expect(mutate("approve", 2, null)).rejects.toMatchObject({ status: 409 });
     const view = await (await readCommerceProofs(new Request("https://store.test/proofs"), order)).json();
     expect(view.proofs[0].prepared).toBe(false);
+    expect(view.proofs[0].crop.backgroundColor).toBe("#247a9f");
     await expect(readCommerceProofs(new Request(`https://store.test/proofs?lineId=${line.id}&asset=source`), order)).rejects.toMatchObject({ status: 409 });
     await mutate("publish", 2);
     expect((await readCommerceProofs(new Request(`https://store.test/proofs?lineId=${line.id}&asset=prepared`), order)).status).toBe(200);

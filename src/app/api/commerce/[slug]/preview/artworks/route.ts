@@ -12,6 +12,7 @@ import {
 import { normalizePublicArtworkUpload } from "@/services/artwork/public-upload";
 import { prepareArtwork } from "@/services/artwork/production";
 import { enforcePublicRateLimit } from "@/lib/security/public-rate-limit";
+import { artworkBackgroundColorSchema } from "@/domain/artwork/framing";
 
 export const runtime = "nodejs";
 const schema = z
@@ -27,6 +28,7 @@ const schema = z
         offsetX: z.number().min(-1).max(1),
         offsetY: z.number().min(-1).max(1),
         rotationDegrees: z.number().min(-180).max(180),
+        backgroundColor: artworkBackgroundColorSchema,
       })
       .strict()
       .optional(),

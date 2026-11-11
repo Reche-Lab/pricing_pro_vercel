@@ -63,6 +63,7 @@ export type RetouchComposition = {
   backgroundMode?: "copy" | "extend";
   offsetX?: number;
   offsetY?: number;
+  backgroundColor?: string | null;
 };
 export type RetouchStage = {
   operations: RetouchOperation[];

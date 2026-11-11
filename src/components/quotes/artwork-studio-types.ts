@@ -1,12 +1,8 @@
 import type { PrintGeometry, PrintMargins } from "@/domain/artwork/geometry";
+import type { ArtworkFrame } from "@/domain/artwork/framing";
 
 export type ArtworkStudioStep = "retouch" | "crop" | "review";
-export type ArtworkStudioCrop = {
-  scale: number;
-  offsetX: number;
-  offsetY: number;
-  rotationDegrees: number;
-};
+export type ArtworkStudioCrop = ArtworkFrame;
 export type ArtworkStudioAsset = {
   id: string;
   name: string;

@@ -153,6 +153,55 @@ try {
   await page.getByRole("alertdialog").waitFor();
   await page.screenshot({ path: "/tmp/journey-uncovered-320.png", fullPage: true });
   await page.getByRole("button", { name: "Retocar e completar o fundo" }).click();
+  const retouchCanvas = page.locator('canvas[aria-label^="Editor da arte"]');
+  await retouchCanvas.waitFor();
+  await page.getByText("Carregando imagem...").waitFor({ state: "hidden" });
+  async function setBackground(color) {
+    await page.getByLabel("Cor do fundo", { exact: true }).evaluate((input, value) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }, color);
+  }
+  await setBackground("#247a9f");
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('canvas[aria-label^="Editor da arte"]');
+    const pixel = canvas?.getContext("2d").getImageData(5, 5, 1, 1).data;
+    return pixel && pixel[0] === 36 && pixel[1] === 122 && pixel[2] === 159 && pixel[3] === 255;
+  });
+  assert.equal(await page.getByText("Desfazer incorporação", { exact: true }).count(), 0);
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 960 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+    await page.screenshot({ path: `/tmp/journey-retouch-background-${width}.png` });
+  }
+  await page.getByRole("button", { name: "Salvar e enquadrar", exact: true }).click();
+  await page.getByText("Centralizar e enquadrar arte").waitFor();
+  await page.getByRole("slider", { name: /^Zoom/ }).focus(); await page.keyboard.press("Home");
+  await page.getByRole("button", { name: "Capturar cor para o fundo" }).click();
+  const frame = page.locator('svg[viewBox^="0 0 1000"]').first(), frameBounds = await frame.boundingBox();
+  await frame.click({ position: { x: frameBounds.width / 2, y: frameBounds.height / 2 } });
+  await page.waitForFunction(() => document.querySelector('path[data-artwork-background]')?.getAttribute("fill") !== "white");
+  const captured = await page.getByLabel("Cor do fundo", { exact: true }).inputValue();
+  assert.notEqual(captured, "#ffffff");
+  await page.getByRole("button", { name: "Revisar e aprovar" }).click();
+  await page.getByAltText("Arte final para aprovação").waitFor();
+  await page.getByRole("button", { name: "Enquadrar", exact: true }).click();
+  assert.equal(await page.getByLabel("Cor do fundo", { exact: true }).inputValue(), captured);
+  await page.getByRole("button", { name: "Remover cor de fundo" }).click();
+  assert.equal(await page.locator('path[data-artwork-background]').getAttribute("fill"), "white");
+  await setBackground("#247a9f");
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 960 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+    await page.screenshot({ path: `/tmp/journey-crop-background-${width}.png` });
+  }
+  await page.getByRole("button", { name: "Revisar e aprovar" }).click();
+  await page.getByAltText("Arte final para aprovação").waitFor();
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Aprovar arte", exact: true }).click();
+  await page.getByRole("button", { name: "Concluir", exact: true }).waitFor();
+  assert.equal(await page.getByRole("alertdialog").count(), 0);
   assert.deepEqual(errors, []);
-  console.log("Buyer journey verified: saved checkout, pending artwork focus, quotes with and without freight/PDF, fastest insured service and responsive cards in light/dark, artwork limit, live front/back and uncovered-art confirmation at 1440/390/320px.");
+  console.log("Buyer journey verified: checkout, insured freight/PDF, live front/back, reversible retouch background without incorporation, crop eyedropper, removal/reopen and approval without uncovered areas at 1440/390/320px.");
 } finally { await browser.close(); await db.end(); }

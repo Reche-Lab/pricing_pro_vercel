@@ -4,13 +4,10 @@ import { getPublicArtworkContext, savePublicPreparedArtwork } from "@/repositori
 import { enforcePublicRateLimit } from "@/lib/security/public-rate-limit";
 import { prepareArtwork } from "@/services/artwork/production";
 import { decodeDataUrl, deleteArtworkObject, loadArtworkDataUrl, uploadArtworkObject } from "@/services/storage/artwork-storage";
+import { artworkFrameSchema } from "@/domain/artwork/framing";
 
 const paramsSchema = z.object({ token: z.string().min(20).max(200), itemId: z.string().uuid(), artworkId: z.string().uuid() });
-const bodySchema = z.object({
-  diameterMm: z.number().min(10).max(300).optional(), scale: z.number().min(0.1).max(5).default(1),
-  offsetX: z.number().min(-1).max(1).default(0), offsetY: z.number().min(-1).max(1).default(0),
-  rotationDegrees: z.number().min(-180).max(180).default(0)
-});
+const bodySchema = artworkFrameSchema.extend({ diameterMm: z.number().min(10).max(300).optional() });
 
 export async function POST(request: Request, route: { params: Promise<{ token: string; itemId: string; artworkId: string }> }) {
   const params = paramsSchema.safeParse(await route.params);
@@ -26,7 +23,7 @@ export async function POST(request: Request, route: { params: Promise<{ token: s
   let storagePath: string | null = null;
   try {
     const source = await loadArtworkDataUrl(context.artwork.data_url, context.artwork.storage_path);
-    const prepared = await prepareArtwork({ dataUrl: source, geometry, bleedMm: margins.bleedMm, safeMarginMm: margins.safeMarginMm, dpi: context.profile.dpi, scale: body.data.scale, offsetX: body.data.offsetX, offsetY: body.data.offsetY, rotationDegrees: body.data.rotationDegrees });
+    const prepared = await prepareArtwork({ dataUrl: source, geometry, bleedMm: margins.bleedMm, safeMarginMm: margins.safeMarginMm, dpi: context.profile.dpi, ...body.data });
     const decoded = decodeDataUrl(prepared.dataUrl);
     storagePath = await uploadArtworkObject({ path: `${context.tenantId}/quotes/${context.quoteId}/items/${context.itemId}/prepared/${params.data.artworkId}-v${Date.now()}.png`, contentType: "image/png", bytes: decoded.bytes });
     await savePublicPreparedArtwork({ context, artworkId: params.data.artworkId, geometry, margins, prepared, preparedDataUrl: storagePath ? null : prepared.dataUrl, preparedStoragePath: storagePath, crop: body.data });

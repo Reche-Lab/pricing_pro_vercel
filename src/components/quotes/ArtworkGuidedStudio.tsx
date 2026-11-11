@@ -59,6 +59,7 @@ export function ArtworkGuidedStudio({
   const [imageReady, setImageReady] = useState(false);
   const [complete, setComplete] = useState(false);
   const [coveragePrompt, setCoveragePrompt] = useState<{ uncoveredPercent: number } | null>(null);
+  const [completeBackground, setCompleteBackground] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const pendingRetouch = useRef<ArtworkStudioAsset | null>(null);
   useEffect(() => {
@@ -181,6 +182,7 @@ export function ArtworkGuidedStudio({
           fileName={asset.fileName}
           imageUrl={asset.sourceUrl}
           initialCrop={asset.crop}
+          initialBackground={completeBackground}
           geometry={asset.geometry}
           {...asset.margins}
           draftUrl={asset.draftUrl}
@@ -215,12 +217,14 @@ export function ArtworkGuidedStudio({
             crop_offset_x: String(asset.crop.offsetX),
             crop_offset_y: String(asset.crop.offsetY),
             rotation_degrees: String(asset.crop.rotationDegrees),
+            crop_background_color: asset.crop.backgroundColor,
           }}
           geometry={asset.geometry}
           {...asset.margins}
           imageUrl={asset.sourceUrl}
           itemId=""
           quoteId=""
+          focusBackground={completeBackground}
           navigation={navigation}
           onRetouch={allowRetouch ? () => navigate("retouch") : undefined}
           renderPreview={renderFramingPreview ? frame => renderFramingPreview(asset, frame) : undefined}
@@ -349,7 +353,7 @@ export function ArtworkGuidedStudio({
         <h2 id="coverage-warning-title" className="font-semibold text-amber-200">Há áreas sem cobertura na arte</h2>
         <p className="mt-3 text-sm leading-6">Identificamos aproximadamente {coveragePrompt.uncoveredPercent.toLocaleString("pt-BR")}% da área de corte sem imagem. Essas regiões serão brancas e podem aparecer na frente ou nas bordas e no verso do produto.</p>
         <p className="mt-2 text-xs leading-5 text-zinc-400">O fundo precisa continuar até o corte. Branco já presente na imagem pode ser intencional e não é tratado como falha nesta verificação. Confira também a simulação.</p>
-        <div className="mt-5 grid gap-2"><button autoFocus type="button" disabled={busy} className="min-h-11 rounded-md bg-cyan-400 px-4 text-sm font-semibold text-cyan-950" onClick={() => navigate(allowRetouch ? "retouch" : "crop")}>{allowRetouch ? "Retocar e completar o fundo" : "Revisar enquadramento"}</button><button type="button" disabled={busy} className="min-h-11 rounded-md border border-zinc-700 px-4 text-sm" onClick={() => void approve(true)}>{busy ? "Aprovando…" : "Conferi e aprovo assim mesmo"}</button><button type="button" disabled={busy} className="min-h-10 text-sm text-zinc-400" onClick={() => setCoveragePrompt(null)}>Voltar à revisão</button></div>
+        <div className="mt-5 grid gap-2"><button autoFocus type="button" disabled={busy} className="min-h-11 rounded-md bg-cyan-400 px-4 text-sm font-semibold text-cyan-950" onClick={() => { setCompleteBackground(true); navigate("crop"); }}>Completar bordas no enquadramento</button>{allowRetouch ? <button type="button" disabled={busy} className="min-h-11 rounded-md border border-zinc-700 px-4 text-sm" onClick={() => { setCompleteBackground(true); navigate("retouch"); }}>Retocar e completar o fundo</button> : null}<button type="button" disabled={busy} className="min-h-11 rounded-md border border-zinc-700 px-4 text-sm" onClick={() => void approve(true)}>{busy ? "Aprovando…" : "Conferi e aprovo assim mesmo"}</button><button type="button" disabled={busy} className="min-h-10 text-sm text-zinc-400" onClick={() => setCoveragePrompt(null)}>Voltar à revisão</button></div>
       </section></div> : null}
     </div>,
     document.body,

@@ -43,6 +43,17 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("crop preparation adapters", () => {
+  it("previews a removable background and submits it with the frame without incorporating the image", async () => {
+    const onPrepare = vi.fn().mockResolvedValue(undefined), renderPreview = vi.fn(() => null);
+    render(<ArtworkCropEditor {...props} onPrepare={onPrepare} renderPreview={renderPreview}/>);
+    fireEvent.change(screen.getByLabelText("Cor do fundo"), { target: { value: "#247a9f" } });
+    expect(document.querySelector('path[data-artwork-background]')).toHaveAttribute("fill", "#247a9f");
+    expect(renderPreview).toHaveBeenLastCalledWith(expect.objectContaining({ backgroundColor: "#247a9f" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preparar arte" }));
+    await waitFor(() => expect(onPrepare).toHaveBeenCalledWith(expect.objectContaining({ backgroundColor: "#247a9f" })));
+    fireEvent.click(screen.getByRole("button", { name: "Remover cor de fundo" }));
+    expect(document.querySelector('path[data-artwork-background]')).toHaveAttribute("fill", "white");
+  });
   it("keeps horizontal and vertical displacement when preparing the artwork", async () => {
     const onPrepare = vi.fn().mockResolvedValue(undefined);
     render(<ArtworkCropEditor {...props} onPrepare={onPrepare} />);

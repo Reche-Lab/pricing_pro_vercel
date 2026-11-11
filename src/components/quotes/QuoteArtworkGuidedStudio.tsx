@@ -56,6 +56,7 @@ export function QuoteArtworkGuidedStudio({
         offsetX: Number(row.crop_offset_x || 0),
         offsetY: Number(row.crop_offset_y || 0),
         rotationDegrees: Number(row.rotation_degrees || 0),
+        backgroundColor: row.crop_background_color ?? null,
       },
       approved: row.approval_status === "approved",
       notes: row.preparation_notes || undefined,

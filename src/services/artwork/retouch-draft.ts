@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { artworkBackgroundColorSchema } from "@/domain/artwork/framing";
 
 const point = z.object({ x: z.number().finite().min(0).max(20_000), y: z.number().finite().min(0).max(20_000) });
 const selection = z.object({ x: z.number().finite().min(0).max(20_000), y: z.number().finite().min(0).max(20_000), width: z.number().finite().min(0).max(20_000), height: z.number().finite().min(0).max(20_000) }).nullable().optional();
@@ -37,6 +38,7 @@ const stage = z.object({
     backgroundScalePercent: z.number().int().min(50).max(250),
     backgroundBlurPx: z.number().int().min(0).max(80),
     backgroundMode: z.enum(["copy", "extend"]).optional(),
+    backgroundColor: artworkBackgroundColorSchema,
     offsetX: z.number().finite().min(-1).max(1).optional(),
     offsetY: z.number().finite().min(-1).max(1).optional()
   }).optional()
@@ -48,7 +50,8 @@ export const retouchDraftSchema = stage.extend({
     scale: z.number().finite().min(0.1).max(5),
     offsetX: z.number().finite().min(-1).max(1),
     offsetY: z.number().finite().min(-1).max(1),
-    rotationDegrees: z.number().finite().min(-180).max(180)
+    rotationDegrees: z.number().finite().min(-180).max(180),
+    backgroundColor: artworkBackgroundColorSchema
   }).optional(),
   stages: z.array(stage.extend({ cut: z.boolean() })).max(32).optional()
 }).refine((draft) => (draft.stages ?? []).reduce((sum, entry) => sum + entry.operations.length, draft.operations.length) <= 1500,

@@ -2,7 +2,11 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getPool } from "@/lib/db/client";
-import { updateQuoteEditable, updateQuoteShippingTotal, type UpdateQuoteInput } from "@/repositories/quotes";
+import { updateQuoteEditable, updateQuoteShippingTotal, getQuoteDetail, getPublicQuoteByToken, createPublicQuoteLink, type UpdateQuoteInput } from "@/repositories/quotes";
+import { savePreparedArtwork, getArtworkProductionData } from "@/repositories/artwork-production";
+import { getPublicArtworkContext, savePublicPreparedArtwork } from "@/repositories/public-artworks";
+import { DEFAULT_ARTWORK_PROFILE, prepareArtwork } from "@/services/artwork/production";
+import sharp from "sharp";
 
 const url = process.env.QUOTE_EDIT_TEST_DATABASE_URL;
 describe.skipIf(!url)("quote item edits in isolated Postgres", () => {
@@ -39,6 +43,26 @@ describe.skipIf(!url)("quote item edits in isolated Postgres", () => {
     }
     await db.end();
     globalThis.__pricingPool = undefined;
+  });
+
+  it("persists and restores reversible backgrounds in internal and public artwork preparation", async () => {
+    const artworkId = (await getPool().query("select id from quote_item_artworks where quote_id=$1", [quoteId])).rows[0].id;
+    const geometry = { shape: "circle" as const, widthMm: 35, heightMm: 35, cornerStyle: "sharp" as const, cornerRadiusMm: 0, rotationDegrees: 0, allowPrintRotation: true };
+    const margins = { bleedMm: 2, safeMarginMm: 2 }, crop = { scale: .5, offsetX: .1, offsetY: 0, rotationDegrees: 10, backgroundColor: "#247a9f" };
+    const bytes = await sharp({ create: { width: 100, height: 80, channels: 4, background: "#ffffff" } }).png().toBuffer();
+    const prepared = await prepareArtwork({ dataUrl: `data:image/png;base64,${bytes.toString("base64")}`, geometry, ...margins, ...crop, dpi: 100 });
+    const saved = await savePreparedArtwork({ userId: actorId, tenantId, quoteId, itemId: originalId, artworkId, geometry, margins, crop, prepared, preparedDataUrl: prepared.dataUrl, preparedStoragePath: null, profile: DEFAULT_ARTWORK_PROFILE });
+    expect(saved.crop_background_color).toBe("#247a9f");
+    await expect(getPool().query("update quote_item_artworks set crop_background_color='red' where id=$1", [artworkId])).rejects.toMatchObject({ code: "23514" });
+    expect((await getQuoteDetail(actorId, tenantId, quoteId))?.items[0].artworks?.[0].crop_background_color).toBe("#247a9f");
+    expect((await getArtworkProductionData(actorId, tenantId, quoteId))?.artworks[0].crop_background_color).toBe("#247a9f");
+    const link = await createPublicQuoteLink(actorId, tenantId, quoteId);
+    expect((await getPublicQuoteByToken(link.token))?.items[0].artworks?.[0].crop_background_color).toBe("#247a9f");
+    const context = await getPublicArtworkContext(link.token, originalId, artworkId);
+    expect(context).not.toBeNull();
+    await savePublicPreparedArtwork({ context: context!, artworkId, geometry, margins, crop: { ...crop, backgroundColor: null }, prepared, preparedDataUrl: prepared.dataUrl, preparedStoragePath: null });
+    expect((await getQuoteDetail(actorId, tenantId, quoteId))?.items[0].artworks?.[0].crop_background_color).toBeNull();
+    expect((await getPool().query("select data_url from quote_item_artworks where id=$1", [artworkId])).rows[0].data_url).toBe("data:image/png;base64,AA==");
   });
 
   it("inserts an item, keeps original IDs, recalculates discounts, totals and installments", async () => {

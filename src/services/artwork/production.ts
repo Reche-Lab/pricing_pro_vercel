@@ -65,6 +65,7 @@ export async function prepareCircularArtwork(input: {
   offsetX?: number;
   offsetY?: number;
   rotationDegrees?: number;
+  backgroundColor?: string | null;
 }): Promise<PreparedArtwork> {
   return prepareArtwork({
     ...input,
@@ -82,6 +83,7 @@ export async function prepareArtwork(input: {
   offsetX?: number;
   offsetY?: number;
   rotationDegrees?: number;
+  backgroundColor?: string | null;
 }): Promise<PreparedArtwork> {
   const source = decodeImageDataUrl(input.dataUrl);
   const orientedSource = await sharp(source, { failOn: "error" }).rotate().png().toBuffer();
@@ -141,15 +143,17 @@ export async function prepareArtwork(input: {
   const inspectionWidth = Math.min(256, outputWidthPx), inspectionHeight = Math.max(1, Math.round(inspectionWidth * outputHeightPx / outputWidthPx));
   const alpha = await sharp(framed).resize(inspectionWidth, inspectionHeight).ensureAlpha().raw().toBuffer();
   const maskPixels = await sharp(shapeMask).resize(inspectionWidth, inspectionHeight).ensureAlpha().raw().toBuffer();
-  const coverage = artworkCoverage(alpha, maskPixels);
+  const backgroundColor = input.backgroundColor ?? null;
+  if (backgroundColor !== null && (backgroundColor.length !== 7 || !/^#[0-9a-f]{6}$/i.test(backgroundColor))) throw new Error("Cor de fundo inválida.");
+  const coverage = backgroundColor ? { warning: false, uncoveredPercent: 0 } : artworkCoverage(alpha, maskPixels);
   const output = await sharp(framed)
-    .flatten({ background: "#ffffff" })
+    .flatten({ background: backgroundColor ?? "#ffffff" })
     .ensureAlpha()
     .composite([{ input: shapeMask, blend: "dest-in" }])
     .png({ compressionLevel: 9 })
     .toBuffer();
 
-  const whiteMarginNote = scale < 1
+  const whiteMarginNote = backgroundColor ? ` Áreas transparentes completadas com a cor ${backgroundColor}.` : scale < 1
     ? ` Zoom reduzido para ${scale.toFixed(2)}x com preenchimento branco.`
     : Math.abs(offsetX) > 0.001 || Math.abs(offsetY) > 0.001
       ? " A imagem foi deslocada de forma independente dentro da área de corte."

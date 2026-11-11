@@ -28,6 +28,7 @@ export type StoreArtwork = {
     offsetX: number;
     offsetY: number;
     rotationDegrees: number;
+    backgroundColor?: string | null;
   } | null;
 };
 export function StoreArtworkTools({
