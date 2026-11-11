@@ -986,6 +986,29 @@
 .deliveryResults small { display: block; font-size: 12px; color: var(--muted); }
 .deliveryResults strong { flex-shrink: 0; }
 .deliveryError { color: var(--highlight); margin-block: 12px; font-size: 13px; }
+
+.shippingOptions { min-width: 0; margin: 0; padding: 0; border: 0; }
+.shippingOptions legend { margin-bottom: 12px; font-size: 14px; font-weight: 650; }
+.shippingGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+.store label.shippingCard { display: flex; flex-direction: column; min-width: 0; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); cursor: pointer; transition: border-color .18s, box-shadow .18s, transform .18s; }
+.store label.shippingCard:hover { border-color: var(--accent); transform: translateY(-1px); }
+.store label.shippingCard[data-selected="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent), 0 5px 16px -12px var(--accent); }
+.shippingCard:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
+.shippingCardHeading { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
+.shippingCardHeading strong { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.shippingCardHeading > svg { flex-shrink: 0; color: var(--accent); }
+.shippingCardHeading input { margin-top: 2px; accent-color: var(--accent); }
+.shippingCardPrice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+.shippingCardPrice > strong { font-size: 19px; font-variant-numeric: tabular-nums; }
+.shippingCardPrice small { display: inline-flex; align-items: center; gap: 4px; color: var(--highlight); font-size: 11px; font-weight: 650; }
+.shippingCardTiming { font-size: 12px; line-height: 1.6; color: var(--muted); }
+.shippingCardDate { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 12px; }
+.shippingCardDate strong { font-size: 14px; font-variant-numeric: tabular-nums; }
+.shippingCardInsurance { display: flex; align-items: flex-start; gap: 6px; padding-top: 8px; margin-top: auto; border-top: 1px solid var(--line); font-size: 11px; line-height: 1.5; color: var(--muted); }
+.shippingCardInsurance > svg { flex-shrink: 0; margin-top: 2px; }
+.shippingCardInsurance small { display: block; }
+.shippingOptions > p { margin-top: 10px; }
+@media (prefers-reduced-motion: reduce) { .store label.shippingCard { transition: none; } .store label.shippingCard:hover { transform: none; } }
 @media (max-width: 430px) {
   .priceAmounts strong { font-size: 21px; }
   .compactPrice .priceAmounts { grid-template-columns: minmax(0, 1fr); gap: 8px; }

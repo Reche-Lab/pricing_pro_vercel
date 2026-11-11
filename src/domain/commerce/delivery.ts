@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { cartLineSchema, type StoreSettings, type CartLine } from "./schemas";
 import { commerceSelectionError, CommerceError, type PriceProduct } from "./commerce";
+import type { StoreShippingOption } from "./shipping-options";
 
 export type CommerceDeliveryResult = {
   postalCode: string;
   estimated: true;
-  options: { id: string; name: string; priceCents: number; description?: string; transitDays?: number | null }[];
+  options: StoreShippingOption[];
   previewCarrier?: boolean;
   warnings?: string[];
 };

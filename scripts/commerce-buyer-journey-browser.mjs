@@ -65,6 +65,61 @@ try {
   assert.equal(pdfResponse.status(), 200); assert.match(pdfResponse.headers()["content-type"], /application\/pdf/);
   assert.ok((await PDFDocument.load(await pdfResponse.body())).getPageCount() > 0);
   await page.screenshot({ path: "/tmp/journey-saved-quote-320.png", fullPage: true });
+  // Carrier responses are fixtures; quote persistence and PDF generation use the real local server.
+  await db.query(`update commerce_stores set settings=settings || '{"carrierEnabled":true,"deliveryEnabled":false}'::jsonb where tenant_id=$1`, [fixture.tenant_id]);
+  let freightQuoteIds;
+  await context.route(`${base}/api/store/ground-shop/checkout-delivery`, async route => {
+    const cartResponse = await context.request.get(`${base}/api/store/ground-shop/cart`);
+    assert.equal(cartResponse.status(), 200);
+    const cart = await cartResponse.json();
+    const { rows: [session] } = await db.query("select id,revision from commerce_sessions where tenant_id=$1 and token_hash=$2", [fixture.tenant_id, createHash("sha256").update(token).digest("hex")]);
+    const { rows: [configuration] } = await db.query("select revision from commerce_stores where tenant_id=$1", [fixture.tenant_id]);
+    const options = [
+      { id: "melhor_envio:1", name: "Correios - PAC", priceCents: 1500, transitDays: 6, insuranceValueCents: cart.calculation.totalCents },
+      { id: "melhor_envio:2", name: "Correios - SEDEX", priceCents: 2200, transitDays: 2, insuranceValueCents: cart.calculation.totalCents },
+    ];
+    for (const option of options) {
+      const { rows: [saved] } = await db.query(`insert into commerce_shipping_quotes(tenant_id,session_id,cart_revision,store_revision,cart_hash,postal_code,option) values($1,$2,$3,$4,$5,$6,$7) returning id`,
+        [fixture.tenant_id, session.id, session.revision, configuration.revision, createHash("sha256").update(JSON.stringify(cart.calculation)).digest("hex"), "01001000", JSON.stringify(option)]);
+      option.quoteId = saved.id;
+    }
+    freightQuoteIds = options.map(option => option.quoteId);
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ options, expiresInSeconds: 900 }) });
+  });
+  await page.goto(`${store}/orcamento`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Calcular frete do carrinho" }).click();
+  await page.getByRole("radio", { name: "Correios - SEDEX", exact: true }).waitFor();
+  assert.equal(await page.getByRole("radio", { name: "Correios - SEDEX", exact: true }).isChecked(), true);
+  assert.equal(await page.getByRole("checkbox", { name: "Incluir frete ou retirada neste orçamento" }).isChecked(), true);
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 960 });
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(theme => { localStorage.setItem("commerce-theme:ground-shop", theme); window.dispatchEvent(new Event("storage")); }, theme);
+      await page.locator(`[data-theme="${theme}"]`).waitFor();
+      for (const card of await page.locator('label[class*="shippingCard_"]').all()) {
+        const bounds = await card.boundingBox();
+        assert.ok(bounds && bounds.width > 150 && bounds.x >= 0 && bounds.x + bounds.width <= width + 1, `Shipping card fits at ${width}px`);
+      }
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `Shipping overflow at ${width}px`);
+      await page.locator('fieldset[class*="shippingOptions"]').screenshot({ path: `/tmp/journey-shipping-${width}-${theme}.png` });
+    }
+  }
+  await page.getByRole("radio", { name: "Correios - PAC", exact: true }).check();
+  await page.getByRole("radio", { name: "Correios - SEDEX", exact: true }).check();
+  const submitted = page.waitForRequest(request => request.method() === "POST" && request.url() === `${base}/api/store/ground-shop/quotes`);
+  await page.getByRole("button", { name: "Salvar orçamento e acessar PDF" }).click();
+  assert.equal((await submitted).postDataJSON().shippingQuoteId, freightQuoteIds[1]);
+  await page.waitForURL(/\/orcamentos\/[a-f0-9-]+$/);
+  const savedQuoteId = new URL(page.url()).pathname.split("/").pop();
+  const { rows: [savedQuote] } = await db.query("select shipping_cents,total_cents,snapshot from commerce_buyer_quotes where tenant_id=$1 and id=$2", [fixture.tenant_id, savedQuoteId]);
+  assert.equal(savedQuote.shipping_cents, 2200);
+  assert.equal(savedQuote.total_cents, savedQuote.snapshot.shippingOption.insuranceValueCents + 2200);
+  const insuredPdf = await context.request.get(new URL(await page.getByRole("link", { name: "Baixar orçamento PDF" }).getAttribute("href"), base).toString());
+  assert.equal(insuredPdf.status(), 200);
+  assert.ok((await PDFDocument.load(await insuredPdf.body())).getPageCount() > 0);
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("heading", { name: "Resumo do orçamento" }).waitFor();
+  assert.equal(await page.getByText("R$ 22,00", { exact: true }).count() > 0, true);
   // Private preview exercises upload/crop/approval without Storage or real orders.
   const adminToken = await new SignJWT({ userId: fixture.user_id, tenantId: fixture.tenant_id, email: fixture.email, role: "owner" }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("1h").sign(new TextEncoder().encode("commerce-local-test-secret-at-least-32-characters"));
   await context.addCookies([{ name: "pricing_session", value: adminToken, url: base, httpOnly: true, sameSite: "Lax" }]);
@@ -99,5 +154,5 @@ try {
   await page.screenshot({ path: "/tmp/journey-uncovered-320.png", fullPage: true });
   await page.getByRole("button", { name: "Retocar e completar o fundo" }).click();
   assert.deepEqual(errors, []);
-  console.log("Buyer journey verified: saved checkout, pending artwork focus, private quote/PDF, artwork limit, live nonblank front/back and uncovered-art confirmation at 1440/390/320px.");
+  console.log("Buyer journey verified: saved checkout, pending artwork focus, quotes with and without freight/PDF, fastest insured service and responsive cards in light/dark, artwork limit, live front/back and uncovered-art confirmation at 1440/390/320px.");
 } finally { await browser.close(); await db.end(); }

@@ -13,6 +13,8 @@ import { emptyContact, type ContactDraft } from "@/domain/commerce/checkout-draf
 import { useCheckoutDraft } from "./use-checkout-draft";
 import { DeliveryTimeline } from "@/components/shipping/DeliveryTimeline";
 import { buyerQuoteSchema } from "@/domain/commerce/buyer-quote";
+import { sortShippingOptions, type StoreShippingOption } from "@/domain/commerce/shipping-options";
+import { StoreShippingOptions } from "./StoreShippingOptions";
 
 type Cart = Awaited<ReturnType<typeof cartView>>;
 const previewBilling = { ...emptyContact(), name: "Cliente de teste", email: "cliente@example.test", phone: "11999990000", document: "52998224725", postalCode: "01001000", street: "Praça de teste", number: "100", district: "Centro", city: "São Paulo", state: "SP" };
@@ -121,8 +123,7 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
   const [includeQuoteShipping, setIncludeQuoteShipping] = useState(false);
   const [requestId] = useState(() => crypto.randomUUID());
   const quoting = intent === "quote";
-  type ShippingOption = { id: string; name: string; priceCents: number; description?: string; quoteId?: string; transitDays?: number | null };
-  const [freight, setFreight] = useState<{ key: string; expiresAt: number; options: ShippingOption[] } | null>(null);
+  const [freight, setFreight] = useState<{ key: string; expiresAt: number; options: StoreShippingOption[] } | null>(null);
   const [serviceId, setServiceId] = useState("delivery"), [shippingBusy, setShippingBusy] = useState(false), [shippingError, setShippingError] = useState("");
   const postalCode = (same ? billing.postalCode : address.postalCode);
   const freightKey = `${postalCode}:${cart.revision}:${cart.calculation?.totalCents}`;
@@ -137,14 +138,16 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
   async function quoteShipping() {
     if (!api || shippingBusy || postalCode.length !== 8) return;
     const key = freightKey, generation = ++quoteGeneration.current;
+    if (quoting) setIncludeQuoteShipping(true);
     setShippingBusy(true); setShippingError(""); setFreight(null);
     try {
       const result = await storeRequest(`${api}/checkout-delivery`, "POST", { postalCode, revision: cart.revision, ...(preview ? { lines: cart.lines } : {}) });
       if (latestFreightKey.current !== key || generation !== quoteGeneration.current) return;
-      const options: ShippingOption[] = result.options.filter((option: ShippingOption) => option.id !== "pickup");
+      const options = sortShippingOptions(result.options);
       setFreight({ key, options, expiresAt: Date.now() + 900000 });
-      setServiceId(options.find(option => option.id.startsWith("melhor_envio:"))?.id ?? "delivery");
+      setServiceId(options[0]?.id ?? "delivery");
       if (result.warnings?.length) setShippingError(result.warnings.join(" "));
+      else if (!options.length) setShippingError("Nenhuma opção de entrega disponível para este CEP. Tente novamente ou consulte a loja.");
     } catch (cause) { if (generation === quoteGeneration.current) setShippingError(cause instanceof Error ? cause.message : "Não foi possível calcular o frete."); }
     finally { if (generation === quoteGeneration.current) setShippingBusy(false); }
   }
@@ -152,7 +155,7 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
   return <form ref={form} className={styles.columns} noValidate onSubmit={async e => {
     e.preventDefault(); setError("");
     if (disabled || submitLock.current || !persistence.ready) return;
-    if (missingFreight || (selectedFreight && freight && freight.expiresAt <= Date.now())) { setError("Calcule e selecione o frete para este endereço antes de confirmar."); return; }
+    if (missingFreight || ((!quoting || includeQuoteShipping) && delivery === "delivery" && selectedFreight && freight && freight.expiresAt <= Date.now())) { setError("Calcule e selecione o frete para este endereço antes de confirmar."); return; }
     const common = { revision: cart.revision, expectedTotalCents: (cart.calculation?.totalCents ?? 0) + shipping,
       billing: { ...postalContact(billing), email: billing.email }, delivery, deliveryAddressSameAsBilling: quoting && delivery === "pickup" ? true : same,
       ...(delivery === "delivery" && selectedFreight?.quoteId && (!quoting || includeQuoteShipping) ? { shippingQuoteId: selectedFreight.quoteId } : {}),
@@ -216,8 +219,9 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
             </button>
             {postalCode.length !== 8 ? <p className={styles.muted}>Preencha o CEP da entrega para consultar PAC, SEDEX e os demais serviços habilitados.</p> : null}
             {shippingError ? <p role="alert" className="text-sm text-amber-700">{shippingError}</p> : null}
-            {settings.deliveryEnabled ? <label className="!flex items-start gap-3"><input type="radio" name="shipping-service" checked={serviceId === "delivery"} onChange={() => setServiceId("delivery")}/><span>{settings.deliveryDescription} · {storeMoney(settings.deliveryCents)}</span></label> : null}
-            {freight?.key === freightKey ? freight.options.filter(option => option.id.startsWith("melhor_envio:")).map(option => <div key={option.id}><label className="!flex items-start gap-3"><input type="radio" name="shipping-service" checked={serviceId === option.id} onChange={() => setServiceId(option.id)}/><span>{option.name} · {storeMoney(option.priceCents)}<small className={`${styles.muted} block`}>{option.description}</small></span></label><DeliveryTimeline quantity={cart.lines.reduce((sum, line) => sum + line.quantity, 0)} transportDays={option.transitDays} settings={settings.production}/></div>) : null}
+            <StoreShippingOptions options={freight?.key === freightKey ? freight.options : settings.deliveryEnabled ? [{ id: "delivery", name: settings.deliveryDescription || "Entrega da loja", priceCents: settings.deliveryCents, transitDays: settings.deliveryTransitDays }] : []}
+              selectedId={serviceId} quantity={cart.lines.reduce((sum, line) => sum + line.quantity, 0)} production={settings.production} disabled={shippingBusy}
+              onSelect={option => { setServiceId(option.id); if (quoting) setIncludeQuoteShipping(true); }}/>
             {freight?.key === freightKey ? <p className={styles.muted}>Cotação válida por 15 minutos. Mudanças no carrinho ou CEP exigem novo cálculo.</p> : null}
           </div> : null}
         </> : null}

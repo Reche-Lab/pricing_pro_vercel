@@ -737,7 +737,7 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
     const store = (await getCommerceStore("ground-shop"))!;
     const session = (await getPool().query(`select s.* from commerce_sessions s join commerce_customers c on c.tenant_id=s.tenant_id and c.id=s.customer_id where c.tenant_id=$1 and c.email='quote-buyer@example.test' order by s.created_at desc limit 1`, [tenantId])).rows[0];
     const calculation = await calculateCommerceCart(tenantId, session.id, session.cart, await commerceProducts(tenantId));
-    const option = { id: "melhor_envio:1", name: "PAC teste", priceCents: 1499, transitDays: 2 };
+    const option = { id: "melhor_envio:1", name: "PAC teste", priceCents: 1499, transitDays: 2, insuranceValueCents: calculation.totalCents };
     const shipping = (await getPool().query(`insert into commerce_shipping_quotes(tenant_id,session_id,cart_revision,store_revision,cart_hash,postal_code,option) values($1,$2,$3,$4,$5,$6,$7) returning id`,
       [tenantId, session.id, session.revision, store.revision, hashCommerceToken(JSON.stringify(calculation)), testCommerceBilling.postalCode, JSON.stringify(option)])).rows[0];
     const input = { requestId: crypto.randomUUID(), revision: session.revision, expectedTotalCents: calculation.totalCents + 1499, billing: testCommerceBilling, address: null, deliveryAddressSameAsBilling: true, delivery: "delivery" as const, shippingQuoteId: shipping.id };
@@ -749,6 +749,8 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
     const created = await createBuyerQuote(store, session, input);
     const quote = await getBuyerQuote(tenantId, session, created.id);
     expect(quote.shipping_cents).toBe(1499); expect(quote.snapshot.production.transportDays).toBe(2);
+    expect(quote.total_cents).toBe(calculation.totalCents + 1499);
+    expect(quote.snapshot.shippingOption).toEqual(option);
     await expect(createBuyerQuote(store, session, { ...input, billing: { ...input.billing, name: "Outro nome" } })).rejects.toMatchObject({ status: 409 });
   });
 });

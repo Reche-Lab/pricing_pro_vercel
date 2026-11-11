@@ -6,11 +6,12 @@ import { buyerQuoteSchema, type BuyerQuoteInput } from "@/domain/commerce/buyer-
 import { deliveryEstimate } from "@/domain/shipping/production-lead-time";
 import { commerceProducts, commerceTransaction, calculateCommerceCart, hashCommerceToken, type BuyerSession, type CommerceStore } from "./commerce";
 import { emptyContact } from "@/domain/commerce/checkout-draft";
+import type { StoreShippingOption } from "@/domain/commerce/shipping-options";
 
 type QuoteSnapshot = {
   items: Awaited<ReturnType<typeof calculateCommerceCart>>["items"];
   lines: BuyerSession["cart"];
-  shippingOption: { id: string; name: string; priceCents: number; transitDays?: number | null; description?: string } | null;
+  shippingOption: StoreShippingOption | null;
   delivery: BuyerQuoteInput["delivery"];
   production: ReturnType<typeof deliveryEstimate>;
   storeName: string;

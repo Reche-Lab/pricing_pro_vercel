@@ -22,6 +22,19 @@
 
 ## Regras
 
+### Revisão: frete no orçamento
+
+- [x] Calcular frete ativa sua inclusão no resumo e no orçamento enviado ao servidor.
+- [x] Opções em cards compactos e responsivos, priorizando menor prazo; empates usam menor preço.
+- [x] Seguro por volume mantém o total dos produtos, após benefícios, sem incluir o próprio frete.
+- [x] Regressão de persistência/PDF, testes locais e conferência mobile.
+
+Correção validada com 776 testes unitários, 19 testes de integração em banco local novo, typecheck, lint e build de produção com memória limitada. Playwright confirmou seleção automática do SEDEX mesmo com PAC mais barato, troca de serviço, inclusão no resumo, persistência após recarregar e download do PDF. Os cards foram conferidos em 320, 390 e 1440 px, em light/dark, sem overflow. As cotações do navegador são fixtures; não houve compra de frete ou chamada ao provedor real.
+
+O seguro usa `insurance` em cada volume, conforme a [documentação de cálculo do Melhor Envio](https://docs.melhorenvio.com.br/reference/calculo-de-fretes-por-produtos). O rateio mantém exatamente o valor líquido dos produtos em centavos, sem somar o frete nem multiplicar o seguro pela quantidade de caixas. A cotação registra esse valor para exibição nos cards e no PDF; isso não equivale à compra de uma etiqueta.
+
+Esta revisão não exige nova migration, somente publicação do código. Orçamentos já emitidos não são alterados retroativamente; gere um novo orçamento para incluir uma nova cotação.
+
 Padrão: 3 dias úteis mínimos, 100 unidades por dia. 300 unidades = 3 dias; 301 = 4 dias. Soma-se a quantidade total a produzir. Estimativas antes da confirmação são condicionadas a pagamento e aprovação das artes. Datas usam America/Sao_Paulo, excluem sábados, domingos e datas sem produção configuradas; não presumem cadastro completo de feriados nacionais/locais. Transporte permanece uma estimativa do provedor.
 
 Orçamento não é pedido nem reserva de preço/frete. A conversão exige nova conferência. Rascunhos pertencem ao tenant e à sessão autenticada; não são expostos em URLs públicas ou localStorage. Preview permanece isolado de pedidos, orçamentos e ERP reais.

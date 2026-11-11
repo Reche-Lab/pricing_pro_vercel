@@ -25,7 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     try { carrier = await previewCarrierDelivery(session.userId, store.tenant_id, input.postalCode, input.lines, products); }
     catch (error) { if (!(error instanceof CommerceError)) throw error; warnings.push(error.message); }
     return commerceJson({ options: [
-      ...(store.settings.deliveryEnabled ? [{ id: "delivery", name: "Entrega", priceCents: store.settings.deliveryCents, description: store.settings.deliveryDescription }] : []),
+      ...(store.settings.deliveryEnabled ? [{ id: "delivery", name: "Entrega", priceCents: store.settings.deliveryCents, description: store.settings.deliveryDescription, transitDays: store.settings.deliveryTransitDays }] : []),
       ...(carrier?.options ?? []),
     ], warnings });
   } catch (error) { return commerceFailure(error, "preview.checkout.delivery"); }

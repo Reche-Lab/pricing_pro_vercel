@@ -21,7 +21,7 @@ beforeEach(() => {
   vi.mocked(buyerContext).mockResolvedValue({ store, session: { id: "session", cart: [line], revision: 2 } } as never);
   vi.mocked(commerceProducts).mockResolvedValue([product] as never);
   vi.mocked(calculateCommerceCart).mockResolvedValue({ totalCents: 1000 } as never);
-  vi.mocked(publicCarrierDelivery).mockResolvedValue({ options: [{ id: "melhor_envio:2", name: "SEDEX", priceCents: 1500, description: "2 dias" }] });
+  vi.mocked(publicCarrierDelivery).mockResolvedValue({ options: [{ id: "melhor_envio:2", name: "SEDEX", priceCents: 1500, description: "2 dias", insuranceValueCents: 1000 }] });
   query.mockResolvedValue({ rows: [{ id: "quote" }] });
   vi.mocked(commerceTransaction).mockImplementation(work => work({ query } as never));
 });
@@ -29,9 +29,10 @@ describe("checkout delivery boundary", () => {
   it("quotes the authoritative multi-product cart and persists only server-issued options", async () => {
     const response = await checkoutDelivery(request(), "shop");
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ options: [{ id: "melhor_envio:2", priceCents: 1500, quoteId: "quote" }], expiresInSeconds: 900 });
+    expect(await response.json()).toMatchObject({ options: [{ id: "melhor_envio:2", priceCents: 1500, quoteId: "quote", insuranceValueCents: 1000 }], expiresInSeconds: 900 });
     expect(publicCarrierDelivery).toHaveBeenCalledWith("tenant-a", "01001000", [line], [product], 1000);
     expect(query).toHaveBeenCalledWith(expect.stringContaining("insert into commerce_shipping_quotes"), expect.arrayContaining(["tenant-a", "session", 2, 3, "01001000"]));
+    expect(JSON.parse(query.mock.calls[0][1][6])).toMatchObject({ insuranceValueCents: 1000 });
   });
   it("rejects client lines/prices and stale carts before any provider request", async () => {
     expect((await checkoutDelivery(request({ postalCode: "01001000", revision: 2, priceCents: 0 }), "shop")).status).toBe(400);

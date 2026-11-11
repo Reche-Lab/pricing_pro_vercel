@@ -8,6 +8,7 @@ import { melhorEnvioRequest, MelhorEnvioRequestError } from "@/services/melhor-e
 import type { MelhorEnvioCredentials, MelhorEnvioSettings } from "@/services/melhor-envio/types";
 import type { IntegrationConnectionRow } from "@/repositories/integrations";
 import type { SelectedPackage } from "@/domain/shipping/types";
+import type { StoreShippingOption } from "@/domain/commerce/shipping-options";
 
 // Only invoked after admin preview authorization; never impersonate an owner for public buyers.
 export async function previewCarrierDelivery(userId: string, tenantId: string, postalCode: string, lines: CartLine[], products: CommerceProduct[]) {
@@ -18,7 +19,7 @@ export async function previewCarrierDelivery(userId: string, tenantId: string, p
 }
 
 export async function carrierDelivery(connection: IntegrationConnectionRow | null, originPostalCode: string, postalCode: string,
-  lines: CartLine[], products: CommerceProduct[], packagingFor: (items: { productVariantId: string; quantity: number }[]) => Promise<SelectedPackage | null>, declaredValueCents?: number): Promise<{ options: { id: string; name: string; priceCents: number; description: string; transitDays?: number | null }[] } | null> {
+  lines: CartLine[], products: CommerceProduct[], packagingFor: (items: { productVariantId: string; quantity: number }[]) => Promise<SelectedPackage | null>, declaredValueCents?: number): Promise<{ options: StoreShippingOption[] } | null> {
   if (!connection || connection.status === "disabled") return null;
   if (connection.status !== "active") throw new CommerceError("Reconecte o Melhor Envio em Configurações > Melhor Envio.", 409);
   const origin = originPostalCode.replace(/\D/g, "");
@@ -31,6 +32,8 @@ export async function carrierDelivery(connection: IntegrationConnectionRow | nul
 
   const priced = calculateCart(lines, products);
   const insuranceCents = declaredValueCents ?? priced.totalCents;
+  if (!Number.isSafeInteger(insuranceCents) || insuranceCents < 0 || insuranceCents > 100000000)
+    throw new CommerceError("Confira o valor declarado dos produtos para calcular o seguro.", 409);
   const quantities = new Map<string, number>();
   for (const line of lines) {
     const product = products.find(candidate => candidate.id === line.productId);
@@ -79,7 +82,7 @@ export async function carrierDelivery(connection: IntegrationConnectionRow | nul
     const name = typeof row.name === "string" ? row.name : "Frete";
     return [{ id: `melhor_envio:${String(row.id)}`, name: `${company} - ${name}`, priceCents: Math.round(amount * 100),
       transitDays: days !== null && Number.isInteger(days) && days >= 0 ? days : null,
-      description: "Cotação Melhor Envio" }];
+      description: "Cotação Melhor Envio", insuranceValueCents: insuranceCents }];
   }).sort((a, b) => a.priceCents - b.priceCents) : [];
   if (!options.length) throw new CommerceError("O Melhor Envio não retornou serviços disponíveis para este CEP e embalagem. Confira também os serviços habilitados na integração.", 409);
   return { options };

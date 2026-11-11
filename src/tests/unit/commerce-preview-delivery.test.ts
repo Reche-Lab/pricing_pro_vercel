@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { previewCarrierDelivery } from "@/services/commerce/preview-delivery";
+import { carrierDelivery, previewCarrierDelivery } from "@/services/commerce/preview-delivery";
 import { getIntegrationConnection, decryptIntegrationCredentials } from "@/repositories/integrations";
 import { estimatePackaging } from "@/repositories/packaging";
 import { getTenantShippingProfile } from "@/repositories/tenant-settings";
@@ -22,6 +22,19 @@ beforeEach(() => {
   vi.mocked(melhorEnvioRequest).mockResolvedValue([{ id: 1, name: "PAC", company: { name: "Correios" }, price: "20.00", custom_price: "18.50", delivery_time: 6, custom_delivery_time: 5 }, { id: 2, error: "Indisponível" }]);
 });
 describe("preview tenant carrier quote", () => {
+  it("uses the discounted authoritative merchandise value as insurance and preserves every cent across volumes", async () => {
+    const connection = await getIntegrationConnection("user", "tenant", "melhor_envio");
+    const result = await carrierDelivery(connection, "87654321", "12345678", lines as never, [product] as never, async () => packaging as never, 4501);
+    const body = vi.mocked(melhorEnvioRequest).mock.calls[0][0].body as { volumes: { insurance: number }[]; options: Record<string, unknown> };
+    expect(body.volumes.map(volume => Math.round(volume.insurance * 100))).toEqual([2251, 2250]);
+    expect(body.options).not.toHaveProperty("insurance_value");
+    expect(result?.options[0]).toMatchObject({ insuranceValueCents: 4501 });
+  });
+  it.each([-1, NaN, 12.5])("rejects invalid declared insurance cents %s before calling the carrier", async cents => {
+    const connection = await getIntegrationConnection("user", "tenant", "melhor_envio");
+    await expect(carrierDelivery(connection, "87654321", "12345678", lines as never, [product] as never, async () => packaging as never, cents)).rejects.toThrow("valor declarado");
+    expect(melhorEnvioRequest).not.toHaveBeenCalled();
+  });
   it("uses tenant context, combined quantities, dimensions, weight and the server-priced insurance", async () => {
     const result = await call();
     expect(getIntegrationConnection).toHaveBeenCalledWith("user", "tenant", "melhor_envio");
@@ -31,7 +44,7 @@ describe("preview tenant carrier quote", () => {
       volumes: [{ width: 12, height: 5, length: 20, weight: .4, insurance: 25 }, { width: 12, height: 5, length: 20, weight: .4, insurance: 25 }],
       options: { receipt: false, own_hand: false },
     } }));
-    expect(result?.options).toEqual([{ id: "melhor_envio:1", name: "Correios - PAC", priceCents: 1850, description: "Cotação Melhor Envio", transitDays: 5 }]);
+    expect(result?.options).toEqual([{ id: "melhor_envio:1", name: "Correios - PAC", priceCents: 1850, description: "Cotação Melhor Envio", transitDays: 5, insuranceValueCents: 5000 }]);
     expect(JSON.stringify(result)).not.toContain("secret");
   });
   it("does not invent a tariff without a configured carrier", async () => {
