@@ -10,10 +10,11 @@ export async function storeRequest(
     cache: "no-store",
   });
   const data = await response.json().catch(() => null);
-  if (!response.ok)
-    throw new Error(
-      data?.error ?? "Não foi possível concluir. Tente novamente.",
-    );
+  if (!response.ok) {
+    const error = new Error(data?.error ?? "Não foi possível concluir. Tente novamente.");
+    Object.assign(error, { details: data?.details, status: response.status });
+    throw error;
+  }
   return data;
 }
 export const storeMoney = (cents: number) =>

@@ -25,6 +25,7 @@ export default async function ShippingPage() {
       tenantName={profile.tenant_name}
     >
       <ShippingQuoteForm
+        productionSettings={tenant?.production_settings}
         defaultOriginPostalCode={tenant?.postal_code ?? ""}
         variants={variants.map((variant) => ({
           id: variant.variant_id,

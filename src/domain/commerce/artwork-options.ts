@@ -39,10 +39,9 @@ export function mockupSourcePoint(x: number, y: number, side: "front" | "back", 
   const radius = Math.hypot(x, y);
   if (radius > 1 || side === "back" && radius < model.backOpeningRatio) return null;
   const visible = Math.max(0.01, Math.min(1, visibleRatio));
-  const join = visible + (1 - visible) * model.frontWrapFraction;
+  const join = visible;
   const sourceRadius = side === "front"
-    ? radius <= model.frontFaceRatio ? radius / model.frontFaceRatio * visible
-      : visible + (radius - model.frontFaceRatio) / (1 - model.frontFaceRatio) * (join - visible)
+    ? radius * visible
     : join + (1 - radius) / (1 - model.backOpeningRatio) * (1 - join);
   if (!radius) return { x: 0.5, y: 0.5 };
   return { x: 0.5 + (side === "back" ? -x : x) / radius * sourceRadius / 2, y: 0.5 + y / radius * sourceRadius / 2 };

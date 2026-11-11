@@ -20,6 +20,7 @@ export function ArtworkCropEditor({
   onPrepare,
   navigation,
   onRetouch,
+  renderPreview,
   onClose,
   onSaved
 }: {
@@ -34,6 +35,7 @@ export function ArtworkCropEditor({
   onPrepare?: (crop: { scale: number; offsetX: number; offsetY: number; rotationDegrees: number }) => Promise<void>;
   navigation?: React.ReactNode;
   onRetouch?: () => void;
+  renderPreview?: (frame: { scale: number; offsetX: number; offsetY: number; rotationDegrees: number }) => React.ReactNode;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -102,10 +104,10 @@ export function ArtworkCropEditor({
 
   return (
     <div className="fixed inset-0 z-[70] grid place-items-center overflow-hidden bg-black/80 p-0 backdrop-blur-sm sm:p-3 lg:p-6">
-      <div className="grid h-dvh w-full min-w-0 grid-rows-[minmax(210px,42dvh)_minmax(0,1fr)] overflow-hidden border border-zinc-700 bg-zinc-950 shadow-2xl sm:h-[94dvh] sm:rounded-lg lg:max-w-4xl lg:grid-cols-[minmax(320px,1fr)_360px] lg:grid-rows-1">
-        <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-zinc-900 p-3 sm:p-5 lg:p-8">
-          <div ref={previewRef} className="grid min-h-0 place-items-center">
-          <div className="overflow-hidden bg-zinc-800 shadow-[0_0_0_5px_rgba(34,211,238,0.12)] sm:shadow-[0_0_0_8px_rgba(34,211,238,0.12)]" style={{ width: fitted.width, height: fitted.height }}>
+      <div className="grid h-dvh w-full min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(210px,42dvh)_minmax(0,1fr)] overflow-hidden border border-zinc-700 bg-zinc-950 shadow-2xl sm:h-[94dvh] sm:rounded-lg lg:max-w-4xl lg:grid-cols-[minmax(320px,1fr)_360px] lg:grid-rows-1">
+        <div className="grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-zinc-900 p-3 sm:p-5 lg:p-8">
+          <div ref={previewRef} className="grid min-h-0 min-w-0 place-items-center">
+          <div className="max-h-full max-w-full overflow-hidden bg-zinc-800 shadow-[0_0_0_5px_rgba(34,211,238,0.12)] sm:shadow-[0_0_0_8px_rgba(34,211,238,0.12)]" style={{ width: fitted.width, height: fitted.height }}>
             <svg aria-label={artwork.artwork_name ?? artwork.file_name} className="h-full w-full" viewBox={`0 0 ${viewWidth} ${viewHeight}`}>
               <defs><clipPath id={`artwork-shape-${artwork.id}`}><path d={clipPath} /></clipPath></defs>
               <path d={clipPath} fill="white" />
@@ -121,12 +123,13 @@ export function ArtworkCropEditor({
           <div className="mt-3 flex max-w-full gap-3 overflow-x-auto pb-1 text-[11px] text-zinc-400 sm:mt-5 sm:flex-wrap sm:justify-center sm:gap-4 sm:text-xs"><span className="shrink-0 text-cyan-300">Segurança: {safeAbsolute}</span><span className="shrink-0 text-amber-300">Sangria: {sangriaAbsolute}</span><span className="shrink-0 text-rose-300">Corte: {cutAbsolute}</span></div>
         </div>
 
-        <div className="min-h-0 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5">
+        <div className="min-h-0 min-w-0 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5">
           <div className="flex items-start justify-between gap-4">
             <div><h3 className="font-semibold text-white">Centralizar e enquadrar arte</h3><p className="mt-1 text-sm text-zinc-500">Posicione a composição usando as três guias de produção abaixo.</p></div>
             <button aria-label="Fechar enquadramento" disabled={saving} className="focus-ring rounded-md p-2 text-zinc-500 hover:bg-zinc-900 hover:text-white" type="button" onClick={() => exit.request(onClose)}><X size={18} /></button>
           </div>
           {navigation}
+          {renderPreview ? <details open className="mt-4 min-w-0 rounded-md border border-zinc-700 p-2 text-zinc-200"><summary className="cursor-pointer text-sm font-semibold">Seu produto em tempo real · frente e verso</summary><p className="my-2 text-xs leading-5 text-zinc-400">A linha amarela coincide com a borda da frente. A faixa até o corte continua no verso.</p>{renderPreview({ scale, offsetX, offsetY, rotationDegrees: rotation })}</details> : null}
           {onRetouch ? <button className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900 disabled:opacity-40" disabled={saving} type="button" onClick={() => exit.request(onRetouch)}><Paintbrush size={15} /> Retocar arte</button> : null}
           <div className="mt-4 grid gap-2 rounded-md border border-zinc-800 bg-zinc-900/55 p-3 text-xs leading-5">
             <p className="mb-1 font-semibold text-zinc-200">Geometria de impressão e corte</p>

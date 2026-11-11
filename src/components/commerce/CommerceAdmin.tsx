@@ -475,6 +475,10 @@ export function CommerceAdmin({
                       }
                     />
                   </label>
+                  <label className="grid gap-1 text-sm">Transporte da entrega fixa (dias úteis)
+                    <input className={field} inputMode="numeric" value={settings.deliveryTransitDays ?? ""} placeholder="A confirmar" onChange={event => updateSetting("deliveryTransitDays", event.target.value === "" ? undefined : Number(event.target.value))}/>
+                    <small className="text-xs text-zinc-500">Sem incluir produção. Deixe vazio quando não houver estimativa.</small>
+                  </label>
                 </div>
               ) : null}
               <p className="text-xs text-zinc-500">

@@ -46,6 +46,7 @@ export default async function PricingPage() {
       tenantName={profile.tenant_name}
     >
       <PricingCalculator
+        productionSettings={tenant?.production_settings}
         activeShippingServices={{
           correios: correiosConnection?.status === "active",
           melhorEnvio: melhorEnvioConnection?.status === "active"

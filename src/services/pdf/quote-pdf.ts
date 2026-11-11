@@ -9,6 +9,7 @@ import {
 } from "@/domain/quotes/pdf-artwork";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 import { loadArtworkDataUrl } from "@/services/storage/artwork-storage";
+import { deliveryEstimate, formatDeliveryDate, type DeliveryEstimate, type ProductionSettings } from "@/domain/shipping/production-lead-time";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const PAGE_SIZE: [number, number] = [595.28, 841.89];
@@ -25,10 +26,12 @@ export async function generateQuotePdf(input: {
     company_phone: string | null;
     company_site: string | null;
     company_document: string | null;
+    production_settings?: ProductionSettings;
   } | null;
   quote: QuoteDetail;
   items: QuoteItemRow[];
   artworkVariant?: QuotePdfArtworkVariant;
+  productionEstimate?: DeliveryEstimate;
 }): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   let page = pdf.addPage(PAGE_SIZE);
@@ -268,6 +271,16 @@ export async function generateQuotePdf(input: {
     y -= 4;
   }
 
+  const productionQuantity = input.items.reduce((sum, item) => sum + item.quantity, 0);
+  const forecast = input.productionEstimate ?? (input.tenant?.production_settings && productionQuantity > 0
+    ? deliveryEstimate(productionQuantity, input.quote.delivery_method === "pickup" ? 0 : null, input.tenant.production_settings) : null);
+  if (forecast) {
+    drawSectionTitle("Producao e entrega estimadas");
+    drawText(`Producao: ${forecast.productionDays} dias uteis apos pagamento e aprovacao das artes.`, { size: 9 });
+    if (input.quote.delivery_method !== "pickup") drawText(`Transporte: ${forecast.transportDays === null ? "prazo a confirmar" : `${forecast.transportDays} dias uteis`}.`, { size: 9 });
+    if (forecast.deliveryDate) drawText(`${input.quote.delivery_method === "pickup" ? "Retirada" : "Recebimento"} estimado: ${formatDeliveryDate(forecast.deliveryDate)}`, { size: 10, bold: true });
+    drawText(`Projecao condicionada a confirmacao em ${formatDeliveryDate(forecast.estimatedFrom)}. Datas nao garantidas.`, { size: 8 });
+  }
   if (input.quote.notes) {
     drawSectionTitle("Observacoes");
     for (const line of wrapText(input.quote.notes, 90)) drawText(line, { size: 9, color: rgb(0.28, 0.28, 0.3) });

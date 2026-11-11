@@ -51,10 +51,12 @@ export default async function StorePage({ params }: Props) {
         "carrinho",
         "conta",
         "checkout",
+        "orcamento",
+        "orcamentos",
         "pedidos",
         "condicoes",
       ].includes(path[0])) ||
-    (path.length === 2 && ["produto", "pedidos"].includes(path[0]));
+    (path.length === 2 && ["produto", "pedidos", "orcamentos"].includes(path[0]));
   if (!supported) notFound();
   const library = libraryPath ? await loadLibrary(store.tenant_id, path[1]) : undefined;
   if (libraryPath && path[1] && !library?.campaigns.some(c => c.slug === path[1])) notFound();

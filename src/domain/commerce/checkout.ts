@@ -5,7 +5,7 @@ export function resolveCheckoutDelivery(input: CheckoutInput): CommerceAddress |
   if (input.delivery === "pickup") return null;
   if (!input.deliveryAddressSameAsBilling) {
     if (!input.address) throw new CommerceError("Informe o endereço de entrega.");
-    return input.address;
+    return { ...input.address, document: input.address.document.replace(/\D/g, "") || input.billing.document };
   }
   const { name, phone, document, postalCode, street, number, complement, district, city, state } = input.billing;
   return { name, phone, document, postalCode, street, number, complement, district, city, state, attention: "" };

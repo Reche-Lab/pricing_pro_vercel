@@ -7,6 +7,7 @@ import { PixPaymentCard } from "@/components/quotes/PixPaymentCard";
 import { getPublicArtworkReviewProgress } from "@/domain/quotes/public-artwork-review";
 import { quoteDiscountLabel } from "@/domain/quotes/discount";
 import { getPublicQuoteByToken } from "@/repositories/quotes";
+import { DeliveryTimeline } from "@/components/shipping/DeliveryTimeline";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -150,6 +151,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
                 {detail.quote.discount_reason ? <Detail label="Motivo" value={detail.quote.discount_reason} /> : null}
                 <Detail label="Validade" value={detail.quote.valid_until ? formatDate(detail.quote.valid_until) : "-"} />
               </dl>
+              <DeliveryTimeline quantity={detail.items.reduce((sum, item) => sum + item.quantity, 0)} settings={detail.tenant.production_settings} pickup={detail.quote.delivery_method === "pickup"}/>
             </section>
 
             {detail.quote.pix_payment_snapshot ? (

@@ -32,6 +32,7 @@ const schema = z
     offsetY: z.number().min(-1).max(1).default(0),
     rotationDegrees: z.number().min(-180).max(180).default(0),
     lines: z.array(cartLineSchema).max(40).optional(),
+    acceptUncovered: z.boolean().optional(),
   })
   .strict()
   .refine(input => input.action === "approve" || input.lines === undefined, { message: "Os itens são usados somente na aprovação.", path: ["lines"] });
@@ -68,6 +69,7 @@ export async function GET(request: Request, { params }: Params) {
 }
 export async function POST(request: Request, { params }: Params) {
   let uploaded: string | null = null;
+  let coverage: { warning: boolean; uncoveredPercent: number } | undefined;
   try {
     checkCommerceOrigin(request);
     const blocked = await enforcePublicRateLimit(request, "commerce", {
@@ -104,6 +106,7 @@ export async function POST(request: Request, { params }: Params) {
         dpi: 300,
         ...input,
       });
+      coverage = prepared.coverage;
       uploaded = await uploadArtworkObject({
         path: `${store.tenant_id}/commerce/${session.id}/${crypto.randomUUID()}.png`,
         contentType: "image/png",
@@ -142,6 +145,8 @@ export async function POST(request: Request, { params }: Params) {
           409,
         );
       if (input.action === "approve") {
+        if (current.crop?.coverage?.warning && !input.acceptUncovered)
+          throw new CommerceError("A arte tem áreas sem cobertura que podem ficar brancas. Confirme a revisão antes de aprovar.", 409, { code: "artwork_coverage_confirmation" });
         if (
           !current.prepared_path ||
           current.crop?.geometryHash !== fingerprint
@@ -149,8 +154,8 @@ export async function POST(request: Request, { params }: Params) {
           throw new CommerceError("Enquadre a arte antes de aprovar.", 409);
         const newlyApproved = !current.approved_at;
         if (newlyApproved) await client.query(
-          "update commerce_artworks set approved_at=now() where tenant_id=$1 and id=$2",
-          [store.tenant_id, artworkId],
+          "update commerce_artworks set approved_at=now(),coverage_acceptance=$3::jsonb where tenant_id=$1 and id=$2",
+          [store.tenant_id, artworkId, JSON.stringify({ acceptedUncovered: Boolean(input.acceptUncovered), coverage: current.crop?.coverage ?? null, crop: current.crop, acceptedAt: new Date().toISOString() })],
         );
         const lines = input.lines ?? locked.rows[0].cart;
         let discount: number | null = null;
@@ -164,17 +169,17 @@ export async function POST(request: Request, { params }: Params) {
         return { newlyApproved, artworkDiscountCents: discount };
       } else
         await client.query(
-          "update commerce_artworks set prepared_path=$3,crop=$4,approved_at=null where tenant_id=$1 and id=$2",
+          "update commerce_artworks set prepared_path=$3,crop=$4,approved_at=null,coverage_acceptance=null where tenant_id=$1 and id=$2",
           [
             store.tenant_id,
             artworkId,
             uploaded,
-            JSON.stringify({ ...input, geometryHash: fingerprint }),
+            JSON.stringify({ scale: input.scale, offsetX: input.offsetX, offsetY: input.offsetY, rotationDegrees: input.rotationDegrees, coverage, geometryHash: fingerprint }),
           ],
         );
     });
     uploaded = null;
-    return commerceJson({ ok: true, ...approval });
+    return commerceJson({ ok: true, coverage, ...approval });
   } catch (error) {
     await deleteArtworkObject(uploaded);
     return commerceFailure(error, "artwork.prepare");

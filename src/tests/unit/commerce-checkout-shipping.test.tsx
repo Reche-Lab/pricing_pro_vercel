@@ -23,7 +23,7 @@ describe("checkout carrier selection", () => {
     expect(storeRequest).toHaveBeenCalledWith("/api/commerce/shop/preview/checkout-delivery", "POST", expect.objectContaining({ postalCode: "01001000", revision: 2 }));
     fireEvent.click(screen.getByLabelText(/Correios - SEDEX/));
     fireEvent.click(screen.getByRole("button", { name: "Concluir simulação" }));
-    expect(submit).toHaveBeenCalledWith(expect.objectContaining({ shippingQuoteId: "22222222-2222-4222-8222-222222222222", expectedTotalCents: 12200 }));
+    await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ shippingQuoteId: "22222222-2222-4222-8222-222222222222", expectedTotalCents: 12200 })));
     fireEvent.change(screen.getByLabelText("CEP de faturamento"), { target: { value: "20040020" } });
     await waitFor(() => expect(screen.getByRole("button", { name: "Concluir simulação" })).toBeDisabled());
     expect(screen.queryByText(/Correios - SEDEX/)).not.toBeInTheDocument();

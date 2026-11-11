@@ -29,6 +29,8 @@ import { listProductVariants } from "@/repositories/products";
 import { listQuoteShipments } from "@/repositories/shipments";
 import { getSessionProfile, listTenantMembers, userHasPermission } from "@/repositories/users";
 import { getTenantShippingProfile } from "@/repositories/tenant-settings";
+import { DeliveryTimeline } from "@/components/shipping/DeliveryTimeline";
+import { transportDaysFromQuote } from "@/domain/shipping/production-lead-time";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 type QuoteDetailResult = NonNullable<Awaited<ReturnType<typeof getQuoteDetail>>>;
@@ -141,6 +143,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
               <Detail label="Validade" value={formatDate(detail.quote.valid_until)} />
             </dl>
             <QuotePickupAction quote={detail.quote} />
+            <DeliveryTimeline quantity={detail.items.reduce((sum, item) => sum + item.quantity, 0)} settings={tenant?.production_settings} pickup={detail.quote.delivery_method === "pickup"} transportDays={transportDaysFromQuote(shipments[0]?.selected_quote)}/>
           </div>
 
           <QuotePaymentTermPanel
@@ -347,6 +350,8 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ qu
               />
               {detail.quote.delivery_method === "pickup" ? <p className="rounded-md border border-zinc-700 p-3 text-sm text-zinc-300">Retirada no local: não será criada uma nova etiqueta. Envios anteriores permanecem no histórico; eventuais cancelamentos devem ser feitos no Melhor Envio.</p> : <MelhorEnvioQuoteLabelActions
                 pickupAction={<QuotePickupAction quote={detail.quote} />}
+                quantity={detail.items.reduce((sum, item) => sum + item.quantity, 0)}
+                productionSettings={tenant?.production_settings}
                 quoteId={quoteId}
                 quoteShippingTotal={Number(detail.quote.shipping_total)}
                 shipments={shipments}

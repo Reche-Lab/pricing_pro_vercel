@@ -27,6 +27,7 @@ export function StoreArtworkGuide({ productName, geometry, margins }: {
           <Download size={16} aria-hidden="true" />Baixar guia SVG
         </a>
       </div>
+      <p className={styles.artworkGuideHint}>Tem familiaridade com design? Baixe o guia SVG em tamanho real e monte sua arte seguindo as marcações: detalhes na segurança, imagem visível até a sangria e fundo contínuo até o corte. Oculte as linhas antes de exportar a imagem final.</p>
       <details className={styles.artworkGuideDetails}>
         <summary>Ver marcações e medidas<ChevronDown size={15} aria-hidden="true" /></summary>
         <label className={styles.artworkGuideLineStyle} title="Aplicar tracejado à prévia e ao SVG baixado; as medidas permanecem iguais">

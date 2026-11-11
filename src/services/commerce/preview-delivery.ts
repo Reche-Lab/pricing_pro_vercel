@@ -18,7 +18,7 @@ export async function previewCarrierDelivery(userId: string, tenantId: string, p
 }
 
 export async function carrierDelivery(connection: IntegrationConnectionRow | null, originPostalCode: string, postalCode: string,
-  lines: CartLine[], products: CommerceProduct[], packagingFor: (items: { productVariantId: string; quantity: number }[]) => Promise<SelectedPackage | null>, declaredValueCents?: number) {
+  lines: CartLine[], products: CommerceProduct[], packagingFor: (items: { productVariantId: string; quantity: number }[]) => Promise<SelectedPackage | null>, declaredValueCents?: number): Promise<{ options: { id: string; name: string; priceCents: number; description: string; transitDays?: number | null }[] } | null> {
   if (!connection || connection.status === "disabled") return null;
   if (connection.status !== "active") throw new CommerceError("Reconecte o Melhor Envio em Configurações > Melhor Envio.", 409);
   const origin = originPostalCode.replace(/\D/g, "");
@@ -78,7 +78,8 @@ export async function carrierDelivery(connection: IntegrationConnectionRow | nul
     const company = typeof row.company?.name === "string" ? row.company.name : "Melhor Envio";
     const name = typeof row.name === "string" ? row.name : "Frete";
     return [{ id: `melhor_envio:${String(row.id)}`, name: `${company} - ${name}`, priceCents: Math.round(amount * 100),
-      description: `Melhor Envio${days !== null && days >= 0 ? ` · Prazo estimado: ${days} ${days === 1 ? "dia útil" : "dias úteis"}` : ""}` }];
+      transitDays: days !== null && Number.isInteger(days) && days >= 0 ? days : null,
+      description: "Cotação Melhor Envio" }];
   }).sort((a, b) => a.priceCents - b.priceCents) : [];
   if (!options.length) throw new CommerceError("O Melhor Envio não retornou serviços disponíveis para este CEP e embalagem. Confira também os serviços habilitados na integração.", 409);
   return { options };

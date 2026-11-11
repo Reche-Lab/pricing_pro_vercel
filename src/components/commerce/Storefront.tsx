@@ -31,6 +31,7 @@ import {
   Loader2,
   X,
   Download,
+  FileText,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import type {
@@ -39,7 +40,7 @@ import type {
   buyerOrders,
 } from "@/repositories/commerce";
 import type { CartLine, StoreSettings } from "@/domain/commerce/schemas";
-import { commerceSelectionError, distributeQuantity } from "@/domain/commerce/commerce";
+import { artworkLimit, commerceSelectionError, distributeQuantity } from "@/domain/commerce/commerce";
 import { normalizeProductSearchTerm } from "@/domain/products/product-search";
 import { storeRequest, storeMoney } from "./store-http";
 import styles from "./store.module.css";
@@ -56,9 +57,12 @@ import { useStoreTheme, accentForeground } from "./use-store-theme";
 import { useCommercePreview } from "./CommercePreviewProvider";
 import type { StoreArtwork } from "./StoreArtworkTools";
 import type { LibraryResult } from "@/domain/commerce/library";
+import { pendingCartArtworks } from "@/domain/commerce/artwork-readiness";
+import { formatDeliveryDate } from "@/domain/shipping/production-lead-time";
 const StoreLibrary = dynamic(() => import("./StoreLibrary").then(m => m.StoreLibrary));
 const FeaturedLibraryCampaigns = dynamic(() => import("./StoreLibrary").then(m => m.FeaturedLibraryCampaigns));
 const StorePayment = dynamic(() => import("./StorePayment").then(module => module.StorePayment), { ssr: false });
+const StoreBuyerQuotes = dynamic(() => import("./StoreBuyerQuotes").then(module => module.StoreBuyerQuotes));
 const ArtworkTools = dynamic(
   () => import("./StoreArtworkTools").then((m) => m.StoreArtworkTools),
   { ssr: false },
@@ -94,6 +98,7 @@ export function Storefront({
   children,
 }: Props) {
   const router = useRouter();
+  const focusedItem = useSearchParams().get("item");
   const { theme, toggle } = useStoreTheme(slug, settings.theme);
   const base = preview ? `/commerce/${slug}/preview` : (basePath ?? `/loja/${slug}`);
   const api = preview ? `/api/commerce/${slug}/preview` : `/api/store/${slug}`;
@@ -113,6 +118,11 @@ export function Storefront({
     void refresh().catch((e) => setError(e.message));
   }, [refresh]);
   const view = path[0] ?? "home";
+  useEffect(() => {
+    if (view !== "carrinho" || !focusedItem || !cart) return;
+    const element = document.getElementById(`item-${focusedItem}`);
+    element?.scrollIntoView?.({ behavior: "smooth", block: "center" }); element?.focus();
+  }, [view, focusedItem, cart]);
   const refreshOrders = useCallback(async () => {
     if (preview) return;
     const data = await storeRequest(`${api}/orders`);
@@ -252,6 +262,7 @@ export function Storefront({
                 >
                   <UserRound size={21} />
                 </Link>
+                <Link href={`${base}/orcamentos`} title="Meus orçamentos" aria-label="Meus orçamentos"><FileText size={20}/></Link>
               </>
             ) : null}
             <Link
@@ -268,6 +279,7 @@ export function Storefront({
           <Link href={`${base}/catalogo`} aria-label="Pesquisar produtos">
             Todos os produtos
           </Link>
+          {!preview ? <Link href={`${base}/orcamento`}>Solicitar orçamento</Link> : null}
           {[...new Set(products.map((product) => product.category))].map(
             (category) => (
               <Link
@@ -331,6 +343,7 @@ export function Storefront({
         ) : null}
         {selectedProduct ? (
           <ProductDetail
+            settings={settings}
             key={selectedProduct.id}
             product={selectedProduct}
             slug={slug}
@@ -354,6 +367,7 @@ export function Storefront({
               <div className="max-w-xl space-y-5">
                 <h1 className={styles.title}>Olá, {cart.customer.name}</h1>
                 <p>{cart.customer.email}</p>
+                <Link className={styles.secondary} href={`${base}/orcamentos`}><FileText size={17}/>Meus orçamentos</Link>
                 <Link className={styles.primary} href={`${base}/pedidos`}>
                   Meus pedidos
                   <ArrowRight size={17} />
@@ -402,7 +416,7 @@ export function Storefront({
                       (i) => i.id === line.id,
                     );
                     return (
-                      <div key={line.id} className={styles.line}>
+                      <div key={line.id} id={`item-${line.id}`} tabIndex={-1} className={`${styles.line} scroll-mt-24 ${focusedItem === line.id ? "rounded-md ring-2 ring-amber-400 ring-offset-4" : ""}`}>
                         <div className="flex gap-4">
                           {product ? (
                             <img
@@ -526,14 +540,15 @@ export function Storefront({
                   >
                     Continuar comprando
                   </Link>
+                  {!preview ? <Link href={`${base}/orcamento`} className={`${styles.secondary} mt-4 w-full`}><FileText size={17}/>Gerar orçamento sem comprar</Link> : null}
                 </aside>
               </div>
             )}
           </>
         ) : null}
-        {view === "checkout" ? (
+        {view === "checkout" || view === "orcamento" ? (
           <>
-            <h1 className={styles.title}>Finalizar pedido</h1>
+            <h1 className={styles.title}>{view === "orcamento" ? "Preparar orçamento" : "Finalizar pedido"}</h1>
             {!cart ? (
               <p>Carregando…</p>
             ) : !cart.customer && !preview ? (
@@ -553,26 +568,30 @@ export function Storefront({
               />
             ) : (
               <Checkout
+                intent={view === "orcamento" ? "quote" : "purchase"}
+                artworkIssues={pendingCartArtworks(cart.lines, products, cart.artworks)}
                 cart={cart}
                 api={api}
                 settings={settings}
                 base={base}
                 disabled={busy || paused}
                 onSubmit={async (input) => {
-                  await action(async () => {
+                  setBusy(true);
+                  try {
                     const result = await storeRequest(
-                      `${api}/orders`,
+                      `${api}/${view === "orcamento" ? "quotes" : "orders"}`,
                       "POST",
                       input,
                     );
                     await refresh();
-                    router.push(`${base}/pedidos/${result.id}`);
-                  });
+                    router.push(`${base}/${view === "orcamento" ? "orcamentos" : "pedidos"}/${result.id}`);
+                  } finally { setBusy(false); }
                 }}
               />
             )}
           </>
         ) : null}
+        {view === "orcamentos" ? (!cart?.customer ? <BuyerLogin api={api} onLogged={refresh} disabled={!cart}/> : <StoreBuyerQuotes api={api} base={base} quoteId={path[1]} revision={cart.revision} hasCart={cart.lines.length > 0} onRestored={refresh}/>) : null}
         {view === "pedidos" ? (
           <>
             <h1 className={styles.title}>
@@ -741,6 +760,7 @@ function Catalog({
   );
 }
 function ProductDetail({
+  settings,
   product,
   slug,
   preview,
@@ -752,6 +772,7 @@ function ProductDetail({
   onAdd,
   libraryEnabled,
 }: {
+  settings: StoreSettings;
   product: Product;
   slug: string;
   preview: boolean;
@@ -776,6 +797,10 @@ function ProductDetail({
   const [confirmation, setConfirmation] = useState<{ quantity: number; groups: number; artworks: number } | null>(null);
   const artworkPanelId = useId();
   const artworkBusy = uploadingGroups.size > 0;
+  const allowedArtworks = artworkLimit(Number(quantity), product.maxArtworks);
+  const unusedArtworks = Object.entries(draftArtworks).filter(([index, id]) => id && Number(index) >= Number(groups || "1")).length;
+  const [allowUnused, setAllowUnused] = useState(false);
+  useEffect(() => setAllowUnused(false), [quantity, groups]);
   const [priced, setPrice] = useState<{ lines: CartLine[]; calculation: {
     totalCents: number;
     artworkDiscountCents?: number;
@@ -805,7 +830,7 @@ function ProductDetail({
   const price = priced?.lines === lines ? priced.calculation : null;
   const deliveryIssue = commerceSelectionError(lines, product);
   async function addToCart() {
-    if (disabled || !price || deliveryIssue || artworkBusy || addingRef.current) return;
+    if (disabled || !price || deliveryIssue || artworkBusy || addingRef.current || (unusedArtworks > 0 && !allowUnused)) return;
     addingRef.current = true;
     setAdding(true);
     setConfirmation(null);
@@ -884,6 +909,7 @@ function ProductDetail({
                   placeholder="1"
                   disabled={adding || artworkBusy}
                   value={groups}
+                  aria-invalid={Number(groups) > allowedArtworks || Number(groups) < 1}
                   onChange={(e) => setGroups(e.target.value)}
                 />
               </label>
@@ -891,8 +917,10 @@ function ProductDetail({
           </div>
           <p className="mt-3 text-sm text-zinc-500">
             De {product.minQuantity} a {product.maxQuantity} unidades
-            {product.personalized ? ` · Até ${product.maxArtworks} ${product.maxArtworks === 1 ? "arte" : "artes"}` : ""}
+            {product.personalized ? ` · Até ${allowedArtworks} ${allowedArtworks === 1 ? "arte" : "artes"} para esta quantidade` : ""}
           </p>
+          {Number(groups) > allowedArtworks ? <p role="alert" className="mt-2 text-sm text-amber-700">Ajuste para até {allowedArtworks} artes ou aumente a quantidade de produtos. Nenhuma arte enviada foi apagada.</p> : null}
+          {unusedArtworks > 0 ? <label className="mt-3 flex items-start gap-2 text-sm"><input type="checkbox" checked={allowUnused} onChange={event => setAllowUnused(event.target.checked)}/>Confirmo que {unusedArtworks} arte(s) dos grupos anteriores não serão incluídas nesta seleção. Os arquivos continuam disponíveis.</label> : null}
           {product.personalized && lines.length ? (
             <p className="mt-3 text-sm">
               {lines
@@ -961,7 +989,7 @@ function ProductDetail({
           ) : null}
           <button
             className={`${styles.primary} w-full`}
-            disabled={disabled || !price || Boolean(deliveryIssue) || artworkBusy || adding}
+            disabled={disabled || !price || Boolean(deliveryIssue) || artworkBusy || adding || (unusedArtworks > 0 && !allowUnused)}
             onClick={() => void addToCart()}
           >
             {adding || artworkBusy ? <Loader2 className="animate-spin motion-reduce:animate-none" size={18} /> : <ShoppingBag size={18} />}
@@ -972,7 +1000,7 @@ function ProductDetail({
               {product.artworkOptions?.allowTeamPreparation ? "Envie sua arte para a equipe preparar ou enquadre e aprove para receber o benefício disponível." : "O enquadramento e a aprovação de cada arte podem ser concluídos no carrinho."}
             </p>
           ) : null}
-          {quantity.trim() ? <StoreDeliveryInquiry api={api} lines={lines} disabled={Boolean(deliveryIssue)} disabledReason={deliveryIssue ?? undefined} /> : null}
+          {quantity.trim() ? <StoreDeliveryInquiry api={api} lines={lines} production={settings.production} disabled={Boolean(deliveryIssue)} disabledReason={deliveryIssue ?? undefined} /> : null}
         </section>
       </div>
       {confirmation ? <aside className={styles.cartConfirmation} aria-label="Confirmação do carrinho">
@@ -1228,6 +1256,7 @@ function OrderDetail({
         ))}
         <CommerceOrderArtworks endpoint={`${api}/orders/${order.id}/artworks`} />
         <StoreOrderContactDetails billing={order.billing} address={order.address} same={order.deliveryAddressSameAsBilling} shippingOption={order.shippingOption}/>
+        {order.production ? <p className="mt-4 text-sm">Previsão registrada: produção de <strong>{order.production.productionDays} dias úteis</strong>{order.production.transportDays !== null ? ` + ${order.production.transportDays} dias úteis de transporte` : " · transporte a confirmar"}.{order.production.deliveryDate ? <span className="mt-1 block font-semibold">{order.delivery === "pickup" ? "Retirada" : "Recebimento"} estimado: {formatDeliveryDate(order.production.deliveryDate)}</span> : null}<small className="mt-1 block opacity-70">Condicionada ao pagamento e à aprovação das artes na data de criação. Confirmações posteriores alteram a previsão.</small></p> : null}
         {order.hasTerms ? <section className="mt-6 space-y-3 border-t border-current/10 pt-5"><h2 className="text-sm font-semibold">Condições desta compra</h2><p className={styles.muted}>Consulte o texto registrado neste pedido{order.termsVersion ? `, versão ${order.termsVersion}` : ""}. Alterações posteriores na loja não mudam este registro.</p><a href={`${api}/orders/${order.id}/conditions`} className={styles.secondary}><Download size={16}/>Baixar condições aceitas</a></section> : null}
       </div>
       <aside className={styles.summary}>

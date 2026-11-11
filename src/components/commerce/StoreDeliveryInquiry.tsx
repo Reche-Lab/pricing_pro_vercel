@@ -7,8 +7,10 @@ import Link from "next/link";
 import { formatCep } from "@/lib/cep";
 import { storeMoney, storeRequest } from "./store-http";
 import styles from "./store.module.css";
+import { DeliveryTimeline } from "@/components/shipping/DeliveryTimeline";
+import type { ProductionSettings } from "@/domain/shipping/production-lead-time";
 
-export function StoreDeliveryInquiry({ api, lines, disabled, disabledReason }: { api: string; lines: CartLine[]; disabled: boolean; disabledReason?: string }) {
+export function StoreDeliveryInquiry({ api, lines, disabled, disabledReason, production }: { api: string; lines: CartLine[]; disabled: boolean; disabledReason?: string; production?: ProductionSettings }) {
   const [cep, setCep] = useState("");
   const [result, setResult] = useState<CommerceDeliveryResult | null>(null);
   const [busy, setBusy] = useState(false);
@@ -36,7 +38,7 @@ export function StoreDeliveryInquiry({ api, lines, disabled, disabledReason }: {
     }}>
       <label>CEP de destino<input value={cep} inputMode="numeric" autoComplete="postal-code" placeholder="00000-000" required pattern="[0-9]{5}-[0-9]{3}" maxLength={9}
         onChange={event => { generation.current.value++; setCep(formatCep(event.target.value)); setResult(null); setError(""); setBusy(false); }} /></label>
-      <button className={styles.secondary} disabled={disabled || busy || cep.length !== 9} type="submit">
+      <button className={styles.primary} disabled={disabled || busy || cep.length !== 9} type="submit">
         {busy ? <LoaderCircle size={17} className="animate-spin" /> : <Truck size={17} />} {busy ? "Consultando…" : "Consultar"}
       </button>
     </form>
@@ -44,10 +46,11 @@ export function StoreDeliveryInquiry({ api, lines, disabled, disabledReason }: {
     {error ? <p role="alert" className={styles.deliveryError}>{error}</p> : null}
     {result ? <div role="status" className={styles.deliveryResults}>
       {!result.options.length && !result.warnings?.length ? <p>Nenhuma opção de entrega ou retirada foi configurada para esta loja. Entre em contato com a loja.</p> : result.options.map(option => <div key={option.id}>
-        <span>{option.name}<small>{option.id === "delivery" ? "Tarifa de entrega da loja" : option.description}</small></span>
+        <span>{option.name}<small>{option.id === "delivery" ? "Tarifa de entrega da loja" : option.description}</small><DeliveryTimeline compact quantity={lines.reduce((sum, line) => sum + line.quantity, 0)} transportDays={option.transitDays} settings={production} pickup={option.id === "pickup"}/></span>
         <strong>{option.priceCents === 0 ? "Grátis" : storeMoney(option.priceCents)}</strong>
       </div>)}
       {result.warnings?.map(warning => <p key={warning} className={styles.deliveryError}>{warning}</p>)}
+      {result.options.length ? <p className={styles.muted}>Datas projetadas se pagamento e artes forem confirmados hoje. Produção e transporte são contados separadamente em dias úteis.</p> : null}
       {result.previewCarrier ? <p className={styles.muted}>Cotação real do Melhor Envio para conferência no preview. Para oferecer estes serviços aos compradores, habilite o frete Melhor Envio na loja. O checkout calcula novamente para todo o carrinho; esta consulta não compra um frete.</p> : null}
       {api.startsWith("/api/commerce/") ? <p className="flex flex-wrap gap-3 text-sm">
         <Link href="/settings?section=melhor-envio" target="_blank" rel="noopener noreferrer" className="underline">Configurar Melhor Envio</Link>

@@ -8,6 +8,7 @@ export class CommerceError extends Error {
   constructor(
     message: string,
     public status = 400,
+    public details?: { code: string; lineIds?: string[] },
   ) {
     super(message);
   }
@@ -24,12 +25,15 @@ export type PriceProduct = {
   personalized?: boolean;
   artworkOptions?: CommerceArtworkOptions;
 };
+export function artworkLimit(quantity: number, configured = 10) {
+  return Math.max(0, Math.min(Number.isFinite(quantity) ? Math.floor(quantity) : 0, configured, 10));
+}
 export function distributeQuantity(total: number, groups: number) {
   if (
     !Number.isInteger(total) ||
     !Number.isInteger(groups) ||
     groups < 1 ||
-    groups > 20 ||
+    groups > 10 ||
     total < groups ||
     total > 50000
   )
@@ -50,8 +54,8 @@ export function commerceSelectionError(
   const quantity = lines.reduce((sum, line) => sum + line.quantity, 0);
   if (quantity < product.minQuantity || quantity > product.maxQuantity)
     return `Selecione de ${product.minQuantity} a ${product.maxQuantity} unidades para consultar a entrega.`;
-  if (lines.length > Math.min(20, product.maxArtworks))
-    return `Este produto permite até ${product.maxArtworks} artes. Ajuste a quantidade de artes.`;
+  if (lines.length > artworkLimit(quantity, product.maxArtworks))
+    return `Para esta quantidade, selecione até ${artworkLimit(quantity, product.maxArtworks)} artes.`;
   return null;
 }
 export function calculateCart(lines: CartLine[], products: PriceProduct[], readyArtworkKeys: ReadonlySet<string> = new Set()) {
@@ -75,7 +79,7 @@ export function calculateCart(lines: CartLine[], products: PriceProduct[], ready
       line.quantity < 1 ||
       total < product.minQuantity ||
       total > product.maxQuantity ||
-      group.length > product.maxArtworks
+      group.length > artworkLimit(total, product.maxArtworks)
     )
       throw new CommerceError(`Revise as quantidades de ${product.name}.`);
     const reference =

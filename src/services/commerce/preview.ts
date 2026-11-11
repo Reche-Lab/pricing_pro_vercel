@@ -11,7 +11,7 @@ export async function requireCommercePreview(
     throw new CommerceError("Prévia não encontrada.", 404);
   // Draft access is exclusive to this authenticated tenant, never a public flag.
   const result = await getPool().query<CommerceStore>(
-    "select s.*,t.slug from commerce_stores s join tenants t on t.id=s.tenant_id where s.tenant_id=$1 and t.slug=$2 and t.status='active'",
+    "select s.*,t.slug,s.settings || jsonb_build_object('production',t.production_settings) as settings from commerce_stores s join tenants t on t.id=s.tenant_id where s.tenant_id=$1 and t.slug=$2 and t.status='active'",
     [session.tenantId, slug],
   );
   if (!result.rows[0])

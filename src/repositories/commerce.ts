@@ -11,6 +11,7 @@ import { purchaseConditionsText, PURCHASE_CONDITIONS_VERSION } from "@/domain/co
 import type { CommerceArtworkOptions } from "@/domain/commerce/artwork-options";
 import { checkoutSchema, type CommerceBillingSnapshot } from "@/domain/commerce/schemas";
 import { resolveCheckoutDelivery } from "@/domain/commerce/checkout";
+import { deliveryEstimate } from "@/domain/shipping/production-lead-time";
 import { commerceLaunchReadiness } from "@/repositories/commerce-launch";
 import { commercePublicationIssues } from "@/domain/commerce/publication";
 import { commerceDomains, commerceStoreUrl } from "@/domain/commerce/domains";
@@ -86,7 +87,8 @@ export type CommerceOrder = {
     billing?: CommerceBillingSnapshot;
     deliveryAddressSameAsBilling?: boolean;
     delivery: string;
-    shippingOption?: { id: string; name: string; priceCents: number; description?: string } | null;
+    shippingOption?: { id: string; name: string; priceCents: number; description?: string; transitDays?: number | null } | null;
+    production?: ReturnType<typeof deliveryEstimate>;
     terms: string;
     termsVersion?: string;
     termsAcceptedAt?: string;
@@ -120,7 +122,7 @@ export async function getCommerceStore(
   if (!commerceEnabled() || !/^[a-z0-9][a-z0-9-]{0,99}$/.test(slug))
     return null;
   const result = await getPool().query<CommerceStore>(
-    `select s.*,t.slug from commerce_stores s join tenants t on t.id=s.tenant_id where t.slug=$1 and t.status='active' and s.enabled and (s.status='published' or ($2 and s.status='paused'))`,
+    `select s.*,t.slug,s.settings || jsonb_build_object('production',t.production_settings) as settings from commerce_stores s join tenants t on t.id=s.tenant_id where t.slug=$1 and t.status='active' and s.enabled and (s.status='published' or ($2 and s.status='paused'))`,
     [slug, allowPaused],
   );
   return result.rows[0] ?? null;
@@ -472,7 +474,7 @@ export async function createCommerceOrder(
       );
     const lockedStore = (
       await client.query<CommerceStore>(
-        "select * from commerce_stores where tenant_id=$1 for share",
+        "select s.*,s.settings || jsonb_build_object('production',t.production_settings) as settings from commerce_stores s join tenants t on t.id=s.tenant_id where s.tenant_id=$1 for share of s,t",
         [store.tenant_id],
       )
     ).rows[0];
@@ -484,7 +486,7 @@ export async function createCommerceOrder(
     if (!current.cart.length || calculated.totalCents <= 0)
       throw new CommerceError("Inclua produtos no carrinho.");
     let shipping = input.delivery === "pickup" ? 0 : settings.deliveryCents;
-    type ShippingOption = { id: string; name: string; priceCents: number; description?: string };
+    type ShippingOption = { id: string; name: string; priceCents: number; description?: string; transitDays?: number | null };
     let shippingOption: ShippingOption | null = null;
     if (input.delivery === "delivery" && input.shippingQuoteId) {
       if (!settings.carrierEnabled || !address) throw new CommerceError("O frete automático não está disponível.", 409);
@@ -531,7 +533,7 @@ export async function createCommerceOrder(
         throw new CommerceError(`A preparação pela equipe não está disponível para ${product.name}. Revise o carrinho.`, 409);
       if (line.preparation === "team" && product.artworkOptions?.allowTeamPreparation) {
         const uploaded = await client.query("select id from commerce_artworks where tenant_id=$1 and session_id=$2 and product_id=$3 and id=$4", [store.tenant_id, session.id, line.productId, line.artworkId]);
-        if (!uploaded.rowCount) throw new CommerceError(`Envie a arte de ${product.name} para a equipe preparar.`);
+        if (!uploaded.rowCount) throw new CommerceError(`Envie a arte de ${product.name} para a equipe preparar.`, 400, { code: "artwork_pending", lineIds: [line.id] });
         continue;
       }
       const approved = await client.query(
@@ -544,6 +546,7 @@ export async function createCommerceOrder(
       )
         throw new CommerceError(
           `Enquadre e aprove a arte de ${product.name} antes de concluir.`,
+          400, { code: "artwork_pending", lineIds: [line.id] },
         );
     }
     const customer = (
@@ -569,6 +572,7 @@ export async function createCommerceOrder(
       termsAcceptedAt: new Date().toISOString(),
       storeRevision: lockedStore.revision,
       artworkDiscountCents: calculated.artworkDiscountCents ?? 0,
+      production: deliveryEstimate(current.cart.reduce((sum, line) => sum + line.quantity, 0), input.delivery === "pickup" ? 0 : shippingOption?.transitDays ?? settings.deliveryTransitDays ?? null, settings.production),
     };
     const result = await client.query<{ id: string }>(
       `insert into commerce_orders(tenant_id,customer_id,session_id,cart_revision,snapshot,subtotal_cents,shipping_cents,total_cents,provider,payment_environment) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
@@ -664,6 +668,7 @@ export async function buyerOrders(tenantId: string, customerId: string) {
       deliveryAddressSameAsBilling: snapshot.deliveryAddressSameAsBilling ?? false,
       delivery: snapshot.delivery,
       shippingOption: snapshot.shippingOption ?? null,
+      production: snapshot.production ?? null,
       artworkDiscountCents: snapshot.artworkDiscountCents ?? 0,
       hasTerms: Boolean(snapshot.terms),
       termsVersion: snapshot.termsVersion ?? null,

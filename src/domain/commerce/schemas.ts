@@ -2,6 +2,7 @@ import { z } from "zod";
 import { isValidCpfOrCnpj } from "@/lib/validation/documents";
 import { productMediaSchema, safeCommerceMediaUrl } from "./product-media";
 import { commerceArtworkOptionsSchema } from "./artwork-options";
+import { productionSettingsSchema } from "@/domain/shipping/production-lead-time";
 
 export const cartLineSchema = z
   .object({
@@ -54,7 +55,9 @@ export const storeSettingsSchema = z
     carrierEnabled: z.boolean().optional(),
     deliveryCents: z.number().int().min(0).max(1000000),
     deliveryDescription: z.string().trim().max(200),
+    deliveryTransitDays: z.number().int().min(0).max(365).optional(),
     terms: z.string().trim().max(10000),
+    production: productionSettingsSchema.optional(),
   })
   .strict()
   .superRefine((value, ctx) => {

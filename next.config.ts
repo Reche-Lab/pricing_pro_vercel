@@ -15,6 +15,11 @@ const noStoreHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  webpack(config, { dev }) {
+    // Local validation should not retain a large on-disk webpack cache.
+    if (!dev && process.env.COMMERCE_LOW_MEMORY === "true") config.cache = false;
+    return config;
+  },
   ...(process.env.COMMERCE_LOW_MEMORY === "true" ? {
     experimental: { cpus: 1, webpackMemoryOptimizations: true }
   } : {}),

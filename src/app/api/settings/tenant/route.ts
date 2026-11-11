@@ -5,8 +5,11 @@ import { requireWritableBilling } from "@/lib/billing/guard";
 import { isValidCpfOrCnpj } from "@/lib/validation/documents";
 import { isValidPixKey, normalizePixKey, PIX_KEY_TYPES, pixKeyTypeLabel } from "@/domain/payments/pix";
 import { getTenantShippingProfile, updateTenantShippingProfile } from "@/repositories/tenant-settings";
+import { productionSettingsSchema } from "@/domain/shipping/production-lead-time";
+import { getSessionProfile } from "@/repositories/users";
 
 const tenantSettingsSchema = z.object({
+  productionSettings: productionSettingsSchema.optional(),
   name: z.string().trim().min(2).optional().nullable(),
   logoUrl: z.string().trim().url().optional().or(z.literal("")).nullable(),
   companyPhone: z.string().trim().optional().nullable(),
@@ -49,6 +52,8 @@ export async function GET() {
 export async function PATCH(request: Request) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ ok: false }, { status: 401 });
+  const profile = await getSessionProfile(session.userId, session.tenantId);
+  if (!profile || (!profile.is_super_admin && !["owner", "admin"].includes(profile.role))) return NextResponse.json({ ok: false }, { status: 403 });
   const billingBlock = await requireWritableBilling(session.userId, session.tenantId);
   if (billingBlock) return billingBlock;
 

@@ -31,7 +31,7 @@ describe("preview tenant carrier quote", () => {
       volumes: [{ width: 12, height: 5, length: 20, weight: .4, insurance: 25 }, { width: 12, height: 5, length: 20, weight: .4, insurance: 25 }],
       options: { receipt: false, own_hand: false },
     } }));
-    expect(result?.options).toEqual([{ id: "melhor_envio:1", name: "Correios - PAC", priceCents: 1850, description: "Melhor Envio · Prazo estimado: 5 dias úteis" }]);
+    expect(result?.options).toEqual([{ id: "melhor_envio:1", name: "Correios - PAC", priceCents: 1850, description: "Cotação Melhor Envio", transitDays: 5 }]);
     expect(JSON.stringify(result)).not.toContain("secret");
   });
   it("does not invent a tariff without a configured carrier", async () => {

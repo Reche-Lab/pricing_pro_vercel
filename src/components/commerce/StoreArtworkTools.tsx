@@ -263,6 +263,7 @@ export function StoreArtworkTools({
           initialStep={editor}
           renderApprovalSuccess={() => reward ? <StoreArtworkReward {...reward} context={benefitContext} /> : <p role="status">Arte aprovada!</p>}
           renderProductPreview={asset => asset.geometry && asset.preparedUrl ? <StoreProductMockup name={product.name} sourceUrl={asset.preparedUrl} geometry={asset.geometry} margins={asset.margins} model={product.artworkOptions?.mockup} /> : null}
+          renderFramingPreview={(asset, frame) => asset.geometry ? <><div className="grid min-w-0 grid-cols-2 gap-2">{(["front", "back"] as const).map(side => <StoreProductMockup key={side} compact fixedSide={side} name={product.name} sourceUrl={asset.sourceUrl} geometry={asset.geometry!} margins={asset.margins} model={product.artworkOptions?.mockup} frame={frame}/>)}</div><p className="mt-2 text-xs leading-5 text-zinc-400">Simulação ilustrativa. Cores, curvatura e fecho podem variar. Mantenha os detalhes na área segura.</p></> : null}
           onClose={() => setEditor(null)}
           onRetouch={async (_asset, file) => {
             const id = await saveFile(file);
@@ -291,9 +292,9 @@ export function StoreArtworkTools({
                 : `${base}/${asset.id}?prepared=1&v=${Date.now()}`,
             };
           }}
-          onApprove={async (asset) => {
+          onApprove={async (asset, confirmation) => {
             const result = preview ? await simulation!.approve(asset.id, pricingLines) : await storeRequest(`${base}/${asset.id}`, "POST", {
-              action: "approve", ...(pricingLines ? { lines: pricingLines } : {}),
+              action: "approve", ...(confirmation?.acceptUncovered ? { acceptUncovered: true } : {}), ...(pricingLines ? { lines: pricingLines } : {}),
             });
             const celebrate = result.newlyApproved === true && !celebrated.current.has(asset.id);
             if (celebrate) celebrated.current.add(asset.id);

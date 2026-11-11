@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { artworkCoverage } from "@/domain/artwork/coverage";
 import { calculatePrintGuideDimensions, createShapeSvg, type PrintGeometry } from "@/domain/artwork/geometry";
 
 export type ArtworkProductionProfile = {
@@ -36,6 +37,7 @@ export function resolveDrawCutLines(defaultValue: boolean, override: string | nu
 }
 
 export type PreparedArtwork = {
+  coverage: { uncoveredPercent: number; warning: boolean };
   dataUrl: string;
   widthPx: number;
   heightPx: number;
@@ -118,20 +120,30 @@ export async function prepareArtwork(input: {
     fill: "white"
   }));
   const transformed = await image
-    .rotate(rotationDegrees, { background: { r: 255, g: 255, b: 255, alpha: 0 } })
     .resize(scaledWidthPx, scaledHeightPx, { fit: "cover", position: "centre" })
     .png({ compressionLevel: 9 })
     .toBuffer();
-  const framed = await placeArtworkOnCanvas(
+  let framed = await placeArtworkOnCanvas(
     transformed,
     outputWidthPx,
     outputHeightPx,
     scaledWidthPx,
     scaledHeightPx,
     offsetX,
-    offsetY
+    offsetY,
+    true
   );
+  // Match the browser: scale/place first, then rotate around the cut canvas center.
+  if (rotationDegrees !== 0) {
+    const rotated = await sharp(framed).rotate(rotationDegrees, { background: { r: 255, g: 255, b: 255, alpha: 0 } }).png().toBuffer({ resolveWithObject: true });
+    framed = await placeArtworkOnCanvas(rotated.data, outputWidthPx, outputHeightPx, rotated.info.width, rotated.info.height, 0, 0, true);
+  }
+  const inspectionWidth = Math.min(256, outputWidthPx), inspectionHeight = Math.max(1, Math.round(inspectionWidth * outputHeightPx / outputWidthPx));
+  const alpha = await sharp(framed).resize(inspectionWidth, inspectionHeight).ensureAlpha().raw().toBuffer();
+  const maskPixels = await sharp(shapeMask).resize(inspectionWidth, inspectionHeight).ensureAlpha().raw().toBuffer();
+  const coverage = artworkCoverage(alpha, maskPixels);
   const output = await sharp(framed)
+    .flatten({ background: "#ffffff" })
     .ensureAlpha()
     .composite([{ input: shapeMask, blend: "dest-in" }])
     .png({ compressionLevel: 9 })
@@ -153,6 +165,7 @@ export async function prepareArtwork(input: {
     originalWidthPx: metadata.width,
     originalHeightPx: metadata.height,
     qualityStatus,
+    coverage,
     notes
   };
 }
@@ -164,7 +177,8 @@ async function placeArtworkOnCanvas(
   scaledWidthPx: number,
   scaledHeightPx: number,
   offsetX: number,
-  offsetY: number
+  offsetY: number,
+  transparent = false
 ) {
   const desiredLeft = Math.round((outputWidthPx - scaledWidthPx) / 2 + offsetX * outputWidthPx / 2);
   const desiredTop = Math.round((outputHeightPx - scaledHeightPx) / 2 + offsetY * outputHeightPx / 2);
@@ -174,7 +188,7 @@ async function placeArtworkOnCanvas(
   const destinationTop = Math.max(0, desiredTop);
   const visibleWidth = Math.min(scaledWidthPx - sourceLeft, outputWidthPx - destinationLeft);
   const visibleHeight = Math.min(scaledHeightPx - sourceTop, outputHeightPx - destinationTop);
-  const canvas = sharp({ create: { width: outputWidthPx, height: outputHeightPx, channels: 4, background: "#ffffff" } });
+  const canvas = sharp({ create: { width: outputWidthPx, height: outputHeightPx, channels: 4, background: transparent ? { r: 255, g: 255, b: 255, alpha: 0 } : "#ffffff" } });
   if (visibleWidth <= 0 || visibleHeight <= 0) return canvas.png({ compressionLevel: 9 }).toBuffer();
   const visibleImage = await sharp(image)
     .extract({ left: sourceLeft, top: sourceTop, width: visibleWidth, height: visibleHeight })

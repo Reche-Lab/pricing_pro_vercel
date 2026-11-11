@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import { ArrowLeft, Check, Crop, Paintbrush, X } from "lucide-react";
+import { inspectArtworkCoverage } from "./artwork-coverage";
 import type { RetouchedArtworkFile } from "./ArtworkRetouchEditor";
 import type {
   ArtworkStudioAsset,
@@ -27,6 +28,7 @@ export function ArtworkGuidedStudio({
   onApprove,
   onClose,
   renderProductPreview,
+  renderFramingPreview,
   renderApprovalSuccess,
   proofMode = false,
   allowRetouch = true,
@@ -41,9 +43,10 @@ export function ArtworkGuidedStudio({
     asset: ArtworkStudioAsset,
     crop: ArtworkStudioCrop,
   ) => Promise<ArtworkStudioAsset>;
-  onApprove: (asset: ArtworkStudioAsset) => Promise<void>;
+  onApprove: (asset: ArtworkStudioAsset, confirmation?: { acceptUncovered: boolean }) => Promise<void>;
   onClose: () => void;
   renderProductPreview?: (asset: ArtworkStudioAsset) => React.ReactNode;
+  renderFramingPreview?: (asset: ArtworkStudioAsset, frame: ArtworkStudioCrop) => React.ReactNode;
   renderApprovalSuccess?: (asset: ArtworkStudioAsset) => React.ReactNode;
   proofMode?: boolean;
   allowRetouch?: boolean;
@@ -55,6 +58,7 @@ export function ArtworkGuidedStudio({
   const [accepted, setAccepted] = useState(false);
   const [imageReady, setImageReady] = useState(false);
   const [complete, setComplete] = useState(false);
+  const [coveragePrompt, setCoveragePrompt] = useState<{ uncoveredPercent: number } | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const pendingRetouch = useRef<ArtworkStudioAsset | null>(null);
   useEffect(() => {
@@ -88,6 +92,19 @@ export function ArtworkGuidedStudio({
     setError("");
     setAccepted(false);
     setImageReady(false);
+    setCoveragePrompt(null);
+  }
+  async function approve(acceptUncovered = false) {
+    setBusy(true); setError("");
+    try {
+      if (!proofMode && !acceptUncovered) {
+        const coverage = await inspectArtworkCoverage(asset);
+        if (coverage.warning) { setCoveragePrompt(coverage); return; }
+      }
+      await onApprove(asset, { acceptUncovered });
+      setAsset({ ...asset, approved: true }); setComplete(true); setCoveragePrompt(null);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível aprovar."); }
+    finally { setBusy(false); }
   }
   const navigation = (
     <ol
@@ -206,6 +223,7 @@ export function ArtworkGuidedStudio({
           quoteId=""
           navigation={navigation}
           onRetouch={allowRetouch ? () => navigate("retouch") : undefined}
+          renderPreview={renderFramingPreview ? frame => renderFramingPreview(asset, frame) : undefined}
           onPrepare={async (crop) => {
             const next = await onPrepare(asset, crop);
             setAsset({ ...next, crop, approved: false });
@@ -317,23 +335,7 @@ export function ArtworkGuidedStudio({
                     }
                     className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-emerald-400 px-3 py-2 text-sm font-semibold text-emerald-950 disabled:opacity-40"
                     type="button"
-                    onClick={async () => {
-                      setBusy(true);
-                      setError("");
-                      try {
-                        await onApprove(asset);
-                        setAsset({ ...asset, approved: true });
-                        setComplete(true);
-                      } catch (cause) {
-                        setError(
-                          cause instanceof Error
-                            ? cause.message
-                            : "Não foi possível aprovar.",
-                        );
-                      } finally {
-                        setBusy(false);
-                      }
-                    }}
+                    onClick={() => void approve()}
                   >
                     <Check size={16} /> {proofMode ? busy ? "Publicando..." : "Publicar prova na conta do cliente" : busy ? "Aprovando..." : "Aprovar arte"}
                   </button>
@@ -343,6 +345,12 @@ export function ArtworkGuidedStudio({
           </section>
         </div>
       )}
+      {coveragePrompt ? <div className="fixed inset-0 z-[160] grid place-items-center bg-black/80 p-4 backdrop-blur-sm"><section role="alertdialog" aria-modal="true" aria-labelledby="coverage-warning-title" className="max-h-[90dvh] w-full max-w-lg overflow-auto rounded-lg border border-amber-400/35 bg-zinc-950 p-5 text-zinc-200 shadow-2xl">
+        <h2 id="coverage-warning-title" className="font-semibold text-amber-200">Há áreas sem cobertura na arte</h2>
+        <p className="mt-3 text-sm leading-6">Identificamos aproximadamente {coveragePrompt.uncoveredPercent.toLocaleString("pt-BR")}% da área de corte sem imagem. Essas regiões serão brancas e podem aparecer na frente ou nas bordas e no verso do produto.</p>
+        <p className="mt-2 text-xs leading-5 text-zinc-400">O fundo precisa continuar até o corte. Branco já presente na imagem pode ser intencional e não é tratado como falha nesta verificação. Confira também a simulação.</p>
+        <div className="mt-5 grid gap-2"><button autoFocus type="button" disabled={busy} className="min-h-11 rounded-md bg-cyan-400 px-4 text-sm font-semibold text-cyan-950" onClick={() => navigate(allowRetouch ? "retouch" : "crop")}>{allowRetouch ? "Retocar e completar o fundo" : "Revisar enquadramento"}</button><button type="button" disabled={busy} className="min-h-11 rounded-md border border-zinc-700 px-4 text-sm" onClick={() => void approve(true)}>{busy ? "Aprovando…" : "Conferi e aprovo assim mesmo"}</button><button type="button" disabled={busy} className="min-h-10 text-sm text-zinc-400" onClick={() => setCoveragePrompt(null)}>Voltar à revisão</button></div>
+      </section></div> : null}
     </div>,
     document.body,
   );

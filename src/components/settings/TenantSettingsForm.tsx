@@ -6,6 +6,7 @@ import { ImageUp, KeyRound, Save } from "lucide-react";
 import { PIX_KEY_TYPES, pixKeyTypeLabel } from "@/domain/payments/pix";
 import { fetchCepAddress, formatCep, normalizeCep } from "@/lib/cep";
 import type { TenantShippingProfile } from "@/repositories/tenant-settings";
+import { resolveProductionSettings } from "@/domain/shipping/production-lead-time";
 
 export function TenantSettingsForm({ tenant }: { tenant: TenantShippingProfile }) {
   const router = useRouter();
@@ -29,6 +30,7 @@ export function TenantSettingsForm({ tenant }: { tenant: TenantShippingProfile }
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        productionSettings: { minimumDays: Number(form.get("productionMinimum")), unitsPerDay: Number(form.get("productionCapacity")), holidays: String(form.get("productionHolidays") ?? "").split(/[\s,;]+/).filter(Boolean) },
         name: form.get("name"),
         logoUrl,
         companyPhone: form.get("companyPhone"),
@@ -96,6 +98,17 @@ export function TenantSettingsForm({ tenant }: { tenant: TenantShippingProfile }
         <h2 className="font-semibold">Dados do tenant e remetente</h2>
       </div>
       <div className="grid gap-5">
+        <section className="border-b border-zinc-800 pb-5">
+          <h3 className="text-sm font-semibold text-zinc-200">Prazo de produção</h3>
+          <p className="mt-1 text-xs leading-5 text-zinc-400">Vale para loja, precificador e orçamentos. O prazo é o maior entre o mínimo e a quantidade total dividida pela capacidade diária, arredondada para cima. Começa após pagamento e aprovação das artes.</p>
+          <div className="mt-3 grid items-start gap-4 sm:grid-cols-2">
+            <Input name="productionMinimum" label="Mínimo de dias úteis" type="number" required defaultValue={String(resolveProductionSettings(tenant.production_settings).minimumDays)} />
+            <Input name="productionCapacity" label="Unidades produzidas por dia útil" type="number" required defaultValue={String(resolveProductionSettings(tenant.production_settings).unitsPerDay)} />
+          </div>
+          <label className="mt-3 block text-sm text-zinc-300">Datas sem produção (opcional)
+            <textarea name="productionHolidays" className="mt-1 min-h-20 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" placeholder="2026-12-25, 2027-01-01" defaultValue={resolveProductionSettings(tenant.production_settings).holidays.join(", ")} />
+          </label><p className="mt-1 text-xs text-zinc-500">Formato AAAA-MM-DD, separado por vírgulas. Sábados e domingos já são excluídos. Inclua aqui os feriados e recessos da empresa.</p>
+        </section>
         <section className="grid gap-4 md:grid-cols-2">
           <Input defaultValue={tenant.name} label="Nome da empresa" name="name" required />
           <Input defaultValue={tenant.company_document} label="CPF/CNPJ" name="companyDocument" />

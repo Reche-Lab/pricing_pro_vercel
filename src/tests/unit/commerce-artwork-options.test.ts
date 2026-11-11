@@ -4,7 +4,7 @@ describe("product mockup mapping", () => {
   it("keeps the face center centered and maps its edge to the visible contour", () => {
     const m = defaultMockup();
     expect(mockupSourcePoint(0, 0, "front", 0.8, m)).toEqual({ x: 0.5, y: 0.5 });
-    expect(mockupSourcePoint(m.frontFaceRatio, 0, "front", 0.8, m)?.x).toBeCloseTo(0.9);
+    expect(mockupSourcePoint(1, 0, "front", 0.8, m)?.x).toBeCloseTo(0.9);
   });
   it("continues the folded band on the back and mirrors its orientation", () => {
     const m = defaultMockup();

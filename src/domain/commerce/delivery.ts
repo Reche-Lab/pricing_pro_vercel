@@ -5,7 +5,7 @@ import { commerceSelectionError, CommerceError, type PriceProduct } from "./comm
 export type CommerceDeliveryResult = {
   postalCode: string;
   estimated: true;
-  options: { id: string; name: string; priceCents: number; description?: string }[];
+  options: { id: string; name: string; priceCents: number; description?: string; transitDays?: number | null }[];
   previewCarrier?: boolean;
   warnings?: string[];
 };
@@ -17,7 +17,7 @@ export const productDeliverySchema = z.object({
 }).strict();
 
 export function commerceDeliveryEstimate(
-  settings: Pick<StoreSettings, "deliveryEnabled" | "deliveryCents" | "deliveryDescription" | "pickupEnabled" | "pickupAddress">,
+  settings: Pick<StoreSettings, "deliveryEnabled" | "deliveryCents" | "deliveryDescription" | "pickupEnabled" | "pickupAddress" | "deliveryTransitDays">,
   postalCode: string, lines: CartLine[], products: PriceProduct[],
 ) {
   // Validate published availability and quantities without creating or updating a buyer cart.
@@ -29,8 +29,8 @@ export function commerceDeliveryEstimate(
   if (!product) throw new CommerceError("Produto indisponível. Atualize a página.", 409);
   const selectionError = commerceSelectionError(lines, product);
   if (selectionError) throw new CommerceError(selectionError);
-  const options: { id: string; name: string; priceCents: number; description?: string }[] = [];
-  if (settings.deliveryEnabled) options.push({ id: "delivery", name: settings.deliveryDescription || "Entrega", priceCents: settings.deliveryCents });
+  const options: CommerceDeliveryResult["options"] = [];
+  if (settings.deliveryEnabled) options.push({ id: "delivery", name: settings.deliveryDescription || "Entrega", priceCents: settings.deliveryCents, ...(settings.deliveryTransitDays !== undefined ? { transitDays: settings.deliveryTransitDays } : {}) });
   if (settings.pickupEnabled) options.push({ id: "pickup", name: "Retirada na loja", priceCents: 0, description: settings.pickupAddress });
   return { postalCode: postalCode.replace("-", ""), estimated: true as const, options };
 }

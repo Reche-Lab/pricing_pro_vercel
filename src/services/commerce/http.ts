@@ -130,6 +130,7 @@ export function commerceFailure(error: unknown, operation: string) {
     {
       ok: false,
       debugId,
+      ...(error instanceof CommerceError && error.details ? { details: error.details } : {}),
       error:
         error instanceof CommerceError
           ? error.message

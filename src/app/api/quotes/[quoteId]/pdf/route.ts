@@ -5,6 +5,8 @@ import { getQuoteDetail } from "@/repositories/quotes";
 import { getTenantShippingProfile } from "@/repositories/tenant-settings";
 import { getSessionProfile } from "@/repositories/users";
 import { generateQuotePdf } from "@/services/pdf/quote-pdf";
+import { listQuoteShipments } from "@/repositories/shipments";
+import { deliveryEstimate, transportDaysFromQuote } from "@/domain/shipping/production-lead-time";
 
 const artworkVariantSchema = z.enum(["original", "edited", "cropped"]);
 
@@ -22,10 +24,11 @@ export async function GET(request: Request, context: { params: Promise<{ quoteId
     return NextResponse.json({ ok: false, error: "Seleção de arte inválida." }, { status: 400 });
   }
 
-  const [profile, detail, tenant] = await Promise.all([
+  const [profile, detail, tenant, shipments] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
     getQuoteDetail(session.userId, session.tenantId, quoteId),
-    getTenantShippingProfile(session.userId, session.tenantId)
+    getTenantShippingProfile(session.userId, session.tenantId),
+    listQuoteShipments(session.userId, session.tenantId, quoteId)
   ]);
   if (!profile || !detail) {
     return NextResponse.json({ ok: false, error: "Quote not found." }, { status: 404 });
@@ -36,7 +39,8 @@ export async function GET(request: Request, context: { params: Promise<{ quoteId
     tenant,
     quote: detail.quote,
     items: detail.items,
-    artworkVariant: artworkVariant.data
+    artworkVariant: artworkVariant.data,
+    productionEstimate: detail.items.length ? deliveryEstimate(detail.items.reduce((sum, item) => sum + item.quantity, 0), detail.quote.delivery_method === "pickup" ? 0 : transportDaysFromQuote(shipments[0]?.selected_quote), tenant?.production_settings) : undefined
   });
 
   return new Response(Buffer.from(pdf), {

@@ -26,6 +26,7 @@ import { getPool, withTenantContext } from "@/lib/db/client";
 import { decryptTenantSecret, encryptTenantSecret } from "@/lib/crypto/secrets";
 import type { QuotePaymentTermInput } from "@/repositories/olist-payment-options";
 import type pg from "pg";
+import type { ProductionSettings } from "@/domain/shipping/production-lead-time";
 
 export type QuoteRow = {
   id: string;
@@ -267,6 +268,7 @@ export type QuoteArtworkFileInput = {
 };
 
 export type PublicQuoteTenant = {
+  production_settings?: ProductionSettings;
   name: string;
   logo_url: string | null;
   company_document: string | null;
@@ -689,7 +691,8 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           t.logo_url,
           t.company_document,
           t.company_phone,
-          t.company_site
+          t.company_site,
+          t.production_settings
         from quotes q
         join tenants t on t.id = q.tenant_id
         left join customers c on c.id = q.customer_id and c.tenant_id = q.tenant_id
@@ -809,7 +812,8 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
         logo_url: quote.logo_url,
         company_document: quote.company_document,
         company_phone: quote.company_phone,
-        company_site: quote.company_site
+        company_site: quote.company_site,
+        production_settings: quote.production_settings
       }
     };
   } finally {

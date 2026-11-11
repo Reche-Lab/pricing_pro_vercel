@@ -20,6 +20,8 @@ import {
 import type { ShipmentRow } from "@/repositories/shipments";
 import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 import { melhorEnvioAwareFetch } from "@/lib/melhor-envio/browser-request";
+import { DeliveryTimeline } from "@/components/shipping/DeliveryTimeline";
+import type { ProductionSettings } from "@/domain/shipping/production-lead-time";
 
 type QuoteOption = {
   code: string;
@@ -48,11 +50,15 @@ const OPERATIONS: Array<{
 ];
 
 export function MelhorEnvioQuoteLabelActions({
+  productionSettings,
+  quantity = 1,
   quoteId,
   quoteShippingTotal,
   shipments,
   pickupAction
 }: {
+  productionSettings?: ProductionSettings;
+  quantity?: number;
   quoteId: string;
   quoteShippingTotal: number;
   shipments: ShipmentRow[];
@@ -302,6 +308,7 @@ export function MelhorEnvioQuoteLabelActions({
                 ))}
               </select>
             </label>
+            <DeliveryTimeline quantity={quantity} settings={productionSettings} transportDays={quoteOptions.find(option => option.code === selectedServiceCode)?.deliveryTime}/>
             <button
               className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded-md bg-cyan-400 px-3 py-2 text-center text-sm font-semibold text-zinc-950 hover:bg-cyan-300 disabled:opacity-60 sm:w-fit"
               disabled={loading === "save-service"}

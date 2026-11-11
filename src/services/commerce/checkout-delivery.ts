@@ -19,8 +19,8 @@ export async function checkoutDelivery(request: Request, slug: string) {
     // Validate every product using the same rules as the product inquiry, without assuming a single-product cart.
     for (const id of new Set(session.cart.map(line => line.productId)))
       commerceDeliveryEstimate(store.settings, input.postalCode, session.cart.filter(line => line.productId === id), products);
-    let options: { id: string; name: string; priceCents: number; description?: string; quoteId?: string }[] = [];
-    if (store.settings.deliveryEnabled) options.push({ id: "delivery", name: "Entrega", priceCents: store.settings.deliveryCents, description: store.settings.deliveryDescription });
+    let options: { id: string; name: string; priceCents: number; description?: string; quoteId?: string; transitDays?: number | null }[] = [];
+    if (store.settings.deliveryEnabled) options.push({ id: "delivery", name: "Entrega", priceCents: store.settings.deliveryCents, description: store.settings.deliveryDescription, transitDays: store.settings.deliveryTransitDays });
     if (store.settings.pickupEnabled) options.push({ id: "pickup", name: "Retirada na loja", priceCents: 0, description: store.settings.pickupAddress });
     const warnings: string[] = [];
     if (store.settings.carrierEnabled) {

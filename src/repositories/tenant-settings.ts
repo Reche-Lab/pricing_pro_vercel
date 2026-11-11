@@ -1,7 +1,9 @@
 import { withTenantContext } from "@/lib/db/client";
 import type { PixKeyType } from "@/domain/payments/pix";
+import type { ProductionSettings } from "@/domain/shipping/production-lead-time";
 
 export type TenantShippingProfile = {
+  production_settings?: ProductionSettings;
   id: string;
   name: string;
   slug: string;
@@ -22,6 +24,7 @@ export type TenantShippingProfile = {
 };
 
 export type UpdateTenantShippingProfileInput = {
+  productionSettings?: ProductionSettings;
   name?: string | null;
   logoUrl?: string | null;
   companyPhone?: string | null;
@@ -63,7 +66,8 @@ export async function getTenantShippingProfile(
           state,
           pix_key_type,
           pix_key,
-          pix_beneficiary_name
+          pix_beneficiary_name,
+          production_settings
         from tenants
         where id = $1
         limit 1
@@ -99,6 +103,7 @@ export async function updateTenantShippingProfile(
             pix_key_type = $14,
             pix_key = $15,
             pix_beneficiary_name = $16,
+            production_settings = coalesce($17::jsonb, production_settings),
             updated_at = now()
         where id = $1
         returning
@@ -118,7 +123,8 @@ export async function updateTenantShippingProfile(
           state,
           pix_key_type,
           pix_key,
-          pix_beneficiary_name
+          pix_beneficiary_name,
+          production_settings
       `,
       [
         tenantId,
@@ -136,7 +142,8 @@ export async function updateTenantShippingProfile(
         clean(input.state)?.toUpperCase() ?? null,
         input.pixKeyType ?? null,
         clean(input.pixKey),
-        clean(input.pixBeneficiaryName)
+        clean(input.pixBeneficiaryName),
+        input.productionSettings ? JSON.stringify(input.productionSettings) : null
       ]
     );
 

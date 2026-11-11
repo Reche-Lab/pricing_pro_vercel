@@ -1172,6 +1172,7 @@
   .brand {
     font-size: 19px;
     gap: 8px;
+    overflow-wrap: normal;
   }
   .brand img {
     width: 34px;
@@ -1183,6 +1184,10 @@
   .navigation .iconButton {
     width: 36px;
     height: 36px;
+  }
+  .navigation > a {
+    min-width: 28px;
+    padding-inline: 2px;
   }
   .wrap,
   .homeContent {

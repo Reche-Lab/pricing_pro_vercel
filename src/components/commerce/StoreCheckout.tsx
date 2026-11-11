@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, Copy, Loader2, MapPin, Search, Truck } from "lucide-react";
+import { Check, Copy, Loader2, MapPin, Search, Truck, Save, RefreshCw } from "lucide-react";
 import type { cartView } from "@/repositories/commerce";
 import { addressSchema, checkoutSchema, type StoreSettings } from "@/domain/commerce/schemas";
 import { formatCheckoutDocument, formatCheckoutPhone } from "@/domain/commerce/checkout";
@@ -9,10 +9,12 @@ import { fetchCepAddress, formatCep, normalizeCep } from "@/lib/cep";
 import { StoreOrderSummary } from "./StoreOrderSummary";
 import { storeMoney, storeRequest } from "./store-http";
 import styles from "./store.module.css";
+import { emptyContact, type ContactDraft } from "@/domain/commerce/checkout-draft";
+import { useCheckoutDraft } from "./use-checkout-draft";
+import { DeliveryTimeline } from "@/components/shipping/DeliveryTimeline";
+import { buyerQuoteSchema } from "@/domain/commerce/buyer-quote";
 
 type Cart = Awaited<ReturnType<typeof cartView>>;
-type ContactDraft = { name: string; email: string; phone: string; document: string; postalCode: string; street: string; number: string; complement: string; district: string; city: string; state: string; attention: string };
-const emptyContact = (): ContactDraft => ({ name: "", email: "", phone: "", document: "", postalCode: "", street: "", number: "", complement: "", district: "", city: "", state: "", attention: "" });
 const previewBilling = { ...emptyContact(), name: "Cliente de teste", email: "cliente@example.test", phone: "11999990000", document: "52998224725", postalCode: "01001000", street: "Praça de teste", number: "100", district: "Centro", city: "São Paulo", state: "SP" };
 function postalContact(d: ContactDraft) {
   const { name, phone, document, postalCode, street, number, complement, district, city, state } = d;
@@ -65,7 +67,7 @@ function ContactFields({ value, onChange, billing, errors, onBusyChange }: {
   const documentType = value.document.replace(/\D/g, "").length;
   return <div className="grid min-w-0 gap-3 sm:grid-cols-2">
     {field("name", billing ? "Nome completo / Razão social" : "Nome do destinatário", true, "name")}
-    <div className="min-w-0">{field("document", billing ? "CPF/CNPJ para faturamento" : "CPF/CNPJ do destinatário (opcional)", billing)}
+    <div className="min-w-0">{field("document", billing ? "CPF/CNPJ para faturamento" : "CPF/CNPJ do destinatário", true)}
       {billing && [11, 14].includes(documentType) ? <small className={styles.muted}>{documentType === 14 ? "Pessoa jurídica" : "Pessoa física"}</small> : null}
     </div>
     {billing ? field("email", "E-mail para faturamento", true, "email") : null}
@@ -96,18 +98,30 @@ function ContactFields({ value, onChange, billing, errors, onBusyChange }: {
   </div>;
 }
 
-export function StoreCheckout({ cart, settings, base, disabled, onSubmit, preview = false, api }: {
+export function StoreCheckout({ cart, settings, base, disabled, onSubmit, preview = false, api, artworkIssues = [], intent = "purchase" }: {
   cart: Cart; settings: StoreSettings; base: string; disabled: boolean; onSubmit: (input: unknown) => Promise<void>; preview?: boolean; api?: string;
+  artworkIssues?: { lineId: string; name: string; artworkName: string; reason: string }[];
+  intent?: "purchase" | "quote";
 }) {
-  const [delivery, setDelivery] = useState(settings.pickupEnabled ? "pickup" : "delivery");
+  const persistence = useCheckoutDraft(api, preview, { billing: { ...emptyContact(), name: cart.customer?.name ?? "", email: cart.customer?.email ?? "" }, address: emptyContact(), same: true, delivery: settings.pickupEnabled ? "pickup" : "delivery" });
+  const { billing, address, same, delivery } = persistence.draft;
+  const setBilling = (value: ContactDraft) => persistence.setDraft(current => ({ ...current, billing: value }));
+  const setAddress = (value: ContactDraft) => persistence.setDraft(current => ({ ...current, address: value }));
+  const setSame = (value: boolean) => persistence.setDraft(current => ({ ...current, same: value }));
+  const setDelivery = (value: "pickup" | "delivery") => persistence.setDraft(current => ({ ...current, delivery: value }));
   const [provider, setProvider] = useState(cart.payments.mp_enabled ? "mercado_pago" : "manual");
-  const [billing, setBilling] = useState<ContactDraft>(() => ({ ...emptyContact(), name: cart.customer?.name ?? "", email: cart.customer?.email ?? "" }));
-  const [address, setAddress] = useState<ContactDraft>(emptyContact);
-  const [same, setSame] = useState(true), [customEdited, setCustomEdited] = useState(false), [accepted, setAccepted] = useState(false);
+  const [customEdited, setCustomEdited] = useState(false), [accepted, setAccepted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({}), [error, setError] = useState("");
+  const [pendingLines, setPendingLines] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const submitLock = useRef(false);
+  const pendingRef = useRef<HTMLDivElement>(null);
   const [billingCepBusy, setBillingCepBusy] = useState(false), [deliveryCepBusy, setDeliveryCepBusy] = useState(false);
   const form = useRef<HTMLFormElement>(null);
-  type ShippingOption = { id: string; name: string; priceCents: number; description?: string; quoteId?: string };
+  const [includeQuoteShipping, setIncludeQuoteShipping] = useState(false);
+  const [requestId] = useState(() => crypto.randomUUID());
+  const quoting = intent === "quote";
+  type ShippingOption = { id: string; name: string; priceCents: number; description?: string; quoteId?: string; transitDays?: number | null };
   const [freight, setFreight] = useState<{ key: string; expiresAt: number; options: ShippingOption[] } | null>(null);
   const [serviceId, setServiceId] = useState("delivery"), [shippingBusy, setShippingBusy] = useState(false), [shippingError, setShippingError] = useState("");
   const postalCode = (same ? billing.postalCode : address.postalCode);
@@ -118,8 +132,8 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
   useEffect(() => () => { quoteGeneration.current++; }, []);
   const selectedFreight = freight?.key === freightKey && freight.expiresAt > Date.now() ? freight.options.find(option => option.id === serviceId) : undefined;
   const requiresFreight = delivery === "delivery" && settings.carrierEnabled && serviceId !== "delivery";
-  const missingFreight = delivery === "delivery" && !selectedFreight && (!settings.deliveryEnabled || requiresFreight);
-  const shipping = delivery === "pickup" ? 0 : selectedFreight?.priceCents ?? (settings.deliveryEnabled && !requiresFreight ? settings.deliveryCents : 0);
+  const missingFreight = (!quoting || includeQuoteShipping) && delivery === "delivery" && !selectedFreight && (!settings.deliveryEnabled || requiresFreight);
+  const shipping = (quoting && !includeQuoteShipping) || delivery === "pickup" ? 0 : selectedFreight?.priceCents ?? (settings.deliveryEnabled && !requiresFreight ? settings.deliveryCents : 0);
   async function quoteShipping() {
     if (!api || shippingBusy || postalCode.length !== 8) return;
     const key = freightKey, generation = ++quoteGeneration.current;
@@ -135,24 +149,52 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
     finally { if (generation === quoteGeneration.current) setShippingBusy(false); }
   }
   function changeDeliveryAddress(next: ContactDraft) { setAddress(next); setCustomEdited(true); }
-  return <form ref={form} className={styles.columns} noValidate onSubmit={e => {
+  return <form ref={form} className={styles.columns} noValidate onSubmit={async e => {
     e.preventDefault(); setError("");
+    if (disabled || submitLock.current || !persistence.ready) return;
     if (missingFreight || (selectedFreight && freight && freight.expiresAt <= Date.now())) { setError("Calcule e selecione o frete para este endereço antes de confirmar."); return; }
-    const parsed = checkoutSchema.safeParse({ revision: cart.revision, expectedTotalCents: (cart.calculation?.totalCents ?? 0) + shipping,
-      billing: { ...postalContact(billing), email: billing.email }, delivery, deliveryAddressSameAsBilling: same,
-      ...(delivery === "delivery" && selectedFreight?.quoteId ? { shippingQuoteId: selectedFreight.quoteId } : {}),
-      address: delivery === "delivery" && !same ? { ...postalContact(address), attention: address.attention } : null,
-      provider, acceptedTerms: accepted, paymentEnvironment: cart.payments.payment_environment ?? "production",
-    });
+    const common = { revision: cart.revision, expectedTotalCents: (cart.calculation?.totalCents ?? 0) + shipping,
+      billing: { ...postalContact(billing), email: billing.email }, delivery, deliveryAddressSameAsBilling: quoting && delivery === "pickup" ? true : same,
+      ...(delivery === "delivery" && selectedFreight?.quoteId && (!quoting || includeQuoteShipping) ? { shippingQuoteId: selectedFreight.quoteId } : {}),
+      address: !same && delivery !== "pickup" && (quoting || delivery === "delivery") ? { ...postalContact(address), document: address.document || billing.document, attention: address.attention } : null };
+    const parsed = quoting ? buyerQuoteSchema.safeParse({ ...common, requestId, delivery: includeQuoteShipping ? delivery : "not_included" })
+      : checkoutSchema.safeParse({ ...common, provider, acceptedTerms: accepted, paymentEnvironment: cart.payments.payment_environment ?? "production" });
     if (!parsed.success) {
       setErrors(Object.fromEntries(parsed.error.issues.map(issue => [issue.path.join("."), issue.message])));
       setError("Confira os campos destacados antes de confirmar o pedido.");
       requestAnimationFrame(() => form.current?.querySelector<HTMLElement>("[aria-invalid=true]")?.focus());
       return;
     }
-    setErrors({}); void onSubmit(parsed.data);
+    setErrors({});
+    submitLock.current = true; setSubmitting(true);
+    try {
+      if (!preview) await persistence.flush();
+      if (!quoting && artworkIssues.length) {
+        setPendingLines(artworkIssues.map(issue => issue.lineId));
+        requestAnimationFrame(() => { pendingRef.current?.scrollIntoView?.({ behavior: "smooth", block: "center" }); pendingRef.current?.focus(); });
+        return;
+      }
+      await onSubmit(parsed.data);
+    }
+    catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível confirmar.");
+      if (cause && typeof cause === "object" && "details" in cause) {
+        const details = cause.details as { lineIds?: string[] } | undefined;
+        if (details?.lineIds) setPendingLines(details.lineIds);
+      }
+      requestAnimationFrame(() => form.current?.querySelector<HTMLElement>('[role="alert"]')?.scrollIntoView?.({ behavior: "smooth", block: "center" }));
+    }
+    finally { submitLock.current = false; setSubmitting(false); }
   }}>
     <div className={styles.form}>
+      {pendingLines.length ? <div ref={pendingRef} tabIndex={-1} role="alert" className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 p-4 outline-none">
+        <strong>Vamos concluir suas artes?</strong><p className="mt-1 text-sm">Falta enviar ou aprovar a arte dos itens abaixo. Seus dados de faturamento e entrega continuam salvos.</p>
+        {pendingLines.map(id => { const issue = artworkIssues.find(issue => issue.lineId === id); return <Link key={id} className="mt-2 block text-sm font-semibold underline" href={`${base}/carrinho?item=${encodeURIComponent(id)}#item-${id}`} onClick={event => { if (persistence.status.startsWith("Salvando")) event.preventDefault(); }}>{issue ? `${issue.name} · ${issue.artworkName}: ${issue.reason}` : "Revisar arte deste item"}</Link>; })}
+      </div> : null}
+      <p role="status" className={styles.muted}>{persistence.status || (persistence.ready ? "Seus dados são salvos apenas para esta conta nesta loja." : "Recuperando seus dados…")}</p>
+      {persistence.status.includes("Não foi possível") || persistence.status.includes("outra aba") ? <button type="button" className={`${styles.secondary} mb-3`} onClick={() => { if (!persistence.ready || persistence.status.includes("outra aba")) window.location.reload(); else void persistence.flush().catch(() => undefined); }}>{!persistence.ready ? <RefreshCw size={16}/> : <Save size={16}/>} {!persistence.ready || persistence.status.includes("outra aba") ? "Recarregar dados salvos" : "Tentar salvar novamente"}</button> : null}
+      {quoting ? <div className="mb-5 border-l-2 border-current/25 pl-3"><strong>Seu orçamento, sem compromisso de compra</strong><p className="mt-1 text-sm">Você não precisa enviar nem aprovar artes agora. O PDF ficará salvo em Meus orçamentos.</p><label className="mt-3 !flex items-center gap-2"><input type="checkbox" checked={includeQuoteShipping} onChange={event => setIncludeQuoteShipping(event.target.checked)}/>Incluir frete ou retirada neste orçamento</label></div> : null}
+      <fieldset disabled={!persistence.ready || submitting || disabled} className="min-w-0 border-0 p-0">
       {preview ? <button type="button" className={`${styles.secondary} justify-self-start`} onClick={() => { setBilling({ ...previewBilling }); setErrors({}); setError(""); }}>Preencher dados de teste</button> : null}
       <section className="min-w-0 space-y-4" aria-labelledby="checkout-billing"><h2 id="checkout-billing" className="text-lg font-semibold">1. Dados para faturamento</h2>
         <ContactFields billing value={billing} onChange={setBilling} errors={errors} onBusyChange={setBillingCepBusy}/>
@@ -163,40 +205,42 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
         {delivery === "delivery" ? <>
           <div className="grid min-w-0 gap-2 sm:grid-cols-2" role="group" aria-label="Endereço e destinatário da entrega">
             <button type="button" aria-pressed={same} className={`${same ? styles.primary : styles.secondary} min-h-11 !whitespace-normal !text-left`} onClick={() => { setDeliveryCepBusy(false); setSame(true); }}><Copy size={18} className="shrink-0"/>Usar dados do faturamento</button>
-            <button type="button" aria-pressed={!same} className={`${!same ? styles.primary : styles.secondary} min-h-11 !whitespace-normal !text-left`} onClick={() => { if (!customEdited) setAddress({ ...billing, email: "", attention: "" }); setSame(false); }}><MapPin size={18} className="shrink-0"/>Outro destinatário ou endereço</button>
+            <button type="button" aria-pressed={!same} className={`${!same ? styles.primary : styles.secondary} min-h-11 !whitespace-normal !text-left`} onClick={() => { if (!customEdited && !Object.values(address).some(Boolean)) setAddress({ ...billing, email: "", attention: "" }); setSame(false); }}><MapPin size={18} className="shrink-0"/>Outro destinatário ou endereço</button>
           </div>
           {same ? <address className="border-l-2 border-current/20 pl-3 text-sm not-italic leading-6" aria-label="Entrega com os dados do faturamento"><strong>{billing.name || "Destinatário do faturamento"}</strong><br/>{billing.street ? `${billing.street}${billing.number ? `, ${billing.number}` : ""}${billing.complement ? ` · ${billing.complement}` : ""}` : "Endereço de faturamento"}<br/>{[billing.district, billing.city, billing.state, formatCep(billing.postalCode)].filter(Boolean).join(" · ")}</address>
-            : <ContactFields billing={false} value={address} onChange={changeDeliveryAddress} errors={errors} onBusyChange={setDeliveryCepBusy}/>}
+            : <><ContactFields billing={false} value={{ ...address, document: address.document || billing.document }} onChange={changeDeliveryAddress} errors={errors} onBusyChange={setDeliveryCepBusy}/><p className={styles.muted}>Se o documento do destinatário ficar vazio, usaremos o CPF/CNPJ do faturamento. Altere-o se a entrega for para outra pessoa.</p></>}
           {errors.address ? <p role="alert" className="text-sm text-red-700">{errors.address}</p> : null}
           {settings.carrierEnabled ? <div className="min-w-0 space-y-3 border-t border-current/15 pt-4" aria-label="Frete do carrinho">
-            <button type="button" className={styles.secondary} disabled={disabled || shippingBusy || postalCode.length !== 8 || !api} onClick={() => void quoteShipping()}>
+            <button type="button" className={styles.primary} disabled={disabled || shippingBusy || postalCode.length !== 8 || !api} onClick={() => void quoteShipping()}>
               {shippingBusy ? <Loader2 size={18} className="animate-spin"/> : <Truck size={18}/>} {shippingBusy ? "Calculando…" : "Calcular frete do carrinho"}
             </button>
             {postalCode.length !== 8 ? <p className={styles.muted}>Preencha o CEP da entrega para consultar PAC, SEDEX e os demais serviços habilitados.</p> : null}
             {shippingError ? <p role="alert" className="text-sm text-amber-700">{shippingError}</p> : null}
             {settings.deliveryEnabled ? <label className="!flex items-start gap-3"><input type="radio" name="shipping-service" checked={serviceId === "delivery"} onChange={() => setServiceId("delivery")}/><span>{settings.deliveryDescription} · {storeMoney(settings.deliveryCents)}</span></label> : null}
-            {freight?.key === freightKey ? freight.options.filter(option => option.id.startsWith("melhor_envio:")).map(option => <label key={option.id} className="!flex items-start gap-3"><input type="radio" name="shipping-service" checked={serviceId === option.id} onChange={() => setServiceId(option.id)}/><span>{option.name} · {storeMoney(option.priceCents)}<small className={`${styles.muted} block`}>{option.description}</small></span></label>) : null}
+            {freight?.key === freightKey ? freight.options.filter(option => option.id.startsWith("melhor_envio:")).map(option => <div key={option.id}><label className="!flex items-start gap-3"><input type="radio" name="shipping-service" checked={serviceId === option.id} onChange={() => setServiceId(option.id)}/><span>{option.name} · {storeMoney(option.priceCents)}<small className={`${styles.muted} block`}>{option.description}</small></span></label><DeliveryTimeline quantity={cart.lines.reduce((sum, line) => sum + line.quantity, 0)} transportDays={option.transitDays} settings={settings.production}/></div>) : null}
             {freight?.key === freightKey ? <p className={styles.muted}>Cotação válida por 15 minutos. Mudanças no carrinho ou CEP exigem novo cálculo.</p> : null}
           </div> : null}
         </> : null}
       </section>
-      <section className="mt-5 min-w-0 space-y-4 border-t border-current/15 pt-5" aria-labelledby="checkout-payment"><h2 id="checkout-payment" className="text-lg font-semibold">3. Forma de pagamento</h2>
+      </fieldset>
+      {!quoting ? <section className="mt-5 min-w-0 space-y-4 border-t border-current/15 pt-5" aria-labelledby="checkout-payment"><h2 id="checkout-payment" className="text-lg font-semibold">3. Forma de pagamento</h2>
         {preview ? <p className="text-sm">Pagamento simulado · Nenhum valor será cobrado.</p> : <>
           {cart.payments.mp_enabled ? <label className="!flex items-center gap-3"><input type="radio" name="provider" checked={provider === "mercado_pago"} onChange={() => setProvider("mercado_pago")}/>Mercado Pago · Métodos disponíveis no checkout seguro</label> : null}
           {cart.payments.manual_enabled ? <label className="!flex items-center gap-3"><input type="radio" name="provider" checked={provider === "manual"} onChange={() => setProvider("manual")}/>Pagamento combinado com a loja</label> : null}
           {!cart.payments.mp_enabled && !cart.payments.manual_enabled ? <p className="text-sm text-red-700">A loja ainda não habilitou formas de pagamento.</p> : null}
           {provider === "manual" ? <p className="whitespace-pre-wrap text-sm text-zinc-500">{cart.payments.manual_instructions}</p> : null}
         </>}
-      </section>
+      </section> : null}
     </div>
-    <aside className={styles.summary}><h2 className="mb-4 text-lg font-semibold">4. Revise seu pedido</h2>
+    <aside className={styles.summary}><h2 className="mb-4 text-lg font-semibold">{quoting ? "Resumo do orçamento" : "4. Revise seu pedido"}</h2>
       {cart.calculation?.items.map(item => <div className="mb-3 flex justify-between gap-3 text-sm" key={item.id}><span>{item.quantity} × {item.name}<small className="block text-zinc-500">{item.artworkName}</small></span><span>{storeMoney(item.totalCents)}</span></div>)}
-      <StoreOrderSummary subtotal={cart.calculation?.totalCents ?? 0} shipping={shipping} shippingPending={Boolean(missingFreight)} artworkDiscountCents={cart.calculation?.artworkDiscountCents}/>
+      <StoreOrderSummary subtotal={cart.calculation?.totalCents ?? 0} shipping={shipping} shippingPending={Boolean(missingFreight)} shippingExcluded={quoting && !includeQuoteShipping} artworkDiscountCents={cart.calculation?.artworkDiscountCents}/>
+      <DeliveryTimeline quantity={cart.lines.reduce((sum, line) => sum + line.quantity, 0)} settings={settings.production} transportDays={quoting && !includeQuoteShipping ? null : selectedFreight?.transitDays ?? (serviceId === "delivery" ? settings.deliveryTransitDays : null)} pickup={(!quoting || includeQuoteShipping) && delivery === "pickup"}/>
       {missingFreight ? <p role="status" className="mt-2 text-sm text-amber-700">Frete a calcular. O total acima ainda não inclui a entrega.</p> : null}
-      <label className="my-5 flex items-start gap-3"><input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} required/><span>Li e aceito as <Link target="_blank" href={`${base}/condicoes`} className="underline">condições de compra</Link>.</span></label>
+      {quoting ? <p className="my-5 text-sm">{includeQuoteShipping ? "Frete incluído conforme sua seleção." : "Frete não incluído no total."} Preços e frete serão conferidos novamente antes da compra.</p> : <label className="my-5 flex items-start gap-3"><input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} required/><span>Li e aceito as <Link target="_blank" href={`${base}/condicoes`} className="underline">condições de compra</Link>.</span></label>}
       {error ? <p role="alert" className="mb-3 text-sm text-red-700">{error}</p> : null}
-      <button className={`${styles.primary} w-full`} disabled={disabled || shippingBusy || missingFreight || billingCepBusy || deliveryCepBusy || !accepted || !cart.calculation || (!cart.payments.mp_enabled && !cart.payments.manual_enabled)}><Check size={17}/>{preview ? "Concluir simulação" : "Confirmar pedido"}</button>
-      <p className="mt-3 text-sm text-zinc-500">{preview ? "Prévia privada. Nenhum pedido real será criado." : cart.payments.payment_environment === "test" ? "Pedido de teste: utilize apenas os dados e cartões de teste do Mercado Pago. Não haverá liberação de produção ou envio." : provider === "mercado_pago" ? "Após confirmar, escolha como pagar no detalhe do pedido." : "A produção começa após a confirmação do pagamento pela loja."}</p>
+      <button className={`${styles.primary} w-full`} disabled={!persistence.ready || submitting || disabled || shippingBusy || missingFreight || billingCepBusy || deliveryCepBusy || (!quoting && !accepted) || !cart.calculation || (!quoting && !cart.payments.mp_enabled && !cart.payments.manual_enabled)}>{submitting ? <Loader2 className="animate-spin" size={17}/> : <Check size={17}/>} {submitting ? "Conferindo e salvando…" : quoting ? "Salvar orçamento e acessar PDF" : preview ? "Concluir simulação" : "Confirmar pedido"}</button>
+      <p className="mt-3 text-sm text-zinc-500">{quoting ? "Nenhum pagamento ou pedido será criado. O orçamento fica disponível somente na sua conta." : preview ? "Prévia privada. Nenhum pedido real será criado." : cart.payments.payment_environment === "test" ? "Pedido de teste: utilize apenas os dados e cartões de teste do Mercado Pago. Não haverá liberação de produção ou envio." : provider === "mercado_pago" ? "Após confirmar, escolha como pagar no detalhe do pedido." : "A produção começa após pagamento e aprovação das artes."}</p>
     </aside>
   </form>;
 }

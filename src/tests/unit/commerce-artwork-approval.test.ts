@@ -5,7 +5,7 @@ import { CommerceError } from "@/domain/commerce/commerce";
 import { calculateCommerceCart } from "@/repositories/commerce";
 
 const fixture = vi.hoisted(() => ({
-  query: vi.fn(), art: { id: "df970f73-c33b-43ca-8779-f63b7bdbef3b", product_id: "8c82b392-f45e-4c87-82d1-c0c3eea5da14", prepared_path: "prepared.png", approved_at: null as Date | null, crop: { geometryHash: "current" } },
+  query: vi.fn(), art: { id: "df970f73-c33b-43ca-8779-f63b7bdbef3b", product_id: "8c82b392-f45e-4c87-82d1-c0c3eea5da14", prepared_path: "prepared.png", approved_at: null as Date | null, crop: { geometryHash: "current", coverage: undefined as { warning: boolean; uncoveredPercent: number } | undefined } },
 }));
 vi.mock("@/lib/db/client", () => ({ getPool: () => ({ query: fixture.query }) }));
 vi.mock("@/repositories/commerce", () => ({
@@ -25,6 +25,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.APP_URL = "http://localhost:3000";
   fixture.art.approved_at = null; fixture.art.crop.geometryHash = "current";
+  fixture.art.crop.coverage = undefined;
   fixture.query.mockImplementation(async (sql: string) => {
     if (sql.includes("from commerce_sessions")) return { rows: [{ id: "buyer-session", cart: [line] }] };
     if (sql.startsWith("select * from commerce_artworks")) return { rows: [fixture.art] };
@@ -40,6 +41,14 @@ async function call(extra = {}) {
   }), { params: Promise.resolve({ slug: "shop", artworkId: fixture.art.id }) });
 }
 describe("authoritative artwork approval reward", () => {
+  it("requires and records confirmation for the specific crop when print coverage is incomplete", async () => {
+    fixture.art.crop.coverage = { warning: true, uncoveredPercent: 17 };
+    expect((await call()).status).toBe(409);
+    expect(fixture.art.approved_at).toBeNull();
+    expect((await call({ acceptUncovered: true })).status).toBe(200);
+    const update = fixture.query.mock.calls.find(([sql]) => String(sql).startsWith("update commerce_artworks set approved_at"));
+    expect(JSON.parse(update![1][2])).toMatchObject({ acceptedUncovered: true, coverage: { uncoveredPercent: 17 }, crop: { geometryHash: "current" } });
+  });
   it("returns the capped server price for the selected artwork", async () => {
     const response = await call({ lines: [line] });
     expect(await response.json()).toMatchObject({ ok: true, newlyApproved: true, artworkDiscountCents: 500 });

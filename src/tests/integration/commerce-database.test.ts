@@ -42,6 +42,10 @@ import { createHmac } from "node:crypto";
 import { PURCHASE_CONDITIONS_VERSION } from "@/domain/commerce/purchase-conditions";
 import { deleteCommerceOrder } from "@/repositories/commerce-orders";
 import { orderDeletionConfirmation } from "@/domain/commerce/order-deletion";
+import { readCheckoutDraft, saveCheckoutDraft } from "@/repositories/commerce-checkout-draft";
+import { createBuyerQuote, getBuyerQuote, listBuyerQuotes, restoreBuyerQuote } from "@/repositories/commerce-buyer-quotes";
+import { emptyContact } from "@/domain/commerce/checkout-draft";
+import { generateBuyerQuotePdf } from "@/services/pdf/commerce-buyer-quote-pdf";
 vi.mock("@/lib/auth/session", () => ({ getCurrentSession: vi.fn() }));
 const objects = vi.hoisted(() => new Map<string, { bytes: Uint8Array; contentType: string }>());
 vi.mock("@/services/storage/artwork-storage", async importOriginal => ({
@@ -667,5 +671,84 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
       expect((await orderAction(new Request(`https://panel.example.test/api/commerce/admin/orders/${order.id}`, { method: "POST", headers: { origin: "https://panel.example.test" }, body: JSON.stringify({ action: "production", note: "Pedido excluído não deve avançar" }) }), { params: Promise.resolve({ orderId: order.id }) })).status).toBe(404);
       expect((await orderFiles(new Request(`https://panel.example.test/api/commerce/admin/orders/${order.id}/files?pdf=1`), { params: Promise.resolve({ orderId: order.id }) })).status).toBe(404);
     } finally { vi.unstubAllEnvs(); }
+  });
+  it("encrypts checkout drafts, detects stale saves, expires them and isolates buyer and tenant", async () => {
+    const created = await createBuyerSession(tenantId);
+    const buyer = (await getPool().query("insert into commerce_customers(tenant_id,email,name) values($1,'draft@example.test','Comprador rascunho') returning id", [tenantId])).rows[0];
+    await getPool().query("update commerce_sessions set customer_id=$3 where tenant_id=$1 and id=$2", [tenantId, created.session.id, buyer.id]);
+    const session = { ...created.session, customer_id: buyer.id };
+    const draft = { billing: { ...emptyContact(), ...testCommerceBilling }, address: emptyContact(), same: true, delivery: "delivery" as const };
+    expect(await readCheckoutDraft(tenantId, session)).toEqual({ draft: null, version: 0 });
+    expect(await saveCheckoutDraft(tenantId, session, draft, 0)).toEqual({ version: 1 });
+    const encrypted = (await getPool().query("select payload_encrypted from commerce_checkout_drafts where tenant_id=$1 and session_id=$2", [tenantId, session.id])).rows[0].payload_encrypted;
+    expect(encrypted).not.toContain(testCommerceBilling.document); expect(encrypted).not.toContain(testCommerceBilling.email);
+    expect((await readCheckoutDraft(tenantId, session)).draft).toEqual(draft);
+    await expect(saveCheckoutDraft(tenantId, session, draft, 0)).rejects.toMatchObject({ status: 409 });
+    expect((await readCheckoutDraft(otherTenant, session)).draft).toBeNull();
+    expect((await readCheckoutDraft(tenantId, { ...session, customer_id: crypto.randomUUID() })).draft).toBeNull();
+    await expect(readCheckoutDraft(tenantId, { ...session, customer_id: null })).rejects.toMatchObject({ status: 401 });
+    await getPool().query("update commerce_checkout_drafts set expires_at=now()-interval '1 second' where tenant_id=$1 and session_id=$2", [tenantId, session.id]);
+    expect((await readCheckoutDraft(tenantId, session)).draft).toBeNull();
+    expect((await saveCheckoutDraft(tenantId, session, draft, 0)).version).toBe(2);
+  });
+  it("creates idempotent private buyer quotes without artwork, payment, ERP or cart loss and generates the PDF", async () => {
+    await saveCommerceStore(actorId, tenantId, { ...published, products: published.products.map(p => ({ ...p, personalized: true })) });
+    const store = (await getCommerceStore("ground-shop"))!;
+    const product = (await commerceProducts(tenantId))[0];
+    const created = await createBuyerSession(tenantId);
+    const customer = (await getPool().query("insert into commerce_customers(tenant_id,email,name) values($1,'quote-buyer@example.test','Cliente orçamento') returning id", [tenantId])).rows[0];
+    await getPool().query("update commerce_sessions set customer_id=$3 where tenant_id=$1 and id=$2", [tenantId, created.session.id, customer.id]);
+    const lines = [{ id: crypto.randomUUID(), productId: product.id, quantity: 301, artworkName: "Arte a definir", artworkId: null }];
+    await replaceCart(store, created.session, 0, lines);
+    const session = { ...created.session, customer_id: customer.id, cart: lines, revision: 1 };
+    const amount = (await calculateCommerceCart(tenantId, session.id, lines, [product])).totalCents;
+    const input = { requestId: crypto.randomUUID(), revision: 1, expectedTotalCents: amount, billing: testCommerceBilling, address: null, deliveryAddressSameAsBilling: true, delivery: "not_included" as const };
+    const before = (await getPool().query("select count(*)::int as n from commerce_orders")).rows[0].n;
+    const [first, repeated] = await Promise.all([createBuyerQuote(store, session, input), createBuyerQuote(store, session, input)]);
+    expect(repeated.id).toBe(first.id);
+    const quote = await getBuyerQuote(tenantId, session, first.id);
+    expect(quote.shipping_cents).toBeNull(); expect(quote.total_cents).toBe(amount); expect(quote.snapshot.production.productionDays).toBe(4);
+    expect(quote.contact.billing.document).toBe(testCommerceBilling.document);
+    expect(JSON.stringify(quote)).not.toContain("contact_encrypted");
+    expect((await listBuyerQuotes(tenantId, session)).some(item => item.id === first.id)).toBe(true);
+    expect((await getPool().query("select count(*)::int as n from commerce_orders")).rows[0].n).toBe(before);
+    expect((await findBuyerSession(tenantId, created.token))!.cart).toEqual(lines);
+    await expect(getBuyerQuote(otherTenant, session, first.id)).rejects.toMatchObject({ status: 404 });
+    await expect(getBuyerQuote(tenantId, { ...session, customer_id: crypto.randomUUID() }, first.id)).rejects.toMatchObject({ status: 404 });
+    const pdf = await generateBuyerQuotePdf(quote, { name: store.settings.name, logo_url: null, company_phone: null, company_site: null, company_document: null });
+    expect(Buffer.from(pdf).subarray(0, 5).toString()).toBe("%PDF-");
+    await expect(restoreBuyerQuote(store, session, first.id, 0)).rejects.toMatchObject({ status: 409 });
+    expect(await restoreBuyerQuote(store, session, first.id, 1)).toMatchObject({ ok: true });
+    const restored = await findBuyerSession(tenantId, created.token);
+    expect(restored!.revision).toBe(2); expect(restored!.cart[0].artworkId).toBeNull();
+    expect(restored!.cart[0].id).not.toBe(lines[0].id);
+    expect((await readCheckoutDraft(tenantId, session)).draft?.billing.email).toBe(testCommerceBilling.email);
+  });
+  it("does not expose buyer quotes or checkout drafts to raw browser SQL roles", async () => {
+    const client = await getPool().connect();
+    try {
+      await client.query("set role anon");
+      for (const table of ["commerce_checkout_drafts", "commerce_buyer_quotes"])
+        await expect(client.query(`select * from ${table}`)).rejects.toMatchObject({ code: "42501" });
+    } finally { await client.query("reset role"); client.release(); }
+  });
+  it("uses only an unexpired server freight bound to this buyer cart and rejects total or idempotency tampering", async () => {
+    await getPool().query(`update commerce_stores set settings=settings || '{"carrierEnabled":true}'::jsonb where tenant_id=$1`, [tenantId]);
+    const store = (await getCommerceStore("ground-shop"))!;
+    const session = (await getPool().query(`select s.* from commerce_sessions s join commerce_customers c on c.tenant_id=s.tenant_id and c.id=s.customer_id where c.tenant_id=$1 and c.email='quote-buyer@example.test' order by s.created_at desc limit 1`, [tenantId])).rows[0];
+    const calculation = await calculateCommerceCart(tenantId, session.id, session.cart, await commerceProducts(tenantId));
+    const option = { id: "melhor_envio:1", name: "PAC teste", priceCents: 1499, transitDays: 2 };
+    const shipping = (await getPool().query(`insert into commerce_shipping_quotes(tenant_id,session_id,cart_revision,store_revision,cart_hash,postal_code,option) values($1,$2,$3,$4,$5,$6,$7) returning id`,
+      [tenantId, session.id, session.revision, store.revision, hashCommerceToken(JSON.stringify(calculation)), testCommerceBilling.postalCode, JSON.stringify(option)])).rows[0];
+    const input = { requestId: crypto.randomUUID(), revision: session.revision, expectedTotalCents: calculation.totalCents + 1499, billing: testCommerceBilling, address: null, deliveryAddressSameAsBilling: true, delivery: "delivery" as const, shippingQuoteId: shipping.id };
+    await expect(createBuyerQuote(store, session, { ...input, shippingQuoteId: crypto.randomUUID() })).rejects.toMatchObject({ status: 409 });
+    await expect(createBuyerQuote(store, session, { ...input, expectedTotalCents: 1 })).rejects.toMatchObject({ status: 409 });
+    await getPool().query("update commerce_shipping_quotes set expires_at=now()-interval '1 second' where id=$1", [shipping.id]);
+    await expect(createBuyerQuote(store, session, input)).rejects.toMatchObject({ status: 409 });
+    await getPool().query("update commerce_shipping_quotes set expires_at=now()+interval '5 minutes' where id=$1", [shipping.id]);
+    const created = await createBuyerQuote(store, session, input);
+    const quote = await getBuyerQuote(tenantId, session, created.id);
+    expect(quote.shipping_cents).toBe(1499); expect(quote.snapshot.production.transportDays).toBe(2);
+    await expect(createBuyerQuote(store, session, { ...input, billing: { ...input.billing, name: "Outro nome" } })).rejects.toMatchObject({ status: 409 });
   });
 });

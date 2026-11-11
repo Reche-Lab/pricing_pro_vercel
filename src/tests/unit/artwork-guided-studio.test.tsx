@@ -5,6 +5,8 @@ import { ArtworkGuidedStudio } from "@/components/quotes/ArtworkGuidedStudio";
 import { ArtworkCropEditor } from "@/components/quotes/ArtworkCropEditor";
 import type { ArtworkStudioAsset } from "@/components/quotes/artwork-studio-types";
 import type { ArtworkRetouchEditor } from "@/components/quotes/ArtworkRetouchEditor";
+import { inspectArtworkCoverage } from "@/components/quotes/artwork-coverage";
+vi.mock("@/components/quotes/artwork-coverage", () => ({ inspectArtworkCoverage: vi.fn(async () => ({ warning: false, uncoveredPercent: 0 })) }));
 
 vi.mock("next/dynamic", () => ({ default: (loader: () => unknown) => {
   if (loader.toString().includes("ArtworkCropEditor")) return function Crop(props: React.ComponentProps<typeof ArtworkCropEditor>) { return <ArtworkCropEditor {...props} />; };
@@ -25,6 +27,18 @@ function callbacks() {
     onApprove: vi.fn().mockResolvedValue(undefined), onClose: vi.fn() };
 }
 describe("guided artwork workflow", () => {
+  it("requires explicit confirmation for uncovered regions and offers the editor", async () => {
+    vi.mocked(inspectArtworkCoverage).mockResolvedValueOnce({ warning: true, uncoveredPercent: 18 });
+    const handlers = callbacks();
+    render(<ArtworkGuidedStudio initialAsset={{ ...asset, preparedUrl: "/prepared.png" }} initialStep="review" {...handlers}/>);
+    fireEvent.load(screen.getByAltText("Arte final para aprovação"));
+    fireEvent.click(screen.getByRole("checkbox")); fireEvent.click(screen.getByRole("button", { name: "Aprovar arte" }));
+    await screen.findByRole("alertdialog"); expect(handlers.onApprove).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Retocar e completar o fundo" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Conferi e aprovo assim mesmo" }));
+    await screen.findByText("Esta versão está aprovada.");
+    expect(handlers.onApprove).toHaveBeenCalledWith(expect.anything(), { acceptUncovered: true });
+  });
   it("keeps the new version in the studio, resets its crop and requires final review before approval", async () => {
     const handlers = callbacks();
     handlers.onApprove.mockRejectedValueOnce(new Error("Aprovação indisponível"));
@@ -45,7 +59,7 @@ describe("guided artwork workflow", () => {
     expect(handlers.onClose).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Aprovar arte" }));
     await screen.findByText("Esta versão está aprovada.");
-    expect(handlers.onApprove).toHaveBeenLastCalledWith(expect.objectContaining({ id: "retouched" }));
+    expect(handlers.onApprove).toHaveBeenLastCalledWith(expect.objectContaining({ id: "retouched" }), { acceptUncovered: false });
     fireEvent.click(screen.getByRole("button", { name: "Concluir" }));
     expect(handlers.onClose).toHaveBeenCalledOnce();
   });

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Truck } from "lucide-react";
 import { fetchCepAddress, formatCep, normalizeCep, type CepAddress } from "@/lib/cep";
+import { DeliveryTimeline } from "./DeliveryTimeline";
+import type { ProductionSettings } from "@/domain/shipping/production-lead-time";
 
 type ShippingVariant = {
   id: string;
@@ -10,6 +12,7 @@ type ShippingVariant = {
 };
 
 type ShippingQuoteFormProps = {
+  productionSettings?: ProductionSettings;
   defaultOriginPostalCode?: string;
   variants: ShippingVariant[];
 };
@@ -34,7 +37,7 @@ type QuoteResponse = {
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
-export function ShippingQuoteForm({ defaultOriginPostalCode = "", variants }: ShippingQuoteFormProps) {
+export function ShippingQuoteForm({ defaultOriginPostalCode = "", variants, productionSettings }: ShippingQuoteFormProps) {
   const [error, setError] = useState("");
   const [originPostalCode, setOriginPostalCode] = useState(formatCep(defaultOriginPostalCode));
   const [destinationPostalCode, setDestinationPostalCode] = useState("");
@@ -43,6 +46,7 @@ export function ShippingQuoteForm({ defaultOriginPostalCode = "", variants }: Sh
   const [cepMessage, setCepMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
+  const [quotedQuantity, setQuotedQuantity] = useState(0);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -51,6 +55,7 @@ export function ShippingQuoteForm({ defaultOriginPostalCode = "", variants }: Sh
     setLoading(true);
 
     const form = new FormData(event.currentTarget);
+    setQuotedQuantity(Number(form.get("quantity")));
     const response = await fetch("/api/shipping/correios", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -173,6 +178,7 @@ export function ShippingQuoteForm({ defaultOriginPostalCode = "", variants }: Sh
         ) : (
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <Metric label="Frete" value={brl.format(quote.result.totalFrete)} />
+            <div className="md:col-span-2"><DeliveryTimeline quantity={quotedQuantity} settings={productionSettings}/></div>
             <Metric label="Caixas" value={String(quote.packaging.boxesNeeded)} />
             <Metric label="Peso líquido" value={`${quote.packaging.netWeightKg.toFixed(3)} kg`} />
             <Metric label="Peso bruto" value={`${quote.packaging.grossWeightKg.toFixed(3)} kg`} />

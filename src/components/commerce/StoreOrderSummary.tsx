@@ -1,11 +1,12 @@
 import React from "react";
 import { storeMoney } from "./store-http";
 
-export function StoreOrderSummary({ subtotal, shipping, artworkDiscountCents = 0, shippingPending = false }: {
+export function StoreOrderSummary({ subtotal, shipping, artworkDiscountCents = 0, shippingPending = false, shippingExcluded = false }: {
   subtotal: number;
   shipping?: number;
   artworkDiscountCents?: number;
   shippingPending?: boolean;
+  shippingExcluded?: boolean;
 }) {
   return <dl className="space-y-3 pt-4">
     <div className="flex justify-between gap-3">
@@ -16,10 +17,10 @@ export function StoreOrderSummary({ subtotal, shipping, artworkDiscountCents = 0
       <dt>Desconto por arte pronta</dt><dd className="shrink-0 tabular-nums">−{storeMoney(artworkDiscountCents)}</dd>
     </div> : null}
     <div className="flex justify-between gap-3 text-sm text-zinc-500">
-      <dt>Entrega</dt><dd className="shrink-0 tabular-nums">{shippingPending ? "A calcular" : shipping === undefined ? "Na próxima etapa" : storeMoney(shipping)}</dd>
+      <dt>Entrega</dt><dd className="shrink-0 tabular-nums">{shippingExcluded ? "Não incluída" : shippingPending ? "A calcular" : shipping === undefined ? "Na próxima etapa" : storeMoney(shipping)}</dd>
     </div>
     <div className="flex justify-between gap-3 border-t border-current/15 pt-4 text-xl font-semibold">
-      <dt>{shippingPending ? "Total parcial" : "Total"}</dt><dd className="shrink-0 tabular-nums">{storeMoney(subtotal + (shipping ?? 0))}</dd>
+      <dt>{shippingExcluded ? "Total sem frete" : shippingPending ? "Total parcial" : "Total"}</dt><dd className="shrink-0 tabular-nums">{storeMoney(subtotal + (shippingExcluded ? 0 : shipping ?? 0))}</dd>
     </div>
   </dl>;
 }

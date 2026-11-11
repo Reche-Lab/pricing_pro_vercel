@@ -41,6 +41,8 @@ import { MelhorEnvioReconnectBoundary } from "@/components/shipping/MelhorEnvioR
 import { melhorEnvioAwareFetch } from "@/lib/melhor-envio/browser-request";
 import { olistAwareFetch } from "@/lib/olist/browser-request";
 import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
+import { DeliveryTimeline } from "@/components/shipping/DeliveryTimeline";
+import type { ProductionSettings } from "@/domain/shipping/production-lead-time";
 
 export type PricingPlatformOption = PlatformRule & {
   name: string;
@@ -48,6 +50,7 @@ export type PricingPlatformOption = PlatformRule & {
 };
 
 type PricingCalculatorProps = {
+  productionSettings?: ProductionSettings;
   activeShippingServices?: {
     correios: boolean;
     melhorEnvio: boolean;
@@ -158,6 +161,7 @@ const emptyPlatform: PricingPlatformOption = {
 };
 
 export function PricingCalculator({
+  productionSettings,
   activeShippingServices = { correios: false, melhorEnvio: false },
   defaultOriginPostalCode = "",
   defaultPaymentCategory = { externalId: "", name: "" },
@@ -1699,6 +1703,7 @@ export function PricingCalculator({
               {shippingQuoteMessage}
             </p>
           ) : null}
+          <DeliveryTimeline quantity={draftItems.length ? draftItems.reduce((sum, item) => sum + item.quantity, 0) : quantity} settings={productionSettings} transportDays={shippingService === "melhor_envio" ? melhorEnvioOptions.find(option => option.code === selectedMelhorEnvioServiceCode)?.deliveryTime : null}/>
           {cepLookupMessage ? <p className="mt-2 text-xs text-zinc-500">{cepLookupMessage}</p> : null}
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             <CepPreview label={effectiveDestinationPostalCode === quickCustomerPostalCode ? "Destino (cliente)" : "Destino"} address={effectiveDestinationAddress} />
