@@ -42,7 +42,7 @@ describe("studio creative demonstration", () => {
     await advanceIntro(2000);
     expect(screen.getByText("Agora crie você mesmo a sua arte.")).toBeVisible();
     expect(saveStudioPurchase).not.toHaveBeenCalled(); expect(navigation.push).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Criar minha arte", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Criar minha arte" }));
     expect(message).toHaveFocus(); expect(message.selectionEnd).toBe(message.value.length);
   });
   it("stops on editing and never replaces the customer's text later", async () => {
@@ -149,6 +149,21 @@ describe("studio creative demonstration", () => {
     expect(renderStudioArtwork).toHaveBeenLastCalledWith(expect.anything(), products[0].geometry, products[0].margins, { purpose: "purchase" });
     expect(saveStudioPurchase).toHaveBeenCalledTimes(1);
     expect(saveStudioPurchase).toHaveBeenCalledWith(expect.objectContaining({ slug: "store", productId: "demo", file: expect.objectContaining({ fileSize: 1, mimeType: "image/png" }) }));
+  });
+  it("keeps an uploaded image and an empty message when previewing and exporting the customer's composition", async () => {
+    render(<StudioPersonalizer products={products} base="/loja/store" slug="store"/>);
+    await screen.findByLabelText("Frente do exemplo");
+    fireEvent.click(screen.getByRole("tab", { name: "Fundo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Imagem" }));
+    fireEvent.change(screen.getByLabelText("Enviar imagem de fundo"), { target: { files: [new File(["image"], "fundo.png", { type: "image/png" })] } });
+    await screen.findByAltText("Imagem de fundo escolhida");
+    fireEvent.click(screen.getByRole("tab", { name: "Texto" }));
+    fireEvent.change(screen.getByLabelText("Sua mensagem"), { target: { value: "" } });
+    await waitFor(() => expect(renderStudioArtwork).toHaveBeenLastCalledWith(expect.objectContaining({ text: "", backgroundType: "image", backgroundImage: expect.anything() }), products[0].geometry, products[0].margins));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Usar esta arte no produto" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Usar esta arte no produto" }));
+    await waitFor(() => expect(saveStudioPurchase).toHaveBeenCalledTimes(1));
+    expect(renderStudioArtwork).toHaveBeenLastCalledWith(expect.objectContaining({ text: "", backgroundType: "image", backgroundImage: expect.anything() }), products[0].geometry, products[0].margins, { purpose: "purchase" });
   });
   it("keeps the artwork on failure and does not navigate or allow a duplicate click", async () => {
     vi.mocked(saveStudioPurchase).mockRejectedValueOnce(new Error("Armazenamento indisponível"));

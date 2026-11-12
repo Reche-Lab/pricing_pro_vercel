@@ -24,6 +24,8 @@ Validação: **885 testes aprovados** (62 condicionais ignorados), lint e build 
 
 #### Imagem de Fundo e Continuidade na Compra
 
+- [x] Campo de mensagem vazio (ou só com espaços/quebras) não insere texto substituto, em linhas, círculo ou espiral; a regra vale tanto para a prévia quanto para a composição salva. Testes cobrem os três modos e o envio de uma composição com imagem e mensagem vazia.
+
 - [x] Imagem PNG/JPEG/WebP validada, com tamanho, deslocamento, encaixe e cor para áreas descobertas.
 - [x] Composição de compra nas medidas de corte a 300 dpi, preservando a disposição da prévia e alertando sobre imagens pouco nítidas.
 - [x] Salvar pela sessão do tenant e encaminhar ao produto com a arte anexada, sem aprovação automática nem alteração de outros itens.

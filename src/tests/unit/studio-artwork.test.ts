@@ -3,6 +3,13 @@ import { layoutStudioText, studioGradientColor, studioTextBounds, type TextMeasu
 const measure: TextMeasure = (text, size) => Array.from(text).length * size * .56;
 const bounds = { x: 120, y: 120, width: 400, height: 400 };
 describe("studio artwork composition", () => {
+  it.each(["centered", "circle", "spiral"] as const)("leaves empty or whitespace-only messages blank in %s mode", mode => {
+    for (const text of ["", "  \n\t  "]) {
+      const result = layoutStudioText({ text, mode, bounds, measure: () => { throw new Error("Empty text must not be measured"); } });
+      expect(result.glyphs).toEqual([]);
+      expect(result.truncated).toBe(false);
+    }
+  });
   it("wraps a long message into multiple centered lines inside the circular safety boundary", () => {
     const result = layoutStudioText({ text: "Minha marca faz parte dos melhores momentos da sua vida", mode: "centered", bounds, measure });
     expect(result.fontSize).toBeGreaterThanOrEqual(24);

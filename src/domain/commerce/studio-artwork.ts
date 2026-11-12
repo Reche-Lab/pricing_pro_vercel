@@ -110,7 +110,8 @@ function spiral(text: string, bounds: StudioTextBounds, measure: TextMeasure): S
 }
 
 export function layoutStudioText({ text, mode, bounds, measure }: { text: string; mode: StudioTextMode; bounds: StudioTextBounds; measure: TextMeasure }): StudioTextLayout {
-  const normalized = (text.normalize("NFC").trim() || "Sua ideia").slice(0, 160);
+  const normalized = text.normalize("NFC").trim().slice(0, 160);
+  if (!normalized) return { fontSize: 12, glyphs: [], truncated: false };
   if (bounds.width <= 0 || bounds.height <= 0) return { fontSize: 12, glyphs: [], truncated: true };
   return mode === "circle" ? circular(normalized, bounds, measure) : mode === "spiral" ? spiral(normalized, bounds, measure) : centered(normalized, bounds, measure);
 }
