@@ -45,6 +45,7 @@ import { normalizeProductSearchTerm } from "@/domain/products/product-search";
 import { storeRequest, storeMoney } from "./store-http";
 import styles from "./store.module.css";
 import { StoreHome, StoreProductCard } from "./StoreHome";
+import { StoreCategoryNavigation } from "./StoreCategoryNavigation";
 import { StoreProductGallery } from "./StoreProductGallery";
 import { StorePriceBreakdown } from "./StorePriceBreakdown";
 import { StoreDeliveryInquiry } from "./StoreDeliveryInquiry";
@@ -98,7 +99,8 @@ export function Storefront({
   children,
 }: Props) {
   const router = useRouter();
-  const focusedItem = useSearchParams().get("item");
+  const searchParams = useSearchParams();
+  const focusedItem = searchParams.get("item");
   const { theme, toggle } = useStoreTheme(slug, settings.theme);
   const base = preview ? `/commerce/${slug}/preview` : (basePath ?? `/loja/${slug}`);
   const api = preview ? `/api/commerce/${slug}/preview` : `/api/store/${slug}`;
@@ -275,23 +277,9 @@ export function Storefront({
             </Link>
           </nav>
         </div>
-        <nav aria-label="Categorias de produtos" className={styles.categoryNav}>
-          <Link href={`${base}/catalogo`} aria-label="Pesquisar produtos">
-            Todos os produtos
-          </Link>
-          {!preview ? <Link href={`${base}/orcamento`}>Solicitar orçamento</Link> : null}
-          {[...new Set(products.map((product) => product.category))].map(
-            (category) => (
-              <Link
-                key={category}
-                href={`${base}/catalogo?categoria=${encodeURIComponent(category)}`}
-              >
-                {category}
-              </Link>
-            ),
-          )}
-          {libraryEnabled ? <><Link href={`${base}/artes`} aria-current={view === "artes" ? "page" : undefined}>Artes prontas</Link><Link href={`${base}/campanhas`} aria-current={view === "campanhas" ? "page" : undefined}>Campanhas</Link></> : null}
-        </nav>
+        <StoreCategoryNavigation products={products} base={base} preview={preview} view={view}
+          activeCategory={selectedProduct?.category ?? (view === "catalogo" ? searchParams.get("categoria") : null)}
+          libraryEnabled={libraryEnabled} navigationKey={`${base}/${path.join("/")}?${searchParams.toString()}`}/>
       </header>
       {view === "home" ? (
         <StoreHome settings={settings} products={products} base={base} />

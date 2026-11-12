@@ -8,6 +8,20 @@ O tema de referência permite reordenar diversas seções. Esta adaptação util
 
 ## Planejado x realizado
 
+### Menu de categorias
+
+- [x] Dropdown por categoria, com produtos publicados, miniaturas, preços e acesso ao catálogo completo da categoria.
+- [x] Hover no desktop, seleção por toque, indicação da categoria ativa e fechamento por fora/Escape.
+- [x] Navegação por teclado, foco devolvido ao gatilho e dropdown independente da faixa rolável do menu.
+- [x] Links preservam preview e domínio próprio; não há consultas adicionais nem pré-carregamento dos links de cada produto.
+- [x] Testes de regressão, temas claro/escuro e conferência desktop/mobile.
+
+Esta melhoria usa o catálogo já publicado do tenant e não exige migration ou nova variável de ambiente.
+
+Validação: suíte completa de 790 testes unitários, 22 regressões focadas de navegação/home/preview (incluindo seis casos específicos do menu), lint, tipos e build de produção com memória limitada. `scripts/commerce-menu-browser.mjs` verificou loja pública e preview em 1440/1920/390/320 px e paisagem 844 × 390, nos dois temas, com hover, toque, foco/Escape, carregamento de miniaturas, rolagem limitada e seleção real de produto. O teste cria categorias/produtos temporários somente no banco local isolado e restaura o catálogo ao finalizar. Nomes longos ficam limitados no gatilho, e o cabeçalho do dropdown é compacto em telas baixas. Nenhum dado de produção foi alterado.
+
+### Histórico da home
+
 - [x] Banner centralizado, largura máxima de 1216 px e margens laterais. Altura ampliada para até 480 px no desktop e 380 px no celular, para reduzir as sobras laterais de imagens exibidas inteiras.
 - [x] Banner menor no celular e em orientação paisagem, sem mudar de altura ao alternar imagem com/sem texto.
 - [x] Categorias com miniaturas circulares antes dos produtos; benefícios após as coleções.
