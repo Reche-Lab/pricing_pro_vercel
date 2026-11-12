@@ -1,0 +1,50 @@
+import React from "react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { StudioPersonalizer } from "@/components/commerce/StudioPersonalizer";
+import { renderStudioArtwork } from "@/components/commerce/studio-artwork-canvas";
+import type { StoreProduct } from "@/components/commerce/StoreHome";
+import { defaultMockup } from "@/domain/commerce/artwork-options";
+vi.mock("@/components/commerce/studio-artwork-canvas", () => ({ renderStudioArtwork: vi.fn(async () => ({ dataUrl: "data:image/png;base64,example", truncated: false })) }));
+vi.mock("@/components/commerce/StoreProductMockup", () => ({ StoreProductMockup: ({ fixedSide }: { fixedSide: string }) => <canvas aria-label={fixedSide === "front" ? "Frente do exemplo" : "Verso do exemplo"}/> }));
+const products = [{ id: "demo", name: "Botton 3,5 cm", personalized: true, geometry: { shape: "circle", widthMm: 35, heightMm: 35 }, margins: { safeMarginMm: 3, bleedMm: 3 }, artworkOptions: { mockup: defaultMockup() } }] as StoreProduct[];
+afterEach(() => { cleanup(); vi.clearAllMocks(); });
+describe("studio creative demonstration", () => {
+  it("shows both sides at once and exposes a multiline message and distinct typography modes", async () => {
+    render(<StudioPersonalizer products={products} base="/commerce/store/preview"/>);
+    expect(await screen.findByLabelText("Frente do exemplo")).toBeInTheDocument();
+    expect(screen.getByLabelText("Verso do exemplo")).toBeInTheDocument();
+    expect(screen.getByLabelText("Sua mensagem").tagName).toBe("TEXTAREA");
+    fireEvent.change(screen.getByLabelText("Sua mensagem"), { target: { value: "Uma mensagem\ncom várias linhas" } });
+    fireEvent.click(screen.getByRole("button", { name: "Texto em espiral" }));
+    fireEvent.change(screen.getByLabelText("Fonte"), { target: { value: "handwritten" } });
+    await waitFor(() => expect(renderStudioArtwork).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "spiral", font: "handwritten", text: "Uma mensagem\ncom várias linhas" }), products[0].geometry, products[0].margins));
+    expect(screen.getByRole("link", { name: "Personalizar este produto" })).toHaveAttribute("href", "/commerce/store/preview/produto/demo");
+    expect(screen.getByText(/Simulação ilustrativa/)).toBeInTheDocument();
+  });
+  it("adds and removes background colors with an explicit limit of four", async () => {
+    render(<StudioPersonalizer products={products} base=""/>);
+    await screen.findByLabelText("Frente do exemplo");
+    fireEvent.click(screen.getByRole("tab", { name: "Fundo" }));
+    const add = screen.getByRole("button", { name: "Adicionar cor ao fundo" });
+    fireEvent.click(add); fireEvent.click(add); fireEvent.click(add);
+    expect(screen.getAllByLabelText(/^Cor do fundo \d$/)).toHaveLength(4);
+    expect(add).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Formato do fundo"), { target: { value: "spiral" } });
+    fireEvent.change(screen.getByLabelText("Cor do fundo 4"), { target: { value: "#334455" } });
+    await waitFor(() => expect(renderStudioArtwork).toHaveBeenLastCalledWith(expect.objectContaining({ gradient: "spiral", colors: expect.arrayContaining(["#334455"]) }), expect.anything(), expect.anything()));
+    fireEvent.click(screen.getByRole("button", { name: "Remover cor 4" }));
+    expect(screen.getAllByLabelText(/^Cor do fundo \d$/)).toHaveLength(3);
+    expect(add).not.toBeDisabled();
+  });
+  it("supports keyboard navigation between text and background without losing the message", async () => {
+    render(<StudioPersonalizer products={products} base=""/>);
+    await screen.findByLabelText("Frente do exemplo");
+    fireEvent.change(screen.getByLabelText("Sua mensagem"), { target: { value: "Minha criação" } });
+    fireEvent.keyDown(screen.getByRole("tab", { name: "Texto" }), { key: "ArrowRight" });
+    expect(screen.getByRole("tab", { name: "Fundo" })).toHaveFocus();
+    expect(screen.getByRole("tabpanel", { name: "Fundo" })).toBeVisible();
+    fireEvent.keyDown(screen.getByRole("tab", { name: "Fundo" }), { key: "Home" });
+    expect(screen.getByLabelText("Sua mensagem")).toHaveValue("Minha criação");
+  });
+});

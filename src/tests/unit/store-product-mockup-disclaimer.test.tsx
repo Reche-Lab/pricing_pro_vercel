@@ -27,4 +27,12 @@ describe("illustrative product preview notice", () => {
     expect(screen.getByText("Imagem meramente ilustrativa.")).toBeVisible();
     expect(screen.getByText(/Visualização esquemática, sem foto do acabamento/)).toBeVisible();
   });
+  it("lets compact studio faces expand independently with a notice and return using Escape", () => {
+    render(<StoreProductMockup {...props} model={defaultMockup()} compact expandable fixedSide="front"/>);
+    fireEvent.click(screen.getByRole("button", { name: "Ampliar frente do produto" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Imagem meramente ilustrativa.");
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ampliar frente do produto" })).toHaveFocus();
+  });
 });

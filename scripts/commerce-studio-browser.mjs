@@ -62,6 +62,7 @@ try {
             assert.ok(next.y < height, `Next section is visible ${width} ${height} ${prefix}: ${next.y}`);
           }
           assert.equal(await page.locator("canvas").count(), 0, "Mockup must not mount before interaction");
+          if (prefix === "/loja/ground-shop" && width === (mobile ? 390 : 1440)) assert.equal(requested.some(url => url.includes("/studio/fonts/")), false, "Fonts must not download before opening the example");
           if (prefix === "/loja/ground-shop" && width === (mobile ? 390 : 1440)) assert.equal(requested.some(url => url.includes(demoChunk)), false, "Demo chunk must not download before the first click");
           assert.equal(await page.locator("main").evaluate(element => getComputedStyle(element).backgroundColor), theme === "dark" ? "rgb(19, 23, 21)" : "rgb(244, 245, 243)");
           await page.screenshot({ path: `/tmp/commerce-studio-${prefix.includes("preview") ? "preview" : "public"}-${width}-${theme}.png` });
@@ -69,36 +70,90 @@ try {
             await page.mouse.move(bounds.x + bounds.width * .8, bounds.y + bounds.height * .7);
             await page.waitForTimeout(200);
             assert.ok(parseFloat(await hero.evaluate(element => element.style.getPropertyValue("--studio-x"))) > 0);
+            const float = hero.locator("[data-studio-float]");
+            const beforePause = await float.evaluate(element => element.getAnimations()[0].currentTime);
             await page.getByRole("button", { name: "Pausar movimento da vitrine" }).click();
             await page.waitForFunction(() => document.querySelector('[aria-label="Estúdio Ground Shop"]').dataset.moving === "false");
             assert.equal(await hero.getAttribute("data-moving"), "false");
-            assert.equal(await hero.locator('a[aria-label^="Personalizar"] img').evaluate(element => getComputedStyle(element).animationName), "none");
+            assert.equal(await float.evaluate(element => element.getAnimations()[0].playState), "paused");
+            const pausedTime = await float.evaluate(element => element.getAnimations()[0].currentTime);
+            assert.ok(pausedTime >= beforePause, "Pause preserves the animation phase");
+            await page.waitForTimeout(100);
+            assert.equal(await float.evaluate(element => element.getAnimations()[0].currentTime), pausedTime);
             await page.getByRole("button", { name: "Retomar movimento da vitrine" }).click();
+            await page.waitForTimeout(120);
+            assert.ok(await float.evaluate(element => element.getAnimations()[0].currentTime) >= pausedTime, "Resume does not restart the animation");
+            const samples = await float.evaluate(element => new Promise(resolve => {
+              const frames = [];
+              function sample() {
+                const rect = element.getBoundingClientRect(), image = element.querySelector("img");
+                frames.push({ x: rect.x, y: rect.y, opacity: getComputedStyle(image).opacity, loaded: image.complete && image.naturalWidth > 0 });
+                if (frames.length < 24) requestAnimationFrame(sample); else resolve(frames);
+              }
+              requestAnimationFrame(sample);
+            }));
+            for (let index = 1; index < samples.length; index++) {
+              assert.ok(Math.hypot(samples[index].x - samples[index - 1].x, samples[index].y - samples[index - 1].y) < 3, "No frame-position cuts");
+              assert.equal(samples[index].opacity, "1"); assert.equal(samples[index].loaded, true);
+            }
           }
           if (mobile) assert.equal(await hero.getAttribute("data-moving"), "false");
           const selector = hero.getByRole("button", { name: "Mostrar Espelho 5,5 cm" }); await selector.click();
           await hero.getByRole("link", { name: "Personalizar Espelho 5,5 cm" }).waitFor();
         }
-        if (width === 1440 || width === 390) {
+        if (width === 1440 || width === 390 || width === 320) {
           await page.getByRole("button", { name: "Ver como fica" }).click();
           const demo = page.getByRole("region", { name: "Experimente sua ideia" });
-          const canvas = demo.locator("canvas"); await canvas.waitFor();
+          const canvas = demo.locator('canvas[aria-label*="frente"]'), backCanvas = demo.locator('canvas[aria-label*="verso"]');
+          await canvas.waitFor(); await backCanvas.waitFor(); assert.equal(await demo.locator("canvas").count(), 2);
           assert.ok(requested.some(url => url.includes(demoChunk)), "Demo imports its own chunk on interaction");
           await page.waitForFunction(() => document.querySelector('[aria-label="Estúdio Ground Shop"]').dataset.moving === "false");
-          const pixels = async () => canvas.evaluate(element => {
+          const pixels = async (target = canvas) => target.evaluate(element => {
             const bytes = element.getContext("2d").getImageData(0, 0, element.width, element.height).data;
             let filled = 0, signature = 0; for (let i = 0; i < bytes.length; i += 4) { if (bytes[i + 3]) filled++; signature = (signature + bytes[i] * (i % 97 + 1) + bytes[i + 1]) % 1000000007; }
             return { filled, signature, width: element.width };
           });
-          await page.waitForFunction(() => { const canvas = document.querySelector("canvas"); return canvas?.width === 256 && canvas.getContext("2d").getImageData(128, 128, 1, 1).data[3] > 0; });
+          await page.waitForFunction(() => { const canvases = [...document.querySelectorAll("canvas")]; return canvases.length === 2 && canvases.every(canvas => canvas.width === 256 && canvas.getContext("2d").getImageData(0, 0, 256, 256).data.some((value, index) => index % 4 === 3 && value > 0)); });
           const front = await pixels(); assert.ok(front.filled > 10000 && front.width === 256);
+          const back = await pixels(backCanvas); assert.ok(back.filled > 10000); assert.notEqual(back.signature, front.signature);
+          const change = async action => {
+            const before = (await pixels()).signature; await action();
+            for (let attempt = 0; attempt < 60 && (await pixels()).signature === before; attempt++) await page.waitForTimeout(100);
+            assert.notEqual((await pixels()).signature, before, "The selected effect changes real canvas pixels");
+          };
+          await change(() => demo.getByLabel("Sua mensagem").fill("Minha marca faz parte dos melhores momentos da sua vida"));
+          await demo.screenshot({ path: `/tmp/commerce-studio-lines-${prefix.includes("preview") ? "preview" : "public"}-${width}.png` });
+          assert.equal(await demo.getByRole("status").filter({ hasText: "Encurte" }).count(), 0);
+          await change(() => demo.getByRole("button", { name: "Texto circular", exact: true }).click());
+          await demo.screenshot({ path: `/tmp/commerce-studio-circle-${prefix.includes("preview") ? "preview" : "public"}-${width}.png` });
+          await change(() => demo.getByRole("button", { name: "Texto em espiral", exact: true }).click());
+          await change(() => demo.getByLabel("Fonte", { exact: true }).selectOption("handwritten"));
+          assert.ok(await page.evaluate(() => document.fonts.check('700 32px "Studio Handwritten"')));
+          await change(() => demo.getByLabel("Fonte", { exact: true }).selectOption("editorial"));
+          assert.ok(await page.evaluate(() => document.fonts.check('400 32px "Studio Editorial"')));
+          await demo.getByRole("tab", { name: "Fundo", exact: true }).click();
           await demo.getByRole("button", { name: "Cor coral" }).click();
-          await page.waitForTimeout(500); assert.notEqual((await pixels()).signature, front.signature, "Color changes actual canvas pixels");
-          await demo.getByLabel("Sua mensagem").fill("Minha marca");
-          await demo.getByRole("button", { name: "Verso", exact: true }).click();
-          await page.waitForTimeout(500); const back = await pixels(); assert.ok(back.filled > 10000); assert.notEqual(back.signature, front.signature);
+          for (const gradient of ["horizontal", "diagonal", "radial", "spiral"]) await change(() => demo.getByLabel("Formato do fundo").selectOption(gradient));
+          const add = demo.getByRole("button", { name: "Adicionar cor ao fundo" });
+          await add.click(); await add.click(); assert.equal(await add.isDisabled(), true);
+          assert.equal(await demo.locator('input[aria-label^="Cor do fundo"]').count(), 4);
+          await change(() => demo.getByLabel("Cor do fundo 4", { exact: true }).evaluate(element => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(element, "#8138b5");
+            element.dispatchEvent(new Event("input", { bubbles: true })); element.dispatchEvent(new Event("change", { bubbles: true }));
+          }));
+          await demo.getByRole("tab", { name: "Texto", exact: true }).click();
           await demo.getByRole("combobox", { name: /^Produto/ }).selectOption({ label: "Espelho 5,5 cm" });
           await page.waitForTimeout(500); assert.ok((await pixels()).filled > 10000);
+          for (const face of ["frente", "verso"]) {
+            const zoom = demo.getByRole("button", { name: `Ampliar ${face} do produto`, exact: true });
+            await zoom.click(); const dialog = page.getByRole("dialog"); await dialog.waitFor();
+            await page.waitForFunction(() => document.querySelector('[role="dialog"] canvas')?.width === 640);
+            assert.ok((await pixels(dialog.locator("canvas"))).filled > 10000, "Expanded canvas is nonblank at higher resolution");
+            if (face === "frente") await dialog.getByRole("button", { name: "Fechar ampliação", exact: true }).click(); else await page.keyboard.press("Escape");
+            await dialog.waitFor({ state: "hidden" });
+            assert.equal(await zoom.evaluate(element => element === document.activeElement), true, "Zoom returns focus to its trigger");
+          }
+          await page.waitForTimeout(250);
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
           await demo.screenshot({ path: `/tmp/commerce-studio-demo-${prefix.includes("preview") ? "preview" : "public"}-${width}.png` });
           await page.goto(`${base}${prefix}/carrinho`, { waitUntil: "networkidle" });
@@ -115,7 +170,7 @@ try {
     await context.close();
   }
   assert.deepEqual(errors, []);
-  console.log("Studio verified: public/private preview; light/dark; 320/390/844/1280/1440/1920px; actual images; pointer motion/pause/reduced-motion/touch; lazy model with front/back/color pixels; product selection; quiet cart; one H1; no overflow.");
+  console.log("Studio verified: public/private preview; light/dark; 320/390/844/1280/1440/1920px; 24 continuous motion frames; pause/resume phase; reduced-motion/touch; lazy model/fonts; simultaneous front/back pixels; multiline/circle/spiral lettering; both bundled fonts; all gradient modes and four colors; quiet cart; one H1; no overflow.");
 } finally {
   await browser.close();
   if (variants.length) { await db.query("delete from commerce_products where variant_id=any($1::uuid[])", [variants]); await db.query("delete from product_variants where id=any($1::uuid[])", [variants]); }

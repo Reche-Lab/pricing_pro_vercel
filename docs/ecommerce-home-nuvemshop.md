@@ -10,6 +10,24 @@ O tema de referência permite reordenar diversas seções. Esta adaptação util
 
 ### Tema Estúdio
 
+#### Refinamento da Animação e Demonstração
+
+- [x] Separar flutuação e resposta ao mouse, suavizar pelo tempo entre frames e pausar sem reiniciar a animação.
+- [x] Frente e verso simultâneos, com a indicação de simulação e sem gravação ou aprovação de arte.
+- [x] Tipografia local, texto em linhas ajustadas à área segura, circular e em espiral do centro para fora.
+- [x] Fundo sólido ou degradê horizontal, diagonal, circular ou espiral, com até quatro cores editáveis.
+- [x] Regressões de layout e movimento, pixels reais desktop/mobile, build e limites de memória preservados.
+
+A flutuação tem uma camada própria com transformação 3D composta pelo navegador; a camada de mouse interpola pelo tempo entre frames, sem transições CSS concorrentes. Pausa, visibilidade e interseção suspendem a animação sem recriá-la. O retorno ao centro também é gradual, e o loop do mouse termina ao estabilizar. Dispositivos de toque e movimento reduzido continuam estáticos.
+
+O exemplo usa uma mensagem de até 140 caracteres. O modo em linhas respeita quebras manuais e calcula larguras diferentes por linha dentro da região segura; o circular acompanha a borda e o espiral distribui caracteres por comprimento de arco, do centro para fora. Nenhuma dessas ações altera as artes reais do pedido. A demonstração continua importada somente no clique, sem IA, upload ou gravação.
+
+Fontes adicionais servidas localmente e carregadas somente quando selecionadas: Caveat 700 (aproximadamente 51 KB) e DM Serif Display (aproximadamente 28 KB), obtidas do Google Fonts. Arquivos WOFF2 e respectivas licenças SIL OFL estão em `public/studio/fonts/`. Fontes oficiais: [Caveat](https://github.com/google/fonts/tree/main/ofl/caveat), [DM Serif Display](https://github.com/google/fonts/tree/main/ofl/dmserifdisplay). Os estilos Moderna e Marcante usam fontes do sistema. Não há nova dependência ou conexão do navegador com o Google Fonts.
+
+Frente e verso têm ampliação individual, incluindo no celular: a versão ampliada é renderizada em 640 px somente ao abrir, mantendo as miniaturas em 256 px. Escape ou fechar devolve o foco ao botão de ampliação. Um aviso de simulação permanece visível; fontes indisponíveis recebem mensagem de erro em português, sem apagar o último exemplo válido.
+
+Validação do refinamento: **862 testes na suíte de regressão**, seguidos de **14 testes focados** para a ampliação, tipografia, cores, navegação e suavização; lint sem avisos, tipos e build com memória limitada. O teste de navegador percorreu loja pública/prévia, claro/escuro, desktop/mobile de 320 a 1920 px, com dados temporários restaurados no PostgreSQL local. Confirmou 24 amostras consecutivas sem saltos maiores que 3 px ou desaparecimento da imagem, tempo de animação preservado durante pausa/retomada, os dois canvases não vazios ao mesmo tempo, diferenças reais de pixels em cada modo de texto/degradê, fontes locais efetivamente carregadas e zoom de ambas as faces em 640 px com retorno de foco. Foram inspecionadas capturas das composições em linhas, circular e espiral. Não houve acesso a integrações ou dados reais. Não é necessária migration nem nova variável de ambiente.
+
 - [x] Preset opcional por tenant, mantendo lojas existentes no tema clássico até ativação explícita.
 - [x] Abertura com imagens reais do catálogo, textura de apoio e foto própria opcional.
 - [x] Profundidade, microinterações leves, pausa e respeito a movimento reduzido, toque e abas ocultas.
