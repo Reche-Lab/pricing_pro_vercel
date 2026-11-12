@@ -10,6 +10,16 @@ O tema de referência permite reordenar diversas seções. Esta adaptação util
 
 ### Tema Estúdio
 
+#### Imagem de Fundo e Continuidade na Compra
+
+- [x] Imagem PNG/JPEG/WebP validada, com tamanho, deslocamento, encaixe e cor para áreas descobertas.
+- [x] Composição de compra nas medidas de corte a 300 dpi, preservando a disposição da prévia e alertando sobre imagens pouco nítidas.
+- [x] Salvar pela sessão do tenant e encaminhar ao produto com a arte anexada, sem aprovação automática nem alteração de outros itens.
+- [x] Fluxo equivalente na prévia privada, sem gravação real, e retomada de tentativas após falha parcial.
+- [x] Testes unitários, integração local de compra/arte, build e verificação desktop/mobile.
+
+Validação da continuidade: **879 testes aprovados**, com 62 testes condicionais ignorados por dependências de ambiente não configuradas; lint, tipos e build de produção com memória limitada. `scripts/commerce-studio-purchase-browser.mjs` usa PostgreSQL isolado e emula somente o protocolo privado do Storage em `127.0.0.1:55440`. Percorre loja pública/prévia em 320/390/1440 px e temas claro/escuro, com imagens sintéticas. Confere pixels das duas faces, imagem inteira sem distorção, cor de preenchimento e lados preservados no arquivo salvo, corte de 60 mm em 709 × 709 px, vínculo por tenant/produto/sessão e bloqueio de acesso por outro comprador. Também verifica reabertura na mesma sessão, aprovação explícita, carrinho e criação de pedido local com prova aprovada e pagamento pendente, sem cobrança. A prévia não grava linhas de arte no banco nem objetos no Storage. Capturas desktop/mobile foram inspecionadas; um overflow causado pelo input oculto de upload foi corrigido. As configurações e produtos temporários são restaurados ao finalizar. Não houve acesso a IA, ERP, SMTP, pagamentos ou Storage reais.
+
 #### Refinamento da Animação e Demonstração
 
 Correção de continuidade em repouso:
@@ -19,14 +29,14 @@ Correção de continuidade em repouso:
 Validação desta correção: 20 testes focados aprovados, lint, tipos e build com memória limitada. `COMMERCE_STUDIO_MOTION_ONLY=true` no script de navegador verifica somente a vitrine, sem repetir o editor: cursor parado durante um ciclo completo (430 frames), cursor fora da área (120 frames por cenário), posições fracionárias sem variações maiores que 0,45 px entre amostras após estabilizar o mouse, pausa/retomada, ausência de animação CSS concorrente, loja pública/prévia e temas claro/escuro, além de toque e movimento reduzido estáticos. Capturas da vitrine com cursor dentro e fora foram conferidas. A flutuação permanece acima da posição de repouso para preservar espaço para as legendas. O banco local é restaurado ao terminar; nenhuma migration ou variável adicional é necessária para a aplicação.
 
 - [x] Suavizar flutuação e resposta ao mouse pelo tempo entre frames e pausar sem reiniciar a animação.
-- [x] Frente e verso simultâneos, com a indicação de simulação e sem gravação ou aprovação de arte.
+- [x] Frente e verso simultâneos, com a indicação de simulação, sem gravação durante os ajustes nem aprovação automática.
 - [x] Tipografia local, texto em linhas ajustadas à área segura, circular e em espiral do centro para fora.
 - [x] Fundo sólido ou degradê horizontal, diagonal, circular ou espiral, com até quatro cores editáveis.
 - [x] Regressões de layout e movimento, pixels reais desktop/mobile, build e limites de memória preservados.
 
 A flutuação automática e o mouse compartilham um único relógio `requestAnimationFrame` e uma única transformação da imagem, sem keyframes ou transições CSS concorrentes. A imagem continua recebendo posições fracionárias quando o cursor para ou sai da vitrine. O tempo acumulado é preservado ao pausar; aba oculta, interseção e desmontagem cancelam o loop, sem recuperar o tempo de ausência ao retomar. O retorno ao centro é gradual, e legendas permanecem imóveis. Dispositivos de toque e movimento reduzido continuam estáticos.
 
-O exemplo usa uma mensagem de até 140 caracteres. O modo em linhas respeita quebras manuais e calcula larguras diferentes por linha dentro da região segura; o circular acompanha a borda e o espiral distribui caracteres por comprimento de arco, do centro para fora. Nenhuma dessas ações altera as artes reais do pedido. A demonstração continua importada somente no clique, sem IA, upload ou gravação.
+O Estúdio usa uma mensagem opcional de até 140 caracteres. O modo em linhas respeita quebras manuais e calcula larguras diferentes por linha dentro da região segura; o circular acompanha a borda e o espiral distribui caracteres por comprimento de arco, do centro para fora. Durante a edição, a composição fica local no navegador, sem IA ou gravação. Somente **Usar esta arte no produto** salva uma nova arte na sessão privada do comprador e abre a página do produto para revisão e aprovação explícitas.
 
 Fontes adicionais servidas localmente e carregadas somente quando selecionadas: Caveat 700 (aproximadamente 51 KB) e DM Serif Display (aproximadamente 28 KB), obtidas do Google Fonts. Arquivos WOFF2 e respectivas licenças SIL OFL estão em `public/studio/fonts/`. Fontes oficiais: [Caveat](https://github.com/google/fonts/tree/main/ofl/caveat), [DM Serif Display](https://github.com/google/fonts/tree/main/ofl/dmserifdisplay). Os estilos Moderna e Marcante usam fontes do sistema. Não há nova dependência ou conexão do navegador com o Google Fonts.
 
@@ -37,7 +47,7 @@ Validação do refinamento: **862 testes na suíte de regressão**, seguidos de 
 - [x] Preset opcional por tenant, mantendo lojas existentes no tema clássico até ativação explícita.
 - [x] Abertura com imagens reais do catálogo, textura de apoio e foto própria opcional.
 - [x] Profundidade, microinterações leves, pausa e respeito a movimento reduzido, toque e abas ocultas.
-- [x] Demonstração de arte e frente/verso carregada somente por interação, sem IA nem gravação de dados.
+- [x] Demonstração de arte e frente/verso carregada somente por interação, sem IA nem gravação durante os ajustes.
 - [x] Orçamento, carrinho e pagamento preservam superfícies tranquilas e suas regras atuais.
 - [x] Testes de regressão, build e conferência desktop/mobile, claro/escuro e pixels dos modelos.
 
@@ -51,7 +61,13 @@ Em **Loja online > Loja e catálogo > Identidade e atendimento > Identidade visu
 
 A foto própria é opcional, com o upload existente de PNG/JPEG/WebP de até 3 MB. Sem ela, os produtos reais aparecem sobre uma textura ilustrativa. O visitante pode trocar o destaque e pausar a abertura. Toque, movimento reduzido, aba oculta e vitrine fora da tela suspendem o movimento. Não há Three.js, vídeo automático, polling ou requisição de IA nesta experiência.
 
-A demonstração **Ver como fica** só aparece para produtos personalizados com geometria e modelo frente/verso configurados. O módulo é importado apenas no clique; usa uma arte-exemplo gerada localmente em canvas e os modelos existentes, com mensagem, cor e seleção de produto. Não grava dados, não aprova artes nem adiciona produtos ao carrinho. A personalização real continua na página do produto. Imagens de acabamento são ilustrativas, sem promessas de fabricação ou certificados não comprovados. Banners continuam disponíveis abaixo das vitrines como campanhas.
+A experiência **Ver como fica** só aparece para produtos personalizados com geometria e modelo frente/verso configurados. O módulo é importado apenas no clique; usa canvas e os modelos existentes, com mensagem opcional, imagem, cor e seleção de produto. **Fundo > Imagem** aceita PNG/JPEG/WebP de até 3 MB, 25 megapixels e 10.000 px por lado, com checagem de assinatura. A imagem mantém proporção; permite encaixe inteiro, preenchimento, tamanho, deslocamento e uma cor sólida nas áreas descobertas. A nitidez é estimada pela imagem original, não pela resolução artificial da composição.
+
+**Usar esta arte no produto** gera uma composição nas medidas de corte a 300 dpi e usa o upload/enquadramento privados já existentes. O arquivo final é PNG, com fallback para WebP quando necessário, limitado a 3 MB; produtos que exigem mais de 4.096 px por lado ou 16 megapixels recebem orientação para enviar arte pronta, sem reduzir silenciosamente a resolução. A composição é achatada: texto, imagem e fundo passam a ser uma arte única que pode ser retocada ou reenquadrada pelas ferramentas existentes. Não há aprovação automática, inclusão automática no carrinho ou cobrança.
+
+O link de continuidade contém apenas o ID da arte, nunca a imagem ou credenciais. A página do produto só seleciona esse ID se estiver na lista de artes da sessão e pertencer ao produto atual. Na loja pública, a arte permanece disponível na mesma sessão ao reabrir o link; a prévia privada continua somente em memória e perde a simulação ao recarregar. Se o preparo falhar depois do envio, tentar novamente reaproveita a mesma arte. Não há nova migration, dependência ou variável de ambiente: o fluxo usa o bucket privado `artwork-production` e as configurações de Storage já existentes.
+
+Imagens de acabamento são ilustrativas, sem promessas de fabricação ou certificados não comprovados. Banners continuam disponíveis abaixo das vitrines como campanhas.
 
 #### Asset e Proveniência
 

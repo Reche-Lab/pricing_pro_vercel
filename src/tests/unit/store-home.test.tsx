@@ -64,7 +64,7 @@ afterEach(() => {
 describe("storefront merchandising", () => {
   const product = { id: "product", name: "Botton", imageUrl: "https://example.test/product.png", category: "Bottons", personalized: true, unitCents: 1000, minQuantity: 1, offer: { originalUnitCents: 1000, maxDiscountPercent: 0 }, media: [{ id: "second", kind: "image", url: "https://example.test/back.png" }] } as StoreProduct;
   it("places categories before featured products and benefits after the catalog", () => {
-    render(<StoreHome settings={settings} products={[product]} base="/commerce/ground-shop/preview" />);
+    render(<StoreHome settings={settings} products={[product]} base="/commerce/ground-shop/preview" slug="ground-shop" />);
     const categories = screen.getByRole("region", { name: "Coleções" });
     const featured = screen.getByRole("region", { name: "Encontre o seu próximo favorito" });
     expect(categories.compareDocumentPosition(featured) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

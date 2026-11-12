@@ -7,12 +7,13 @@ import { CommercePreviewProvider, useCommercePreview } from "@/components/commer
 import { storeSettingsSchema } from "@/domain/commerce/schemas";
 import { storeRequest } from "@/components/commerce/store-http";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
+const navigation = vi.hoisted(() => ({ search: "" }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams(navigation.search) }));
 vi.mock("next/dynamic", () => ({ default: (loader: () => unknown) => function Tools(props: React.ComponentProps<typeof StoreArtworkTools>) {
   return String(loader).includes("StoreArtworkTools") ? <StoreArtworkTools {...props} /> : null;
 } }));
 vi.mock("@/components/commerce/store-http", () => ({ storeRequest: vi.fn(), storeMoney: (cents: number) => `R$ ${(cents / 100).toFixed(2)}` }));
-beforeEach(() => vi.stubGlobal("React", React));
+beforeEach(() => { vi.stubGlobal("React", React); navigation.search = ""; });
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 const settings = storeSettingsSchema.parse({ name: "Loja teste", description: "", logoUrl: "", bannerUrl: "", accent: "#047857",
   contactEmail: "test@example.test", contactPhone: "", pickupEnabled: false, pickupAddress: "", deliveryEnabled: false,
@@ -35,6 +36,30 @@ function show(preview = false, personalized = true, geometry: import("@/domain/a
 }
 
 describe("product artwork and cart confirmation", () => {
+  it("restores the studio art into the first product group after navigation or refresh, without approving it", async () => {
+    navigation.search = `arteEstudio=${artwork.id}`;
+    const created = { ...artwork, crop: { scale: 1, offsetX: 0, offsetY: 0, rotationDegrees: 0 } };
+    vi.mocked(storeRequest).mockImplementation(async (url, method, body) => url.endsWith("/price") ? calculation(body) : method === "PUT" ? { ok: true } : { revision: 0, lines: [], artworks: [created], customer: null, calculation: null });
+    const view = show();
+    await screen.findByText(/Sua arte do Estúdio já está anexada/);
+    view.unmount(); show();
+    await screen.findByText(/Sua arte do Estúdio já está anexada/);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Adicionar ao carrinho" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar ao carrinho" }));
+    await screen.findByText("Produto adicionado ao carrinho");
+    expect(vi.mocked(storeRequest).mock.calls.find(([, method]) => method === "PUT")?.[2]).toMatchObject({ lines: [{ artworkId: artwork.id, artworkName: "Arte do Estúdio", preparation: "customer" }] });
+    expect(vi.mocked(storeRequest).mock.calls.some(([, , body]) => (body as { action?: string } | undefined)?.action === "approve")).toBe(false);
+  });
+  it("does not use an artwork from a different product just because its ID appears in the URL", async () => {
+    navigation.search = `arteEstudio=${artwork.id}`;
+    vi.mocked(storeRequest).mockImplementation(async (url, method, body) => url.endsWith("/price") ? calculation(body) : method === "PUT" ? { ok: true } : { revision: 0, lines: [], artworks: [{ ...artwork, product_id: crypto.randomUUID() }], customer: null, calculation: null });
+    show();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Adicionar ao carrinho" })).toBeEnabled());
+    expect(screen.queryByText(/Sua arte do Estúdio já está anexada/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar ao carrinho" }));
+    await screen.findByText("Produto adicionado ao carrinho");
+    expect(vi.mocked(storeRequest).mock.calls.find(([, method]) => method === "PUT")?.[2]).toMatchObject({ lines: [{ artworkId: null }] });
+  });
   it.each([false, true])("offers the configured SVG guide before choosing quantities or uploading (preview: %s)", async preview => {
     vi.mocked(storeRequest).mockImplementation(async (url, _method, body) => url.endsWith("/price") ? calculation(body) : { revision: 0, lines: [], artworks: [], customer: null, calculation: null });
     const geometry = { shape: "circle" as const, widthMm: 35, heightMm: 35, cornerStyle: "sharp" as const, cornerRadiusMm: 0, rotationDegrees: 0, allowPrintRotation: true };

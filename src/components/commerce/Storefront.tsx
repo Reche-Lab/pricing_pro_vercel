@@ -308,7 +308,7 @@ export function Storefront({
         {showQuoteJourney ? <StoreQuoteJourney base={base} step={savedQuote ? 4 : quoteDetails ? quoteStep === "review" ? 3 : 2 : 1} count={cart?.lines.length ?? 0} totalCents={cart?.calculation?.totalCents ?? 0} identified={Boolean(cart?.customer)} onPurchase={() => { setQuoteMode(false); router.push(`${base}/carrinho`); }}/>: null}
       </header>
       {view === "home" ? (
-        <StoreHome settings={settings} products={products} base={base} preview={preview} quoting={quoting} />
+        <StoreHome settings={settings} products={products} base={base} preview={preview} quoting={quoting} slug={slug} />
       ) : null}
       <div
         className={
@@ -811,6 +811,9 @@ function ProductDetail({
   const [draftArtworks, setDraftArtworks] = useState<Record<number, string>>({});
   const [draftNames, setDraftNames] = useState<Record<number, string>>({});
   const initialLibraryId = useSearchParams().get("arte") ?? undefined;
+  const studioArtworkId = useSearchParams().get("arteEstudio");
+  const appliedStudioArtwork = useRef<string | null>(null);
+  const studioArtwork = artworks.find(art => art.id === studioArtworkId && art.product_id === product.id);
   const [draftPreparation, setDraftPreparation] = useState<Record<number, "team" | "customer">>({});
   const [artworksOpen, setArtworksOpen] = useState(Boolean(initialLibraryId && libraryEnabled));
   const [uploadingGroups, setUploadingGroups] = useState<Set<number>>(new Set());
@@ -822,6 +825,14 @@ function ProductDetail({
   const allowedArtworks = artworkLimit(Number(quantity), product.maxArtworks);
   const unusedArtworks = Object.entries(draftArtworks).filter(([index, id]) => id && Number(index) >= Number(groups || "1")).length;
   const [allowUnused, setAllowUnused] = useState(false);
+  useEffect(() => {
+    if (!studioArtwork || appliedStudioArtwork.current === studioArtwork.id) return;
+    appliedStudioArtwork.current = studioArtwork.id;
+    setDraftArtworks(current => ({ ...current, 0: studioArtwork.id }));
+    setDraftNames(current => ({ ...current, 0: "Arte do Estúdio" }));
+    setDraftPreparation(current => ({ ...current, 0: "customer" }));
+    setArtworksOpen(true);
+  }, [studioArtwork]);
   useEffect(() => setAllowUnused(false), [quantity, groups]);
   const [priced, setPrice] = useState<{ lines: CartLine[]; calculation: {
     totalCents: number;
@@ -899,6 +910,7 @@ function ProductDetail({
         <ArrowLeft size={15} />
         Todos os produtos
       </Link>
+      {studioArtworkId && !disabled && !studioArtwork && !appliedStudioArtwork.current ? <p role="alert" className="mb-4 text-sm text-amber-600">A arte do Estúdio não está disponível nesta sessão. Volte ao Estúdio ou envie sua arte novamente.</p> : null}
       <div className={styles.columns}>
         <StoreProductGallery
           id={product.id}
@@ -981,6 +993,7 @@ function ProductDetail({
                 <ChevronDown size={18} className={artworksOpen ? styles.chevronOpen : undefined} aria-hidden="true" />
               </button>
               {artworksOpen ? <div id={artworkPanelId} className={styles.personalizationContent}>
+                {studioArtwork ? <p role="status" className="mb-3 text-sm text-emerald-600">Sua arte do Estúdio já está anexada. Revise e aprove antes de concluir a compra.</p> : null}
                 <p className={styles.muted}>PNG, JPEG ou WebP de até 3 MB por arte.</p>
                 {lines.length && !deliveryIssue ? lines.map((line, index) => (
                   <div className={styles.productArtworkGroup} key={index}>

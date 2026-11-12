@@ -5,13 +5,18 @@ import { StudioPersonalizer } from "@/components/commerce/StudioPersonalizer";
 import { renderStudioArtwork } from "@/components/commerce/studio-artwork-canvas";
 import type { StoreProduct } from "@/components/commerce/StoreHome";
 import { defaultMockup } from "@/domain/commerce/artwork-options";
-vi.mock("@/components/commerce/studio-artwork-canvas", () => ({ renderStudioArtwork: vi.fn(async () => ({ dataUrl: "data:image/png;base64,example", truncated: false })) }));
+import { saveStudioPurchase } from "@/components/commerce/studio-purchase";
+const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+vi.mock("@/components/commerce/studio-purchase", () => ({ saveStudioPurchase: vi.fn(async () => "saved-art") }));
+vi.mock("@/components/commerce/studio-image", () => ({ readStudioBackground: vi.fn(async () => ({ dataUrl: "data:image/png;base64,YQ==", fileName: "fundo.png", width: 1200, height: 800 })) }));
+vi.mock("@/components/commerce/studio-artwork-canvas", () => ({ renderStudioArtwork: vi.fn(async () => ({ dataUrl: "data:image/png;base64,YQ==", truncated: false, mimeType: "image/png", fileSize: 1 })) }));
 vi.mock("@/components/commerce/StoreProductMockup", () => ({ StoreProductMockup: ({ fixedSide }: { fixedSide: string }) => <canvas aria-label={fixedSide === "front" ? "Frente do exemplo" : "Verso do exemplo"}/> }));
 const products = [{ id: "demo", name: "Botton 3,5 cm", personalized: true, geometry: { shape: "circle", widthMm: 35, heightMm: 35 }, margins: { safeMarginMm: 3, bleedMm: 3 }, artworkOptions: { mockup: defaultMockup() } }] as StoreProduct[];
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 describe("studio creative demonstration", () => {
   it("shows both sides at once and exposes a multiline message and distinct typography modes", async () => {
-    render(<StudioPersonalizer products={products} base="/commerce/store/preview"/>);
+    render(<StudioPersonalizer products={products} base="/commerce/store/preview" slug="store"/>);
     expect(await screen.findByLabelText("Frente do exemplo")).toBeInTheDocument();
     expect(screen.getByLabelText("Verso do exemplo")).toBeInTheDocument();
     expect(screen.getByLabelText("Sua mensagem").tagName).toBe("TEXTAREA");
@@ -19,11 +24,11 @@ describe("studio creative demonstration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Texto em espiral" }));
     fireEvent.change(screen.getByLabelText("Fonte"), { target: { value: "handwritten" } });
     await waitFor(() => expect(renderStudioArtwork).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "spiral", font: "handwritten", text: "Uma mensagem\ncom várias linhas" }), products[0].geometry, products[0].margins));
-    expect(screen.getByRole("link", { name: "Personalizar este produto" })).toHaveAttribute("href", "/commerce/store/preview/produto/demo");
+    expect(screen.getByRole("button", { name: "Usar esta arte no produto" })).toBeInTheDocument();
     expect(screen.getByText(/Simulação ilustrativa/)).toBeInTheDocument();
   });
   it("adds and removes background colors with an explicit limit of four", async () => {
-    render(<StudioPersonalizer products={products} base=""/>);
+    render(<StudioPersonalizer products={products} base="" slug="store"/>);
     await screen.findByLabelText("Frente do exemplo");
     fireEvent.click(screen.getByRole("tab", { name: "Fundo" }));
     const add = screen.getByRole("button", { name: "Adicionar cor ao fundo" });
@@ -38,7 +43,7 @@ describe("studio creative demonstration", () => {
     expect(add).not.toBeDisabled();
   });
   it("supports keyboard navigation between text and background without losing the message", async () => {
-    render(<StudioPersonalizer products={products} base=""/>);
+    render(<StudioPersonalizer products={products} base="" slug="store"/>);
     await screen.findByLabelText("Frente do exemplo");
     fireEvent.change(screen.getByLabelText("Sua mensagem"), { target: { value: "Minha criação" } });
     fireEvent.keyDown(screen.getByRole("tab", { name: "Texto" }), { key: "ArrowRight" });
@@ -46,5 +51,38 @@ describe("studio creative demonstration", () => {
     expect(screen.getByRole("tabpanel", { name: "Fundo" })).toBeVisible();
     fireEvent.keyDown(screen.getByRole("tab", { name: "Fundo" }), { key: "Home" });
     expect(screen.getByLabelText("Sua mensagem")).toHaveValue("Minha criação");
+  });
+  it("uses an uploaded background with scale, position and fill, without saving on each adjustment", async () => {
+    render(<StudioPersonalizer products={products} base="" slug="store"/>);
+    await screen.findByLabelText("Frente do exemplo");
+    fireEvent.click(screen.getByRole("tab", { name: "Fundo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Imagem" }));
+    fireEvent.change(screen.getByLabelText("Enviar imagem de fundo"), { target: { files: [new File(["image"], "fundo.png", { type: "image/png" })] } });
+    await screen.findByAltText("Imagem de fundo escolhida");
+    fireEvent.change(screen.getByRole("slider", { name: "Tamanho da imagem" }), { target: { value: ".5" } });
+    fireEvent.change(screen.getByRole("slider", { name: "Deslocamento horizontal" }), { target: { value: ".2" } });
+    fireEvent.change(screen.getByLabelText("Cor nas áreas descobertas"), { target: { value: "#223344" } });
+    await waitFor(() => expect(renderStudioArtwork).toHaveBeenLastCalledWith(expect.objectContaining({ backgroundType: "image", backgroundImage: expect.objectContaining({ scale: .5, offsetX: .2, fillColor: "#223344" }) }), expect.anything(), expect.anything()));
+    expect(saveStudioPurchase).not.toHaveBeenCalled();
+  });
+  it("exports a fresh print composition, saves once and then navigates to the same tenant's product", async () => {
+    render(<StudioPersonalizer products={products} base="/loja/store" slug="store"/>);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Usar esta arte no produto" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Usar esta arte no produto" }));
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/loja/store/produto/demo?arteEstudio=saved-art"));
+    expect(renderStudioArtwork).toHaveBeenLastCalledWith(expect.anything(), products[0].geometry, products[0].margins, { purpose: "purchase" });
+    expect(saveStudioPurchase).toHaveBeenCalledTimes(1);
+    expect(saveStudioPurchase).toHaveBeenCalledWith(expect.objectContaining({ slug: "store", productId: "demo", file: expect.objectContaining({ fileSize: 1, mimeType: "image/png" }) }));
+  });
+  it("keeps the artwork on failure and does not navigate or allow a duplicate click", async () => {
+    vi.mocked(saveStudioPurchase).mockRejectedValueOnce(new Error("Armazenamento indisponível"));
+    render(<StudioPersonalizer products={products} base="" slug="store"/>);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Usar esta arte no produto" })).toBeEnabled());
+    const button = screen.getByRole("button", { name: "Usar esta arte no produto" });
+    fireEvent.click(button); fireEvent.click(button);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Armazenamento indisponível");
+    expect(saveStudioPurchase).toHaveBeenCalledTimes(1); expect(navigation.push).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Sua mensagem")).toHaveValue("Sua ideia\nganha forma");
+    expect(button).toBeEnabled();
   });
 });

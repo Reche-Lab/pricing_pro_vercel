@@ -1,9 +1,10 @@
 import { calculatePrintGuideDimensions, type PrintGeometry, type PrintMargins } from "@/domain/artwork/geometry";
+import type { StudioBackgroundImage } from "./studio-background";
 
 export type StudioTextMode = "centered" | "circle" | "spiral";
 export type StudioGradient = "solid" | "horizontal" | "diagonal" | "radial" | "spiral";
 export type StudioFont = "modern" | "editorial" | "handwritten" | "bold";
-export type StudioArtwork = { text: string; mode: StudioTextMode; font: StudioFont; textColor: string; colors: string[]; gradient: StudioGradient };
+export type StudioArtwork = { text: string; mode: StudioTextMode; font: StudioFont; textColor: string; colors: string[]; gradient: StudioGradient; backgroundType?: "color" | "image"; backgroundImage?: StudioBackgroundImage; showText?: boolean };
 export type TextMeasure = (text: string, size: number) => number;
 export type StudioTextBounds = { x: number; y: number; width: number; height: number };
 export type StudioGlyph = { text: string; x: number; y: number; width: number; rotation: number };

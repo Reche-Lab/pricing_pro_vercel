@@ -1,5 +1,7 @@
-import { calculatePrintGuideDimensions, type PrintGeometry, type PrintMargins } from "@/domain/artwork/geometry";
+import type { PrintGeometry, PrintMargins } from "@/domain/artwork/geometry";
 import { layoutStudioText, studioGradientColor, studioTextBounds, type StudioArtwork, type StudioFont } from "@/domain/commerce/studio-artwork";
+import { STUDIO_MAX_IMAGE_BYTES, studioRasterSize, studioImagePlacement } from "@/domain/commerce/studio-background";
+import { loadStudioImage, studioBlobDataUrl } from "./studio-image";
 
 const fonts = {
   modern: { family: "Arial, sans-serif", weight: "700" },
@@ -18,13 +20,25 @@ async function loadFont(font: StudioFont) {
   await loading.get(font);
 }
 
-function drawBackground(context: CanvasRenderingContext2D, settings: StudioArtwork, width: number, height: number) {
+async function drawBackground(context: CanvasRenderingContext2D, settings: StudioArtwork, width: number, height: number, purpose: "preview" | "purchase") {
+  if (settings.backgroundType === "image") {
+    const background = settings.backgroundImage;
+    context.fillStyle = background?.fillColor || settings.colors[0] || "#ffffff";
+    context.fillRect(0, 0, width, height);
+    if (background) {
+      const image = await loadStudioImage(background.asset);
+      const placement = studioImagePlacement(background.asset, { width, height }, background);
+      context.drawImage(image, placement.x, placement.y, placement.width, placement.height);
+    }
+    return;
+  }
   const colors = settings.colors.slice(0, 4);
   if (colors.length < 2 || settings.gradient === "solid") {
     context.fillStyle = colors[0] || "#226d5c"; context.fillRect(0, 0, width, height); return;
   }
   if (settings.gradient === "spiral") {
-    const sample = document.createElement("canvas"); sample.width = Math.max(1, Math.round(384 * Math.min(1, width / height))); sample.height = Math.max(1, Math.round(384 * Math.min(1, height / width)));
+    const limit = purpose === "purchase" ? 1024 : 384;
+    const sample = document.createElement("canvas"); sample.width = Math.max(1, Math.round(limit * Math.min(1, width / height))); sample.height = Math.max(1, Math.round(limit * Math.min(1, height / width)));
     const ctx = sample.getContext("2d")!;
     const image = ctx.createImageData(sample.width, sample.height), radius = Math.max(sample.width, sample.height) / 2;
     // A small color lookup keeps the spiral's per-pixel work bounded and independent of text quality.
@@ -45,18 +59,19 @@ function drawBackground(context: CanvasRenderingContext2D, settings: StudioArtwo
   context.fillStyle = gradient; context.fillRect(0, 0, width, height);
 }
 
-export async function renderStudioArtwork(settings: StudioArtwork, geometry: PrintGeometry, margins: PrintMargins) {
+export async function renderStudioArtwork(settings: StudioArtwork, geometry: PrintGeometry, margins: PrintMargins, options: { purpose: "purchase" | "preview" } = { purpose: "preview" }) {
   await loadFont(settings.font);
-  const dimensions = calculatePrintGuideDimensions({ safeWidthMm: geometry.widthMm, safeHeightMm: geometry.heightMm, sangriaIncrementMm: margins.safeMarginMm, cutIncrementMm: margins.bleedMm });
   const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(640 * Math.min(1, dimensions.cutWidthMm / dimensions.cutHeightMm)));
-  canvas.height = Math.max(1, Math.round(640 * Math.min(1, dimensions.cutHeightMm / dimensions.cutWidthMm)));
+  const size = studioRasterSize(geometry, margins, options.purpose);
+  canvas.width = size.width; canvas.height = size.height;
+  const logical = studioRasterSize(geometry, margins, "preview");
   const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("Não foi possível preparar a demonstração neste navegador.");
-  drawBackground(ctx, settings, canvas.width, canvas.height);
+  ctx.scale(canvas.width / logical.width, canvas.height / logical.height);
+  await drawBackground(ctx, settings, logical.width, logical.height, options.purpose);
   const font = fonts[settings.font];
   const setSize = (size: number) => { ctx.font = `${font.weight} ${size}px ${font.family}`; };
   const measurements = new Map<string, number>();
-  const layout = layoutStudioText({ text: settings.text, mode: settings.mode, bounds: studioTextBounds(geometry, margins, canvas.width), measure: (text, size) => {
+  const layout = settings.showText === false ? { glyphs: [], fontSize: 12, truncated: false } : layoutStudioText({ text: settings.text, mode: settings.mode, bounds: studioTextBounds(geometry, margins, logical.width), measure: (text, size) => {
     const key = `${size}:${text}`;
     if (!measurements.has(key)) { setSize(size); measurements.set(key, ctx.measureText(text).width); }
     return measurements.get(key)!;
@@ -65,5 +80,10 @@ export async function renderStudioArtwork(settings: StudioArtwork, geometry: Pri
   for (const glyph of layout.glyphs) {
     ctx.save(); ctx.translate(glyph.x, glyph.y); ctx.rotate(glyph.rotation); ctx.fillText(glyph.text, 0, 0); ctx.restore();
   }
-  return { dataUrl: canvas.toDataURL("image/png"), truncated: layout.truncated };
+  if (options.purpose === "preview") return { dataUrl: canvas.toDataURL("image/png"), truncated: layout.truncated, mimeType: "image/png", fileSize: 0 };
+  const encode = (mime: string, quality?: number) => new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Não foi possível exportar sua arte.")), mime, quality));
+  let file = await encode("image/png");
+  if (file.size > STUDIO_MAX_IMAGE_BYTES) file = await encode("image/webp", .94);
+  if (file.size > STUDIO_MAX_IMAGE_BYTES) throw new Error("A arte final ultrapassou 3 MB. Use uma imagem de fundo mais simples ou menor e tente novamente.");
+  return { dataUrl: await studioBlobDataUrl(file), truncated: layout.truncated, mimeType: file.type, fileSize: file.size };
 }

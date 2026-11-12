@@ -40,7 +40,7 @@ describe("optional studio experience", () => {
   });
   it("keeps campaigns and only one primary heading, without mounting a mockup before interaction", () => {
     const product = { ...products[0], geometry: { shape: "circle" }, artworkOptions: { mockup: defaultMockup() } } as StoreProduct;
-    render(<StoreHome settings={{ ...settings, experience: { style: "studio", motion: true, backgroundUrl: "" }, bannerUrl: "https://example.com/banner.webp" }} products={[product]} base="/loja/test"/>);
+    render(<StoreHome settings={{ ...settings, experience: { style: "studio", motion: true, backgroundUrl: "" }, bannerUrl: "https://example.com/banner.webp" }} products={[product]} base="/loja/test" slug="test"/>);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("region", { name: "Campanhas da loja" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Experimentar minha ideia" })).toBeInTheDocument();
