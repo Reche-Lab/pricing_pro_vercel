@@ -5,9 +5,10 @@ import { isProductionCommerceCarrier } from "@/domain/commerce/carrier-settings"
 export async function commerceLaunchReadiness(tenantId: string): Promise<CommerceLaunchReadiness> {
   const result = await getPool().query<{
     postal_code: string | null; carrier_status: string | null; carrier_credentials: boolean;
-    has_boxes: boolean; payment_ready: boolean; carrier_settings: Record<string, unknown> | null;
+    has_boxes: boolean; payment_ready: boolean; carrier_settings: Record<string, unknown> | null; tenant_email_ready: boolean;
   }>(`select t.postal_code,i.status as carrier_status,i.settings as carrier_settings,i.credentials_encrypted is not null as carrier_credentials,
     exists(select 1 from packaging_boxes b where b.tenant_id=t.id and b.active and b.height_cm>0 and b.width_cm>0 and b.length_cm>0) as has_boxes,
+    exists(select 1 from commerce_email_connections e where e.tenant_id=t.id and e.enabled and e.tested_revision=e.revision and e.tested_at is not null) as tenant_email_ready,
     coalesce(case when p.payment_environment='test' then p.mp_enabled and p.transparent_enabled and p.test_encrypted_credentials is not null and length(p.test_public_key)>0
       else (p.mp_enabled and p.encrypted_credentials is not null) or (p.manual_enabled and length(trim(p.manual_instructions))>0) end,false) as payment_ready
     from tenants t left join integration_connections i on i.tenant_id=t.id and i.provider='melhor_envio'
@@ -23,7 +24,7 @@ export async function commerceLaunchReadiness(tenantId: string): Promise<Commerc
   return {
     carrierReady: Boolean(row?.carrier_status === "active" && row.carrier_credentials && productionReady && originReady && row.has_boxes),
     carrierMessage, paymentReady: Boolean(row?.payment_ready),
-    emailReady: Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS),
+    emailReady: Boolean(row?.tenant_email_ready || process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS),
     httpsReady: Boolean(process.env.APP_URL?.startsWith("https://")),
   };
 }

@@ -83,13 +83,16 @@ describe("commerce configuration controls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Salvar meios de pagamento" }));
     await waitFor(() => expect(storeRequest).toHaveBeenCalledWith("/api/commerce/admin/payments", "PUT", expect.objectContaining({ checkoutSettings: { pix: true, credit: true, debit: false, boleto: true, maxInstallments: 6 }, accessToken: undefined, webhookSecret: undefined })));
   });
-  it("shows the URL and records a desired domain without claiming DNS is already active", () => {
+  it("shows the URL and records a desired domain without claiming DNS is already active", async () => {
     const initial = { store: { tenant_id: "tenant", slug: "ground-shop" }, urls: { public: "https://panel.test/loja/ground-shop", domains: [], platform: "https://panel.test/loja/ground-shop", webhook: "https://panel.test/api/store/ground-shop/payment-webhook" }, products: [], variants: [], platforms: [], orders: [], payments: null };
+    vi.mocked(storeRequest).mockResolvedValue({ domains: [] });
     render(<CommerceAdmin initial={initial as never} tenantName="Ground Shop"/>);
-    fireEvent.click(screen.getByRole("button", { name: "Endereço da loja" }));
+    fireEvent.click(screen.getByRole("button", { name: "Domínio e DNS" }));
     expect(screen.getByRole("link", { name: "https://panel.test/loja/ground-shop" })).toHaveAttribute("href", initial.urls.public);
     fireEvent.change(screen.getByLabelText("Domínio desejado"), { target: { value: "groundshop.com.br" } });
     expect(screen.getByText(/não altera DNS nem comprova sua propriedade/)).toBeInTheDocument();
-    expect(storeRequest).not.toHaveBeenCalled();
+    await screen.findByText(/Nenhuma solicitação registrada/);
+    expect(storeRequest).toHaveBeenCalledTimes(1);
+    expect(storeRequest).toHaveBeenCalledWith("/api/commerce/admin/domains");
   });
 });

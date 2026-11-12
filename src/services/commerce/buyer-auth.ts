@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { getPool } from "@/lib/db/client";
-import { sendEmail } from "@/services/email/invite-email";
+import { sendStoreEmail } from "@/services/email/store-email";
 import { CommerceError } from "@/domain/commerce/commerce";
 import {
   commerceTransaction,
@@ -30,11 +30,12 @@ export async function requestBuyerCode(
     ],
   );
   const text = `Seu código para acessar ${store.settings.name}: ${code}.\nVálido por 10 minutos. Não compartilhe este código. Se não solicitou o acesso, ignore esta mensagem.`;
-  const delivery = await sendEmail({
+  const safeName = store.settings.name.replace(/[&<>"']/g, value => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[value]!);
+  const delivery = await sendStoreEmail(store.tenant_id, {
     to: email,
-    subject: "Código de acesso à sua loja",
+    subject: `Seu código de acesso - ${store.settings.name.replace(/[\r\n]/g, " ")}`,
     text,
-    html: `<p>Seu código de acesso: <strong>${code}</strong></p><p>Válido por 10 minutos. Não compartilhe este código.</p>`,
+    html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#202c31"><h1 style="font-size:22px">${safeName}</h1><p>Seu código para acessar a loja e seus orçamentos:</p><p style="font-size:30px;font-weight:bold">${code}</p><p>Válido por 10 minutos. Não compartilhe este código. Se não solicitou o acesso, ignore esta mensagem.</p></div>`,
   });
   if (!delivery.sent) {
     await getPool().query(

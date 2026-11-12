@@ -9,6 +9,8 @@ import type { AccessRequestRow } from "@/repositories/access-requests";
 import type { SuperadminTenantRow } from "@/repositories/superadmin";
 import { AccessRequestsPanel } from "@/components/superadmin/AccessRequestsPanel";
 import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
+import dynamic from "next/dynamic";
+const CommerceDomainsSection = dynamic(() => import("./CommerceDomainsPanel").then(module => module.CommerceDomainsSection));
 
 export function SuperadminPanel({
   accessRequests,
@@ -147,6 +149,7 @@ export function SuperadminPanel({
       </section>
 
       <AccessRequestsPanel plans={billingPlans} requests={accessRequests} />
+      <CommerceDomainsSection/>
 
       <section className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5 xl:col-span-2">
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">

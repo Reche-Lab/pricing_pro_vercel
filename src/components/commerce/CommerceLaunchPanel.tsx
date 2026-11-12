@@ -4,8 +4,8 @@ import { CheckCircle2, CircleAlert } from "lucide-react";
 import type { StoreAdminInput } from "@/domain/commerce/schemas";
 import type { CommerceLaunchReadiness } from "@/domain/commerce/publication";
 
-export function CommerceLaunchPanel({ input, readiness, onPayments }: {
-  input: StoreAdminInput; readiness?: CommerceLaunchReadiness; onPayments: () => void;
+export function CommerceLaunchPanel({ input, readiness, onPayments, onEmail }: {
+  input: StoreAdminInput; readiness?: CommerceLaunchReadiness; onPayments: () => void; onEmail?: () => void;
 }) {
   const checks = [
     { label: "Produtos publicados", ok: input.products.some(product => product.active), target: "commerce-catalog", detail: "Marque ‘Publicar este produto’ no catálogo da loja." },
@@ -22,7 +22,7 @@ export function CommerceLaunchPanel({ input, readiness, onPayments }: {
       </button>
     </li>)}</ul>
     {readiness && (!readiness.emailReady || !readiness.httpsReady) ? <p className="text-xs leading-5 text-amber-200">
-      {!readiness.emailReady ? "Configure SMTP no ambiente antes de vender: o acesso do comprador depende do código por e-mail. " : ""}
+      {!readiness.emailReady ? <>Ative o e-mail da empresa ou configure o SMTP da plataforma antes de vender: o acesso do comprador depende do código por e-mail. {onEmail ? <button type="button" className="underline" onClick={onEmail}>Configurar e-mail da empresa</button> : null} </> : null}
       {!readiness.httpsReady ? "O Mercado Pago em produção exige APP_URL com HTTPS. " : ""}
     </p> : null}
   </section>;

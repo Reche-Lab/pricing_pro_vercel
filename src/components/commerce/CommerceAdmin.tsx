@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, type FormEvent } from "react";
+import React, { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Images,
   Link2,
+  Mail,
 } from "lucide-react";
 import type { getCommerceAdmin } from "@/repositories/commerce";
 import type { StoreAdminInput, StoreSettings } from "@/domain/commerce/schemas";
@@ -38,6 +39,7 @@ import styles from "./commerce-admin.module.css";
 type Data = Awaited<ReturnType<typeof getCommerceAdmin>>;
 const CommerceLibraryAdmin = dynamic(() => import("./CommerceLibraryAdmin").then(m => m.CommerceLibraryAdmin));
 const CommerceOlistSettings = dynamic(() => import("./CommerceOlistSettings").then(m => m.CommerceOlistSettings));
+const CommerceEmailSettings = dynamic(() => import("./CommerceEmailSettings").then(m => m.CommerceEmailSettings));
 const field =
   "min-w-0 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100";
 const button =
@@ -50,6 +52,7 @@ export function CommerceAdmin({
   tenantName: string;
 }) {
   const [data, setData] = useState(initial);
+  const emailReadyChanged = useCallback((ready: boolean) => setData(current => current.readiness ? { ...current, readiness: { ...current.readiness, emailReady: ready } } : current), []);
   const [tab, setTab] = useState("store");
   useEffect(() => { if (initial.olistConfigured && new URLSearchParams(window.location.search).get("tab") === "olist") setTab("olist"); }, [initial.olistConfigured]);
   const [busy, setBusy] = useState(false);
@@ -248,7 +251,8 @@ export function CommerceAdmin({
         {[
           ["store", "Loja e catálogo"],
           ["payments", "Pagamentos"],
-          ["address", "Endereço da loja"],
+          ["address", "Domínio e DNS"],
+          ["email", "E-mail da empresa"],
           ["library", "Campanhas e artes"],
           ...(data.olistConfigured ? [["olist", "Olist"]] : []),
           ["orders", `Pedidos (${data.orders.length})`],
@@ -261,7 +265,7 @@ export function CommerceAdmin({
             onClick={() => setTab(id)}
             className={`${button} shrink-0 whitespace-nowrap ${tab === id ? "border-emerald-500 bg-emerald-500/10 text-emerald-200" : "text-zinc-400"}`}
           >
-            {id === "store" ? <Store size={16} /> : id === "payments" ? <CreditCard size={16} /> : id === "address" ? <Globe size={16}/> : id === "library" ? <Images size={16}/> : id === "olist" ? <Link2 size={16}/> : <Package size={16} />}
+            {id === "store" ? <Store size={16} /> : id === "payments" ? <CreditCard size={16} /> : id === "address" ? <Globe size={16}/> : id === "email" ? <Mail size={16}/> : id === "library" ? <Images size={16}/> : id === "olist" ? <Link2 size={16}/> : <Package size={16} />}
             {label}
           </button>
         ))}
@@ -284,7 +288,7 @@ export function CommerceAdmin({
       ) : null}
       {tab === "store" ? (
         <form onSubmit={save} className="space-y-6">
-          <CommerceLaunchPanel input={{ enabled, status, platformId, settings, products: publications }} readiness={data.readiness && incompleteShipping.length ? { ...data.readiness, carrierReady: false, carrierMessage: `Complete peso e dimensões: ${incompleteShipping.join(", ")}.` } : data.readiness} onPayments={() => setTab("payments")}/>
+          <CommerceLaunchPanel input={{ enabled, status, platformId, settings, products: publications }} readiness={data.readiness && incompleteShipping.length ? { ...data.readiness, carrierReady: false, carrierMessage: `Complete peso e dimensões: ${incompleteShipping.join(", ")}.` } : data.readiness} onPayments={() => setTab("payments")} onEmail={() => setTab("email")}/>
           <fieldset
             disabled={busy || pendingUploads > 0}
             className="min-w-0 space-y-6"
@@ -804,7 +808,8 @@ export function CommerceAdmin({
           />
         </form>
       ) : null}
-      {tab === "address" ? <CommerceStoreAddress slug={data.store?.slug} urls={data.urls} value={settings.requestedDomain ?? ""} onChange={value => updateSetting("requestedDomain", value)} onSubmit={save} disabled={busy || pendingUploads > 0}/> : null}
+      {tab === "address" ? <CommerceStoreAddress slug={data.store?.slug} urls={data.urls} value={settings.requestedDomain ?? ""} onChange={value => updateSetting("requestedDomain", value)} disabled={busy || pendingUploads > 0 || !data.store?.tenant_id}/> : null}
+      {tab === "email" ? data.store?.tenant_id ? <CommerceEmailSettings storeName={settings.name} contactEmail={settings.contactEmail} onReadyChange={emailReadyChanged}/> : <p className="text-sm text-amber-200">Salve a loja antes de configurar o e-mail da empresa.</p> : null}
       {tab === "library" ? <CommerceLibraryAdmin products={data.products} slug={data.store?.slug} onBusyChange={setLibraryBusy}/> : null}
       {tab === "olist" && data.olistConfigured ? <CommerceOlistSettings/> : null}
       {tab === "orders" ? (
