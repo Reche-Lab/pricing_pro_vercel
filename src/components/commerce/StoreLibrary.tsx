@@ -33,6 +33,7 @@ export function LibraryGallery({
   initial,
   onInspect,
   initialArtworkId,
+  initialCategoryId,
 }: {
   slug: string;
   preview: boolean;
@@ -41,9 +42,13 @@ export function LibraryGallery({
   initial?: LibraryResult;
   onInspect: (art: LibraryArtwork) => void;
   initialArtworkId?: string;
+  initialCategoryId?: string;
 }) {
   const [q, setQ] = useState(""),
-    [category, setCategory] = useState(""),
+    [category, setCategory] = useState(() => {
+      const parsed = libraryQuerySchema.safeParse({ category: initialCategoryId });
+      return parsed.success ? parsed.data.category ?? "" : "";
+    }),
     [campaign, setCampaign] = useState(fixedCampaign ?? ""),
     [page, setPage] = useState(1);
   const [requestedArt, setRequestedArt] = useState(
@@ -280,6 +285,8 @@ export function StoreLibrary({
   initial,
   campaignSlug,
   campaignsOnly = false,
+  initialCategoryId,
+  initialArtworkId,
 }: {
   slug: string;
   preview?: boolean;
@@ -288,6 +295,8 @@ export function StoreLibrary({
   initial: LibraryResult;
   campaignSlug?: string;
   campaignsOnly?: boolean;
+  initialCategoryId?: string;
+  initialArtworkId?: string;
 }) {
   const [selected, setSelected] = useState<LibraryArtwork | null>(null);
   const campaign = initial.campaigns.find((c) => c.slug === campaignSlug);
@@ -334,7 +343,9 @@ export function StoreLibrary({
         <LibraryGallery
           slug={slug}
           preview={preview}
-          initial={initial}
+          initial={initialCategoryId || initialArtworkId ? undefined : initial}
+          initialCategoryId={initialCategoryId}
+          initialArtworkId={initialArtworkId}
           fixedCampaign={campaignSlug}
           onInspect={setSelected}
         />

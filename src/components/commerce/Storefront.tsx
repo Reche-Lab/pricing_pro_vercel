@@ -57,7 +57,7 @@ import { StoreOrderContactDetails } from "./StoreOrderContactDetails";
 import { useStoreTheme, accentForeground } from "./use-store-theme";
 import { useCommercePreview } from "./CommercePreviewProvider";
 import type { StoreArtwork } from "./StoreArtworkTools";
-import type { LibraryResult } from "@/domain/commerce/library";
+import { libraryQuerySchema, type LibraryResult } from "@/domain/commerce/library";
 import { pendingCartArtworks } from "@/domain/commerce/artwork-readiness";
 import { formatDeliveryDate } from "@/domain/shipping/production-lead-time";
 const StoreLibrary = dynamic(() => import("./StoreLibrary").then(m => m.StoreLibrary));
@@ -120,6 +120,7 @@ export function Storefront({
     void refresh().catch((e) => setError(e.message));
   }, [refresh]);
   const view = path[0] ?? "home";
+  const libraryFilters = libraryQuerySchema.safeParse({ category: searchParams.get("categoria") || undefined, artwork: searchParams.get("arte") || undefined });
   useEffect(() => {
     if (view !== "carrinho" || !focusedItem || !cart) return;
     const element = document.getElementById(`item-${focusedItem}`);
@@ -279,7 +280,7 @@ export function Storefront({
         </div>
         <StoreCategoryNavigation products={products} base={base} preview={preview} view={view}
           activeCategory={selectedProduct?.category ?? (view === "catalogo" ? searchParams.get("categoria") : null)}
-          libraryEnabled={libraryEnabled} navigationKey={`${base}/${path.join("/")}?${searchParams.toString()}`}/>
+          libraryEnabled={libraryEnabled} libraryApi={`${api}/library`} navigationKey={`${base}/${path.join("/")}?${searchParams.toString()}`}/>
       </header>
       {view === "home" ? (
         <StoreHome settings={settings} products={products} base={base} />
@@ -321,7 +322,7 @@ export function Storefront({
         ) : null}
         {children}
         {view === "home" && libraryEnabled ? <FeaturedLibraryCampaigns slug={slug} preview={preview} base={base}/> : null}
-        {libraryInitial && ["artes", "campanhas"].includes(view) ? <StoreLibrary slug={slug} preview={preview} base={base} products={products} initial={libraryInitial} campaignSlug={view === "campanhas" ? path[1] : undefined} campaignsOnly={view === "campanhas" && !path[1]}/> : null}
+        {libraryInitial && ["artes", "campanhas"].includes(view) ? <StoreLibrary key={`${view}/${path[1] ?? ""}?${searchParams.toString()}`} slug={slug} preview={preview} base={base} products={products} initial={libraryInitial} campaignSlug={view === "campanhas" ? path[1] : undefined} campaignsOnly={view === "campanhas" && !path[1]} initialCategoryId={libraryFilters.success ? libraryFilters.data.category : undefined} initialArtworkId={libraryFilters.success ? libraryFilters.data.artwork : undefined}/> : null}
         {view === "catalogo" ? (
           <Catalog
             products={products}

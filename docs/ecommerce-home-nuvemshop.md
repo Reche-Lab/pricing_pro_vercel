@@ -13,12 +13,22 @@ O tema de referência permite reordenar diversas seções. Esta adaptação util
 - [x] Dropdown por categoria, com produtos publicados, miniaturas, preços e acesso ao catálogo completo da categoria.
 - [x] Hover no desktop, seleção por toque, indicação da categoria ativa e fechamento por fora/Escape.
 - [x] Navegação por teclado, foco devolvido ao gatilho e dropdown independente da faixa rolável do menu.
-- [x] Links preservam preview e domínio próprio; não há consultas adicionais nem pré-carregamento dos links de cada produto.
+- [x] Links preservam preview e domínio próprio; o menu de produtos não adiciona consultas nem pré-carregamento dos links de cada produto.
 - [x] Testes de regressão, temas claro/escuro e conferência desktop/mobile.
 
 Esta melhoria usa o catálogo já publicado do tenant e não exige migration ou nova variável de ambiente.
 
-Validação: suíte completa de 790 testes unitários, 22 regressões focadas de navegação/home/preview (incluindo seis casos específicos do menu), lint, tipos e build de produção com memória limitada. `scripts/commerce-menu-browser.mjs` verificou loja pública e preview em 1440/1920/390/320 px e paisagem 844 × 390, nos dois temas, com hover, toque, foco/Escape, carregamento de miniaturas, rolagem limitada e seleção real de produto. O teste cria categorias/produtos temporários somente no banco local isolado e restaura o catálogo ao finalizar. Nomes longos ficam limitados no gatilho, e o cabeçalho do dropdown é compacto em telas baixas. Nenhum dado de produção foi alterado.
+### Campanhas e artes prontas no menu
+
+- [x] Campanhas em dropdown com capa, nome, quantidade de artes e link para sua coleção.
+- [x] Artes prontas com miniaturas, categorias e subcategorias, além do acesso à galeria completa.
+- [x] Biblioteca carregada sob demanda e compartilhada entre os dois dropdowns, sem buscar arquivos originais.
+- [x] Atalhos de arte/categoria aplicam os filtros corretos na galeria; os caminhos de preview e domínio próprio são preservados.
+- [x] Regressões e verificação em navegador desktop/mobile, claro/escuro; filtros e estados de erro cobertos por testes.
+
+As opções usam as APIs existentes e o conteúdo permitido para o tenant e o modo de navegação. Não há migration nem nova configuração obrigatória.
+
+Validação da ampliação: 799 testes unitários (incluindo 20 casos focados nos menus e na galeria), 19 testes de integração com PostgreSQL local, lint, tipos e build de produção com memória limitada. `scripts/commerce-menu-browser.mjs` verificou loja pública e preview em 1440/1920/390/320 px e paisagem 844 × 390, nos dois temas, com hover, toque, foco/Escape, carregamento de miniaturas, rolagem limitada e navegação real para produto, campanha, categoria e arte específica. O teste usa campanhas, categorias e produtos temporários no banco local isolado, intercepta somente as miniaturas de artes para não acessar o Storage e restaura o catálogo ao finalizar. Os testes unitários cobrem também falha/retentativa e isolamento de dados entre tenants. Nomes longos ficam limitados no gatilho, e o cabeçalho do dropdown é compacto em telas baixas. Nenhum dado de produção foi alterado.
 
 ### Histórico da home
 

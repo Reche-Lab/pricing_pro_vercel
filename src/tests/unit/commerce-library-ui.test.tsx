@@ -58,6 +58,16 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("art library customer and administration UX", () => {
+  it.each(["category", "artwork"] as const)("opens the gallery with the %s selected by the dropdown instead of showing unrelated initial results", async filter => {
+    const category = "44444444-4444-4444-8444-444444444444";
+    const result = { ...data, categories: [{ id: category, name: "Campanhas de conscientização", slug: "conscientizacao", parent_id: null, active: true, sort_order: 0, revision: 1 }] };
+    vi.mocked(storeRequest).mockResolvedValue(result);
+    render(<StoreLibrary slug="test" base="/loja/test" products={[]} initial={result} initialCategoryId={filter === "category" ? category : undefined} initialArtworkId={filter === "artwork" ? artId : undefined}/>);
+    expect(screen.queryByTitle("Ver Flores da campanha")).not.toBeInTheDocument();
+    await screen.findByTitle("Ver Flores da campanha");
+    expect(storeRequest).toHaveBeenCalledWith(expect.stringContaining(`${filter}=${filter === "category" ? category : artId}`));
+    if (filter === "category") expect(screen.getByRole("combobox", { name: "Categoria" })).toHaveValue(category);
+  });
   it("asks for explicit confirmation before copying a selected artwork", async () => {
     const selected = vi.fn().mockResolvedValue(undefined),
       close = vi.fn();

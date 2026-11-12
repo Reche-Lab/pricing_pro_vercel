@@ -74,7 +74,7 @@ describe("store category navigation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Bottons" }));
     expect(screen.getByRole("link", { name: /Botton 2,5 cm/ })).toHaveAttribute("href", "/commerce/ground-shop/preview/produto/small");
     expect(screen.queryByRole("link", { name: "Solicitar orçamento" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Campanhas" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Campanhas" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Bottons" })).toHaveAttribute("aria-current", "true");
     rerender(<StoreCategoryNavigation {...props} base="" navigationKey="/catalogo"/>);
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
