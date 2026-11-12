@@ -12,13 +12,19 @@ O tema de referência permite reordenar diversas seções. Esta adaptação util
 
 #### Refinamento da Animação e Demonstração
 
-- [x] Separar flutuação e resposta ao mouse, suavizar pelo tempo entre frames e pausar sem reiniciar a animação.
+Correção de continuidade em repouso:
+- [x] Unificar a flutuação automática e o mouse num único relógio de frames e numa única transformação da imagem.
+- [x] Conferir cursor parado, fora da vitrine, extremos da oscilação, pausa e aba oculta; manter movimento reduzido e toque estáticos.
+
+Validação desta correção: 20 testes focados aprovados, lint, tipos e build com memória limitada. `COMMERCE_STUDIO_MOTION_ONLY=true` no script de navegador verifica somente a vitrine, sem repetir o editor: cursor parado durante um ciclo completo (430 frames), cursor fora da área (120 frames por cenário), posições fracionárias sem variações maiores que 0,45 px entre amostras após estabilizar o mouse, pausa/retomada, ausência de animação CSS concorrente, loja pública/prévia e temas claro/escuro, além de toque e movimento reduzido estáticos. Capturas da vitrine com cursor dentro e fora foram conferidas. A flutuação permanece acima da posição de repouso para preservar espaço para as legendas. O banco local é restaurado ao terminar; nenhuma migration ou variável adicional é necessária para a aplicação.
+
+- [x] Suavizar flutuação e resposta ao mouse pelo tempo entre frames e pausar sem reiniciar a animação.
 - [x] Frente e verso simultâneos, com a indicação de simulação e sem gravação ou aprovação de arte.
 - [x] Tipografia local, texto em linhas ajustadas à área segura, circular e em espiral do centro para fora.
 - [x] Fundo sólido ou degradê horizontal, diagonal, circular ou espiral, com até quatro cores editáveis.
 - [x] Regressões de layout e movimento, pixels reais desktop/mobile, build e limites de memória preservados.
 
-A flutuação tem uma camada própria com transformação 3D composta pelo navegador; a camada de mouse interpola pelo tempo entre frames, sem transições CSS concorrentes. Pausa, visibilidade e interseção suspendem a animação sem recriá-la. O retorno ao centro também é gradual, e o loop do mouse termina ao estabilizar. Dispositivos de toque e movimento reduzido continuam estáticos.
+A flutuação automática e o mouse compartilham um único relógio `requestAnimationFrame` e uma única transformação da imagem, sem keyframes ou transições CSS concorrentes. A imagem continua recebendo posições fracionárias quando o cursor para ou sai da vitrine. O tempo acumulado é preservado ao pausar; aba oculta, interseção e desmontagem cancelam o loop, sem recuperar o tempo de ausência ao retomar. O retorno ao centro é gradual, e legendas permanecem imóveis. Dispositivos de toque e movimento reduzido continuam estáticos.
 
 O exemplo usa uma mensagem de até 140 caracteres. O modo em linhas respeita quebras manuais e calcula larguras diferentes por linha dentro da região segura; o circular acompanha a borda e o espiral distribui caracteres por comprimento de arco, do centro para fora. Nenhuma dessas ações altera as artes reais do pedido. A demonstração continua importada somente no clique, sem IA, upload ou gravação.
 

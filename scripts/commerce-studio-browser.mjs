@@ -6,6 +6,7 @@ import { SignJWT } from "jose";
 import pg from "pg";
 
 const require = createRequire(import.meta.url);
+const motionOnly = process.env.COMMERCE_STUDIO_MOTION_ONLY === "true";
 const { chromium } = require(process.env.COMMERCE_PLAYWRIGHT_PATH || "playwright");
 const url = process.env.COMMERCE_TEST_DATABASE_URL, base = process.env.COMMERCE_TEST_BASE_URL || "http://127.0.0.1:3011";
 if (!url || new URL(url).hostname !== "127.0.0.1" || !new URL(url).pathname.startsWith("/commerce_test_") || new URL(base).hostname !== "127.0.0.1") throw new Error("Isolated local test environment required.");
@@ -39,7 +40,7 @@ try {
     const page = await context.newPage(); page.on("pageerror", error => errors.push(error.message));
     const requested = []; page.on("request", request => requested.push(request.url()));
     for (const prefix of ["/loja/ground-shop", "/commerce/ground-shop/preview"]) {
-      for (const [width, height] of mobile ? [[390, 844], [320, 640], [844, 390]] : [[1440, 960], [1920, 1080], [1280, 720]]) {
+      for (const [width, height] of mobile ? motionOnly ? [[390, 844]] : [[390, 844], [320, 640], [844, 390]] : motionOnly ? [[1440, 960]] : [[1440, 960], [1920, 1080], [1280, 720]]) {
         await page.setViewportSize({ width, height });
         await page.goto(`${base}${prefix}`, { waitUntil: "networkidle" });
         for (const theme of ["light", "dark"]) {
@@ -71,37 +72,49 @@ try {
             await page.waitForTimeout(200);
             assert.ok(parseFloat(await hero.evaluate(element => element.style.getPropertyValue("--studio-x"))) > 0);
             const float = hero.locator("[data-studio-float]");
-            const beforePause = await float.evaluate(element => element.getAnimations()[0].currentTime);
             await page.getByRole("button", { name: "Pausar movimento da vitrine" }).click();
             await page.waitForFunction(() => document.querySelector('[aria-label="Estúdio Ground Shop"]').dataset.moving === "false");
             assert.equal(await hero.getAttribute("data-moving"), "false");
-            assert.equal(await float.evaluate(element => element.getAnimations()[0].playState), "paused");
-            const pausedTime = await float.evaluate(element => element.getAnimations()[0].currentTime);
-            assert.ok(pausedTime >= beforePause, "Pause preserves the animation phase");
+            assert.equal(await float.evaluate(element => element.getAnimations().length), 0, "There is no competing CSS animation");
+            const pausedTransform = await float.evaluate(element => element.style.transform);
             await page.waitForTimeout(100);
-            assert.equal(await float.evaluate(element => element.getAnimations()[0].currentTime), pausedTime);
+            assert.equal(await float.evaluate(element => element.style.transform), pausedTransform);
             await page.getByRole("button", { name: "Retomar movimento da vitrine" }).click();
             await page.waitForTimeout(120);
-            assert.ok(await float.evaluate(element => element.getAnimations()[0].currentTime) >= pausedTime, "Resume does not restart the animation");
-            const samples = await float.evaluate(element => new Promise(resolve => {
+            assert.notEqual(await float.evaluate(element => element.style.transform), pausedTransform);
+            const sampleMotion = async count => float.evaluate((element, count) => new Promise(resolve => {
               const frames = [];
               function sample() {
                 const rect = element.getBoundingClientRect(), image = element.querySelector("img");
                 frames.push({ x: rect.x, y: rect.y, opacity: getComputedStyle(image).opacity, loaded: image.complete && image.naturalWidth > 0 });
-                if (frames.length < 24) requestAnimationFrame(sample); else resolve(frames);
+                if (frames.length < count) requestAnimationFrame(sample); else resolve(frames);
               }
               requestAnimationFrame(sample);
-            }));
-            for (let index = 1; index < samples.length; index++) {
-              assert.ok(Math.hypot(samples[index].x - samples[index - 1].x, samples[index].y - samples[index - 1].y) < 3, "No frame-position cuts");
-              assert.equal(samples[index].opacity, "1"); assert.equal(samples[index].loaded, true);
-            }
+            }), count);
+            const checkIdle = samples => {
+              let moved = 0;
+              for (let index = 1; index < samples.length; index++) {
+                const distance = Math.hypot(samples[index].x - samples[index - 1].x, samples[index].y - samples[index - 1].y);
+                assert.ok(distance < .45, "Idle frames stay subpixel, without jumps");
+                if (distance > .0001) moved++;
+                assert.equal(samples[index].opacity, "1"); assert.equal(samples[index].loaded, true);
+              }
+              assert.ok(moved > samples.length * .8, "The image keeps sliding when the cursor is stationary or outside");
+            };
+            await page.mouse.move(bounds.x + bounds.width * .8, bounds.y + bounds.height * .6);
+            await page.waitForTimeout(1400);
+            checkIdle(await sampleMotion(theme === "light" && prefix === "/loja/ground-shop" ? 430 : 60));
+            await page.screenshot({ path: `/tmp/commerce-studio-idle-inside-${prefix.includes("preview") ? "preview" : "public"}-${theme}.png` });
+            await page.mouse.move(20, 20);
+            await page.waitForTimeout(1400);
+            checkIdle(await sampleMotion(120));
+            await page.screenshot({ path: `/tmp/commerce-studio-idle-outside-${prefix.includes("preview") ? "preview" : "public"}-${theme}.png` });
           }
           if (mobile) assert.equal(await hero.getAttribute("data-moving"), "false");
           const selector = hero.getByRole("button", { name: "Mostrar Espelho 5,5 cm" }); await selector.click();
           await hero.getByRole("link", { name: "Personalizar Espelho 5,5 cm" }).waitFor();
         }
-        if (width === 1440 || width === 390 || width === 320) {
+        if (!motionOnly && (width === 1440 || width === 390 || width === 320)) {
           await page.getByRole("button", { name: "Ver como fica" }).click();
           const demo = page.getByRole("region", { name: "Experimente sua ideia" });
           const canvas = demo.locator('canvas[aria-label*="frente"]'), backCanvas = demo.locator('canvas[aria-label*="verso"]');
@@ -170,7 +183,7 @@ try {
     await context.close();
   }
   assert.deepEqual(errors, []);
-  console.log("Studio verified: public/private preview; light/dark; 320/390/844/1280/1440/1920px; 24 continuous motion frames; pause/resume phase; reduced-motion/touch; lazy model/fonts; simultaneous front/back pixels; multiline/circle/spiral lettering; both bundled fonts; all gradient modes and four colors; quiet cart; one H1; no overflow.");
+  console.log(motionOnly ? "Studio idle motion verified: public/private preview; light/dark; desktop/mobile; stationary cursor over a full cycle; cursor outside; subpixel updates; no CSS animation; pause/resume; reduced-motion/touch; no overflow." : "Studio verified: public/private preview; light/dark; 320/390/844/1280/1440/1920px; idle inside/outside; pause/resume; reduced-motion/touch; lazy model/fonts; simultaneous front/back pixels; all text and gradient modes; fonts and zoom; quiet cart; no overflow.");
 } finally {
   await browser.close();
   if (variants.length) { await db.query("delete from commerce_products where variant_id=any($1::uuid[])", [variants]); await db.query("delete from product_variants where id=any($1::uuid[])", [variants]); }
