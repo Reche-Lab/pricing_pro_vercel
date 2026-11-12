@@ -122,7 +122,15 @@
 .swatches legend { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
 .swatches button { width: 36px; height: 36px; border-radius: 50%; border: 3px solid var(--soft); box-shadow: 0 0 0 1px var(--line); }
 .swatches button[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink); }
-.demoPreview { min-width: 0; width: 100%; position: sticky; top: var(--store-header-offset, 155px); }
+.demoPreview { min-width: 0; width: 100%; position: sticky; top: var(--store-header-offset, 155px); scroll-margin-top: calc(var(--store-header-offset, 130px) + 16px); }
+.introNotice { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; min-height: 112px; margin-bottom: 18px; padding: 14px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 6px; background: var(--surface); }
+.introNotice > div { min-width: 0; }
+.introNotice small { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+.introNotice p { font-size: 14px; font-weight: 650; line-height: 1.5; margin-top: 5px; overflow-wrap: anywhere; }
+.introNotice button { font-size: 12px; padding: 10px; gap: 6px; }
+.introProgress { display: flex; gap: 5px; margin-top: 10px; max-width: 180px; }
+.introProgress span { flex: 1; height: 3px; border-radius: 2px; background: var(--line); }
+.introProgress span[data-complete="true"] { background: var(--accent); }
 .previewPair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .previewPair > section { border: 0; padding: 0; }
 .previewPair canvas { width: 100%; height: 100%; }

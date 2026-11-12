@@ -8,6 +8,7 @@ import pg from "pg";
 import sharp from "sharp";
 
 const require = createRequire(import.meta.url);
+const introOnly = process.env.COMMERCE_STUDIO_INTRO_ONLY === "true";
 const { chromium } = require(process.env.COMMERCE_PLAYWRIGHT_PATH || "playwright");
 const url = process.env.COMMERCE_TEST_DATABASE_URL, base = process.env.COMMERCE_TEST_BASE_URL || "http://127.0.0.1:3011";
 if (!url || new URL(url).hostname !== "127.0.0.1" || !new URL(url).pathname.startsWith("/commerce_test_") || new URL(base).hostname !== "127.0.0.1") throw new Error("Isolated local test environment required.");
@@ -61,9 +62,10 @@ try {
     element.dispatchEvent(new Event("input", { bubbles: true })); element.dispatchEvent(new Event("change", { bubbles: true }));
   }, value);
   for (const preview of [false, true]) for (const width of [1440, 390, 320]) {
-    const context = await browser.newContext({ viewport: { width, height: 960 }, reducedMotion: "reduce" });
+    const context = await browser.newContext({ viewport: { width, height: 960 }, reducedMotion: introOnly ? "no-preference" : "reduce" });
     await context.addCookies([{ name: "pricing_session", value: token, url: base, httpOnly: true, sameSite: "Lax" }]);
     const page = await context.newPage(); page.on("pageerror", error => errors.push(error.message));
+    const writes = []; page.on("request", request => { if (request.method() !== "GET" && /artworks|orders|payments/.test(request.url())) writes.push(request.url()); });
     const prefix = preview ? "/commerce/ground-shop/preview" : "/loja/ground-shop";
     const before = objects.size;
     await page.goto(`${base}${prefix}`, { waitUntil: "networkidle" });
@@ -73,6 +75,61 @@ try {
     }
     await page.getByRole("button", { name: "Ver como fica" }).click();
     const demo = page.getByRole("region", { name: "Experimente sua ideia" });
+    if (introOnly) {
+      let previous = null;
+      for (let step = 0; step < 5; step++) {
+        await demo.locator(`[data-studio-demo-stage="${step}"]`).waitFor();
+        await page.waitForFunction(() => document.querySelector("[data-studio-demo-stage]")?.closest("[aria-busy]")?.getAttribute("aria-busy") === "false");
+        await page.waitForFunction(prior => {
+          const canvas = document.querySelector('canvas[aria-label*="frente"]');
+          if (!canvas) return false;
+          const bytes = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+          let signature = 0, filled = 0;
+          for (let i = 0; i < bytes.length; i += 4) { if (bytes[i + 3]) filled++; signature = (signature + bytes[i] * (i % 97 + 1) + bytes[i + 1]) % 1000000007; }
+          return filled > 1000 && signature !== prior;
+        }, previous);
+        previous = await demo.locator('canvas[aria-label*="frente"]').evaluate(canvas => {
+          const bytes = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+          let signature = 0; for (let i = 0; i < bytes.length; i += 4) signature = (signature + bytes[i] * (i % 97 + 1) + bytes[i + 1]) % 1000000007;
+          return signature;
+        });
+        assert.equal(await demo.getByRole("button", { name: "Usar esta arte no produto" }).isDisabled(), true);
+        if (step === 1) assert.equal(await demo.getByRole("button", { name: "Texto circular" }).getAttribute("aria-pressed"), "true");
+        if (step === 2) assert.equal(await demo.getByRole("button", { name: "Texto em espiral" }).getAttribute("aria-pressed"), "true");
+        if (step === 3) assert.equal(await demo.locator('input[aria-label^="Cor do fundo"]').count(), 3);
+        if (step === 4) assert.equal(await demo.getByLabel("Formato do fundo").inputValue(), "spiral");
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+        await page.screenshot({ path: `/tmp/studio-intro-${preview ? "preview" : "public"}-${width}-${step}.png` });
+      }
+      await demo.getByText("Agora crie você mesmo a sua arte.").waitFor();
+      await page.screenshot({ path: `/tmp/studio-intro-${preview ? "preview" : "public"}-${width}-complete.png` });
+      assert.equal(await demo.getByRole("status").filter({ hasText: "Encurte" }).count(), 0);
+      await demo.getByRole("button", { name: "Criar minha arte", exact: true }).click();
+      assert.equal(await demo.getByLabel("Sua mensagem").evaluate(element => element === document.activeElement && element.selectionEnd === element.value.length), true);
+      await demo.getByLabel("Sua mensagem").fill("Minha criação, meu estilo");
+      await page.waitForTimeout(2200);
+      assert.equal(await demo.getByLabel("Sua mensagem").inputValue(), "Minha criação, meu estilo");
+      assert.deepEqual(writes, []); assert.equal(objects.size, before);
+      if (width !== 390) {
+        await page.goto(`${base}${prefix}`, { waitUntil: "networkidle" });
+        await page.getByRole("button", { name: "Ver como fica" }).click();
+        if (width === 320) {
+          await demo.getByLabel("Sua mensagem").fill("Quero começar agora");
+          await page.waitForTimeout(2200);
+          assert.equal(await demo.getByLabel("Sua mensagem").inputValue(), "Quero começar agora");
+          assert.equal(await demo.locator("[data-studio-demo-stage]").count(), 0);
+        } else {
+          await demo.getByRole("button", { name: "Pular demonstração" }).click();
+          assert.equal(await demo.getByLabel("Sua mensagem").inputValue(), "Sua ideia\nganha forma");
+          await page.emulateMedia({ reducedMotion: "reduce" });
+          await page.goto(`${base}${prefix}`, { waitUntil: "networkidle" });
+          await page.getByRole("button", { name: "Ver como fica" }).click();
+          await demo.getByText("Agora crie você mesmo a sua arte.").waitFor();
+          assert.equal(await demo.getByLabel("Sua mensagem").inputValue(), "Sua ideia\nganha forma");
+        }
+      }
+      await context.close(); continue;
+    }
     await demo.getByRole("checkbox", { name: "Incluir texto sobre o fundo" }).uncheck();
     await demo.getByRole("tab", { name: "Fundo", exact: true }).click();
     await demo.getByRole("button", { name: "Imagem", exact: true }).click();
@@ -155,7 +212,7 @@ try {
     await context.close();
   }
   assert.deepEqual(errors, []);
-  console.log("Studio purchase verified: upload, resize, offsets, fill, front/back pixels, exact 300-dpi cut dimensions, private storage and session isolation, reload, explicit approval, cart and real local checkout with approved proof (no charge); public/preview at 320/390/1440px, light/dark; preview stays ephemeral; no overflow.");
+  console.log(introOnly ? "Studio intro verified: five automatic stages with distinct real canvas pixels; circle, spiral, three colors and spiral background; final invitation, focus, skip, interruption and reduced motion; public/preview at 320/390/1440px, light/dark; no artwork/order/payment writes or overflow." : "Studio purchase verified: upload, resize, offsets, fill, front/back pixels, exact 300-dpi cut dimensions, private storage and session isolation, reload, explicit approval, cart and real local checkout with approved proof (no charge); public/preview at 320/390/1440px, light/dark; preview stays ephemeral; no overflow.");
 } finally {
   await browser.close();
   if (orders.length) { await db.query("delete from commerce_order_events where order_id=any($1::uuid[])", [orders]); await db.query("delete from commerce_orders where id=any($1::uuid[])", [orders]); }

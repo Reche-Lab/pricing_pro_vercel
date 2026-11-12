@@ -1,5 +1,5 @@
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StudioPersonalizer } from "@/components/commerce/StudioPersonalizer";
 import { renderStudioArtwork } from "@/components/commerce/studio-artwork-canvas";
@@ -13,8 +13,84 @@ vi.mock("@/components/commerce/studio-image", () => ({ readStudioBackground: vi.
 vi.mock("@/components/commerce/studio-artwork-canvas", () => ({ renderStudioArtwork: vi.fn(async () => ({ dataUrl: "data:image/png;base64,YQ==", truncated: false, mimeType: "image/png", fileSize: 1 })) }));
 vi.mock("@/components/commerce/StoreProductMockup", () => ({ StoreProductMockup: ({ fixedSide }: { fixedSide: string }) => <canvas aria-label={fixedSide === "front" ? "Frente do exemplo" : "Verso do exemplo"}/> }));
 const products = [{ id: "demo", name: "Botton 3,5 cm", personalized: true, geometry: { shape: "circle", widthMm: 35, heightMm: 35 }, margins: { safeMarginMm: 3, bleedMm: 3 }, artworkOptions: { mockup: defaultMockup() } }] as StoreProduct[];
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.clearAllMocks(); });
+function introEnvironment(reduced = false) {
+  vi.useFakeTimers();
+  vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: reduced, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+}
+async function advanceIntro(milliseconds: number) {
+  await act(async () => { vi.advanceTimersByTime(milliseconds); });
+  await act(async () => { vi.advanceTimersByTime(200); });
+}
 describe("studio creative demonstration", () => {
+  it("automatically shows a longer message, circle, spiral, three colors and a spiral background, then invites creation without saving", async () => {
+    introEnvironment();
+    render(<StudioPersonalizer products={products} base="" slug="store" autoDemo/>);
+    await advanceIntro(200); await advanceIntro(600);
+    const message = screen.getByLabelText("Sua mensagem") as HTMLTextAreaElement;
+    expect(message.value.length).toBeGreaterThan(40);
+    expect(screen.getByRole("button", { name: "Usar esta arte no produto" })).toBeDisabled();
+    await advanceIntro(2000);
+    expect(screen.getByRole("button", { name: "Texto circular" })).toHaveAttribute("aria-pressed", "true");
+    await advanceIntro(2000);
+    expect(screen.getByRole("button", { name: "Texto em espiral" })).toHaveAttribute("aria-pressed", "true");
+    await advanceIntro(2000);
+    expect(screen.getByRole("tab", { name: "Fundo" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getAllByLabelText(/^Cor do fundo \d$/)).toHaveLength(3);
+    await advanceIntro(2000);
+    expect(screen.getByLabelText("Formato do fundo")).toHaveValue("spiral");
+    await advanceIntro(2000);
+    expect(screen.getByText("Agora crie você mesmo a sua arte.")).toBeVisible();
+    expect(saveStudioPurchase).not.toHaveBeenCalled(); expect(navigation.push).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Criar minha arte", exact: true }));
+    expect(message).toHaveFocus(); expect(message.selectionEnd).toBe(message.value.length);
+  });
+  it("stops on editing and never replaces the customer's text later", async () => {
+    introEnvironment();
+    render(<StudioPersonalizer products={products} base="" slug="store" autoDemo/>);
+    await advanceIntro(200); await advanceIntro(600);
+    fireEvent.change(screen.getByLabelText("Sua mensagem"), { target: { value: "Minha criação de verdade" } });
+    await advanceIntro(20000);
+    expect(screen.getByLabelText("Sua mensagem")).toHaveValue("Minha criação de verdade");
+    expect(screen.queryByRole("button", { name: "Pular demonstração" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Texto" })).toHaveAttribute("aria-selected", "true");
+  });
+  it("lets the customer skip directly to their own creation and cancels pending steps on unmount", async () => {
+    introEnvironment();
+    const view = render(<StudioPersonalizer products={products} base="" slug="store" autoDemo/>);
+    fireEvent.click(screen.getByRole("button", { name: "Pular demonstração" }));
+    await advanceIntro(20000);
+    expect(screen.getByLabelText("Sua mensagem")).toHaveValue("Sua ideia\nganha forma");
+    expect(screen.getByLabelText("Sua mensagem")).toHaveFocus();
+    view.unmount(); expect(vi.getTimerCount()).toBe(0);
+  });
+  it("does not autoplay with reduced motion and immediately offers creation", async () => {
+    introEnvironment(true);
+    render(<StudioPersonalizer products={products} base="" slug="store" autoDemo/>);
+    await advanceIntro(20000);
+    expect(screen.getByText("Agora crie você mesmo a sua arte.")).toBeVisible();
+    expect(screen.getByLabelText("Sua mensagem")).toHaveValue("Sua ideia\nganha forma");
+    expect(saveStudioPurchase).not.toHaveBeenCalled();
+  });
+  it("pauses while the tab is hidden instead of playing through unseen steps", async () => {
+    introEnvironment();
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    render(<StudioPersonalizer products={products} base="" slug="store" autoDemo/>);
+    await advanceIntro(20000);
+    expect(screen.getByLabelText("Sua mensagem")).toHaveValue("Sua ideia\nganha forma");
+    hidden.mockReturnValue(false);
+    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    await advanceIntro(600);
+    expect((screen.getByLabelText("Sua mensagem") as HTMLTextAreaElement).value.length).toBeGreaterThan(40);
+  });
+  it("cleans up an active demonstration when leaving the studio", async () => {
+    introEnvironment();
+    const view = render(<StudioPersonalizer products={products} base="" slug="store" autoDemo/>);
+    await advanceIntro(200);
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    view.unmount(); expect(vi.getTimerCount()).toBe(0);
+    await advanceIntro(20000); expect(saveStudioPurchase).not.toHaveBeenCalled();
+  });
   it("shows both sides at once and exposes a multiline message and distinct typography modes", async () => {
     render(<StudioPersonalizer products={products} base="/commerce/store/preview" slug="store"/>);
     expect(await screen.findByLabelText("Frente do exemplo")).toBeInTheDocument();

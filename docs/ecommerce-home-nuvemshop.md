@@ -10,6 +10,18 @@ O tema de referência permite reordenar diversas seções. Esta adaptação util
 
 ### Tema Estúdio
 
+#### Demonstração Guiada de Abertura
+
+- [x] Ao abrir o Estúdio, mostrar uma mensagem mais longa, texto circular, texto em espiral, três cores e fundo em espiral.
+- [x] Finalizar com “Agora crie você mesmo a sua arte” e um botão para editar a mensagem selecionada.
+- [x] Permitir pular e interromper imediatamente ao editar, sem sobrescrever a criação do cliente.
+- [x] Pausar fora da tela/aba oculta, respeitar movimento reduzido e cancelar temporizadores ao sair.
+- [x] Testes de regressão, build e conferência dos estágios reais em desktop/mobile.
+
+A abertura dura aproximadamente 10 segundos, aguardando a renderização da composição entre etapas. Não usa IA, não faz upload, não grava arte, não aprova e não adiciona nada ao carrinho. O botão de continuar com a arte fica indisponível durante a demonstração; ao final, o cliente pode aproveitar o exemplo ou criar algo próprio. “Pular” restaura o ponto de partida e seleciona a mensagem para edição. Interagir diretamente preserva a composição que estava sendo mostrada e cancela os próximos passos automáticos. Com movimento reduzido, o convite para criar aparece diretamente, sem reprodução automática. A demonstração é carregada somente na abertura já existente do Estúdio e não exige migration ou variável de ambiente.
+
+Validação: **885 testes aprovados** (62 condicionais ignorados), lint e build de produção com tipos verificados e memória limitada. `COMMERCE_STUDIO_INTRO_ONLY=true` em `scripts/commerce-studio-purchase-browser.mjs` verifica os cinco estágios com assinaturas de pixels diferentes no canvas real, mensagem final, foco e seleção do texto, pular, interrupção ao editar e movimento reduzido. Os cenários cobrem loja pública/prévia, temas claro/escuro e 320/390/1440 px, sem requisições de gravação de arte/pedido/pagamento ou overflow horizontal. As capturas dos estágios e do convite final foram inspecionadas em desktop/mobile. O teste utiliza apenas PostgreSQL isolado, imagens sintéticas e configurações temporárias restauradas ao final.
+
 #### Imagem de Fundo e Continuidade na Compra
 
 - [x] Imagem PNG/JPEG/WebP validada, com tamanho, deslocamento, encaixe e cor para áreas descobertas.
