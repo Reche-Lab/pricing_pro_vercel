@@ -33,6 +33,7 @@ export type StoreArtwork = {
 };
 export function StoreArtworkTools({
   slug,
+  storeName,
   product,
   artwork,
   artworks,
@@ -50,6 +51,7 @@ export function StoreArtworkTools({
   initialLibraryId,
 }: {
   slug: string;
+  storeName: string;
   product: ReturnType<typeof publicCommerceProduct>;
   artwork?: StoreArtwork;
   artworks: StoreArtwork[];
@@ -158,7 +160,7 @@ export function StoreArtworkTools({
   }
   return (
     <div className="mt-3 space-y-3">
-      {product.artworkOptions?.allowTeamPreparation && onPreparationChange ? <fieldset className="grid gap-2 rounded-md border border-current/20 p-3"><legend className="px-1 text-sm font-medium">Como deseja preparar esta arte?</legend>{([ ["team", "Prefiro que a equipe prepare"], ["customer", "Quero preparar e aprovar"] ] as const).map(([value, label]) => <label key={value} className="flex cursor-pointer items-start gap-2 text-sm"><input type="radio" checked={preparation === value} disabled={busy || disabled} onChange={() => { setWorking(true); void Promise.resolve(onPreparationChange(value)).catch(e => setError(e.message)).finally(() => setWorking(false)); }} /><span>{label}{value === "customer" && product.artworkOptions!.discountFixedCents > 0 ? <small className="block text-emerald-600">Benefício de até {(product.artworkOptions!.discountFixedCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por arte, limitado a {product.artworkOptions!.maxDiscountPercent}% do grupo.</small> : null}</span></label>)}</fieldset> : null}
+      {product.artworkOptions?.allowTeamPreparation && onPreparationChange ? <fieldset className="grid gap-2 rounded-md border border-current/20 p-3"><legend className="px-1 text-sm font-medium">Como deseja preparar esta arte?</legend>{([ ["team", `Prefiro que a ${storeName} faça os ajustes finais`], ["customer", "Quero preparar e aprovar"] ] as const).map(([value, label]) => <label key={value} className="flex cursor-pointer items-start gap-2 text-sm"><input type="radio" checked={preparation === value} disabled={busy || disabled} onChange={() => { setWorking(true); void Promise.resolve(onPreparationChange(value)).catch(e => setError(e.message)).finally(() => setWorking(false)); }} /><span>{label}{value === "customer" && product.artworkOptions!.discountFixedCents > 0 ? <small className="block text-emerald-600">Benefício de até {(product.artworkOptions!.discountFixedCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} por arte, limitado a {product.artworkOptions!.maxDiscountPercent}% do grupo.</small> : null}</span></label>)}</fieldset> : null}
       <div className="flex flex-wrap items-center gap-2">
         {libraryEnabled ? <button type="button" disabled={busy || disabled} title="Escolher uma arte da biblioteca da loja" className="inline-flex min-h-11 items-center gap-2 rounded-md border border-current/25 px-3 py-2 text-sm" onClick={() => setLibraryOpen(true)}><Images size={16}/>Escolher arte pronta</button> : null}
         <label className={`inline-flex items-center gap-2 rounded-md border border-zinc-300 px-3 py-2 text-sm ${busy || disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}>

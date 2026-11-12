@@ -509,6 +509,7 @@ export function Storefront({
                           <ArtworkTools
                             preview={preview}
                             slug={slug}
+                            storeName={settings.name}
                             libraryEnabled={libraryEnabled}
                             product={product}
                             artwork={cart.artworks.find(
@@ -981,7 +982,7 @@ function ProductDetail({
                 {lines.length && !deliveryIssue ? lines.map((line, index) => (
                   <div className={styles.productArtworkGroup} key={index}>
                     <div className={styles.artworkGroupHeading}><strong>{line.artworkName}</strong><span>{line.quantity} un.</span></div>
-                    <ArtworkTools slug={slug} product={product} preview={preview}
+                    <ArtworkTools slug={slug} storeName={settings.name} product={product} preview={preview}
                       libraryEnabled={libraryEnabled}
                       initialLibraryId={index === 0 ? initialLibraryId : undefined}
                       uploadLabel={`Enviar ${line.artworkName.toLowerCase()}`}

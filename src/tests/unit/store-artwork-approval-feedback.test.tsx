@@ -25,7 +25,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 function show(onRefresh = vi.fn(async () => {})) {
-  render(<StoreArtworkTools slug="shop" product={product} artwork={artwork} artworks={[artwork]} onRefresh={onRefresh} onSelect={vi.fn()} pricingLines={lines} benefitContext="cart" />);
+  render(<StoreArtworkTools slug="shop" storeName="Ground Shop" product={product} artwork={artwork} artworks={[artwork]} onRefresh={onRefresh} onSelect={vi.fn()} pricingLines={lines} benefitContext="cart" />);
   fireEvent.click(screen.getByRole("button", { name: "Aprovar arte" }));
   fireEvent.click(screen.getByRole("button", { name: "Confirmar aprovação em teste" }));
 }

@@ -18,10 +18,10 @@ const proof = { product, lineId: crypto.randomUUID(), revision: 3, prepared: tru
 beforeEach(() => vi.stubGlobal("React", React));
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("store preparation and proof approval", () => {
-  it("explains staff preparation without offering self-approval for this mode", async () => {
+  it.each(["Ground Shop", "Outra loja"])("names %s in staff preparation without changing the selection behavior", async (storeName) => {
     const change = vi.fn();
-    render(<StoreArtworkTools slug="shop" product={product} artworks={[]} preparation="team" onPreparationChange={change} onSelect={vi.fn()} onRefresh={vi.fn()} />);
-    expect(screen.getByLabelText("Prefiro que a equipe prepare")).toBeChecked();
+    render(<StoreArtworkTools slug="shop" storeName={storeName} product={product} artworks={[]} preparation="team" onPreparationChange={change} onSelect={vi.fn()} onRefresh={vi.fn()} />);
+    expect(screen.getByLabelText(`Prefiro que a ${storeName} faça os ajustes finais`)).toBeChecked();
     fireEvent.click(screen.getByLabelText(/Quero preparar e aprovar/));
     expect(change).toHaveBeenCalledWith("customer");
     expect(screen.getByText(/Benefício de até/)).toBeInTheDocument();

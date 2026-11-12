@@ -27,6 +27,7 @@
 - [x] Acesso “Solicitar orçamento” destacado no menu, com ícone e estado ativo.
 - [x] Montagem sem login, faixa persistente com etapas, quantidade, subtotal e retorno ao resumo.
 - [x] Catálogo e produto preservam a intenção de orçamento; inclusão e confirmação usam textos próprios.
+- [x] A opção de preparação pela equipe usa o nome configurado da loja: “Prefiro que a [empresa] faça os ajustes finais”, no produto e no carrinho, inclusive no preview.
 - [x] Validação rápida por código no e-mail ao avançar para salvar; compradores já autenticados não repetem a validação.
 - [x] Revisão explícita de produtos, dados e entrega antes de salvar. Voltar não descarta o preenchimento.
 - [x] Histórico e PDF privados, com conversão explícita para compra e revalidação dos valores.
