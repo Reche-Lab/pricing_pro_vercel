@@ -22,6 +22,26 @@
 
 ## Regras
 
+### Modo orçamento guiado e benefício condicional
+
+- [x] Acesso “Solicitar orçamento” destacado no menu, com ícone e estado ativo.
+- [x] Montagem sem login, faixa persistente com etapas, quantidade, subtotal e retorno ao resumo.
+- [x] Catálogo e produto preservam a intenção de orçamento; inclusão e confirmação usam textos próprios.
+- [x] Validação rápida por código no e-mail ao avançar para salvar; compradores já autenticados não repetem a validação.
+- [x] Revisão explícita de produtos, dados e entrega antes de salvar. Voltar não descarta o preenchimento.
+- [x] Histórico e PDF privados, com conversão explícita para compra e revalidação dos valores.
+- [x] Benefício possível por arte pronta informa percentual, teto em reais por arte/produto e estimativa adicional, sem diminuir o total prematuramente.
+- [x] Regras do benefício registradas no snapshot pelo servidor e incluídas na tela e no PDF. Orçamentos antigos continuam compatíveis.
+- [x] Regressões completas, integração local e navegador desktop/mobile.
+
+Somente a intenção de navegação é guardada em `localStorage`, isolada pela API do tenant. Produtos e quantidades continuam no carrinho da sessão; faturamento e endereço são criptografados no servidor após autenticação, sem dados pessoais no armazenamento local. Mudar de orçamento para compra conserva os itens existentes; recuperar outro orçamento continua exigindo confirmação de substituição. Um rascunho não é um orçamento salvo na conta.
+
+O benefício utiliza as configurações existentes em **Loja online → Catálogo → Preparação da arte, benefício e modelo do produto**: o desconto é o menor entre o percentual do grupo e o teto em reais, uma vez por arte/produto. Artes já beneficiadas não geram nova promessa de desconto. A oferta é condicional ao envio, enquadramento e aprovação conforme o guia do produto, pronta para impressão, sem ajustes da equipe, e não incide no frete. A nova mensagem não altera o cálculo efetivo nem concede benefícios a arquivos sem aprovação válida.
+
+Esta ampliação **não exige migration nem nova variável de ambiente**. O envio do código usa o SMTP já configurado na plataforma; os benefícios continuam sendo definidos por produto. Os snapshots JSON existentes recebem um campo opcional, sem modificar orçamentos anteriores.
+
+Validação: 807 testes unitários, 19 testes de integração com PostgreSQL local novo, lint e build de produção (incluindo tipos) aprovados. O teste `scripts/commerce-quote-journey-browser.mjs` conferiu montagem anônima, persistência de intenção e itens ao recarregar, código inválido/válido, restauração do faturamento, revisão sem salvar prematuramente, retorno aos dados, frete no total, benefício condicional registrado, PDF autenticado, recusa de acesso anônimo e conversão explícita para compra em 1440/390/320 px. Somente a entrega do e-mail foi simulada: a verificação do código e a rotação do cookie passaram pelo servidor real local. O teste de menus confirmou também produtos, campanhas e artes, na loja pública e no preview, em claro/escuro e 1440/1920/390/320/844 px. A entrada de orçamento fica fora da área rolável das categorias e o resumo respeita a altura real do cabeçalho. Nenhuma cobrança, envio de e-mail real, alteração no Supabase ou chamada ao ERP foi realizada.
+
 ### Revisão: frete no orçamento
 
 - [x] Calcular frete ativa sua inclusão no resumo e no orçamento enviado ao servidor.
@@ -50,7 +70,7 @@ Migration: **0075_commerce_buyer_journey.sql**. Aplicar no Supabase correto **an
 3. No produto, a seleção informa o limite de artes para a quantidade atual. Reduzir os grupos não apaga os arquivos; artes deixadas fora da seleção exigem confirmação antes de adicionar ao carrinho.
 4. No enquadramento, o painel de produto em tempo real pode ser recolhido. A frente termina na sangria; o verso continua a faixa até o corte. A verificação de cobertura considera transparência/áreas descobertas, não um branco opaco intencional. Uma aprovação com áreas descobertas fica registrada para aquele enquadramento e é invalidada ao prepará-lo novamente.
 5. No checkout, os dados são salvos automaticamente. Rascunhos ficam criptografados por até 14 dias, vinculados a tenant, sessão e comprador. Se a gravação falhar ou outra aba alterar os dados, o erro é informado. Aceite de termos, tokens de cartão e cotações de frete não são guardados no rascunho. Registros expirados ficam inacessíveis e são removidos na manutenção oportunista de rascunhos do tenant.
-6. Use **Solicitar orçamento** ou **Gerar orçamento sem comprar** no carrinho. Após login, informe faturamento e entrega; inclua frete se desejar. Nenhuma arte ou pagamento é obrigatório para o orçamento.
+6. Use **Solicitar orçamento** ou **Gerar orçamento sem comprar** no carrinho. Monte os produtos sem login e avance para **Dados e entrega**; nesse momento, valide o e-mail se necessário. Confira os dados, inclua frete se desejar, revise e salve para acessar o PDF. Nenhuma arte ou pagamento é obrigatório para o orçamento.
 7. Em **Minha conta → Meus orçamentos** (também pelo ícone de documento do cabeçalho), baixe o PDF e continue uma compra. O PDF mantém preços, benefício por arte e estimativas registrados. Ao recuperar o carrinho, revalidamos produtos/quantidades e pedimos nova conferência de preços/frete. Artes continuam vinculadas somente quando pertencem à sessão atual e não estão congeladas em outro pedido; em outra sessão, é necessário anexá-las novamente.
 
 ## Segurança e testes

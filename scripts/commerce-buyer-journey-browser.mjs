@@ -53,11 +53,12 @@ try {
   await page.locator('[id^="item-"][class*="ring-2"]').waitFor();
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 960 });
-    await page.goto(`${store}/orcamento`, { waitUntil: "networkidle" });
+    await page.goto(`${store}/orcamento?etapa=dados`, { waitUntil: "networkidle" });
     await assert.equal(await page.getByLabel("Número", { exact: true }).inputValue(), "123");
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `Quote checkout overflow at ${width}`);
     await page.screenshot({ path: `/tmp/journey-quote-${width}.png`, fullPage: true });
   }
+  await page.getByRole("button", { name: "Revisar orçamento" }).click();
   await page.getByRole("button", { name: "Salvar orçamento e acessar PDF" }).click();
   await page.waitForURL(/\/orcamentos\/[a-f0-9-]+$/);
   const download = page.getByRole("link", { name: "Baixar orçamento PDF" }); await download.waitFor();
@@ -86,7 +87,7 @@ try {
     freightQuoteIds = options.map(option => option.quoteId);
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ options, expiresInSeconds: 900 }) });
   });
-  await page.goto(`${store}/orcamento`, { waitUntil: "networkidle" });
+  await page.goto(`${store}/orcamento?etapa=dados`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Calcular frete do carrinho" }).click();
   await page.getByRole("radio", { name: "Correios - SEDEX", exact: true }).waitFor();
   assert.equal(await page.getByRole("radio", { name: "Correios - SEDEX", exact: true }).isChecked(), true);
@@ -107,6 +108,7 @@ try {
   await page.getByRole("radio", { name: "Correios - PAC", exact: true }).check();
   await page.getByRole("radio", { name: "Correios - SEDEX", exact: true }).check();
   const submitted = page.waitForRequest(request => request.method() === "POST" && request.url() === `${base}/api/store/ground-shop/quotes`);
+  await page.getByRole("button", { name: "Revisar orçamento" }).click();
   await page.getByRole("button", { name: "Salvar orçamento e acessar PDF" }).click();
   assert.equal((await submitted).postDataJSON().shippingQuoteId, freightQuoteIds[1]);
   await page.waitForURL(/\/orcamentos\/[a-f0-9-]+$/);

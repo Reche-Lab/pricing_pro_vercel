@@ -391,7 +391,9 @@
   margin: auto;
   padding: 0 32px;
 }
+.categoryNavInner { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .categoryNavBar {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -402,6 +404,7 @@
   scrollbar-width: none;
 }
 .categoryNavBar > a,
+.categoryUtilityLink,
 .categoryTrigger {
   display: inline-flex;
   align-items: center;
@@ -434,7 +437,44 @@
 .categoryTrigger[aria-expanded="true"] > svg:last-child { transform: rotate(180deg); }
 .categoryNavBar > .categoryCatalogLink { color: var(--ink); padding-left: 0; padding-right: 14px; }
 .categoryNavBar > .categoryCatalogLink > svg { color: var(--highlight); }
-.categoryNavBar > .categoryUtilityLink { font-weight: 500; }
+.categoryNavInner > .categoryUtilityLink { margin: 0 0 9px auto; font-weight: 700; color: var(--accent-ink); background: var(--accent); border-color: var(--accent); box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 18%, transparent); }
+.categoryUtilityLink > svg { flex-shrink: 0; }
+.categoryNavInner > .categoryUtilityLink:hover, .categoryNavInner > .categoryUtilityLink[aria-current="page"], .categoryNavInner > .categoryUtilityLink[data-quote-active="true"] { color: var(--accent-ink); background: var(--accent); border-color: var(--ink); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+.quoteJourney { background: var(--soft); border-top: 1px solid var(--line); }
+.quoteJourneyInner { max-width: 1260px; margin: auto; padding: 12px 22px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 20px; }
+.quoteJourneyTitle { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.quoteJourneyTitle > svg { flex-shrink: 0; color: var(--highlight); }
+.quoteJourneyTitle strong { font-size: 13px; display: block; }
+.quoteJourneyTitle small { font-size: 11px; color: var(--muted); display: block; margin-top: 3px; }
+.quoteSteps { display: flex; flex-wrap: wrap; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.quoteSteps li { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.quoteSteps li > span { display: grid; place-items: center; width: 21px; height: 21px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 50%; }
+.quoteSteps li[aria-current="step"], .quoteSteps li[data-done="true"] { color: var(--highlight); font-weight: 700; }
+.quoteSteps li[aria-current="step"] > span { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.quoteJourneyActions { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; font-size: 12px; }
+.quoteJourneyActions a { display: inline-flex; align-items: center; gap: 8px; color: var(--highlight); font-weight: 700; }
+.quoteJourneyActions button { color: var(--muted); text-decoration: underline; font-size: 11px; min-height: 24px; }
+.quoteBenefit { margin: 18px 0; padding: 14px 0 14px 14px; border-left: 3px solid var(--accent); min-width: 0; }
+.quoteBenefit h2 { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }
+.quoteBenefit h2 svg { flex-shrink: 0; color: var(--highlight); }
+.quoteBenefit ul { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 8px; }
+.quoteBenefit li, .quoteBenefit p { font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.quoteBenefit small { display: block; font-size: 11px; color: var(--muted); line-height: 1.6; margin-top: 8px; }
+.quoteOverview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); align-items: start; gap: 32px; }
+.quoteOverview > * { min-width: 0; }
+.quoteOverviewHeader { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.quoteReview { min-width: 0; }
+.quoteReview h2 { scroll-margin-top: var(--store-header-offset, 155px); }
+@media (max-width: 760px) {
+  .quoteOverview { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .quoteJourneyInner { padding: 10px 16px; gap: 8px 12px; }
+  .quoteJourneyTitle { flex: 1 1 100%; }
+  .quoteSteps { flex: 1 1 100%; justify-content: space-between; gap: 5px; }
+  .quoteSteps li { font-size: 10px; gap: 3px; }
+  .quoteSteps li > span { width: 18px; height: 18px; }
+  .quoteJourneyActions { flex-direction: row; align-items: center; justify-content: space-between; flex: 1 1 100%; gap: 8px; }
+  .quoteJourneyActions button { min-height: 28px; font-size: 10px; }
+}
 .categoryDropdown {
   position: absolute;
   z-index: 35;
@@ -495,6 +535,10 @@
 @keyframes category-menu-enter { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 1000px) { .categoryProductGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) {
+  .categoryNavInner { gap: 8px; }
+  .categoryNavInner > .categoryUtilityLink { max-width: 145px; min-height: 44px; padding: 7px 9px; white-space: normal; text-align: left; font-size: 12px; line-height: 1.35; }
+  .categoryUtilityLink > svg:last-child { display: none; }
+  .categoryTrigger { max-width: min(160px, 40vw); }
   .categoryLibraryLayout { grid-template-columns: minmax(0, 1fr); }
   .categoryLibraryArtworks > .categoryProductGrid, .categoryLibraryLayout[data-categories="false"] .categoryProductGrid { grid-template-columns: minmax(0, 1fr); }
   .categoryArtCategories { border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 12px; }
@@ -1075,7 +1119,7 @@
 }
 .summary {
   position: sticky;
-  top: 155px;
+  top: var(--store-header-offset, 155px);
   border-top: 3px solid var(--accent);
   padding-top: 20px;
 }

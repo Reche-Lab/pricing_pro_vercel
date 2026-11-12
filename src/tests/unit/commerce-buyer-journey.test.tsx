@@ -66,6 +66,13 @@ describe("buyer quote and pending artwork contracts", () => {
       settings={{ pickupEnabled: false, carrierEnabled: false, deliveryEnabled: false } as never} artworkIssues={[{ lineId: "missing", name: "Botton", artworkName: "A", reason: "Enviar arte" }]}/>);
     fireEvent.click(screen.getByRole("button", { name: "Preencher dados de teste" }));
     expect(screen.queryByText(/Li e aceito/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Revisar orçamento" }));
+    await screen.findByRole("heading", { name: "Confira antes de salvar seu orçamento" });
+    expect(submit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Voltar aos dados e entrega" }));
+    expect(screen.getByLabelText("Nome completo / Razão social")).toHaveValue("Cliente de teste");
+    fireEvent.click(screen.getByRole("button", { name: "Revisar orçamento" }));
+    await screen.findByRole("heading", { name: "Confira antes de salvar seu orçamento" });
     fireEvent.click(screen.getByRole("button", { name: "Salvar orçamento e acessar PDF" }));
     await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ delivery: "not_included", billing: expect.objectContaining({ document: "52998224725" }) })));
   });

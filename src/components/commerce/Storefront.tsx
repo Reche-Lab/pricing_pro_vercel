@@ -60,6 +60,10 @@ import type { StoreArtwork } from "./StoreArtworkTools";
 import { libraryQuerySchema, type LibraryResult } from "@/domain/commerce/library";
 import { pendingCartArtworks } from "@/domain/commerce/artwork-readiness";
 import { formatDeliveryDate } from "@/domain/shipping/production-lead-time";
+import { useQuoteJourney } from "./use-quote-journey";
+import { StoreQuoteJourney } from "./StoreQuoteJourney";
+import { StoreQuoteOverview } from "./StoreQuoteOverview";
+import { quoteArtworkBenefits } from "@/domain/commerce/quote-artwork-benefit";
 const StoreLibrary = dynamic(() => import("./StoreLibrary").then(m => m.StoreLibrary));
 const FeaturedLibraryCampaigns = dynamic(() => import("./StoreLibrary").then(m => m.FeaturedLibraryCampaigns));
 const StorePayment = dynamic(() => import("./StorePayment").then(module => module.StorePayment), { ssr: false });
@@ -120,6 +124,22 @@ export function Storefront({
     void refresh().catch((e) => setError(e.message));
   }, [refresh]);
   const view = path[0] ?? "home";
+  const { quoting, setQuoteMode } = useQuoteJourney(api, view, preview);
+  const quoteDetails = view === "orcamento" && searchParams.get("etapa") === "dados";
+  const [quoteStep, setQuoteStep] = useState<"details" | "review">("details");
+  useEffect(() => { setQuoteStep("details"); }, [view, quoteDetails]);
+  const savedQuote = !preview && Boolean(cart?.customer) && view === "orcamentos" && Boolean(path[1]);
+  const showQuoteJourney = savedQuote || quoting && ["home", "catalogo", "produto", "carrinho", "orcamento", "artes", "campanhas"].includes(view);
+  const storeHeader = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const header = storeHeader.current, root = header?.parentElement;
+    if (!header || !root) return;
+    const measure = () => root.style.setProperty("--store-header-offset", `${Math.ceil(header.getBoundingClientRect().height) + 16}px`);
+    measure();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    observer?.observe(header); window.addEventListener("resize", measure);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", measure); };
+  }, [showQuoteJourney]);
   const libraryFilters = libraryQuerySchema.safeParse({ category: searchParams.get("categoria") || undefined, artwork: searchParams.get("arte") || undefined });
   useEffect(() => {
     if (view !== "carrinho" || !focusedItem || !cart) return;
@@ -206,7 +226,7 @@ export function Storefront({
         </div>
       ) : null}
       {!preview && cart?.payments?.payment_environment === "test" ? <div role="status" className={styles.testNotice}><strong>Loja em modo de teste</strong><span>Use somente dados e cartões de teste do Mercado Pago. Pedidos simulados não são enviados para produção.</span></div> : null}
-      <header className={styles.header}>
+      <header ref={storeHeader} className={styles.header}>
         <div className={styles.headerInner}>
           <Link className={styles.brand} href={base || "/"}>
             {settings.logoUrl ? (
@@ -271,16 +291,18 @@ export function Storefront({
             <Link
               className={styles.cartButton}
               href={`${base}/carrinho`}
-              title="Carrinho"
+              title={quoting ? "Itens do orçamento" : "Carrinho"}
+              aria-label={quoting ? "Itens do orçamento" : "Carrinho"}
             >
-              <ShoppingBag size={21} />
+              {quoting ? <FileText size={21}/> : <ShoppingBag size={21} />}
               <span className="text-sm">{cart?.lines.length ?? 0}</span>
             </Link>
           </nav>
         </div>
         <StoreCategoryNavigation products={products} base={base} preview={preview} view={view}
           activeCategory={selectedProduct?.category ?? (view === "catalogo" ? searchParams.get("categoria") : null)}
-          libraryEnabled={libraryEnabled} libraryApi={`${api}/library`} navigationKey={`${base}/${path.join("/")}?${searchParams.toString()}`}/>
+          quoteActive={quoting} libraryEnabled={libraryEnabled} libraryApi={`${api}/library`} navigationKey={`${base}/${path.join("/")}?${searchParams.toString()}`}/>
+        {showQuoteJourney ? <StoreQuoteJourney base={base} step={savedQuote ? 4 : quoteDetails ? quoteStep === "review" ? 3 : 2 : 1} count={cart?.lines.length ?? 0} totalCents={cart?.calculation?.totalCents ?? 0} identified={Boolean(cart?.customer)} onPurchase={() => { setQuoteMode(false); router.push(`${base}/carrinho`); }}/>: null}
       </header>
       {view === "home" ? (
         <StoreHome settings={settings} products={products} base={base} />
@@ -339,6 +361,7 @@ export function Storefront({
             preview={preview}
             artworks={cart?.artworks ?? []}
             libraryEnabled={libraryEnabled}
+            quoting={quoting}
             onArtworkRefresh={refresh}
             base={base}
             api={api}
@@ -385,12 +408,13 @@ export function Storefront({
         ) : null}
         {view === "carrinho" ? (
           <>
-            <h1 className={styles.title}>Seu carrinho</h1>
+            <h1 className={styles.title}>{quoting ? "Itens do seu orçamento" : "Seu carrinho"}</h1>
+            {quoting ? <p className={`${styles.muted} mb-4`}>Ajuste os produtos e quantidades. Enviar e aprovar artes não é obrigatório para gerar o orçamento.</p> : null}
             {!cart ? (
               <p>Carregando…</p>
             ) : !cart.lines.length ? (
               <Empty
-                text="Seu carrinho ainda está vazio."
+                text={quoting ? "Seu orçamento ainda não tem produtos." : "Seu carrinho ainda está vazio."}
                 href={`${base}/catalogo`}
                 label="Escolher produtos"
               />
@@ -514,40 +538,41 @@ export function Storefront({
                   })}
                 </div>
                 <aside className={styles.summary}>
-                  <h2 className="text-xl font-semibold">Resumo</h2>
+                  <h2 className="text-xl font-semibold">{quoting ? "Resumo do orçamento" : "Resumo"}</h2>
                   <Summary subtotal={cart.calculation?.totalCents ?? 0} artworkDiscountCents={cart.calculation?.artworkDiscountCents} />
                   <Link
                     className={`${styles.primary} mt-5 w-full`}
-                    href={`${base}/checkout`}
+                    href={quoting ? `${base}/orcamento?etapa=dados` : `${base}/checkout`}
                   >
-                    Continuar para entrega
+                    {quoting ? "Continuar para dados e entrega" : "Continuar para entrega"}
                     <ArrowRight size={17} />
                   </Link>
                   <Link
                     className="mt-4 block text-center text-sm underline"
                     href={`${base}/catalogo`}
                   >
-                    Continuar comprando
+                    {quoting ? "Adicionar mais produtos ao orçamento" : "Continuar comprando"}
                   </Link>
-                  {!preview ? <Link href={`${base}/orcamento`} className={`${styles.secondary} mt-4 w-full`}><FileText size={17}/>Gerar orçamento sem comprar</Link> : null}
+                  {!preview && !quoting ? <Link href={`${base}/orcamento`} className={`${styles.secondary} mt-4 w-full`}><FileText size={17}/>Gerar orçamento sem comprar</Link> : null}
                 </aside>
               </div>
             )}
           </>
         ) : null}
-        {view === "checkout" || view === "orcamento" ? (
+        {view === "orcamento" && !quoteDetails ? cart ? <StoreQuoteOverview cart={cart} products={products} base={base} storeName={settings.name} busy={busy || paused} onRemove={id => void action(() => update(cart.lines.filter(line => line.id !== id)))}/> : <p role="status">Recuperando seu orçamento…</p> : null}
+        {view === "checkout" || quoteDetails ? (
           <>
             <h1 className={styles.title}>{view === "orcamento" ? "Preparar orçamento" : "Finalizar pedido"}</h1>
             {!cart ? (
               <p>Carregando…</p>
-            ) : !cart.customer && !preview ? (
-              <BuyerLogin api={api} onLogged={refresh} disabled={false} />
             ) : !cart.lines.length ? (
               <Empty
-                text="Adicione produtos antes de concluir."
+                text={quoteDetails ? "Seu orçamento precisa de ao menos um produto." : "Adicione produtos antes de concluir."}
                 href={`${base}/catalogo`}
-                label="Ver produtos"
+                label={quoteDetails ? "Escolher produtos para o orçamento" : "Ver produtos"}
               />
+            ) : !cart.customer && !preview ? (
+              <BuyerLogin api={api} onLogged={refresh} disabled={false} forQuote={quoteDetails}/>
             ) : preview ? (
               <PreviewCheckout
                 cart={cart}
@@ -558,6 +583,8 @@ export function Storefront({
             ) : (
               <Checkout
                 intent={view === "orcamento" ? "quote" : "purchase"}
+                onQuoteStepChange={setQuoteStep}
+                quoteBenefits={quoteDetails ? quoteArtworkBenefits(cart.lines, products, cart.calculation) : []}
                 artworkIssues={pendingCartArtworks(cart.lines, products, cart.artworks)}
                 cart={cart}
                 api={api}
@@ -580,7 +607,7 @@ export function Storefront({
             )}
           </>
         ) : null}
-        {view === "orcamentos" ? (!cart?.customer ? <BuyerLogin api={api} onLogged={refresh} disabled={!cart}/> : <StoreBuyerQuotes api={api} base={base} quoteId={path[1]} revision={cart.revision} hasCart={cart.lines.length > 0} onRestored={refresh}/>) : null}
+        {view === "orcamentos" ? (!cart?.customer ? <BuyerLogin api={api} onLogged={refresh} disabled={!cart}/> : <StoreBuyerQuotes api={api} base={base} quoteId={path[1]} revision={cart.revision} hasCart={cart.lines.length > 0} onRestored={async () => { setQuoteMode(false); await refresh(); }}/>) : null}
         {view === "pedidos" ? (
           <>
             <h1 className={styles.title}>
@@ -760,6 +787,7 @@ function ProductDetail({
   disabled,
   onAdd,
   libraryEnabled,
+  quoting = false,
 }: {
   settings: StoreSettings;
   product: Product;
@@ -772,6 +800,7 @@ function ProductDetail({
   disabled: boolean;
   onAdd: (lines: CartLine[]) => Promise<boolean>;
   libraryEnabled: boolean;
+  quoting?: boolean;
 }) {
   const [quantity, setQuantity] = useState(String(product.minQuantity));
   const [groups, setGroups] = useState("1");
@@ -982,26 +1011,26 @@ function ProductDetail({
             onClick={() => void addToCart()}
           >
             {adding || artworkBusy ? <Loader2 className="animate-spin motion-reduce:animate-none" size={18} /> : <ShoppingBag size={18} />}
-            {adding ? "Adicionando..." : artworkBusy ? "Salvando sua arte..." : "Adicionar ao carrinho"}
+            {adding ? "Adicionando..." : artworkBusy ? "Salvando sua arte..." : quoting ? "Adicionar ao orçamento" : "Adicionar ao carrinho"}
           </button>
           {product.personalized ? (
             <p className="mt-3 text-sm text-zinc-500">
-              {product.artworkOptions?.allowTeamPreparation ? "Envie sua arte para a equipe preparar ou enquadre e aprove para receber o benefício disponível." : "O enquadramento e a aprovação de cada arte podem ser concluídos no carrinho."}
+              {quoting ? "A arte é opcional para orçar. Você pode enviá-la e aprová-la antes de comprar." : product.artworkOptions?.allowTeamPreparation ? "Envie sua arte para a equipe preparar ou enquadre e aprove para receber o benefício disponível." : "O enquadramento e a aprovação de cada arte podem ser concluídos no carrinho."}
             </p>
           ) : null}
           {quantity.trim() ? <StoreDeliveryInquiry api={api} lines={lines} production={settings.production} disabled={Boolean(deliveryIssue)} disabledReason={deliveryIssue ?? undefined} /> : null}
         </section>
       </div>
-      {confirmation ? <aside className={styles.cartConfirmation} aria-label="Confirmação do carrinho">
+      {confirmation ? <aside className={styles.cartConfirmation} aria-label={quoting ? "Item adicionado ao orçamento" : "Confirmação do carrinho"}>
         <button type="button" className={styles.confirmationClose} title="Fechar confirmação" aria-label="Fechar confirmação" onClick={() => setConfirmation(null)}><X size={18} /></button>
         <img className={styles.confirmationImage} src={product.imageUrl} alt="" width={64} height={64} />
         <div role="status" aria-live="polite" className={styles.confirmationMessage}>
-          <span className={styles.confirmationHeading}><CheckCircle2 size={20} aria-hidden="true" />Produto adicionado ao carrinho</span>
+          <span className={styles.confirmationHeading}><CheckCircle2 size={20} aria-hidden="true" />{quoting ? "Produto adicionado ao orçamento" : "Produto adicionado ao carrinho"}</span>
           <strong>{product.name}</strong>
           <p>{confirmation.quantity.toLocaleString("pt-BR")} {confirmation.quantity === 1 ? "unidade" : "unidades"}{product.personalized ? ` · ${confirmation.groups} ${confirmation.groups === 1 ? "arte" : "artes"}` : ""}</p>
           {confirmation.artworks ? <small>{confirmation.artworks} {confirmation.artworks === 1 ? "arte já anexada" : "artes já anexadas"}</small> : null}
         </div>
-        <Link href={`${base}/carrinho`} className={`${styles.primary} ${styles.confirmationLink}`}>Ver carrinho<ArrowRight size={17} /></Link>
+        <Link href={quoting ? `${base}/orcamento` : `${base}/carrinho`} className={`${styles.primary} ${styles.confirmationLink}`}>{quoting ? "Ver meu orçamento" : "Ver carrinho"}<ArrowRight size={17} /></Link>
       </aside> : null}
     </>
   );
@@ -1010,10 +1039,12 @@ function BuyerLogin({
   api,
   onLogged,
   disabled,
+  forQuote = false,
 }: {
   api: string;
   onLogged: () => Promise<void>;
   disabled: boolean;
+  forQuote?: boolean;
 }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -1050,12 +1081,12 @@ function BuyerLogin({
   return (
     <form onSubmit={submit} className={`${styles.form} mx-auto max-w-md py-8`}>
       <h2 className={styles.title}>
-        {challenge ? "Confira seu e-mail" : "Entre ou crie sua conta"}
+        {challenge ? "Confira seu e-mail" : forQuote ? "Valide seu e-mail para salvar o orçamento" : "Entre ou crie sua conta"}
       </h2>
       <p className={styles.muted}>
         {challenge
           ? `Enviamos um código para ${email}. Ele é válido por 10 minutos.`
-          : "Acesse com um código por e-mail, sem precisar criar uma senha."}
+          : forQuote ? "Seus produtos continuam no rascunho. Receba um código por e-mail, sem senha, para guardar o orçamento na sua conta e comprar depois." : "Acesse com um código por e-mail, sem precisar criar uma senha."}
       </p>
       {!challenge ? (
         <>
@@ -1103,7 +1134,7 @@ function BuyerLogin({
         </p>
       ) : null}
       <button className={styles.primary} disabled={busy || disabled}>
-        {busy ? "Aguarde…" : challenge ? "Confirmar acesso" : "Receber código"}
+        {busy ? "Aguarde…" : challenge ? forQuote ? "Validar e continuar orçamento" : "Confirmar acesso" : "Receber código"}
       </button>
       {challenge ? (
         <button

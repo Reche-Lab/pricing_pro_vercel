@@ -9,6 +9,7 @@ import { storeMoney, storeRequest } from "./store-http";
 import { StoreOrderContactDetails } from "./StoreOrderContactDetails";
 import { StoreOrderSummary } from "./StoreOrderSummary";
 import styles from "./store.module.css";
+import { StoreQuoteArtworkBenefit } from "./StoreQuoteArtworkBenefit";
 
 export function StoreBuyerQuotes({ api, base, quoteId, revision, hasCart, onRestored }: { api: string; base: string; quoteId?: string; revision: number; hasCart: boolean; onRestored: () => Promise<void> }) {
   const [quotes, setQuotes] = useState<Awaited<ReturnType<typeof listBuyerQuotes>>>([]);
@@ -24,9 +25,10 @@ export function StoreBuyerQuotes({ api, base, quoteId, revision, hasCart, onRest
   }, [api, quoteId]);
   if (loading) return <p role="status" className="flex items-center gap-2"><Loader2 size={18} className="animate-spin"/>Carregando seus orçamentos…</p>;
   return <div className="min-w-0 space-y-5">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h1 className={styles.title}>{quoteId ? "Seu orçamento" : "Meus orçamentos"}</h1><Link className={styles.secondary} href={`${base}/catalogo`}><FileText size={16}/>Selecionar produtos para orçamento</Link></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h1 className={styles.title}>{quoteId ? "Seu orçamento" : "Meus orçamentos"}</h1><Link className={styles.secondary} href={`${base}/orcamento`}><FileText size={16}/>Montar novo orçamento</Link></div>
     {error ? <p role="alert" className="rounded-md border border-rose-500/30 p-3 text-sm">{error}</p> : null}
     {quote ? <>
+      <p role="status" className="border-l-2 border-current/25 pl-3 text-sm">Orçamento salvo na sua conta. Você pode baixar o PDF ou voltar por Meus orçamentos quando quiser comprar. Não há cobrança ou reserva.</p>
       <div className={styles.columns}>
         <section className="min-w-0"><h2 className="font-semibold">Orçamento {quote.id.slice(0, 8).toUpperCase()}</h2>
           <p className={`${styles.muted} mt-1`}>Criado em {new Date(quote.created_at).toLocaleDateString("pt-BR")} · Válido até {new Date(quote.valid_until).toLocaleDateString("pt-BR")}</p>
@@ -36,6 +38,7 @@ export function StoreBuyerQuotes({ api, base, quoteId, revision, hasCart, onRest
         <aside className={styles.summary}>
           <h2 className="text-lg font-semibold">Resumo do orçamento</h2>
           <div className="my-4"><StoreOrderSummary subtotal={quote.subtotal_cents - (quote.snapshot.artworkDiscountCents ?? 0)} artworkDiscountCents={quote.snapshot.artworkDiscountCents} shipping={quote.shipping_cents ?? undefined} shippingExcluded={quote.shipping_cents === null}/></div>
+          <StoreQuoteArtworkBenefit benefits={quote.snapshot.artworkBenefits ?? []} storeName={quote.snapshot.storeName}/>
           <p className="text-sm">Produção: {quote.snapshot.production.productionDays} dias úteis após pagamento e aprovação das artes.</p>
           {quote.snapshot.production.deliveryDate ? <p className="mt-2 text-sm">Estimativa registrada: <strong>{formatDeliveryDate(quote.snapshot.production.deliveryDate)}</strong></p> : null}
           <a className={`${styles.primary} mt-4 w-full`} href={`${api}/quotes/${quote.id}/pdf`}><Download size={17}/>Baixar orçamento PDF</a>

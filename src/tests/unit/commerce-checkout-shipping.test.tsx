@@ -24,7 +24,8 @@ describe("checkout carrier selection", () => {
     expect(screen.getByRole("radio", { name: /Correios - SEDEX/ })).toBeChecked();
     expect(screen.getByRole("radio", { name: /Correios - PAC/ })).not.toBeChecked();
     expect(screen.getByText("Mais rápida")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Salvar orçamento e acessar PDF" }));
+    fireEvent.click(screen.getByRole("button", { name: "Revisar orçamento" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Salvar orçamento e acessar PDF" }));
     await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ delivery: "delivery", shippingQuoteId: "22222222-2222-4222-8222-222222222222", expectedTotalCents: 12200 })));
     expect(screen.queryByText("Total sem frete")).not.toBeInTheDocument();
     expect(screen.getAllByText(/Valor declarado/)).toHaveLength(2);
@@ -37,9 +38,11 @@ describe("checkout carrier selection", () => {
     fireEvent.click(screen.getByRole("button", { name: "Calcular frete do carrinho" }));
     await screen.findByRole("radio", { name: /SEDEX/ });
     fireEvent.click(screen.getByRole("checkbox", { name: "Incluir frete ou retirada neste orçamento" }));
-    fireEvent.click(screen.getByRole("button", { name: "Salvar orçamento e acessar PDF" }));
+    fireEvent.click(screen.getByRole("button", { name: "Revisar orçamento" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Salvar orçamento e acessar PDF" }));
     await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ delivery: "not_included", expectedTotalCents: 10000 })));
     expect(submit).toHaveBeenLastCalledWith(expect.not.objectContaining({ shippingQuoteId: expect.anything() }));
+    fireEvent.click(screen.getByRole("button", { name: "Voltar aos dados e entrega" }));
     fireEvent.click(screen.getByRole("radio", { name: /SEDEX/ }));
     expect(screen.getByRole("checkbox", { name: "Incluir frete ou retirada neste orçamento" })).toBeChecked();
   });

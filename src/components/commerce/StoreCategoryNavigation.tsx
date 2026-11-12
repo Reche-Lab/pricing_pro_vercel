@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronDown, Grid2X2, Images, Megaphone, Package, X } from "lucide-react";
+import { ArrowRight, ChevronDown, FileText, Grid2X2, Images, Megaphone, Package, X } from "lucide-react";
 import type { publicCommerceProduct } from "@/repositories/commerce";
 import { campaignIsVisible } from "@/domain/commerce/library";
 import { storeMoney } from "./store-http";
@@ -13,9 +13,9 @@ import styles from "./store.module.css";
 type MenuProduct = Pick<ReturnType<typeof publicCommerceProduct>, "id" | "name" | "category" | "imageUrl" | "unitCents" | "personalized">;
 type MenuGroup = { key: string; name: string; kind: "products"; items: MenuProduct[] } | { key: string; name: string; kind: "artworks" | "campaigns" };
 
-export function StoreCategoryNavigation({ products, base, preview, view, activeCategory, libraryEnabled = false, libraryApi = "", navigationKey = "" }: {
+export function StoreCategoryNavigation({ products, base, preview, view, activeCategory, libraryEnabled = false, libraryApi = "", navigationKey = "", quoteActive = false }: {
   products: MenuProduct[]; base: string; preview: boolean; view: string; activeCategory?: string | null;
-  libraryEnabled?: boolean; libraryApi?: string; navigationKey?: string;
+  libraryEnabled?: boolean; libraryApi?: string; navigationKey?: string; quoteActive?: boolean;
 }) {
   const categories = useMemo(() => {
     const grouped = new Map<string, MenuProduct[]>();
@@ -76,7 +76,7 @@ export function StoreCategoryNavigation({ products, base, preview, view, activeC
     onPointerEnter={cancelClose} onPointerLeave={scheduleClose}
     onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) close(); }}
     onKeyDown={event => { if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); close(true); } }}>
-    <div className={styles.categoryNavBar}>
+    <div className={styles.categoryNavInner}><div className={styles.categoryNavBar}>
       <Link className={styles.categoryCatalogLink} href={`${base}/catalogo`} aria-label="Pesquisar produtos" aria-current={view === "catalogo" && !activeCategory ? "page" : undefined} onClick={() => close()}><Grid2X2 size={16} aria-hidden="true"/>Todos os produtos</Link>
       {categories.map((category, index) => <button key={category.key} type="button"
         ref={element => { if (element) triggers.current.set(category.key, element); else triggers.current.delete(category.key); }}
@@ -95,7 +95,8 @@ export function StoreCategoryNavigation({ products, base, preview, view, activeC
         }}>
         {category.kind === "artworks" ? <Images size={15} aria-hidden="true"/> : category.kind === "campaigns" ? <Megaphone size={15} aria-hidden="true"/> : null}<span>{category.name}</span><ChevronDown size={14} aria-hidden="true"/>
       </button>)}
-      {!preview ? <Link className={styles.categoryUtilityLink} href={`${base}/orcamento`} aria-current={view === "orcamento" ? "page" : undefined} onClick={() => close()}>Solicitar orçamento</Link> : null}
+    </div>
+      {!preview ? <Link className={styles.categoryUtilityLink} href={`${base}/orcamento`} aria-current={view === "orcamento" ? "page" : undefined} data-quote-active={quoteActive} onClick={() => close()}><FileText size={16} aria-hidden="true"/><span>Solicitar orçamento</span><ArrowRight size={14} aria-hidden="true"/></Link> : null}
     </div>
     {selected ? <section ref={panel} id={`${id}-panel-${categories.indexOf(selected)}`} aria-label={selected.kind === "products" ? `Produtos de ${selected.name}` : `${selected.name} da loja`} className={styles.categoryDropdown}>
       <div className={styles.categoryDropdownHeading}>

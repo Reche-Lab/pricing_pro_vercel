@@ -2,6 +2,7 @@ import { generateQuotePdf } from "./quote-pdf";
 import type { getBuyerQuote } from "@/repositories/commerce-buyer-quotes";
 import type { QuoteDetail } from "@/repositories/quotes";
 import { formatDeliveryDate } from "@/domain/shipping/production-lead-time";
+import { quoteArtworkBenefitDescription } from "@/domain/commerce/quote-artwork-benefit";
 
 export async function generateBuyerQuotePdf(quote: Awaited<ReturnType<typeof getBuyerQuote>>, tenant: { name: string; logo_url: string | null; company_phone: string | null; company_site: string | null; company_document: string | null }) {
   const { billing, address } = quote.contact, production = quote.snapshot.production;
@@ -10,6 +11,8 @@ export async function generateBuyerQuotePdf(quote: Awaited<ReturnType<typeof get
     quote.snapshot.shippingOption?.insuranceValueCents !== undefined ? `Valor declarado para seguro na cotacao: ${(quote.snapshot.shippingOption.insuranceValueCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.` : "",
     production.transportDays !== null ? `Transporte: ${production.transportDays} dias uteis.` : "Prazo de transporte a confirmar.",
     production.deliveryDate ? `Recebimento estimado se confirmado na data do orcamento: ${formatDeliveryDate(production.deliveryDate)}.` : "",
+    ...(quote.snapshot.artworkBenefits ?? []).map(quoteArtworkBenefitDescription),
+    quote.snapshot.artworkBenefits?.length ? `Benefício condicional, não incluído no total: envie, enquadre e aprove as artes conforme o guia do produto e as especificações da equipe da ${quote.snapshot.storeName}, prontas para impressão, sem ajustes da equipe. Não incide sobre frete. Elegibilidade e valores serão conferidos na compra.` : "",
     "Este orcamento nao e um pedido, nao reserva estoque e nao gera cobranca. Precos, disponibilidade, artes e frete serao conferidos antes da compra."].filter(Boolean).join("\n");
   const detail: QuoteDetail = {
     id: quote.id, status: new Date(quote.valid_until).getTime() <= Date.now() ? "expired" : "draft", valid_until: quote.valid_until,

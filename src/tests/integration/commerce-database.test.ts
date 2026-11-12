@@ -693,7 +693,7 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
     expect((await saveCheckoutDraft(tenantId, session, draft, 0)).version).toBe(2);
   });
   it("creates idempotent private buyer quotes without artwork, payment, ERP or cart loss and generates the PDF", async () => {
-    await saveCommerceStore(actorId, tenantId, { ...published, products: published.products.map(p => ({ ...p, personalized: true })) });
+    await saveCommerceStore(actorId, tenantId, { ...published, products: published.products.map(p => ({ ...p, personalized: true, artworkOptions: { allowTeamPreparation: true, discountFixedCents: 500, maxDiscountPercent: 15 } })) });
     const store = (await getCommerceStore("ground-shop"))!;
     const product = (await commerceProducts(tenantId))[0];
     const created = await createBuyerSession(tenantId);
@@ -705,10 +705,13 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
     const amount = (await calculateCommerceCart(tenantId, session.id, lines, [product])).totalCents;
     const input = { requestId: crypto.randomUUID(), revision: 1, expectedTotalCents: amount, billing: testCommerceBilling, address: null, deliveryAddressSameAsBilling: true, delivery: "not_included" as const };
     const before = (await getPool().query("select count(*)::int as n from commerce_orders")).rows[0].n;
+    await expect(createBuyerQuote(store, { ...session, customer_id: null }, input)).rejects.toMatchObject({ status: 401 });
     const [first, repeated] = await Promise.all([createBuyerQuote(store, session, input), createBuyerQuote(store, session, input)]);
     expect(repeated.id).toBe(first.id);
     const quote = await getBuyerQuote(tenantId, session, first.id);
     expect(quote.shipping_cents).toBeNull(); expect(quote.total_cents).toBe(amount); expect(quote.snapshot.production.productionDays).toBe(4);
+    expect(quote.snapshot.artworkBenefits).toEqual([expect.objectContaining({ productId: product.id, percent: 15, limitPerArtworkCents: 500, artworkGroups: 1, additionalDiscountCents: Math.min(500, Math.floor(amount * 15 / 100)) })]);
+    expect(quote.snapshot.artworkDiscountCents).toBe(0);
     expect(quote.contact.billing.document).toBe(testCommerceBilling.document);
     expect(JSON.stringify(quote)).not.toContain("contact_encrypted");
     expect((await listBuyerQuotes(tenantId, session)).some(item => item.id === first.id)).toBe(true);

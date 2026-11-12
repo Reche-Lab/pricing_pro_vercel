@@ -15,6 +15,7 @@ describe("buyer quote PDF totals", () => {
       contact: { billing: testCommerceBilling, address: null, deliveryAddressSameAsBilling: true },
       snapshot: {
         items: [], lines: [], delivery: "delivery", storeName: "Loja teste", artworkDiscountCents: 500,
+        artworkBenefits: [{ productId: "product", name: "Botton", percent: 15, limitPerArtworkCents: 500, artworkGroups: 1, additionalDiscountCents: 300 }],
         shippingOption: { id: "melhor_envio:2", name: "Correios - SEDEX", priceCents: 2200, transitDays: 2, insuranceValueCents: 9500 },
         production: deliveryEstimate(301, 2),
       },
@@ -24,5 +25,8 @@ describe("buyer quote PDF totals", () => {
       notes: expect.stringContaining("Correios - SEDEX"),
     }) }));
     expect(vi.mocked(generateQuotePdf).mock.calls[0][0].quote.notes).toContain("95,00");
+    expect(vi.mocked(generateQuotePdf).mock.calls[0][0].quote.notes).toContain("15% de desconto adicional");
+    expect(vi.mocked(generateQuotePdf).mock.calls[0][0].quote.notes).toContain("R$ 5,00 por arte/grupo");
+    expect(vi.mocked(generateQuotePdf).mock.calls[0][0].quote.notes).toContain("não incluído no total");
   });
 });

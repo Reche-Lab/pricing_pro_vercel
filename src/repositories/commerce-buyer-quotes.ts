@@ -7,6 +7,7 @@ import { deliveryEstimate } from "@/domain/shipping/production-lead-time";
 import { commerceProducts, commerceTransaction, calculateCommerceCart, hashCommerceToken, type BuyerSession, type CommerceStore } from "./commerce";
 import { emptyContact } from "@/domain/commerce/checkout-draft";
 import type { StoreShippingOption } from "@/domain/commerce/shipping-options";
+import { quoteArtworkBenefits, type QuoteArtworkBenefit } from "@/domain/commerce/quote-artwork-benefit";
 
 type QuoteSnapshot = {
   items: Awaited<ReturnType<typeof calculateCommerceCart>>["items"];
@@ -16,6 +17,7 @@ type QuoteSnapshot = {
   production: ReturnType<typeof deliveryEstimate>;
   storeName: string;
   artworkDiscountCents: number;
+  artworkBenefits?: QuoteArtworkBenefit[];
 };
 type QuoteContact = Pick<BuyerQuoteInput, "billing" | "address" | "deliveryAddressSameAsBilling">;
 export type BuyerQuoteRow = { id: string; tenant_id: string; customer_id: string; snapshot: QuoteSnapshot; contact_encrypted: string; subtotal_cents: number; shipping_cents: number | null; total_cents: number; created_at: string; valid_until: string };
@@ -63,7 +65,8 @@ export async function createBuyerQuote(store: CommerceStore, session: BuyerSessi
     const total = calculated.totalCents + (shipping ?? 0);
     if (total !== input.expectedTotalCents) throw new CommerceError("Os valores mudaram. Revise o resumo.", 409);
     const snapshot: QuoteSnapshot = { items: calculated.items, lines: current.cart, shippingOption: option, delivery: input.delivery,
-      production: deliveryEstimate(current.cart.reduce((sum, line) => sum + line.quantity, 0), input.delivery === "pickup" ? 0 : option?.transitDays ?? null, lockedStore.settings.production), storeName: lockedStore.settings.name, artworkDiscountCents: calculated.artworkDiscountCents };
+      production: deliveryEstimate(current.cart.reduce((sum, line) => sum + line.quantity, 0), input.delivery === "pickup" ? 0 : option?.transitDays ?? null, lockedStore.settings.production), storeName: lockedStore.settings.name, artworkDiscountCents: calculated.artworkDiscountCents,
+      artworkBenefits: quoteArtworkBenefits(current.cart, products, calculated) };
     const contact: QuoteContact = { billing: input.billing, address: { ...address, document: address.document || input.billing.document }, deliveryAddressSameAsBilling: input.deliveryAddressSameAsBilling };
     const result = await client.query<{ id: string }>(`insert into commerce_buyer_quotes(tenant_id,customer_id,session_id,request_id,request_hash,snapshot,contact_encrypted,subtotal_cents,shipping_cents,total_cents)
       values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) on conflict(tenant_id,customer_id,request_id) do nothing returning id`, [store.tenant_id, customerId, session.id, input.requestId, requestHash, JSON.stringify(snapshot), encryptTenantSecret(contact), calculated.baseSubtotalCents, shipping, total]);

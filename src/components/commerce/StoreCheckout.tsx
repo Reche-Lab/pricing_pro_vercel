@@ -12,9 +12,12 @@ import styles from "./store.module.css";
 import { emptyContact, type ContactDraft } from "@/domain/commerce/checkout-draft";
 import { useCheckoutDraft } from "./use-checkout-draft";
 import { DeliveryTimeline } from "@/components/shipping/DeliveryTimeline";
-import { buyerQuoteSchema } from "@/domain/commerce/buyer-quote";
+import { buyerQuoteSchema, type BuyerQuoteInput } from "@/domain/commerce/buyer-quote";
 import { sortShippingOptions, type StoreShippingOption } from "@/domain/commerce/shipping-options";
 import { StoreShippingOptions } from "./StoreShippingOptions";
+import { StoreQuoteArtworkBenefit } from "./StoreQuoteArtworkBenefit";
+import type { QuoteArtworkBenefit } from "@/domain/commerce/quote-artwork-benefit";
+import { StoreOrderContactDetails } from "./StoreOrderContactDetails";
 
 type Cart = Awaited<ReturnType<typeof cartView>>;
 const previewBilling = { ...emptyContact(), name: "Cliente de teste", email: "cliente@example.test", phone: "11999990000", document: "52998224725", postalCode: "01001000", street: "Praça de teste", number: "100", district: "Centro", city: "São Paulo", state: "SP" };
@@ -100,10 +103,12 @@ function ContactFields({ value, onChange, billing, errors, onBusyChange }: {
   </div>;
 }
 
-export function StoreCheckout({ cart, settings, base, disabled, onSubmit, preview = false, api, artworkIssues = [], intent = "purchase" }: {
+export function StoreCheckout({ cart, settings, base, disabled, onSubmit, preview = false, api, artworkIssues = [], intent = "purchase", quoteBenefits = [], onQuoteStepChange }: {
   cart: Cart; settings: StoreSettings; base: string; disabled: boolean; onSubmit: (input: unknown) => Promise<void>; preview?: boolean; api?: string;
   artworkIssues?: { lineId: string; name: string; artworkName: string; reason: string }[];
   intent?: "purchase" | "quote";
+  quoteBenefits?: QuoteArtworkBenefit[];
+  onQuoteStepChange?: (step: "details" | "review") => void;
 }) {
   const persistence = useCheckoutDraft(api, preview, { billing: { ...emptyContact(), name: cart.customer?.name ?? "", email: cart.customer?.email ?? "" }, address: emptyContact(), same: true, delivery: settings.pickupEnabled ? "pickup" : "delivery" });
   const { billing, address, same, delivery } = persistence.draft;
@@ -123,6 +128,9 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
   const [includeQuoteShipping, setIncludeQuoteShipping] = useState(false);
   const [requestId] = useState(() => crypto.randomUUID());
   const quoting = intent === "quote";
+  const [quoteReview, setQuoteReview] = useState<BuyerQuoteInput | null>(null);
+  const reviewHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { onQuoteStepChange?.(quoteReview ? "review" : "details"); }, [quoteReview, onQuoteStepChange]);
   const [freight, setFreight] = useState<{ key: string; expiresAt: number; options: StoreShippingOption[] } | null>(null);
   const [serviceId, setServiceId] = useState("delivery"), [shippingBusy, setShippingBusy] = useState(false), [shippingError, setShippingError] = useState("");
   const postalCode = (same ? billing.postalCode : address.postalCode);
@@ -164,7 +172,8 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
       : checkoutSchema.safeParse({ ...common, provider, acceptedTerms: accepted, paymentEnvironment: cart.payments.payment_environment ?? "production" });
     if (!parsed.success) {
       setErrors(Object.fromEntries(parsed.error.issues.map(issue => [issue.path.join("."), issue.message])));
-      setError("Confira os campos destacados antes de confirmar o pedido.");
+      setQuoteReview(null);
+      setError(quoting ? "Confira os campos destacados antes de salvar o orçamento." : "Confira os campos destacados antes de confirmar o pedido.");
       requestAnimationFrame(() => form.current?.querySelector<HTMLElement>("[aria-invalid=true]")?.focus());
       return;
     }
@@ -172,6 +181,11 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
     submitLock.current = true; setSubmitting(true);
     try {
       if (!preview) await persistence.flush();
+      if (quoting && !quoteReview) {
+        setQuoteReview(buyerQuoteSchema.parse(parsed.data));
+        requestAnimationFrame(() => { reviewHeading.current?.scrollIntoView?.({ behavior: "smooth", block: "center" }); reviewHeading.current?.focus(); });
+        return;
+      }
       if (!quoting && artworkIssues.length) {
         setPendingLines(artworkIssues.map(issue => issue.lineId));
         requestAnimationFrame(() => { pendingRef.current?.scrollIntoView?.({ behavior: "smooth", block: "center" }); pendingRef.current?.focus(); });
@@ -196,8 +210,9 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
       </div> : null}
       <p role="status" className={styles.muted}>{persistence.status || (persistence.ready ? "Seus dados são salvos apenas para esta conta nesta loja." : "Recuperando seus dados…")}</p>
       {persistence.status.includes("Não foi possível") || persistence.status.includes("outra aba") ? <button type="button" className={`${styles.secondary} mb-3`} onClick={() => { if (!persistence.ready || persistence.status.includes("outra aba")) window.location.reload(); else void persistence.flush().catch(() => undefined); }}>{!persistence.ready ? <RefreshCw size={16}/> : <Save size={16}/>} {!persistence.ready || persistence.status.includes("outra aba") ? "Recarregar dados salvos" : "Tentar salvar novamente"}</button> : null}
-      {quoting ? <div className="mb-5 border-l-2 border-current/25 pl-3"><strong>Seu orçamento, sem compromisso de compra</strong><p className="mt-1 text-sm">Você não precisa enviar nem aprovar artes agora. O PDF ficará salvo em Meus orçamentos.</p><label className="mt-3 !flex items-center gap-2"><input type="checkbox" checked={includeQuoteShipping} onChange={event => setIncludeQuoteShipping(event.target.checked)}/>Incluir frete ou retirada neste orçamento</label></div> : null}
-      <fieldset disabled={!persistence.ready || submitting || disabled} className="min-w-0 border-0 p-0">
+      {quoteReview ? <section className={styles.quoteReview} aria-label="Revisão do orçamento"><h2 ref={reviewHeading} tabIndex={-1} className="text-xl font-semibold outline-none">Confira antes de salvar seu orçamento</h2><p className={`${styles.muted} mt-2`}>Revise os produtos, seus dados e a entrega. Não há cobrança nem compromisso de compra.</p><StoreOrderContactDetails billing={{ ...quoteReview.billing, personType: quoteReview.billing.document.length === 14 ? "J" : "F" }} address={quoteReview.delivery === "pickup" ? null : quoteReview.deliveryAddressSameAsBilling ? { ...quoteReview.billing, attention: "" } : quoteReview.address} same={quoteReview.deliveryAddressSameAsBilling} shippingOption={selectedFreight}/><button type="button" className={`${styles.secondary} mt-4`} onClick={() => setQuoteReview(null)}>Voltar aos dados e entrega</button><Link className="mt-4 block text-sm underline" href={`${base}/orcamento`}>Voltar aos produtos do orçamento</Link></section> : null}
+      {quoting && !quoteReview ? <div className="mb-5 border-l-2 border-current/25 pl-3"><strong>Seu orçamento, sem compromisso de compra</strong><p className="mt-1 text-sm">Você não precisa enviar nem aprovar artes agora. O PDF ficará salvo em Meus orçamentos.</p><label className="mt-3 !flex items-center gap-2"><input type="checkbox" checked={includeQuoteShipping} onChange={event => setIncludeQuoteShipping(event.target.checked)}/>Incluir frete ou retirada neste orçamento</label></div> : null}
+      <fieldset hidden={Boolean(quoteReview)} disabled={!persistence.ready || submitting || disabled} className="min-w-0 border-0 p-0">
       {preview ? <button type="button" className={`${styles.secondary} justify-self-start`} onClick={() => { setBilling({ ...previewBilling }); setErrors({}); setError(""); }}>Preencher dados de teste</button> : null}
       <section className="min-w-0 space-y-4" aria-labelledby="checkout-billing"><h2 id="checkout-billing" className="text-lg font-semibold">1. Dados para faturamento</h2>
         <ContactFields billing value={billing} onChange={setBilling} errors={errors} onBusyChange={setBillingCepBusy}/>
@@ -239,11 +254,12 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
     <aside className={styles.summary}><h2 className="mb-4 text-lg font-semibold">{quoting ? "Resumo do orçamento" : "4. Revise seu pedido"}</h2>
       {cart.calculation?.items.map(item => <div className="mb-3 flex justify-between gap-3 text-sm" key={item.id}><span>{item.quantity} × {item.name}<small className="block text-zinc-500">{item.artworkName}</small></span><span>{storeMoney(item.totalCents)}</span></div>)}
       <StoreOrderSummary subtotal={cart.calculation?.totalCents ?? 0} shipping={shipping} shippingPending={Boolean(missingFreight)} shippingExcluded={quoting && !includeQuoteShipping} artworkDiscountCents={cart.calculation?.artworkDiscountCents}/>
+      {quoting ? <StoreQuoteArtworkBenefit benefits={quoteBenefits} storeName={settings.name}/> : null}
       <DeliveryTimeline quantity={cart.lines.reduce((sum, line) => sum + line.quantity, 0)} settings={settings.production} transportDays={quoting && !includeQuoteShipping ? null : selectedFreight?.transitDays ?? (serviceId === "delivery" ? settings.deliveryTransitDays : null)} pickup={(!quoting || includeQuoteShipping) && delivery === "pickup"}/>
       {missingFreight ? <p role="status" className="mt-2 text-sm text-amber-700">Frete a calcular. O total acima ainda não inclui a entrega.</p> : null}
       {quoting ? <p className="my-5 text-sm">{includeQuoteShipping ? "Frete incluído conforme sua seleção." : "Frete não incluído no total."} Preços e frete serão conferidos novamente antes da compra.</p> : <label className="my-5 flex items-start gap-3"><input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} required/><span>Li e aceito as <Link target="_blank" href={`${base}/condicoes`} className="underline">condições de compra</Link>.</span></label>}
       {error ? <p role="alert" className="mb-3 text-sm text-red-700">{error}</p> : null}
-      <button className={`${styles.primary} w-full`} disabled={!persistence.ready || submitting || disabled || shippingBusy || missingFreight || billingCepBusy || deliveryCepBusy || (!quoting && !accepted) || !cart.calculation || (!quoting && !cart.payments.mp_enabled && !cart.payments.manual_enabled)}>{submitting ? <Loader2 className="animate-spin" size={17}/> : <Check size={17}/>} {submitting ? "Conferindo e salvando…" : quoting ? "Salvar orçamento e acessar PDF" : preview ? "Concluir simulação" : "Confirmar pedido"}</button>
+      <button className={`${styles.primary} w-full`} disabled={!persistence.ready || submitting || disabled || shippingBusy || missingFreight || billingCepBusy || deliveryCepBusy || (!quoting && !accepted) || !cart.calculation || (!quoting && !cart.payments.mp_enabled && !cart.payments.manual_enabled)}>{submitting ? <Loader2 className="animate-spin" size={17}/> : <Check size={17}/>} {submitting ? "Conferindo e salvando…" : quoting ? quoteReview ? "Salvar orçamento e acessar PDF" : "Revisar orçamento" : preview ? "Concluir simulação" : "Confirmar pedido"}</button>
       <p className="mt-3 text-sm text-zinc-500">{quoting ? "Nenhum pagamento ou pedido será criado. O orçamento fica disponível somente na sua conta." : preview ? "Prévia privada. Nenhum pedido real será criado." : cart.payments.payment_environment === "test" ? "Pedido de teste: utilize apenas os dados e cartões de teste do Mercado Pago. Não haverá liberação de produção ou envio." : provider === "mercado_pago" ? "Após confirmar, escolha como pagar no detalhe do pedido." : "A produção começa após pagamento e aprovação das artes."}</p>
     </aside>
   </form>;
