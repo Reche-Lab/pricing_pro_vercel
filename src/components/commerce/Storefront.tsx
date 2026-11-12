@@ -45,6 +45,7 @@ import { normalizeProductSearchTerm } from "@/domain/products/product-search";
 import { storeRequest, storeMoney } from "./store-http";
 import styles from "./store.module.css";
 import { StoreHome, StoreProductCard } from "./StoreHome";
+import studioStyles from "./studio.module.css";
 import { StoreCategoryNavigation } from "./StoreCategoryNavigation";
 import { StoreProductGallery } from "./StoreProductGallery";
 import { StorePriceBreakdown } from "./StorePriceBreakdown";
@@ -188,8 +189,10 @@ export function Storefront({
   const order = orders.find((o) => o.id === path[1]);
   return (
     <main
-      className={styles.store}
+      className={`${styles.store} ${settings.experience?.style === "studio" ? studioStyles.theme : ""}`}
       data-theme={theme}
+      data-experience={settings.experience?.style ?? "classic"}
+      data-studio-motion={settings.experience?.motion !== false}
       style={
         {
           "--accent": theme === "dark" ? "#79d8d0" : settings.accent,
@@ -305,7 +308,7 @@ export function Storefront({
         {showQuoteJourney ? <StoreQuoteJourney base={base} step={savedQuote ? 4 : quoteDetails ? quoteStep === "review" ? 3 : 2 : 1} count={cart?.lines.length ?? 0} totalCents={cart?.calculation?.totalCents ?? 0} identified={Boolean(cart?.customer)} onPurchase={() => { setQuoteMode(false); router.push(`${base}/carrinho`); }}/>: null}
       </header>
       {view === "home" ? (
-        <StoreHome settings={settings} products={products} base={base} />
+        <StoreHome settings={settings} products={products} base={base} preview={preview} quoting={quoting} />
       ) : null}
       <div
         className={

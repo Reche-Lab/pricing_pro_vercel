@@ -25,6 +25,7 @@ import type { getCommerceAdmin } from "@/repositories/commerce";
 import type { StoreAdminInput, StoreSettings } from "@/domain/commerce/schemas";
 import { storeRequest, storeMoney } from "./store-http";
 import { CommerceImageUpload } from "./CommerceImageUpload";
+import { CommerceExperienceSettings } from "./CommerceExperienceSettings";
 import { StoreBannersEditor } from "./StoreBannersEditor";
 import { CommerceProductMediaEditor } from "./CommerceProductMediaEditor";
 import { CommerceCaption, CommerceThemePicker } from "./CommerceAdminControls";
@@ -391,6 +392,7 @@ export function CommerceAdmin({
                 <span className="font-mono text-xs text-zinc-400">{settings.accent.toUpperCase()}</span>
                 </span>
               </label>
+              <div className="lg:col-span-2"><CommerceExperienceSettings value={settings.experience} onChange={value => updateSetting("experience", value)} onBusyChange={imageBusyChanged}/></div>
               <label className="grid gap-1 text-sm lg:col-span-2">
                 Descrição da loja
                 <textarea

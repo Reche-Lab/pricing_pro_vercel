@@ -1,6 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -14,6 +15,9 @@ import type { publicCommerceProduct } from "@/repositories/commerce";
 import type { StoreSettings } from "@/domain/commerce/schemas";
 import { storeMoney } from "./store-http";
 import styles from "./store.module.css";
+import studio from "./studio.module.css";
+import { StudioHero } from "./StudioHero";
+const StudioPersonalizer = dynamic(() => import("./StudioPersonalizer").then(module => module.StudioPersonalizer), { loading: () => <p role="status" className={studio.demoStatus}>Preparando o estúdio…</p>, ssr: false });
 export type StoreProduct = ReturnType<typeof publicCommerceProduct>;
 
 export function StoreProductCard({
@@ -25,8 +29,8 @@ export function StoreProductCard({
 }) {
   const alternate = product.media?.find(media => media.kind === "image" && media.url !== product.imageUrl);
   return (
-    <Link className={styles.product} href={`${base}/produto/${product.id}`}>
-      <div className={`${styles.productPhoto} ${alternate ? styles.hasAlternate : ""}`}>
+    <Link className={styles.product} href={`${base}/produto/${product.id}`} data-product-card>
+      <div className={`${styles.productPhoto} ${alternate ? styles.hasAlternate : ""}`} data-product-photo>
         <img
           src={product.imageUrl}
           alt={product.name}
@@ -156,10 +160,13 @@ export function ProductCarousel({
 export function BannerCarousel({
   settings,
   base,
+  secondary = false,
 }: {
   settings: StoreSettings;
   base: string;
+  secondary?: boolean;
 }) {
+  const Heading = secondary ? "h2" : "h1";
   const slides = settings.banners?.length
     ? settings.banners
     : settings.bannerUrl
@@ -180,11 +187,12 @@ export function BannerCarousel({
   const [playing, setPlaying] = useState(false);
   const [interacting, setInteracting] = useState(false);
   const [visible, setVisible] = useState(true);
+  const allowAutoplay = !(settings.experience?.style === "studio" && settings.experience.motion === false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
     if (!window.matchMedia) return;
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setPlaying(!motion.matches);
+    const update = () => setPlaying(allowAutoplay && !motion.matches);
     const visibility = () => setVisible(!document.hidden);
     update();
     visibility();
@@ -194,7 +202,7 @@ export function BannerCarousel({
       motion.removeEventListener("change", update);
       document.removeEventListener("visibilitychange", visibility);
     };
-  }, []);
+  }, [allowAutoplay]);
   useEffect(() => {
     if (!playing || interacting || !visible || slides.length < 2) return;
     const timer = setInterval(
@@ -212,7 +220,7 @@ export function BannerCarousel({
     return (
       <section className={styles.homeIntro}>
         <p className={styles.eyebrow}>IDEIAS QUE GANHAM FORMA</p>
-        <h1>{settings.name}</h1>
+        <Heading>{settings.name}</Heading>
         <p>{settings.description}</p>
         <Link className={styles.primary} href={`${base}/catalogo`}>
           Explorar produtos <ArrowRight size={18} />
@@ -267,7 +275,7 @@ export function BannerCarousel({
       ))}
       {slides[current].showText === false ? (
         <>
-          <h1 className="sr-only">{settings.name}</h1>
+          <Heading className="sr-only">{settings.name}</Heading>
           <Link
             className={styles.bannerImageLink}
             aria-label={
@@ -281,7 +289,7 @@ export function BannerCarousel({
       ) : (
         <div className={styles.heroText}>
           <p className={styles.eyebrow}>SUA IDEIA. SEU ESTILO.</p>
-          <h1>{settings.name}</h1>
+          <Heading>{settings.name}</Heading>
           <div
             className={styles.heroCopy}
             aria-live={playing ? "off" : "polite"}
@@ -339,16 +347,30 @@ export function StoreHome({
   settings,
   products,
   base,
+  preview = false,
+  quoting = false,
 }: {
   settings: StoreSettings;
   products: StoreProduct[];
   base: string;
+  preview?: boolean;
+  quoting?: boolean;
 }) {
+  const [demoOpen, setDemoOpen] = useState(false);
+  const demoId = useId();
+  const demoRef = useRef<HTMLElement>(null);
+  const isStudio = settings.experience?.style === "studio";
+  const demoProducts = products.filter(product => product.personalized && product.geometry && product.artworkOptions?.mockup);
+  function openDemo() {
+    setDemoOpen(true);
+    demoRef.current?.focus({ preventScroll: true });
+    demoRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
+  }
   const categories = [...new Set(products.map((p) => p.category))];
   const personalized = products.some((p) => p.personalized);
   return (
     <>
-      <BannerCarousel settings={settings} base={base} />
+      {isStudio ? <StudioHero settings={settings} products={products} base={base} preview={preview} quoting={quoting} onOpenPreview={demoProducts.length ? openDemo : undefined}/> : <BannerCarousel settings={settings} base={base} />}
       <div className={styles.homeContent}>
         {categories.length ? (
           <section className={styles.categorySection} aria-label="Coleções">
@@ -370,6 +392,8 @@ export function StoreHome({
         )}
         {categories.length > 1 ? <ProductCarousel products={products.filter(product => product.category === categories[0])} base={base} title={categories[0]} category={categories[0]} /> : null}
       </div>
+      {isStudio && demoProducts.length ? <section ref={demoRef} tabIndex={-1} className={studio.demo} aria-label="Experimente sua ideia" id={demoId}>{demoOpen ? <StudioPersonalizer products={demoProducts} base={base}/> : <div className={studio.demoPrompt}><div><h2>Da sua ideia ao produto.</h2><p>Uma mensagem, uma cor. Experimente a frente e o verso.</p></div><button type="button" className={studio.primary} aria-expanded={false} aria-controls={demoId} onClick={openDemo}>Experimentar minha ideia<ArrowRight size={17}/></button></div>}</section> : null}
+      {isStudio && (settings.banners?.length || settings.bannerUrl) ? <section className={studio.campaigns} aria-label="Campanhas da loja"><h2>Inspire-se nas nossas campanhas</h2><BannerCarousel settings={settings} base={base} secondary/></section> : null}
       {personalized ? (
         <div className={styles.benefits}>
           <div>
@@ -390,7 +414,7 @@ export function StoreHome({
             <CheckCheck size={22} />
             <span>
               <strong>Você aprova primeiro</strong>
-              <small>Confira a arte antes de comprar</small>
+              <small>{isStudio ? "Aprovação antes da produção" : "Confira a arte antes de comprar"}</small>
             </span>
           </div>
           {settings.pickupEnabled ? (

@@ -8,6 +8,35 @@ O tema de referência permite reordenar diversas seções. Esta adaptação util
 
 ## Planejado x realizado
 
+### Tema Estúdio
+
+- [x] Preset opcional por tenant, mantendo lojas existentes no tema clássico até ativação explícita.
+- [x] Abertura com imagens reais do catálogo, textura de apoio e foto própria opcional.
+- [x] Profundidade, microinterações leves, pausa e respeito a movimento reduzido, toque e abas ocultas.
+- [x] Demonstração de arte e frente/verso carregada somente por interação, sem IA nem gravação de dados.
+- [x] Orçamento, carrinho e pagamento preservam superfícies tranquilas e suas regras atuais.
+- [x] Testes de regressão, build e conferência desktop/mobile, claro/escuro e pixels dos modelos.
+
+Validação do Estúdio: suíte completa com **850 testes aprovados**, seguida de **28 testes focados aprovados** após o cenário adicional de banners estáticos; uma integração de persistência aprovada em PostgreSQL isolado; tipos, lint e build de produção com heap limitado a 1024 MB. Os 62 casos condicionais da suíte completa permaneceram ignorados quando suas dependências não estavam configuradas. Não houve cobrança, publicação ou chamada real de IA/ERP/SMTP/Storage.
+
+`scripts/commerce-studio-browser.mjs` validou o build final na loja pública e na prévia privada, nos modos claro/escuro e em 320/390/844/1280/1440/1920 px. Verificou imagens carregadas, ausência de overflow, um único H1, seleção de produto, pausa, movimento reduzido/toque, suspensão fora da tela e ausência do módulo dinâmico na rede antes do clique. As alterações de cor e de frente/verso foram confirmadas por pixels não vazios e assinaturas distintas no canvas real. O carrinho não monta a experiência de abertura. No celular estreito, as ações ficam compactas e o atalho redundante de orçamento da abertura é omitido, preservando o do menu. Produtos e configurações temporários do teste são restaurados ao finalizar.
+
+#### Ativação do Estúdio
+
+Em **Loja online > Loja e catálogo > Identidade e atendimento > Identidade visual**, escolha **Estúdio**, salve a loja e abra a prévia privada do tenant. É possível retornar ao **Clássico** sem perder banners, catálogo ou configurações de compra. Lojas existentes permanecem no clássico até essa seleção explícita. Não há nova migration nem variável de ambiente: a opção fica no JSON de configurações já isolado por tenant.
+
+A foto própria é opcional, com o upload existente de PNG/JPEG/WebP de até 3 MB. Sem ela, os produtos reais aparecem sobre uma textura ilustrativa. O visitante pode trocar o destaque e pausar a abertura. Toque, movimento reduzido, aba oculta e vitrine fora da tela suspendem o movimento. Não há Three.js, vídeo automático, polling ou requisição de IA nesta experiência.
+
+A demonstração **Ver como fica** só aparece para produtos personalizados com geometria e modelo frente/verso configurados. O módulo é importado apenas no clique; usa uma arte-exemplo gerada localmente em canvas e os modelos existentes, com mensagem, cor e seleção de produto. Não grava dados, não aprova artes nem adiciona produtos ao carrinho. A personalização real continua na página do produto. Imagens de acabamento são ilustrativas, sem promessas de fabricação ou certificados não comprovados. Banners continuam disponíveis abaixo das vitrines como campanhas.
+
+#### Asset e Proveniência
+
+Arquivo: `public/studio/paper-v1.webp`. Textura de papel gerada com o recurso integrado de geração de imagens, não uma fotografia da empresa. Otimização mecânica com Sharp: WebP, largura de 1600 px, qualidade 76, aproximadamente 8 KB. Produtos e modelos continuam vindo do catálogo do tenant; a geração não substitui suas fotos. Não foram usados scripts externos de geração nem novas dependências.
+
+Prompt utilizado:
+
+> Use case: photorealistic-natural. Asset type: neutral photographic backdrop for a customizable-print-products ecommerce studio theme, not a product photo or a factory photograph. Create one wide panoramic, high-resolution overhead photograph of a continuous pale neutral cool-white matte paper surface, with authentic subtle paper fibers, very restrained graphite printing registration/crop marks only near the far outer corners, and tiny overlapping cyan and coral colored paper edges at the extreme corners. The entire middle 85 percent is uninterrupted clean paper with almost invisible physical texture, suitable for readable website typography and real catalog product images placed on top. Natural diffuse window lighting, soft authentic edge shadows, meticulous tactile print-studio material, professional contemporary design. The surface should fill the complete frame edge to edge, no frame or border. No actual products, no equipment, no people, no letters, no numbers, no logos, no text, no watermarks, no gradients, no glow, no floating shapes, no bokeh. Do not depict a real company or business premises. Wide landscape composition approximately 2.4:1.
+
 ### Menu de categorias
 
 - [x] Dropdown por categoria, com produtos publicados, miniaturas, preços e acesso ao catálogo completo da categoria.

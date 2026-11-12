@@ -3,6 +3,7 @@ import { isValidCpfOrCnpj } from "@/lib/validation/documents";
 import { productMediaSchema, safeCommerceMediaUrl } from "./product-media";
 import { commerceArtworkOptionsSchema } from "./artwork-options";
 import { productionSettingsSchema } from "@/domain/shipping/production-lead-time";
+import { storeExperienceSchema } from "./studio-experience";
 
 export const cartLineSchema = z
   .object({
@@ -28,6 +29,7 @@ export const storeSettingsSchema = z
     logoUrl: safeImageUrl,
     bannerUrl: safeImageUrl,
     theme: z.enum(["light", "dark", "system"]).optional(),
+    experience: storeExperienceSchema.optional(),
     requestedDomain: z.string().trim().toLowerCase().max(253).refine(value => !value || /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(value), "Informe somente o domínio, sem https:// ou caminhos.").optional(),
     banners: z
       .array(

@@ -26,7 +26,7 @@ export function commerceDomainRoute(host: string | null, path: string, domains =
   if (!slug) return null;
   const primaryHost = Object.keys(domains).find(key => domains[key] === slug)!;
   if (host?.toLowerCase() !== primaryHost) return { slug, type: "redirect" as const, path, host: primaryHost };
-  if (path.startsWith("/_next/") || /^\/(?:favicon\.ico|site\.webmanifest|mockups\/|brands\/)/.test(path)) return { slug, type: "next" as const };
+  if (path.startsWith("/_next/") || /^\/(?:favicon\.ico|site\.webmanifest|mockups\/|brands\/|studio\/)/.test(path)) return { slug, type: "next" as const };
   if (path.startsWith(`/api/store/${slug}/`)) return { slug, type: "next" as const };
   if (path.startsWith("/api/") || path.startsWith("/commerce/")) return { slug, type: "reject" as const };
   if (path === "/sitemap.xml" || path === "/robots.txt") return { slug, type: "rewrite" as const, path: `/loja/${slug}${path}` };

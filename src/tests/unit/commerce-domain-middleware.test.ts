@@ -24,6 +24,11 @@ describe("custom storefront host middleware", () => {
     for (const path of ["/api/commerce/admin", "/api/store/other/cart", "/commerce/ground-shop/preview"]) expect((await middleware(request("groundshop.com.br", path))).status).toBe(404);
     expect((await middleware(request("groundshop.com.br", "/api/store/ground-shop/cart"))).headers.get("x-middleware-next")).toBe("1");
   });
+  it("serves the studio bitmap on a custom domain instead of rewriting it as a store page", async () => {
+    const response = await middleware(request("groundshop.com.br", "/studio/paper-v1.webp"));
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+  });
   it("does not accept an invented tenant context header on the platform", async () => {
     const response = await middleware(request("panel.test", "/", { "x-commerce-custom-slug": "ground-shop" }));
     expect(response.headers.get("x-middleware-request-x-commerce-custom-slug")).toBeNull();

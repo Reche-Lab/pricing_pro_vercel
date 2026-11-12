@@ -65,11 +65,13 @@ describe("commerce configuration controls", () => {
     render(<CommerceAdmin initial={initial as never} tenantName="Loja teste" />);
     fireEvent.change(screen.getByLabelText("E-mail de atendimento"), { target: { value: "teste@example.com" } });
     fireEvent.click(screen.getByRole("button", { name: "Escuro" }));
+    fireEvent.click(screen.getByRole("button", { name: "Estúdio" }));
+    fireEvent.click(screen.getByLabelText(/Ativar movimentos suaves/));
     fireEvent.click(screen.getByRole("button", { name: "Ajuda: Canal de preços" }));
     expect(storeRequest).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Salvar loja e catálogo" }));
     await waitFor(() => expect(storeRequest).toHaveBeenCalledWith("/api/commerce/admin", "PUT", expect.objectContaining({
-      platformId: "channel", settings: expect.objectContaining({ name: "Loja teste", theme: "dark", contactEmail: "teste@example.com" }),
+      platformId: "channel", settings: expect.objectContaining({ name: "Loja teste", theme: "dark", contactEmail: "teste@example.com", experience: { style: "studio", motion: false, backgroundUrl: "" } }),
     })));
     expect(await screen.findByRole("status")).toHaveTextContent("Alterações salvas");
   });
