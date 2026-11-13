@@ -155,3 +155,27 @@ Não há migration, variável de ambiente nova ou alteração de dados de produ�
 
 - [x] Fundo transparente, incluindo banners exibidos por inteiro, sem faixas do componente contrastando com a loja. As imagens e suas proporções permanecem intactas.
 - [x] Playwright validado na loja pública e no preview, claro/escuro, desktop/celular/paisagem, com verificação de transparência, ausência de overlay em banners sem texto e estabilidade de altura. Capturas de tela conferidas. Sem migration.
+
+## Avaliações Google por loja
+
+- [x] Configuração independente por tenant em Loja online → Avaliações Google, com chave criptografada, Place ID, título e limite diário.
+- [x] Salvar → testar com prévia → confirmar estabelecimento → ativar; mudar credencial/perfil exige novo teste. Remoção com confirmação digitada.
+- [x] Seção opcional na home e no preview, responsiva nos dois temas; até cinco avaliações por relevância, autores, datas e links individuais, sem filtrar somente notas positivas.
+- [x] Consulta sob demanda quando a seção está visível, limite diário atômico por tenant, proteção de origem/rate limit, timeout e fallback para o perfil. Sem cache permanente de conteúdo Google nem credencial no cliente.
+- [x] Crédito Google Maps com assets oficiais inalterados e página pública de informações/privacidade por loja.
+- [x] Regressões: 920 testes unitários, quatro testes de integração PostgreSQL, lint e build de produção com tipos aprovados e memória limitada.
+- [x] Navegador: configuração, chave em branco após salvar, criptografia no banco local, teste/prévia, confirmação, ativação e remoção segura; loja pública/preview, claro/escuro e 1440/390/320 px, sem overflow. Logo oficial carregado a 18 px, autoria, fontes e página de privacidade conferidos. Script: `scripts/commerce-google-reviews-browser.mjs`.
+- [ ] Ação do administrador: aplicar migration/deploy, cadastrar credenciais reais, testar o perfil e ativar. Google foi simulado nas verificações locais; nenhuma consulta real, cobrança ou alteração em produção foi realizada.
+
+### Ativação e credenciais
+
+1. Aplicar `supabase/migrations/0078_commerce_google_reviews.sql` no mesmo banco da aplicação e realizar o deploy.
+2. No Google Cloud, selecionar um projeto com faturamento, habilitar **Places API (New)** e criar uma chave restrita a essa API. A chamada é do servidor: restrição por referenciador HTTP de navegador não se aplica; restrição por IP precisa corresponder à saída da hospedagem. Não compartilhar a chave no chat.
+3. Em **Loja online → Avaliações Google**, informar chave e Place ID do perfil público da empresa. Salvar, testar, conferir a prévia e confirmar o estabelecimento antes de ativar. Não é OAuth nem exige acesso à conta Meu Negócio.
+4. Ajustar o limite diário e cotas/alertas no Google Cloud. O limite da aplicação inclui testes/falhas e renova à meia-noite UTC; não é teto de cobrança do provedor. O pedido de `reviews` utiliza o SKU Enterprise + Atmosphere, que pode gerar custos. A API fornece no máximo cinco comentários por relevância, não todo o histórico.
+
+Não há nova variável global: a criptografia utiliza `APP_ENCRYPTION_KEY`, já exigida pela plataforma. Nunca rotacionar essa chave sem um processo de migração dos segredos existentes. A seção permanece desativada até configuração e teste explícitos. A migration não altera configurações anteriores nem ativa a integração.
+
+Os textos, autores, fotos, notas e respostas brutas do Google não são persistidos em SQL, logs ou armazenamento do navegador; somente configuração, teste, auditoria e contagem de chamadas. Não se publica `aggregateRating` para prometer estrelas nos resultados de pesquisa. A integração é de leitura: não cria, altera ou responde avaliações.
+
+Referências: [Place Details e FieldMask](https://developers.google.com/maps/documentation/places/web-service/place-details), [políticas de atribuição e armazenamento](https://developers.google.com/maps/documentation/places/web-service/policies), [segurança de chaves](https://developers.google.com/maps/api-security-best-practices), [Place ID](https://developers.google.com/maps/documentation/places/web-service/place-id), [custos e cotas](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing). As imagens em `public/google-maps` são os PNGs 2x oficiais, sem alteração, do [pacote de atribuição Google Maps](https://developers.google.com/static/maps/documentation/images/Google_Maps_Attribution_Assets.zip), com altura visual de 18 px e área livre própria.

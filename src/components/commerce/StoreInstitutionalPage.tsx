@@ -6,6 +6,7 @@ import type { StoreSettings } from "@/domain/commerce/schemas";
 import { INSTITUTIONAL_UPDATED, storeInstitutionalPages, type StoreInstitutionalPage as Page } from "@/domain/commerce/institutional";
 import styles from "./institutional.module.css";
 import { StoreConditionsPrintButton } from "./StoreConditionsPrintButton";
+import { GoogleMapsNotice } from "./GoogleMapsNotice";
 
 export function StoreInstitutionalPage({ slug, page, settings, preview = false, featuredProduct, basePath }: {
   slug: string; page: Page; settings: StoreSettings; preview?: boolean; basePath?: string;
@@ -40,6 +41,7 @@ export function StoreInstitutionalPage({ slug, page, settings, preview = false, 
           <div><h2 id={`${section.id}-titulo`}>{section.title}</h2>{section.paragraphs.map(paragraph => <p key={paragraph}>{paragraph}</p>)}
             {section.items ? <ul>{section.items.map(item => <li key={item}>{item}</li>)}</ul> : null}</div>
         </section>)}
+        {["avaliacoes-google", "politica-de-privacidade", "termos-de-uso", "condicoes"].includes(page.slug) ? <section className={styles.section} aria-label="Serviços do Google Maps"><div><h2>Avaliações públicas do Google Maps</h2><GoogleMapsNotice/></div></section> : null}
         <section className={styles.questions} aria-labelledby="duvidas-titulo"><h2 id="duvidas-titulo">Dúvidas rápidas</h2>{page.questions.map(item => <details key={item.question}><summary>{item.question}<ChevronDown size={17} aria-hidden="true" /></summary><p>{item.answer}</p></details>)}</section>
         <section className={styles.contact} aria-labelledby="conversar-titulo"><div><h2 id="conversar-titulo">Vamos conversar?</h2><p>Conte com a equipe da {settings.name} para orientar o seu próximo passo.</p></div><a href={`mailto:${settings.contactEmail}?subject=${encodeURIComponent(page.title)}`}><Mail size={17} aria-hidden="true" />{settings.contactEmail}<ArrowRight size={16} aria-hidden="true" /></a></section>
         <a href="#inicio-do-conteudo" className={styles.backTop}><ArrowUp size={15} aria-hidden="true" />Voltar ao início</a>

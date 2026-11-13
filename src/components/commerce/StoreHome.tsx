@@ -18,6 +18,7 @@ import styles from "./store.module.css";
 import studio from "./studio.module.css";
 import { StudioHero } from "./StudioHero";
 const StudioPersonalizer = dynamic(() => import("./StudioPersonalizer").then(module => module.StudioPersonalizer), { loading: () => <p role="status" className={studio.demoStatus}>Preparando o estúdio…</p>, ssr: false });
+const StoreGoogleReviews = dynamic(() => import("./StoreGoogleReviews").then(module => module.StoreGoogleReviews));
 export type StoreProduct = ReturnType<typeof publicCommerceProduct>;
 
 export function StoreProductCard({
@@ -401,6 +402,7 @@ export function StoreHome({
       </div>
       {isStudio && demoProducts.length ? <section ref={demoRef} tabIndex={-1} className={studio.demo} aria-label="Experimente sua ideia" id={demoId}>{demoOpen ? <StudioPersonalizer key={`${slug}:${preview}`} products={demoProducts} base={base} slug={slug} preview={preview} libraryEnabled={libraryEnabled} autoDemo/> : <div className={studio.demoPrompt}><div><h2>Da sua ideia ao produto.</h2><p>Crie sua arte com imagem, mensagem e cores.</p></div><button type="button" className={studio.primary} aria-expanded={false} aria-controls={demoId} onClick={openDemo}>Experimentar minha ideia<ArrowRight size={17}/></button></div>}</section> : null}
       {isStudio && (settings.banners?.length || settings.bannerUrl) ? <section className={studio.campaigns} aria-label="Campanhas da loja"><h2>Inspire-se nas nossas campanhas</h2><BannerCarousel settings={settings} base={base} secondary/></section> : null}
+      <StoreGoogleReviews key={`${slug}:${preview}`} slug={slug} preview={preview} base={base}/>
       {personalized ? (
         <div className={styles.benefits}>
           <div>

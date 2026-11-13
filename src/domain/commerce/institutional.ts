@@ -97,5 +97,15 @@ export function storeInstitutionalPages(tenantSlug: string): readonly StoreInsti
 }
 
 export function storeInstitutionalPage(tenantSlug: string, path: string[]): StoreInstitutionalPage | undefined {
+  if (path.length === 1 && path[0] === "avaliacoes-google") return {
+    slug: "avaliacoes-google", title: "Sobre as avaliações e sua privacidade", updatedAt: "2026-11-13",
+    description: "Entenda como as avaliações públicas do Google Maps são exibidas nesta loja e quais cuidados de privacidade se aplicam.",
+    intro: "Opiniões públicas, com a origem sempre à vista.", highlights: ["Fonte: Google Maps", "Seleção por relevância", "Sem cópias permanentes na plataforma"],
+    sections: [
+      { id: "origem", title: "Origem e seleção das avaliações", paragraphs: ["Quando ativada pela loja, a seção consulta o perfil público da empresa no Google Maps. São exibidas até cinco avaliações escolhidas pelo Google por relevância, não todo o histórico nem apenas comentários positivos. A nota média e a quantidade total podem incluir outras avaliações.", "Os comentários expressam opiniões de seus autores. Sua exibição não significa que a compra tenha sido verificada por esta plataforma. Cada avaliação possui um link para a fonte, onde você pode conferir o conteúdo atualizado."] },
+      { id: "dados-google", title: "Como os dados são utilizados", paragraphs: ["A integração consulta o Google no servidor e não envia dados de cadastro, documentos, artes ou pagamentos do comprador nessa consulta. Textos, autores e notas não são gravados no banco de dados da plataforma nem guardados como cache permanente.", "Fotos públicas dos autores podem ser carregadas dos servidores do Google. Ao carregar essas fotos ou abrir links externos, seu navegador se conecta ao serviço, que pode receber dados técnicos como endereço IP. Os termos e as políticas do Google se aplicam a esse uso."] },
+      { id: "disponibilidade", title: "Disponibilidade e contato", paragraphs: ["As avaliações podem ficar temporariamente indisponíveis por limites de consultas, alteração do perfil ou falha de conexão. O link para o Google Maps permite consultar o perfil diretamente. Para dúvidas sobre dados tratados pela loja, utilize o canal de atendimento abaixo."] },
+    ], questions: [{ question: "Como altero ou removo uma avaliação minha?", answer: "Acesse sua conta no Google Maps e gerencie a avaliação no próprio serviço. A loja não edita os comentários exibidos pela integração." }],
+  };
   return path.length === 1 ? storeInstitutionalPages(tenantSlug).find(page => page.slug === path[0]) : undefined;
 }
