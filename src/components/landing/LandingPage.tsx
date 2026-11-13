@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { PlatformSignature } from "@/components/branding/PlatformSignature";
 import {
   ArrowRight,
   BarChart3,
@@ -382,6 +383,8 @@ export function LandingPage() {
           ))}
         </div>
       </section>
+
+      <footer role="contentinfo" aria-label="Rodapé da plataforma" className="border-t border-zinc-800 px-4 py-6 sm:px-6 lg:px-8"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3"><span className="text-sm font-semibold text-zinc-300">Pricing Pro</span><PlatformSignature appearance="dark"/></div></footer>
 
       {activeBrand ? (
         <BrandStoryModal brand={activeBrand} onClose={() => setActiveBrand(null)} />

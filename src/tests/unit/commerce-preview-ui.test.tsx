@@ -77,7 +77,7 @@ describe("preview storefront navigation", () => {
     render(<Storefront slug="ground-shop" settings={settings} products={[
       { ...product, id: "b", name: "Produto B", unitCents: 200 }, { ...product, id: "a", name: "Produto A", unitCents: 500 },
     ]} path={["catalogo"]} paused={false} preview />);
-    const names = () => screen.getAllByRole("heading", { level: 3 }).map(heading => heading.textContent);
+    const names = () => screen.getAllByRole("heading", { level: 3 }).filter(heading => heading.closest("[data-product-card]")).map(heading => heading.textContent);
     fireEvent.change(screen.getByLabelText("Ordenar produtos"), { target: { value: "price_asc" } });
     expect(names()).toEqual(["Produto B", "Produto A"]);
     fireEvent.change(screen.getByLabelText("Ordenar produtos"), { target: { value: "price_desc" } });
@@ -124,7 +124,7 @@ describe("preview storefront navigation", () => {
     expect(
       screen.getByRole("link", { name: "Pesquisar produtos" }),
     ).toHaveAttribute("href", "/commerce/ground-shop/preview/catalogo");
-    expect(screen.getByText("Condições de compra")).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Condições de compra", hidden: true })).toHaveAttribute(
       "href",
       "/commerce/ground-shop/preview/condicoes",
     );

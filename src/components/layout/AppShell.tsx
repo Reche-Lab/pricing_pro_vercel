@@ -1,7 +1,9 @@
+import React from "react";
 import { LogOut } from "lucide-react";
 import { BillingStatusBanner } from "@/components/billing/BillingStatusBanner";
 import { SidebarNav } from "@/components/layout/SidebarNav";
 import { CommerceOrderAlerts } from "@/components/commerce/CommerceOrderAlerts";
+import { PlatformSignature } from "@/components/branding/PlatformSignature";
 
 type AppShellProps = {
   children: React.ReactNode;
@@ -64,17 +66,18 @@ export function AppShell({ children, isSuperAdmin = false, title, subtitle, tena
         </form>
       </aside>
 
-      <section className="min-w-0">
+      <section className="flex min-w-0 flex-col">
         <header className="border-b border-zinc-800 bg-zinc-950/95 px-4 py-4 lg:px-8 lg:py-5">
           <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0">
             <h1 className="break-words text-xl font-semibold text-white sm:text-2xl">{title}</h1>
             {subtitle ? <p className="mt-1 text-sm text-zinc-400">{subtitle}</p> : null}
           </div><CommerceOrderAlerts /></div>
         </header>
-        <div className="mx-auto max-w-7xl px-3 py-4 sm:px-4 sm:py-6 lg:px-8">
+        <div className="mx-auto w-full max-w-7xl flex-1 px-3 py-4 sm:px-4 sm:py-6 lg:px-8">
           <BillingStatusBanner />
           {children}
         </div>
+        <footer role="contentinfo" aria-label="Rodapé da plataforma" className="border-t border-zinc-800 px-4 py-3 lg:px-8"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2"><span className="text-xs text-zinc-500">Pricing Pro</span><PlatformSignature appearance="dark"/></div></footer>
       </section>
     </main>
   );

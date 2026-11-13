@@ -108,11 +108,6 @@
   background: #e8f2ef;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
-.store:not([data-theme="dark"]) .footer {
-  background: #e2ebef;
-  border-color: #c5d4dc;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-}
 .store input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 .store select,
 .store textarea {
@@ -1210,19 +1205,6 @@
   background: #351a22;
   color: #ffb9c5;
   border-color: #75404b;
-}
-.footer {
-  border-top: 1px solid var(--line);
-  background: var(--surface);
-  margin-top: 32px;
-}
-.store[data-theme="dark"] .footer { background: #090d12; }
-.footer p,
-.footer a {
-  overflow-wrap: anywhere;
-}
-.footer .wrap {
-  padding-block: 40px;
 }
 @media (max-width: 1000px) {
   .headerInner {

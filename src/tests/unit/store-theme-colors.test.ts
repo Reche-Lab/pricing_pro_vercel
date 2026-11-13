@@ -4,6 +4,7 @@ import postcss from "postcss";
 import { describe, expect, it } from "vitest";
 
 const css = postcss.parse(readFileSync(new URL("../../components/commerce/store.module.css", import.meta.url), "utf8"));
+const footerCss = postcss.parse(readFileSync(new URL("../../components/commerce/store-footer.module.css", import.meta.url), "utf8"));
 function tokens(selector: string) {
   const values: Record<string, string> = {};
   css.walkRules(selector, rule => { rule.walkDecls(declaration => { values[declaration.prop] = declaration.value; }); });
@@ -31,8 +32,11 @@ describe("light storefront palette", () => {
     const light = tokens(".store"), dark = tokens('.store[data-theme="dark"]');
     expect(light["--page"]).not.toBe(light["--surface"]);
     expect(light["--product-card-shadow"]).not.toBe("none");
-    for (const component of ["header", "summary", "deliveryInquiry", "footer"])
+    for (const component of ["header", "summary", "deliveryInquiry"])
       expect(tokens(`.store:not([data-theme="dark"]) .${component}`)["box-shadow"]).toMatch(/rgba\(/);
+    let footerBackground = "";
+    footerCss.walkRules(".footer", rule => rule.walkDecls("background", declaration => { footerBackground = declaration.value; }));
+    expect(footerBackground).toBe("var(--soft)");
     expect(dark).toMatchObject({ "--page": "#0d1117", "--surface": "#151b23", "--soft": "#111821", "--ink": "#f3f6f9", "--muted": "#acb9c6", "--highlight": "#6fd0c9", "--product-card-shadow": "0 22px 60px -32px rgba(0, 0, 0, 0.85)" });
   });
 });

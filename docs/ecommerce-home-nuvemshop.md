@@ -8,6 +8,19 @@ O tema de referência permite reordenar diversas seções. Esta adaptação util
 
 ## Planejado x realizado
 
+### Rodapé e Créditos da Plataforma
+
+- [x] Rodapé independente, com marca do tenant, miniaturas reais do catálogo e convites para o Estúdio/orçamento somente nos fluxos disponíveis. Carrinho, checkout, orçamentos, conta e acompanhamento mantêm uma versão sem faixa promocional para não desviar a atenção da tarefa.
+- [x] Contato e retirada usam os dados configurados. Informações de pagamento citam somente o provedor habilitado, sem inventar bandeiras, parcelas ou selos de garantia.
+- [x] Grupos de navegação recolhidos no celular, abertos por padrão no desktop; atendimento sempre visível, links de domínio próprio/prévia preservados e botão de voltar ao topo com movimento reduzido e retorno de foco.
+- [x] Entrada discreta ao chegar ao rodapé, sublinhados/setas no hover/foco e miniaturas com inclinação leve, sem loop contínuo; respeitar a configuração de movimento e a preferência do dispositivo.
+- [x] Assinatura compartilhada **Plataforma Liaflow · Criação rechelab** na loja, landing da plataforma e área administrativa. Links externos com nova aba, `noopener noreferrer`, contraste e foco visível.
+- [x] 931 testes unitários de regressão aprovados, mais 20 testes focados após os refinamentos finais, incluindo checkout discreto. Tipos e lint aprovados.
+- [x] Chrome com o componente real: claro/escuro, 1440/390/320 px e paisagem 844×390; links públicos com base de domínio próprio e prévia privada, logo/catálogo decodificados, miniaturas quadradas sem esticar, disclosure, foco por teclado, retorno ao topo/foco, créditos, nome longo e movimento desativado/reduzido, sem overflow. Capturas inspecionadas. Roteiro: `scripts/commerce-footer-browser.mjs`, em harness local isolado sem banco/APIs; a camada de navegação Next é substituída por âncoras normais.
+- [x] Build de produção com lint/tipos aprovado e memória limitada. Assinatura conferida na landing real do build Next.js em 1440/320 px, com links externos corretos, limites da tela respeitados e sem exceções no navegador. A área administrativa foi coberta pelo teste do AppShell; não houve acesso a dados ou serviços de produção.
+
+Não há migration, nova variável de ambiente, serviço remoto ou dependência de produção. Os destinos públicos da assinatura ficam centralizados em `src/lib/platform-branding.ts`: Liaflow em `https://liaflow-calcula.vercel.app/` e rechelab em `https://reche-lab-portfolio.vercel.app/`. Quando a plataforma ganhar domínio próprio, atualizar o primeiro endereço nesse único arquivo e fazer o deploy. Esses links não alteram domínios das lojas nem o isolamento dos tenants.
+
 ### Tema Estúdio
 
 #### Pulsação dos Produtos na Abertura

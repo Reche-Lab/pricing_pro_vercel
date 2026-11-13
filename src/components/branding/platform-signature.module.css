@@ -1,0 +1,14 @@
+.signature { --credit-ink:var(--ink,#f4f4f5); --credit-muted:var(--muted,#a1a1aa); display:flex; align-items:center; flex-wrap:wrap; gap:10px 16px; min-width:0; color:var(--credit-muted); font-size:11px; line-height:1.6; letter-spacing:0; }
+.signature[data-appearance="dark"] { --credit-ink:#f4f4f5; --credit-muted:#a1a1aa; }
+.credit { display:inline-flex; align-items:center; gap:7px; min-width:0; }
+.credit a { position:relative; display:inline-flex; align-items:center; gap:5px; min-height:32px; color:var(--credit-ink); text-decoration:none; white-space:nowrap; }
+.credit a::after { content:""; position:absolute; bottom:3px; left:0; right:0; height:1px; background:currentColor; transform:scaleX(0); transform-origin:left; transition:transform .22s ease-out; }
+.credit strong { font-size:12px; font-weight:650; }
+.credit .creator { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:13px; }
+.separator { width:1px; height:14px; background:currentColor; opacity:.3; }
+.arrow { opacity:.5; transition:transform .22s ease-out,opacity .22s; }
+.credit a:is(:hover,:focus-visible)::after { transform:scaleX(1); }
+.credit a:is(:hover,:focus-visible) .arrow { opacity:1; transform:translate(1px,-1px); }
+.credit a:focus-visible { outline:2px solid var(--highlight,#6ee7b7); outline-offset:4px; border-radius:3px; }
+@media(max-width:380px) { .signature { gap:6px 12px; } .separator { display:none; } }
+@media(prefers-reduced-motion:reduce) { .credit a::after,.arrow { transition:none; } .credit a:is(:hover,:focus-visible) .arrow { transform:none; } }

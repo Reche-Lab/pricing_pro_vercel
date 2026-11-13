@@ -46,6 +46,7 @@ import { normalizeProductSearchTerm } from "@/domain/products/product-search";
 import { storeRequest, storeMoney } from "./store-http";
 import styles from "./store.module.css";
 import { StoreHome, StoreProductCard } from "./StoreHome";
+import { StoreFooter } from "./StoreFooter";
 import studioStyles from "./studio.module.css";
 import { StoreCategoryNavigation } from "./StoreCategoryNavigation";
 import { StoreProductGallery } from "./StoreProductGallery";
@@ -232,7 +233,7 @@ export function Storefront({
       {!preview && cart?.payments?.payment_environment === "test" ? <div role="status" className={styles.testNotice}><strong>Loja em modo de teste</strong><span>Use somente dados e cartões de teste do Mercado Pago. Pedidos simulados não são enviados para produção.</span></div> : null}
       <header ref={storeHeader} className={styles.header}>
         <div className={styles.headerInner}>
-          <Link className={styles.brand} href={base || "/"}>
+          <Link className={styles.brand} href={base || "/"} data-store-home-link>
             {settings.logoUrl ? (
               <img
                 alt=""
@@ -667,30 +668,7 @@ export function Storefront({
           </>
         ) : null}
       </div>
-      <footer className={styles.footer}>
-        <div className={`${styles.wrap} flex flex-wrap justify-between gap-6`}>
-          <div>
-            <p className="font-semibold">{settings.name}</p>
-            <p className="mt-2 text-sm text-zinc-500">
-              {settings.contactPhone}
-            </p>
-            <a
-              className="text-sm underline"
-              href={`mailto:${settings.contactEmail}`}
-            >
-              {settings.contactEmail}
-            </a>
-          </div>
-          {institutionalLinks.length ? <nav aria-label="Institucional" className="flex flex-col gap-3 text-sm"><p className="mb-1 font-semibold">Institucional</p>{institutionalLinks.map(link => <Link key={link.slug} href={`${base}/${link.slug}`} aria-current={view === link.slug ? "page" : undefined}>{link.title}</Link>)}</nav> : null}
-          <nav aria-label="Atendimento" className="flex flex-col gap-3 text-sm">
-            <p className="mb-1 font-semibold">Sua compra</p>
-            <Link href={`${base}/condicoes`}>Condições de compra</Link>
-            {!preview ? (
-              <Link href={`${base}/pedidos`}>Acompanhar pedido</Link>
-            ) : null}
-          </nav>
-        </div>
-      </footer>
+      <StoreFooter settings={settings} products={products} base={base} preview={preview} libraryEnabled={libraryEnabled} institutionalLinks={institutionalLinks} payments={cart?.payments} view={view}/>
     </main>
   );
 }
