@@ -67,10 +67,10 @@ try {
           if (prefix === "/loja/ground-shop" && width === (mobile ? 390 : 1440)) assert.equal(requested.some(url => url.includes(demoChunk)), false, "Demo chunk must not download before the first click");
           assert.equal(await page.locator("main").evaluate(element => getComputedStyle(element).backgroundColor), theme === "dark" ? "rgb(19, 23, 21)" : "rgb(244, 245, 243)");
           await page.screenshot({ path: `/tmp/commerce-studio-${prefix.includes("preview") ? "preview" : "public"}-${width}-${theme}.png` });
-          if (!mobile && width === 1440) {
+          if (width === 1440 || mobile && width === 390) {
             await page.mouse.move(bounds.x + bounds.width * .8, bounds.y + bounds.height * .7);
             await page.waitForTimeout(200);
-            assert.ok(parseFloat(await hero.evaluate(element => element.style.getPropertyValue("--studio-x"))) > 0);
+            assert.equal(await hero.evaluate(element => element.style.getPropertyValue("--studio-x")), "", "The product no longer follows the pointer");
             const float = hero.locator("[data-studio-float]");
             await page.getByRole("button", { name: "Pausar movimento da vitrine" }).click();
             await page.waitForFunction(() => document.querySelector('[aria-label="Estúdio Ground Shop"]').dataset.moving === "false");
@@ -80,37 +80,37 @@ try {
             await page.waitForTimeout(100);
             assert.equal(await float.evaluate(element => element.style.transform), pausedTransform);
             await page.getByRole("button", { name: "Retomar movimento da vitrine" }).click();
-            await page.waitForTimeout(120);
-            assert.notEqual(await float.evaluate(element => element.style.transform), pausedTransform);
+            await page.waitForFunction(previous => document.querySelector("[data-studio-float]").style.transform !== previous, pausedTransform);
             const sampleMotion = async count => float.evaluate((element, count) => new Promise(resolve => {
               const frames = [];
-              function sample() {
+              function sample(time) {
                 const rect = element.getBoundingClientRect(), image = element.querySelector("img");
-                frames.push({ x: rect.x, y: rect.y, opacity: getComputedStyle(image).opacity, loaded: image.complete && image.naturalWidth > 0 });
+                frames.push({ time, scale: new DOMMatrixReadOnly(getComputedStyle(element).transform).a, x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, opacity: getComputedStyle(image).opacity, loaded: image.complete && image.naturalWidth > 0 });
                 if (frames.length < count) requestAnimationFrame(sample); else resolve(frames);
               }
               requestAnimationFrame(sample);
             }), count);
-            const checkIdle = samples => {
-              let moved = 0;
+            const checkHeartbeat = samples => {
+              assert.ok(Math.max(...samples.map(frame => frame.scale)) > 1.025, "A full-sized first beat is visible");
+              assert.ok(samples.filter(frame => frame.scale < 1.00001).length > samples.length * .2, "The heartbeat includes a calm rest interval");
               for (let index = 1; index < samples.length; index++) {
                 const distance = Math.hypot(samples[index].x - samples[index - 1].x, samples[index].y - samples[index - 1].y);
-                assert.ok(distance < .45, "Idle frames stay subpixel, without jumps");
-                if (distance > .0001) moved++;
+                assert.ok(distance < .02, "The product stays centered while pulsing");
+                assert.ok(samples[index].scale >= 1 && samples[index].scale <= 1.03501);
+                assert.ok(Math.abs(samples[index].scale - samples[index - 1].scale) < .00031 * Math.min(64, samples[index].time - samples[index - 1].time) + .0002, "Heartbeat scale remains smooth between frames");
                 assert.equal(samples[index].opacity, "1"); assert.equal(samples[index].loaded, true);
               }
-              assert.ok(moved > samples.length * .8, "The image keeps sliding when the cursor is stationary or outside");
             };
             await page.mouse.move(bounds.x + bounds.width * .8, bounds.y + bounds.height * .6);
             await page.waitForTimeout(1400);
-            checkIdle(await sampleMotion(theme === "light" && prefix === "/loja/ground-shop" ? 430 : 60));
+            checkHeartbeat(await sampleMotion(180));
             await page.screenshot({ path: `/tmp/commerce-studio-idle-inside-${prefix.includes("preview") ? "preview" : "public"}-${theme}.png` });
             await page.mouse.move(20, 20);
             await page.waitForTimeout(1400);
-            checkIdle(await sampleMotion(120));
+            checkHeartbeat(await sampleMotion(180));
             await page.screenshot({ path: `/tmp/commerce-studio-idle-outside-${prefix.includes("preview") ? "preview" : "public"}-${theme}.png` });
           }
-          if (mobile) assert.equal(await hero.getAttribute("data-moving"), "false");
+          if (mobile) { assert.equal(await hero.getAttribute("data-moving"), "true"); assert.equal(await hero.getByRole("button", { name: "Pausar movimento da vitrine" }).isVisible(), true); }
           const selector = hero.getByRole("button", { name: "Mostrar Espelho 5,5 cm" }); await selector.click();
           await hero.getByRole("link", { name: "Personalizar Espelho 5,5 cm" }).waitFor();
         }
@@ -183,7 +183,7 @@ try {
     await context.close();
   }
   assert.deepEqual(errors, []);
-  console.log(motionOnly ? "Studio idle motion verified: public/private preview; light/dark; desktop/mobile; stationary cursor over a full cycle; cursor outside; subpixel updates; no CSS animation; pause/resume; reduced-motion/touch; no overflow." : "Studio verified: public/private preview; light/dark; 320/390/844/1280/1440/1920px; idle inside/outside; pause/resume; reduced-motion/touch; lazy model/fonts; simultaneous front/back pixels; all text and gradient modes; fonts and zoom; quiet cart; no overflow.");
+  console.log(motionOnly ? "Studio heartbeat verified: public/private preview; light/dark; desktop/mobile; smooth centered scale, quiet rest, no pointer tracking; pause/resume; reduced motion; no overflow." : "Studio verified: public/private preview; light/dark; 320/390/844/1280/1440/1920px; heartbeat and pause/resume on desktop/mobile; reduced motion; lazy model/fonts; simultaneous front/back pixels; all text and gradient modes; fonts and zoom; quiet cart; no overflow.");
 } finally {
   await browser.close();
   if (variants.length) { await db.query("delete from commerce_products where variant_id=any($1::uuid[])", [variants]); await db.query("delete from product_variants where id=any($1::uuid[])", [variants]); }

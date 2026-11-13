@@ -10,6 +10,16 @@ O tema de referência permite reordenar diversas seções. Esta adaptação util
 
 ### Tema Estúdio
 
+#### Pulsação dos Produtos na Abertura
+
+- [x] Substituir o acompanhamento do mouse e a flutuação por duas batidas suaves: escala de até 3,5% na primeira e 2,2% na segunda, com repouso entre ciclos de 2,4 segundos.
+- [x] Preservar centro, proporções e legenda imóvel, sem piscar ou movimentar o restante da página. Um único relógio mantém continuidade ao pausar/retomar.
+- [x] Permitir a pulsação também no celular, com o botão de pausa acessível; respeitar movimento reduzido, configuração do tenant, aba oculta, interseção e desmontagem.
+- [x] TDD: novos testes primeiro falhando, depois 22 testes focados aprovados, incluindo continuidade em 60/120 Hz e fronteiras dos ciclos. Atualizar as expectativas do roteiro de navegador para o novo movimento.
+- [x] 38 testes focados aprovados, tipos e lint aprovados. Chrome com o componente real em ambiente local isolado: 1440/390/320 px, claro/escuro, imagens decodificadas, escala contínua e centralizada, repouso, pausa/retomada, troca de produto, movimento reduzido e ausência de overflow. Capturas inspecionadas. A validação visual foi do componente isolado, sem banco ou APIs; o roteiro completo `commerce-studio-browser.mjs` foi atualizado, mas não reexecutado nesta rodada.
+
+Sem migration, nova configuração ou dependência de produção. A opção existente **Ativar movimentos suaves** controla o efeito. Esta pulsação substitui os comportamentos históricos de mouse/flutuação e toque estático descritos nas validações anteriores abaixo.
+
 #### Entrada, Artes Prontas e Última Composição
 
 - [x] Trocar a chamada por **Crie sua arte aqui**, com contraste e um realce suave de três ciclos, sem piscar o texto; pausa e movimento reduzido suspendem o efeito.
