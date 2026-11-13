@@ -27,7 +27,7 @@ describe("optional studio experience", () => {
   });
   it("opens the demo explicitly without preloading the editor or inventing trust badges", () => {
     const open = vi.fn(); render(<StudioHero settings={settings} products={products} base="" onOpenPreview={open}/>);
-    fireEvent.click(screen.getByRole("button", { name: "Ver como fica" })); expect(open).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Crie sua arte aqui" })); expect(open).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("link", { name: "Explorar produtos" })).toHaveAttribute("href", "/catalogo");
     expect(screen.queryByText(/Compra 100% segura|Clientes satisfeitos/)).not.toBeInTheDocument();
     expect(document.querySelector("canvas")).toBeNull();

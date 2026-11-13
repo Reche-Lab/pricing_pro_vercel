@@ -6,9 +6,12 @@ import { renderStudioArtwork } from "@/components/commerce/studio-artwork-canvas
 import type { StoreProduct } from "@/components/commerce/StoreHome";
 import { defaultMockup } from "@/domain/commerce/artwork-options";
 import { saveStudioPurchase } from "@/components/commerce/studio-purchase";
+import { readStudioDraft, writeStudioDraft } from "@/components/commerce/studio-draft-cache";
+import { studioInitialArtwork } from "@/domain/commerce/studio-demo";
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 vi.mock("@/components/commerce/studio-purchase", () => ({ saveStudioPurchase: vi.fn(async () => "saved-art") }));
+vi.mock("@/components/commerce/studio-draft-cache", () => ({ readStudioDraft: vi.fn(async () => null), writeStudioDraft: vi.fn(async () => true) }));
 vi.mock("@/components/commerce/studio-image", () => ({ readStudioBackground: vi.fn(async () => ({ dataUrl: "data:image/png;base64,YQ==", fileName: "fundo.png", width: 1200, height: 800 })) }));
 vi.mock("@/components/commerce/studio-artwork-canvas", () => ({ renderStudioArtwork: vi.fn(async () => ({ dataUrl: "data:image/png;base64,YQ==", truncated: false, mimeType: "image/png", fileSize: 1 })) }));
 vi.mock("@/components/commerce/StoreProductMockup", () => ({ StoreProductMockup: ({ fixedSide }: { fixedSide: string }) => <canvas aria-label={fixedSide === "front" ? "Frente do exemplo" : "Verso do exemplo"}/> }));
@@ -23,6 +26,33 @@ async function advanceIntro(milliseconds: number) {
   await act(async () => { vi.advanceTimersByTime(200); });
 }
 describe("studio creative demonstration", () => {
+  it("restores the last composition without replaying the demo and keeps it when choosing a different product", async () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    const draft = { version: 1 as const, updatedAt: Date.now(), productId: "demo", artwork: { ...studioInitialArtwork(), text: "Minha composição salva", mode: "circle" as const } };
+    vi.mocked(readStudioDraft).mockResolvedValueOnce(draft);
+    const second = { ...products[0], id: "second", name: "Espelho", geometry: { ...products[0].geometry!, widthMm: 55, heightMm: 55 } };
+    render(<StudioPersonalizer products={[products[0], second]} base="/loja/store" slug="store" autoDemo/>);
+    expect(await screen.findByText("Sua última arte foi recuperada.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Sua mensagem")).toHaveValue(draft.artwork.text);
+    expect(screen.queryByRole("button", { name: "Pular demonstração" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "Produto" }), { target: { value: "second" } });
+    fireEvent.click(screen.getByRole("button", { name: "Nova arte" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retomar" }));
+    expect(screen.getByRole("combobox", { name: "Produto" })).toHaveValue("second");
+    expect(screen.getByLabelText("Sua mensagem")).toHaveValue(draft.artwork.text);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Usar esta arte no produto" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Usar esta arte no produto" }));
+    await waitFor(() => expect(saveStudioPurchase).toHaveBeenCalledWith(expect.objectContaining({ productId: "second" })));
+    expect(writeStudioDraft).toHaveBeenCalledWith({ slug: "store", preview: false }, expect.objectContaining({ productId: "second", artwork: expect.objectContaining({ text: draft.artwork.text }) }));
+    expect(renderStudioArtwork).toHaveBeenLastCalledWith(expect.anything(), second.geometry, second.margins, { purpose: "purchase" });
+  });
+  it("offers ready-made artwork only if this store has its library enabled", async () => {
+    render(<StudioPersonalizer products={products} base="" slug="store" libraryEnabled/>);
+    await screen.findByLabelText("Frente do exemplo");
+    fireEvent.click(screen.getByRole("tab", { name: "Fundo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Imagem" }));
+    expect(screen.getByRole("button", { name: "Escolher entre nossas artes prontas" })).toBeInTheDocument();
+  });
   it("automatically shows a longer message, circle, spiral, three colors and a spiral background, then invites creation without saving", async () => {
     introEnvironment();
     render(<StudioPersonalizer products={products} base="" slug="store" autoDemo/>);
@@ -58,6 +88,7 @@ describe("studio creative demonstration", () => {
   it("lets the customer skip directly to their own creation and cancels pending steps on unmount", async () => {
     introEnvironment();
     const view = render(<StudioPersonalizer products={products} base="" slug="store" autoDemo/>);
+    await advanceIntro(200);
     fireEvent.click(screen.getByRole("button", { name: "Pular demonstração" }));
     await advanceIntro(20000);
     expect(screen.getByLabelText("Sua mensagem")).toHaveValue("Sua ideia\nganha forma");
@@ -71,6 +102,17 @@ describe("studio creative demonstration", () => {
     expect(screen.getByText("Agora crie você mesmo a sua arte.")).toBeVisible();
     expect(screen.getByLabelText("Sua mensagem")).toHaveValue("Sua ideia\nganha forma");
     expect(saveStudioPurchase).not.toHaveBeenCalled();
+  });
+  it("does not move the checkbox under the pointer before its click is completed", async () => {
+    introEnvironment(true);
+    render(<StudioPersonalizer products={products} base="" slug="store" autoDemo/>);
+    await advanceIntro(200);
+    const checkbox = screen.getByRole("checkbox", { name: "Incluir texto sobre o fundo" });
+    fireEvent.pointerDown(checkbox);
+    expect(screen.getByText("Agora crie você mesmo a sua arte.")).toBeVisible();
+    fireEvent.pointerUp(checkbox); fireEvent.click(checkbox);
+    expect(checkbox).not.toBeChecked();
+    expect(screen.queryByText("Agora crie você mesmo a sua arte.")).not.toBeInTheDocument();
   });
   it("pauses while the tab is hidden instead of playing through unseen steps", async () => {
     introEnvironment();

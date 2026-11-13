@@ -32,6 +32,7 @@ import {
   X,
   Download,
   FileText,
+  Paintbrush,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import type {
@@ -308,7 +309,7 @@ export function Storefront({
         {showQuoteJourney ? <StoreQuoteJourney base={base} step={savedQuote ? 4 : quoteDetails ? quoteStep === "review" ? 3 : 2 : 1} count={cart?.lines.length ?? 0} totalCents={cart?.calculation?.totalCents ?? 0} identified={Boolean(cart?.customer)} onPurchase={() => { setQuoteMode(false); router.push(`${base}/carrinho`); }}/>: null}
       </header>
       {view === "home" ? (
-        <StoreHome settings={settings} products={products} base={base} preview={preview} quoting={quoting} slug={slug} />
+        <StoreHome settings={settings} products={products} base={base} preview={preview} quoting={quoting} slug={slug} libraryEnabled={libraryEnabled} openStudio={searchParams.get("estudio") === "1"}/>
       ) : null}
       <div
         className={
@@ -395,6 +396,7 @@ export function Storefront({
                       await storeRequest(`${api}/auth`, "POST", {
                         action: "logout",
                       });
+                      await import("./studio-draft-cache").then(cache => cache.clearStudioDraft({ slug, preview })).catch(() => undefined);
                       setOrders([]);
                       await refresh();
                     })
@@ -993,7 +995,7 @@ function ProductDetail({
                 <ChevronDown size={18} className={artworksOpen ? styles.chevronOpen : undefined} aria-hidden="true" />
               </button>
               {artworksOpen ? <div id={artworkPanelId} className={styles.personalizationContent}>
-                {studioArtwork ? <p role="status" className="mb-3 text-sm text-emerald-600">Sua arte do Estúdio já está anexada. Revise e aprove antes de concluir a compra.</p> : null}
+                {studioArtwork ? <><p role="status" className="mb-3 text-sm text-emerald-600">Sua arte do Estúdio já está anexada. Revise e aprove antes de concluir a compra.</p><Link className="mb-4 inline-flex min-h-10 items-center gap-2 text-sm underline underline-offset-4" href={`${base}?estudio=1`} title="Retomar a composição salva nesta aba e escolher outro produto, sem alterar este item"><Paintbrush size={15}/>Editar arte ou trocar produto no Estúdio</Link></> : null}
                 <p className={styles.muted}>PNG, JPEG ou WebP de até 3 MB por arte.</p>
                 {lines.length && !deliveryIssue ? lines.map((line, index) => (
                   <div className={styles.productArtworkGroup} key={index}>

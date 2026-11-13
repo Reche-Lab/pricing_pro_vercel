@@ -350,6 +350,8 @@ export function StoreHome({
   preview = false,
   quoting = false,
   slug,
+  libraryEnabled = false,
+  openStudio = false,
 }: {
   settings: StoreSettings;
   products: StoreProduct[];
@@ -357,8 +359,10 @@ export function StoreHome({
   preview?: boolean;
   quoting?: boolean;
   slug: string;
+  libraryEnabled?: boolean;
+  openStudio?: boolean;
 }) {
-  const [demoOpen, setDemoOpen] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(openStudio);
   const demoId = useId();
   const demoRef = useRef<HTMLElement>(null);
   const isStudio = settings.experience?.style === "studio";
@@ -368,6 +372,7 @@ export function StoreHome({
     demoRef.current?.focus({ preventScroll: true });
     demoRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
   }
+  useEffect(() => { if (openStudio) setDemoOpen(true); }, [openStudio]);
   const categories = [...new Set(products.map((p) => p.category))];
   const personalized = products.some((p) => p.personalized);
   return (
@@ -394,7 +399,7 @@ export function StoreHome({
         )}
         {categories.length > 1 ? <ProductCarousel products={products.filter(product => product.category === categories[0])} base={base} title={categories[0]} category={categories[0]} /> : null}
       </div>
-      {isStudio && demoProducts.length ? <section ref={demoRef} tabIndex={-1} className={studio.demo} aria-label="Experimente sua ideia" id={demoId}>{demoOpen ? <StudioPersonalizer products={demoProducts} base={base} slug={slug} preview={preview} autoDemo/> : <div className={studio.demoPrompt}><div><h2>Da sua ideia ao produto.</h2><p>Crie sua arte com imagem, mensagem e cores.</p></div><button type="button" className={studio.primary} aria-expanded={false} aria-controls={demoId} onClick={openDemo}>Experimentar minha ideia<ArrowRight size={17}/></button></div>}</section> : null}
+      {isStudio && demoProducts.length ? <section ref={demoRef} tabIndex={-1} className={studio.demo} aria-label="Experimente sua ideia" id={demoId}>{demoOpen ? <StudioPersonalizer key={`${slug}:${preview}`} products={demoProducts} base={base} slug={slug} preview={preview} libraryEnabled={libraryEnabled} autoDemo/> : <div className={studio.demoPrompt}><div><h2>Da sua ideia ao produto.</h2><p>Crie sua arte com imagem, mensagem e cores.</p></div><button type="button" className={studio.primary} aria-expanded={false} aria-controls={demoId} onClick={openDemo}>Experimentar minha ideia<ArrowRight size={17}/></button></div>}</section> : null}
       {isStudio && (settings.banners?.length || settings.bannerUrl) ? <section className={studio.campaigns} aria-label="Campanhas da loja"><h2>Inspire-se nas nossas campanhas</h2><BannerCarousel settings={settings} base={base} secondary/></section> : null}
       {personalized ? (
         <div className={styles.benefits}>

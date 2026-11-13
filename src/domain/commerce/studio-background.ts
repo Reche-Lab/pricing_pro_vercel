@@ -1,6 +1,6 @@
 import { calculatePrintGuideDimensions, type PrintGeometry, type PrintMargins } from "@/domain/artwork/geometry";
 
-export type StudioBackgroundAsset = { dataUrl: string; fileName: string; width: number; height: number };
+export type StudioBackgroundAsset = { dataUrl: string; fileName: string; width: number; height: number; library?: { id: string; version: string } };
 export type StudioBackgroundImage = { asset: StudioBackgroundAsset; scale: number; offsetX: number; offsetY: number; fillColor: string };
 export const STUDIO_MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 

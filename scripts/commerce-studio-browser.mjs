@@ -115,7 +115,7 @@ try {
           await hero.getByRole("link", { name: "Personalizar Espelho 5,5 cm" }).waitFor();
         }
         if (!motionOnly && (width === 1440 || width === 390 || width === 320)) {
-          await page.getByRole("button", { name: "Ver como fica" }).click();
+          await page.getByRole("button", { name: "Crie sua arte aqui" }).click();
           const demo = page.getByRole("region", { name: "Experimente sua ideia" });
           const canvas = demo.locator('canvas[aria-label*="frente"]'), backCanvas = demo.locator('canvas[aria-label*="verso"]');
           await canvas.waitFor(); await backCanvas.waitFor(); assert.equal(await demo.locator("canvas").count(), 2);

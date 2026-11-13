@@ -16,7 +16,7 @@ import {
 } from "./http";
 import { enforcePublicRateLimit } from "@/lib/security/public-rate-limit";
 import { downloadArtworkObject } from "@/services/storage/artwork-storage";
-import { previewLibrarySelection, selectLibraryArtwork } from "./library";
+import { previewLibrarySelection, selectLibraryArtwork, studioLibrarySelection } from "./library";
 
 export async function libraryStore(slug: string, preview: boolean) {
   if (preview) return requireCommercePreview(slug);
@@ -88,7 +88,7 @@ export async function librarySelection(
     const input = await readCommerceBody(
       request,
       z
-        .object({ artworkId: z.string().uuid(), productId: z.string().uuid() })
+        .object({ artworkId: z.string().uuid(), productId: z.string().uuid(), target: z.literal("studio").optional() })
         .strict(),
     );
     const store = await libraryStore(slug, preview);
@@ -98,6 +98,7 @@ export async function librarySelection(
       windowSeconds: 600,
     });
     if (blocked) return blocked;
+    if (input.target === "studio") return commerceJson(await studioLibrarySelection(store.tenant_id, input.artworkId, input.productId, preview));
     if (preview)
       return commerceJson(
         await previewLibrarySelection(

@@ -10,6 +10,21 @@ O tema de referência permite reordenar diversas seções. Esta adaptação util
 
 ### Tema Estúdio
 
+#### Entrada, Artes Prontas e Última Composição
+
+- [x] Trocar a chamada por **Crie sua arte aqui**, com contraste e um realce suave de três ciclos, sem piscar o texto; pausa e movimento reduzido suspendem o efeito.
+- [x] Em **Fundo > Imagem**, abrir a biblioteca com pesquisa, categorias e artes vinculadas ao produto, quando habilitada pela loja.
+- [x] Liberar como fundo apenas originais editáveis; conferir publicação, tenant, vínculo com o produto, integridade e versão também ao continuar.
+- [x] Guardar a composição editável e a imagem em IndexedDB, separadas por tenant, loja/prévia e aba, por até 24 horas enquanto a sessão da aba for mantida, com limpeza de expiradas na próxima gravação.
+- [x] Recuperar a composição ao voltar/recarregar, sem repetir a demonstração, e oferecer **Retomar** e **Nova arte**. Um rascunho antigo não substitui uma gravação mais recente.
+- [x] Incluir no produto o retorno ao Estúdio. A troca de produto mantém a composição e gera um novo arquivo nas medidas correspondentes, sem aprovar automaticamente nem modificar o item anterior.
+- [x] Limpar o cache da loja ao sair da conta, sem afetar o rascunho de outro tenant; rotacionar o identificador de acesso caso o navegador bloqueie a limpeza física.
+- [x] Testes de regressão, integração com PostgreSQL, build e conferência de biblioteca/cache em desktop/mobile.
+
+O cache é funcional e local à aba: não contém credenciais nem transfere uma aprovação entre produtos. `sessionStorage` guarda somente um identificador aleatório da aba; o arquivo não ocupa a pequena cota desse armazenamento. Se IndexedDB estiver bloqueado/sem espaço, há fallback de memória limitado e aviso para não fechar/recarregar a aba. A última composição é gravada antes de navegar para o produto. **Nova arte** mantém a última disponível até uma nova edição substituí-la. Originais não editáveis continuam disponíveis pelo fluxo tradicional de artes prontas do produto, não pelo Estúdio. A biblioteca usa o endpoint existente de seleção com `target: "studio"`, que retorna a fonte autorizada sem criar cópias de comprador; não adiciona upload nem gravação automática no servidor. Não há migration nem variável de ambiente nova.
+
+Validação: suíte de regressão com **896 testes aprovados** (63 condicionais ignorados), seguida de **37 testes focados aprovados** após os refinamentos de interação/limpeza, **30 testes de integração** com PostgreSQL isolado, lint e build de produção. `COMMERCE_STUDIO_CACHE_ONLY=true` em `scripts/commerce-studio-purchase-browser.mjs` percorreu loja/prévia em 320/390/1440 px, claro/escuro, usando apenas dados e Storage locais. Conferiu IndexedDB real após recarregar, imagem, cores, escala e deslocamentos preservados; exportação de outro produto em 496 px versus 709 px do primeiro, aprovação independente e aprovação anterior intacta; galeria com imagens decodificadas e seleção de origem autorizada; carrinho, checkout local sem cobrança, acesso privado e limpeza ao sair. O destaque do botão foi verificado com pausa e movimento reduzido. Capturas da entrada e da biblioteca foram inspecionadas. Uma atualização de aviso durante a captura do clique restaurava o valor antigo de inputs controlados; os controles agora leem a alteração antes dessa atualização visual. O modo dev reiniciou por atingir o limite de memória, por isso a conferência final foi feita no build de produção local, com os seis cenários aprovados. Configurações e produtos temporários foram restaurados ao finalizar.
+
 #### Demonstração Guiada de Abertura
 
 - [x] Ao abrir o Estúdio, mostrar uma mensagem mais longa, texto circular, texto em espiral, três cores e fundo em espiral.
@@ -75,7 +90,7 @@ Em **Loja online > Loja e catálogo > Identidade e atendimento > Identidade visu
 
 A foto própria é opcional, com o upload existente de PNG/JPEG/WebP de até 3 MB. Sem ela, os produtos reais aparecem sobre uma textura ilustrativa. O visitante pode trocar o destaque e pausar a abertura. Toque, movimento reduzido, aba oculta e vitrine fora da tela suspendem o movimento. Não há Three.js, vídeo automático, polling ou requisição de IA nesta experiência.
 
-A experiência **Ver como fica** só aparece para produtos personalizados com geometria e modelo frente/verso configurados. O módulo é importado apenas no clique; usa canvas e os modelos existentes, com mensagem opcional, imagem, cor e seleção de produto. **Fundo > Imagem** aceita PNG/JPEG/WebP de até 3 MB, 25 megapixels e 10.000 px por lado, com checagem de assinatura. A imagem mantém proporção; permite encaixe inteiro, preenchimento, tamanho, deslocamento e uma cor sólida nas áreas descobertas. A nitidez é estimada pela imagem original, não pela resolução artificial da composição.
+A experiência **Crie sua arte aqui** só aparece para produtos personalizados com geometria e modelo frente/verso configurados. O módulo é importado apenas no clique; usa canvas e os modelos existentes, com mensagem opcional, imagem, cor e seleção de produto. **Fundo > Imagem** aceita PNG/JPEG/WebP de até 3 MB, 25 megapixels e 10.000 px por lado, com checagem de assinatura. A imagem mantém proporção; permite encaixe inteiro, preenchimento, tamanho, deslocamento e uma cor sólida nas áreas descobertas. A nitidez é estimada pela imagem original, não pela resolução artificial da composição.
 
 **Usar esta arte no produto** gera uma composição nas medidas de corte a 300 dpi e usa o upload/enquadramento privados já existentes. O arquivo final é PNG, com fallback para WebP quando necessário, limitado a 3 MB; produtos que exigem mais de 4.096 px por lado ou 16 megapixels recebem orientação para enviar arte pronta, sem reduzir silenciosamente a resolução. A composição é achatada: texto, imagem e fundo passam a ser uma arte única que pode ser retocada ou reenquadrada pelas ferramentas existentes. Não há aprovação automática, inclusão automática no carrinho ou cobrança.
 

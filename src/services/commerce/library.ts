@@ -197,6 +197,11 @@ export async function previewLibrarySelection(
     title: art.title,
   };
 }
+export async function studioLibrarySelection(tenantId: string, artworkId: string, productId: string, preview = false) {
+  const { art, file } = await selectionSource(tenantId, artworkId, productId, preview);
+  if (!art.editable) throw new CommerceError("Esta arte não foi liberada para edição no Estúdio. Escolha outra arte pronta.", 403);
+  return { fileName: art.file_name, mimeType: "image/webp", fileSize: file.bytes.length, dataUrl: encodeDataUrl("image/webp", file.bytes), title: art.title, version: art.version };
+}
 export async function selectLibraryArtwork(
   tenantId: string,
   session: BuyerSession,

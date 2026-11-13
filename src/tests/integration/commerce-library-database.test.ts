@@ -18,6 +18,7 @@ import {
   uploadLibraryArtwork,
   selectLibraryArtwork,
   previewLibrarySelection,
+  studioLibrarySelection,
 } from "@/services/commerce/library";
 import {
   commerceProducts,
@@ -498,6 +499,18 @@ describe.skipIf(!url)("campaign library isolated Postgres and storage", () => {
       ),
     ).rejects.toThrow("expirada");
     expect(memory.files.size).toBe(fileCount);
+  });
+  it("loads an editable studio source without making a buyer copy and refuses locked originals", async () => {
+    await saveArt({ editable: true, status: "published" });
+    const before = (await getPool().query("select count(*)::int total from commerce_artworks where tenant_id=$1", [tenant])).rows[0].total;
+    expect((await studioLibrarySelection(tenant, artId, product.id)).dataUrl).toMatch(/^data:image\/webp;base64,/);
+    const response = await librarySelection(request(`/api/store/${slug}/library/select`, { artworkId: artId, productId: product.id, target: "studio" }), slug);
+    expect(response.status).toBe(200);
+    expect((await response.json()).title).toBeTruthy();
+    expect((await getPool().query("select count(*)::int total from commerce_artworks where tenant_id=$1", [tenant])).rows[0].total).toBe(before);
+    await saveArt({ editable: false });
+    await expect(studioLibrarySelection(tenant, artId, product.id)).rejects.toMatchObject({ status: 403 });
+    await saveArt({ editable: true });
   });
   it("guards admin APIs, private preview, origins and query inputs", async () => {
     vi.mocked(getCurrentSession).mockResolvedValue(null);

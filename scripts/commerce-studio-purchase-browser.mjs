@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { SignJWT } from "jose";
@@ -9,6 +9,7 @@ import sharp from "sharp";
 
 const require = createRequire(import.meta.url);
 const introOnly = process.env.COMMERCE_STUDIO_INTRO_ONLY === "true";
+const cacheOnly = process.env.COMMERCE_STUDIO_CACHE_ONLY === "true";
 const { chromium } = require(process.env.COMMERCE_PLAYWRIGHT_PATH || "playwright");
 const url = process.env.COMMERCE_TEST_DATABASE_URL, base = process.env.COMMERCE_TEST_BASE_URL || "http://127.0.0.1:3011";
 if (!url || new URL(url).hostname !== "127.0.0.1" || !new URL(url).pathname.startsWith("/commerce_test_") || new URL(base).hostname !== "127.0.0.1") throw new Error("Isolated local test environment required.");
@@ -35,14 +36,15 @@ const storage = createServer(async (req, res) => {
 await new Promise((resolve, reject) => { storage.once("error", reject); storage.listen(55440, "127.0.0.1", resolve); });
 const db = new pg.Client({ connectionString: url }); await db.connect();
 const browser = await chromium.launch({ headless: true, executablePath: process.env.COMMERCE_BROWSER_EXECUTABLE || undefined, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
-let store, originals = [], variant, payment, customer;
+let store, originals = [], variant, payment, customer, secondProduct, libraryId;
+const extraVariants = [];
 const saved = [], sessions = [], orders = [], errors = [];
 try {
   store = (await db.query("select s.* from commerce_stores s join tenants t on t.id=s.tenant_id where t.slug='ground-shop'")).rows[0];
   assert.ok(store, "Run the isolated commerce database suite first.");
   originals = (await db.query("select cp.*,v.product_id from commerce_products cp join product_variants v on v.id=cp.variant_id where cp.tenant_id=$1", [store.tenant_id])).rows;
   const model = JSON.parse(await readFile(new URL("../public/mockups/botton-25mm-v1/modelo.json", import.meta.url), "utf8"));
-  await db.query("update commerce_stores set enabled=true,status='published',settings=$2 where tenant_id=$1", [store.tenant_id, { ...store.settings, bannerUrl: "", banners: [], pickupEnabled: true, pickupAddress: "Local de teste", experience: { style: "studio", motion: false, backgroundUrl: "" } }]);
+  await db.query("update commerce_stores set enabled=true,status='published',settings=$2 where tenant_id=$1", [store.tenant_id, { ...store.settings, logoUrl: "", bannerUrl: "", banners: [], pickupEnabled: true, pickupAddress: "Local de teste", experience: { style: "studio", motion: cacheOnly, backgroundUrl: "" } }]);
   payment = (await db.query("select manual_enabled,payment_environment from commerce_payment_connections where tenant_id=$1", [store.tenant_id])).rows[0];
   await db.query("insert into commerce_payment_connections(tenant_id,manual_enabled,payment_environment) values($1,true,'production') on conflict(tenant_id) do update set manual_enabled=true,payment_environment='production'", [store.tenant_id]);
   await db.query("update commerce_products set active=false where tenant_id=$1", [store.tenant_id]);
@@ -57,23 +59,48 @@ try {
   const admin = (await db.query("select id from app_users where email='commerce-admin@example.test'")).rows[0];
   const token = await new SignJWT({ userId: admin.id, tenantId: store.tenant_id, email: "commerce-admin@example.test", role: "owner" }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("1h").sign(new TextEncoder().encode("commerce-local-test-secret-at-least-32-characters"));
   const fixture = await sharp({ create: { width: 800, height: 400, channels: 3, background: "#e96982" } }).composite([{ input: await sharp({ create: { width: 400, height: 400, channels: 3, background: "#427db5" } }).png().toBuffer(), left: 400, top: 0 }]).png().toBuffer();
+  if (cacheOnly) {
+    const second = (await db.query("insert into product_variants(tenant_id,product_id,name) values($1,$2,$3) returning id", [store.tenant_id, originals[0].product_id, `Studio purchase fixture ${randomUUID()}`])).rows[0].id;
+    extraVariants.push(second);
+    secondProduct = (await db.query("insert into commerce_products(tenant_id,variant_id,active,snapshot) select tenant_id,$2,true,snapshot || $3::jsonb from commerce_products where id=$1 returning id", [product, second, JSON.stringify({ variantId: second, name: "Espelho Estúdio", geometry: { shape: "circle", widthMm: 35, heightMm: 35, cornerStyle: "sharp", cornerRadiusMm: 0, rotationDegrees: 0, allowPrintRotation: true } })])).rows[0].id;
+    libraryId = randomUUID();
+    const bytes = await sharp(fixture).webp({ lossless: true }).toBuffer();
+    const path = `${store.tenant_id}/commerce/library/${libraryId}/source.webp`;
+    objects.set(`/storage/v1/object/artwork-production/${path}`, { bytes, type: "image/webp" });
+    await db.query("update commerce_stores set art_library_enabled=true where tenant_id=$1", [store.tenant_id]);
+    await db.query("insert into commerce_library_artworks(id,tenant_id,title,search_text,status,storage_path,thumbnail_path,file_name,width,height,content_hash,license_note) values($1,$2,'Campanha Estúdio','campanha estudio','published',$3,$3,'campanha.webp',800,400,$4,'Synthetic local fixture with unrestricted rights')", [libraryId, store.tenant_id, path, createHash('sha256').update(bytes).digest('hex')]);
+    for (const id of [product, secondProduct]) await db.query("insert into commerce_library_products(tenant_id,artwork_id,product_id) values($1,$2,$3)", [store.tenant_id, libraryId, id]);
+  }
   const changeInput = (locator, value) => locator.evaluate((element, value) => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(element, value);
     element.dispatchEvent(new Event("input", { bubbles: true })); element.dispatchEvent(new Event("change", { bubbles: true }));
   }, value);
   for (const preview of [false, true]) for (const width of [1440, 390, 320]) {
-    const context = await browser.newContext({ viewport: { width, height: 960 }, reducedMotion: introOnly ? "no-preference" : "reduce" });
+    const context = await browser.newContext({ viewport: { width, height: 960 }, reducedMotion: introOnly || cacheOnly ? "no-preference" : "reduce" });
     await context.addCookies([{ name: "pricing_session", value: token, url: base, httpOnly: true, sameSite: "Lax" }]);
     const page = await context.newPage(); page.on("pageerror", error => errors.push(error.message));
     const writes = []; page.on("request", request => { if (request.method() !== "GET" && /artworks|orders|payments/.test(request.url())) writes.push(request.url()); });
     const prefix = preview ? "/commerce/ground-shop/preview" : "/loja/ground-shop";
+    console.log(`Checking ${cacheOnly ? "cache/library" : introOnly ? "intro" : "purchase"}: ${preview ? "preview" : "public"} ${width}px`);
     const before = objects.size;
     await page.goto(`${base}${prefix}`, { waitUntil: "networkidle" });
     if (width === 390) {
       await page.evaluate(() => { localStorage.setItem("commerce-theme:ground-shop", "dark"); window.dispatchEvent(new Event("storage")); });
       await page.locator('[data-theme="dark"]').waitFor();
     }
-    await page.getByRole("button", { name: "Ver como fica" }).click();
+    if (cacheOnly) {
+      const cta = page.getByRole("button", { name: "Crie sua arte aqui", exact: true });
+      if (width === 1440 && !preview) {
+        await page.waitForFunction(() => document.querySelector('[aria-label="Estúdio Ground Shop"]')?.dataset.moving === "true");
+        assert.ok(await cta.evaluate(element => element.getAnimations().length > 0), "The studio entry has a brief, non-flashing highlight");
+        await page.getByRole("button", { name: "Pausar movimento da vitrine" }).click();
+        assert.equal(await cta.evaluate(element => element.getAnimations().length), 0);
+      }
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      assert.equal(await cta.evaluate(element => element.getAnimations().length), 0, "Reduced motion keeps the CTA static");
+      await page.screenshot({ path: `/tmp/studio-entry-${preview ? "preview" : "public"}-${width}.png` });
+    }
+    await page.getByRole("button", { name: "Crie sua arte aqui" }).click();
     const demo = page.getByRole("region", { name: "Experimente sua ideia" });
     if (introOnly) {
       let previous = null;
@@ -111,8 +138,9 @@ try {
       assert.equal(await demo.getByLabel("Sua mensagem").inputValue(), "Minha criação, meu estilo");
       assert.deepEqual(writes, []); assert.equal(objects.size, before);
       if (width !== 390) {
+        await page.evaluate(() => sessionStorage.removeItem("commerce-studio-tab"));
         await page.goto(`${base}${prefix}`, { waitUntil: "networkidle" });
-        await page.getByRole("button", { name: "Ver como fica" }).click();
+        await page.getByRole("button", { name: "Crie sua arte aqui" }).click();
         if (width === 320) {
           await demo.getByLabel("Sua mensagem").fill("Quero começar agora");
           await page.waitForTimeout(2200);
@@ -122,8 +150,9 @@ try {
           await demo.getByRole("button", { name: "Pular demonstração" }).click();
           assert.equal(await demo.getByLabel("Sua mensagem").inputValue(), "Sua ideia\nganha forma");
           await page.emulateMedia({ reducedMotion: "reduce" });
+          await page.evaluate(() => sessionStorage.removeItem("commerce-studio-tab"));
           await page.goto(`${base}${prefix}`, { waitUntil: "networkidle" });
-          await page.getByRole("button", { name: "Ver como fica" }).click();
+          await page.getByRole("button", { name: "Crie sua arte aqui" }).click();
           await demo.getByText("Agora crie você mesmo a sua arte.").waitFor();
           assert.equal(await demo.getByLabel("Sua mensagem").inputValue(), "Sua ideia\nganha forma");
         }
@@ -209,23 +238,70 @@ try {
       }
     }
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `Cart overflow ${width}`);
+    if (cacheOnly) {
+      await page.goto(`${base}${prefix}?estudio=1`, { waitUntil: "networkidle" });
+      await demo.getByText("Sua última arte foi recuperada.").waitFor();
+      assert.equal(await demo.locator("[data-studio-demo-stage]").count(), 0, "Recovered work is never replaced by the intro");
+      await demo.getByRole("tab", { name: "Fundo", exact: true }).click();
+      assert.equal(Number(await demo.getByLabel("Tamanho da imagem", { exact: true }).inputValue()), .45);
+      assert.equal(Number(await demo.getByLabel("Deslocamento horizontal", { exact: true }).inputValue()), .15);
+      assert.equal(await demo.getByLabel("Cor nas áreas descobertas").inputValue(), "#123456");
+      await page.reload({ waitUntil: "networkidle" });
+      await demo.getByText("Sua última arte foi recuperada.").waitFor();
+      await demo.getByRole("combobox", { name: "Produto", exact: true }).selectOption(secondProduct);
+      await demo.getByRole("button", { name: "Usar esta arte no produto", exact: true }).click();
+      await page.waitForURL(new RegExp(`/produto/${secondProduct}\\?arteEstudio=`));
+      const secondId = new URL(page.url()).searchParams.get("arteEstudio");
+      assert.notEqual(secondId, id);
+      if (!preview) {
+        const secondArt = (await db.query("select * from commerce_artworks where id=$1", [secondId])).rows[0];
+        assert.equal(secondArt.product_id, secondProduct); assert.equal(secondArt.approved_at, null);
+        const bytes = objects.get(`/storage/v1/object/artwork-production/${secondArt.storage_path}`).bytes;
+        assert.equal((await sharp(bytes).metadata()).width, 496, "The new product gets its own cut dimensions");
+        assert.ok((await db.query("select approved_at from commerce_artworks where id=$1", [id])).rows[0].approved_at, "The original product approval is untouched");
+      }
+      await page.getByRole("link", { name: "Editar arte ou trocar produto no Estúdio" }).click();
+      await demo.getByText("Sua última arte foi recuperada.").waitFor();
+      await demo.getByRole("tab", { name: "Fundo", exact: true }).click();
+      await demo.getByRole("button", { name: "Escolher entre nossas artes prontas" }).click();
+      const dialog = page.getByRole("dialog");
+      await dialog.getByRole("heading", { name: "Campanha Estúdio", exact: true }).click();
+      await dialog.getByRole("img", { name: "Campanha Estúdio", exact: true }).evaluate(image => image.decode());
+      await page.screenshot({ path: `/tmp/studio-ready-${preview ? "preview" : "public"}-${width}.png` });
+      await dialog.getByRole("button", { name: "Usar como fundo", exact: true }).click();
+      await dialog.waitFor({ state: "hidden" });
+      assert.equal(await demo.getByAltText("Imagem de fundo escolhida").count(), 1);
+      await demo.getByRole("button", { name: "Usar esta arte no produto", exact: true }).click();
+      await page.waitForURL(new RegExp(`/produto/${secondProduct}\\?arteEstudio=`));
+      assert.notEqual(new URL(page.url()).searchParams.get("arteEstudio"), secondId);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+      if (!preview && width === 1440) {
+        await page.goto(`${base}${prefix}/conta`, { waitUntil: "networkidle" });
+        await page.getByRole("button", { name: "Sair", exact: true }).click();
+        await page.getByRole("button", { name: "Sair", exact: true }).waitFor({ state: "hidden" });
+        await page.goto(`${base}${prefix}?estudio=1`, { waitUntil: "networkidle" });
+        await demo.getByText("Nova composição", { exact: true }).waitFor();
+        assert.equal(await demo.getByText("Sua última arte foi recuperada.").count(), 0, "Logout clears the local studio draft");
+      }
+    }
     await context.close();
   }
   assert.deepEqual(errors, []);
-  console.log(introOnly ? "Studio intro verified: five automatic stages with distinct real canvas pixels; circle, spiral, three colors and spiral background; final invitation, focus, skip, interruption and reduced motion; public/preview at 320/390/1440px, light/dark; no artwork/order/payment writes or overflow." : "Studio purchase verified: upload, resize, offsets, fill, front/back pixels, exact 300-dpi cut dimensions, private storage and session isolation, reload, explicit approval, cart and real local checkout with approved proof (no charge); public/preview at 320/390/1440px, light/dark; preview stays ephemeral; no overflow.");
+  console.log(cacheOnly ? "Studio cache/library verified: local IndexedDB restoration after navigation/reload; recipe, image and offsets preserved; second-product copy at its own print size, with independent approval; ready-art gallery and public/preview library sources; 320/390/1440px, light/dark; normal cart/checkout flow and privacy checks also passed." : introOnly ? "Studio intro verified: five automatic stages with distinct real canvas pixels; circle, spiral, three colors and spiral background; final invitation, focus, skip, interruption and reduced motion; public/preview at 320/390/1440px, light/dark; no artwork/order/payment writes or overflow." : "Studio purchase verified: upload, resize, offsets, fill, front/back pixels, exact 300-dpi cut dimensions, private storage and session isolation, reload, explicit approval, cart and real local checkout with approved proof (no charge); public/preview at 320/390/1440px, light/dark; preview stays ephemeral; no overflow.");
 } finally {
   await browser.close();
   if (orders.length) { await db.query("delete from commerce_order_events where order_id=any($1::uuid[])", [orders]); await db.query("delete from commerce_orders where id=any($1::uuid[])", [orders]); }
   if (variant) {
-    const artifacts = (await db.query("select a.id,a.session_id from commerce_artworks a join commerce_products p on p.id=a.product_id where p.variant_id=$1", [variant])).rows;
+    const artifacts = (await db.query("select a.id,a.session_id from commerce_artworks a join commerce_products p on p.id=a.product_id where p.variant_id=any($1::uuid[])", [[variant, ...extraVariants]])).rows;
     for (const art of artifacts) { if (!saved.includes(art.id)) saved.push(art.id); if (!sessions.includes(art.session_id)) sessions.push(art.session_id); }
   }
   if (saved.length) await db.query("delete from commerce_artworks where id=any($1::uuid[])", [saved]);
   if (sessions.length) await db.query("delete from commerce_sessions where id=any($1::uuid[])", [sessions]);
   if (customer) await db.query("delete from commerce_customers where id=$1", [customer]);
-  if (variant) { await db.query("delete from commerce_products where variant_id=$1", [variant]); await db.query("delete from product_variants where id=$1", [variant]); }
+  if (libraryId) { await db.query("delete from commerce_library_products where artwork_id=$1", [libraryId]); await db.query("delete from commerce_library_artworks where id=$1", [libraryId]); }
+  if (variant) { await db.query("delete from commerce_products where variant_id=any($1::uuid[])", [[variant, ...extraVariants]]); await db.query("delete from product_variants where id=any($1::uuid[])", [[variant, ...extraVariants]]); }
   for (const product of originals) await db.query("update commerce_products set active=$2 where id=$1", [product.id, product.active]);
-  if (store) await db.query("update commerce_stores set settings=$2,enabled=$3,status=$4 where tenant_id=$1", [store.tenant_id, store.settings, store.enabled, store.status]);
+  if (store) await db.query("update commerce_stores set settings=$2,enabled=$3,status=$4,art_library_enabled=$5 where tenant_id=$1", [store.tenant_id, store.settings, store.enabled, store.status, store.art_library_enabled]);
   if (store && payment) await db.query("update commerce_payment_connections set manual_enabled=$2,payment_environment=$3 where tenant_id=$1", [store.tenant_id, payment.manual_enabled, payment.payment_environment]);
   else if (store) await db.query("delete from commerce_payment_connections where tenant_id=$1", [store.tenant_id]);
   await db.end();

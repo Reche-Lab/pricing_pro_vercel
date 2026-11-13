@@ -42,6 +42,15 @@
 .primary, .secondary { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 46px; padding: 12px 18px; border: 1px solid var(--line); border-radius: 6px; font-size: 14px; font-weight: 650; text-decoration: none; transition: transform .2s, box-shadow .2s; }
 .primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; box-shadow: 0 8px 20px -12px #13432d88; }
 .secondary { color: inherit; background: transparent; }
+.studioCta { background: var(--surface); color: var(--ink); border-color: var(--accent); box-shadow: 0 0 0 2px var(--surface); }
+.hero[data-moving="true"] .studioCta { animation: studio-invite 2.8s ease-in-out 3; }
+.studioCta:hover { box-shadow: 0 0 0 3px var(--accent); }
+@keyframes studio-invite { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 0 5px var(--line), 0 6px 20px -10px var(--accent); } }
+.draftBar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 18px; }
+.draftBar small { flex: 1; min-width: 140px; color: var(--muted); font-size: 12px; }
+.draftBar button { min-height: 40px; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
+.draftBar button:disabled { opacity: .45; cursor: not-allowed; }
+.imageLibraryButton { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 8px; border: 1px solid var(--accent); border-radius: 6px; font-size: 13px; }
 .hero[data-photo="true"] .secondary { border-color: #ffffff88; }
 .quote { display: inline-flex; align-items: center; gap: 8px; margin-top: 22px; font-size: 13px; text-decoration: none; }
 .quote:hover { text-decoration: underline; text-underline-offset: 4px; }
