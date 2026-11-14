@@ -12,9 +12,11 @@ const config = { enabled: true, name: "Ajuda Ground Shop", welcome: "Olá, como 
 const settings = storeSettingsSchema.parse({ name: "Loja teste", description: "", logoUrl: "", bannerUrl: "", accent: "#047857", contactEmail: "loja@example.test", contactPhone: "", pickupEnabled: true, pickupAddress: "Rua de teste", deliveryEnabled: false, deliveryCents: 0, deliveryDescription: "", terms: "Condições para testes" });
 const proposal: AssistantCard = { kind: "proposal", actionId: ids.action, items: [{ name: "Botton", quantity: 100, artworkName: "Arte A", unitCents: 100, totalCents: 10000 }], totalCents: 10000, expiresAt: "2099-01-01T00:00:00Z" };
 const fetcher = vi.fn();
+const resume = vi.fn();
 vi.mock("@/components/commerce/StoreCheckout", () => ({ StoreCheckout: ({ onSubmit }: { onSubmit: (input: unknown) => Promise<void> }) => <button onClick={() => void onSubmit({ expectedTotalCents: 10000, billing: { document: "52998224725" } })}>Confirmar orçamento de teste</button> }));
 beforeEach(() => {
-  vi.stubGlobal("fetch", fetcher); fetcher.mockReset();
+  fetcher.mockReset(); resume.mockReset().mockImplementation(async () => Response.json({ conversation: null, messages: [], customer: false, confirmedActionIds: [] }));
+  vi.stubGlobal("fetch", (url: string, init?: RequestInit) => init?.body && JSON.parse(String(init.body)).action === "resume" ? resume(url, init) : fetcher(url, init));
   Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function() { this.setAttribute("open", ""); } });
   Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value: function() { this.removeAttribute("open"); } });
   Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: vi.fn() });
@@ -22,7 +24,58 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const props = () => ({ config, api: "/api/store/test", base: "/loja/test", settings, onCartChanged: vi.fn(async () => {}), onClose: vi.fn() });
 function response(messages: unknown[] = []) { return Response.json({ conversation: { id: ids.conv }, messages, customer: false }); }
+async function consent() { fireEvent.click(await screen.findByRole("button", { name: "Entendi, iniciar atendimento" })); }
 describe("store assistant customer UX", () => {
+  it("resumes an existing conversation and its confirmed proposals without requesting consent or writing again", async () => {
+    resume.mockResolvedValueOnce(Response.json({ conversation: { id: ids.conv }, messages: [{ id: "old", role: "assistant", text: "Vamos continuar seu orçamento", cards: [proposal] }], customer: true, confirmedActionIds: [ids.action] }));
+    render(<StoreAssistantPanel {...props()}/>);
+    await screen.findByText("Vamos continuar seu orçamento");
+    expect(screen.queryByRole("button", { name: "Entendi, iniciar atendimento" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Proposta adicionada" })).toBeDisabled();
+    expect(HTMLElement.prototype.scrollTo).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: "auto" }));
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(JSON.parse(resume.mock.calls[0][1].body)).toEqual({ action: "resume" });
+  });
+  it("lets a product selection tell the assistant the exact product name without adding to the cart", async () => {
+    resume.mockResolvedValueOnce(response([{ id: "products", role: "assistant", text: "Escolha o tamanho", cards: [{ kind: "products", products: [{ id: ids.quote, name: "Botton - 3,5 cm", category: "Bottons", imageUrl: "", unitCents: 500, minQuantity: 1 }] }] }]));
+    fetcher.mockResolvedValueOnce(Response.json({ messages: [{ id: "next", role: "assistant", text: "Quantas unidades você precisa?", cards: [] }] }));
+    const p = props(); render(<StoreAssistantPanel {...p}/>);
+    fireEvent.click(await screen.findByRole("button", { name: "Quero este produto: Botton - 3,5 cm" }));
+    await screen.findByText("Quantas unidades você precisa?");
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({ action: "message", conversationId: ids.conv, text: 'Tenho interesse no produto "Botton - 3,5 cm".' });
+    expect(p.onCartChanged).not.toHaveBeenCalled();
+  });
+  it("recovers history after visiting a product and mounting the chat again without browser storage", async () => {
+    const history = [{ id: "products", role: "assistant", text: "Seu orçamento de bottons", cards: [{ kind: "products", products: [{ id: ids.quote, name: "Botton", category: "Bottons", imageUrl: "", unitCents: 500, minQuantity: 1 }] }] }];
+    resume.mockImplementation(async () => response(history));
+    const p = props(), first = render(<StoreAssistantPanel {...p}/>);
+    const link = await screen.findByRole("link", { name: "Conhecer produto" });
+    link.addEventListener("click", event => event.preventDefault(), { once: true });
+    fireEvent.click(link);
+    expect(p.onClose).toHaveBeenCalledTimes(1); first.unmount();
+    render(<StoreAssistantPanel {...props()}/>);
+    await screen.findByText("Seu orçamento de bottons");
+    expect(screen.queryByText("Entendi, iniciar atendimento")).not.toBeInTheDocument();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("offers a safe retry instead of creating another conversation when resumption fails", async () => {
+    resume.mockRejectedValueOnce(new Error("network unavailable"));
+    render(<StoreAssistantPanel {...props()}/>);
+    fireEvent.click(await screen.findByRole("button", { name: "Tentar retomar conversa" }));
+    await screen.findByRole("button", { name: "Entendi, iniciar atendimento" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("ignores a previous account's delayed resumed history after logout", async () => {
+    let resolve!: (response: Response) => void;
+    resume.mockImplementationOnce(() => new Promise<Response>(done => { resolve = done; }));
+    const p = props(), { rerender } = render(<StoreAssistantPanel {...p} buyerId="buyer-a"/>);
+    await waitFor(() => expect(resume).toHaveBeenCalledTimes(1));
+    rerender(<StoreAssistantPanel {...p} buyerId={undefined}/>);
+    resolve(response([{ id: "private", role: "assistant", text: "Histórico da conta anterior", cards: [] }]));
+    await screen.findByText(/Sua conta mudou/);
+    expect(screen.queryByText("Histórico da conta anterior")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Entendi, iniciar atendimento" })).toBeInTheDocument();
+  });
   it("shows freight prices and deadlines without advertising insurance", () => {
     const card: AssistantCard = { kind: "shipping", options: [{ id: "sedex", name: "SEDEX", priceCents: 2200, transitDays: 2, insuranceValueCents: 9500, estimate: deliveryEstimate(100, 2) }], warnings: [] };
     const { container } = render(<StoreAssistantCards card={card} api="/api/store/test" base="/loja/test" identified={false} busy={false} confirmed={[]} onLogin={vi.fn()} onClose={vi.fn()} onQuote={vi.fn()} onConfirm={vi.fn()} onHandoff={vi.fn()}/>);
@@ -32,16 +85,17 @@ describe("store assistant customer UX", () => {
   });
   it("does not create a conversation or send any model request before explicit consent", async () => {
     render(<StoreAssistantPanel {...props()}/>); expect(fetcher).not.toHaveBeenCalled();
+    await screen.findByRole("button", { name: "Entendi, iniciar atendimento" });
     expect(screen.getByText(/inteligência artificial/)).toBeInTheDocument(); expect(screen.getByText(/por até 30 dias/)).toBeInTheDocument();
     expect(screen.getByRole("dialog").textContent).not.toMatch(/openrouter|provedor|\bZDR\b|guardrails/i);
     expect(screen.getByText(/Não envie documentos pessoais/)).toBeInTheDocument();
-    fetcher.mockResolvedValueOnce(response()); fireEvent.click(screen.getByRole("button", { name: "Entendi, iniciar atendimento" }));
+    fetcher.mockResolvedValueOnce(response()); await consent();
     await screen.findByRole("textbox", { name: "Mensagem para o assistente" });
     expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ action: "start", consent: true });
   });
   it("streams real progress, uses the official returned history, and never parses model text as HTML", async () => {
     fetcher.mockResolvedValueOnce(response()); render(<StoreAssistantPanel {...props()}/>);
-    fireEvent.click(screen.getByText("Entendi, iniciar atendimento")); await screen.findByRole("textbox");
+    await consent(); await screen.findByRole("textbox");
     fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ type: "status", text: "Buscando catálogo" }) + "\n" + JSON.stringify({ type: "done", messages: [{ id: "m", role: "assistant", text: "<script>nunca executar</script>", cards: [] }] }) + "\n", { headers: { "content-type": "application/x-ndjson" } }));
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Quero bottons" } }); fireEvent.click(screen.getByRole("button", { name: "Enviar mensagem" }));
     await screen.findByText("<script>nunca executar</script>"); expect(document.querySelector("script")).toBeNull();
@@ -59,7 +113,7 @@ describe("store assistant customer UX", () => {
       throw new Error("Unexpected API call");
     });
     const p = props(); render(<StoreAssistantPanel {...p} buyerId="buyer"/>);
-    fireEvent.click(screen.getByText("Entendi, iniciar atendimento"));
+    await consent();
     fireEvent.click(await screen.findByText("Confirmar e adicionar ao carrinho"));
     await waitFor(() => expect(p.onCartChanged).toHaveBeenCalledTimes(1));
     // start returns the exact server authentication state, not the passed UI hint.
@@ -78,7 +132,7 @@ describe("store assistant customer UX", () => {
       throw new Error("Unexpected request");
     });
     render(<StoreAssistantPanel {...props()} buyerId="buyer"/>);
-    fireEvent.click(screen.getByText("Entendi, iniciar atendimento")); fireEvent.click(await screen.findByText("Confirmar e adicionar ao carrinho"));
+    await consent(); fireEvent.click(await screen.findByText("Confirmar e adicionar ao carrinho"));
     fireEvent.click(await screen.findByText("Salvar orçamento em PDF")); fireEvent.click(await screen.findByText("Confirmar orçamento de teste"));
     const pdf = await screen.findByRole("link", { name: "Baixar PDF" }); expect(pdf).toHaveAttribute("href", `/api/store/test/quotes/${ids.quote}/pdf`);
     const chatBodies = fetcher.mock.calls.filter(([url]) => String(url).endsWith("/assistant")).map(([, init]) => init.body);
@@ -88,7 +142,7 @@ describe("store assistant customer UX", () => {
   it("clears another account's private transcript immediately on logout", async () => {
     fetcher.mockResolvedValueOnce(Response.json({ conversation: { id: ids.conv }, customer: true, messages: [{ id: "own", role: "assistant", text: "Seu histórico privado", cards: [] }] }));
     const p = props(), { rerender } = render(<StoreAssistantPanel {...p} buyerId="buyer-a"/>);
-    fireEvent.click(screen.getByText("Entendi, iniciar atendimento")); await screen.findByText("Seu histórico privado");
+    await consent(); await screen.findByText("Seu histórico privado");
     rerender(<StoreAssistantPanel {...p} buyerId={undefined}/>);
     expect(screen.queryByText("Seu histórico privado")).not.toBeInTheDocument(); expect(screen.getByText(/Sua conta mudou/)).toBeInTheDocument();
   });

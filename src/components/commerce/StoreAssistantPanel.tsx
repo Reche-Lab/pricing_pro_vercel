@@ -1,7 +1,7 @@
 "use client";
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
-import { Bot, Copy, FileText, Loader2, Send, ShieldCheck, Trash2, X } from "lucide-react";
+import { Bot, Copy, FileText, Loader2, RotateCcw, Send, ShieldCheck, Trash2, X } from "lucide-react";
 import type { AssistantMessage } from "@/domain/commerce/assistant";
 import type { StoreSettings } from "@/domain/commerce/schemas";
 import type { cartView } from "@/repositories/commerce";
@@ -20,12 +20,14 @@ export function StoreAssistantPanel({ config, api, base, settings, buyerId, onCa
   onCartChanged: () => Promise<void>; onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null), scroll = useRef<HTMLDivElement>(null), heading = useId();
+  const jumpToHistoryEnd = useRef(true);
   const [conversationId, setConversationId] = useState(""), [messages, setMessages] = useState<AssistantMessage[]>([]), [text, setText] = useState("");
   const [busy, setBusy] = useState(false), [status, setStatus] = useState(""), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [identified, setIdentified] = useState(Boolean(buyerId)), [view, setView] = useState<"chat" | "login" | "quote">("chat");
   const [loginPurpose, setLoginPurpose] = useState<"account" | "quote">("account");
   const [quoteCart, setQuoteCart] = useState<Cart | null>(null), [remove, setRemove] = useState(false), [summary, setSummary] = useState("");
   const [confirmed, setConfirmed] = useState<string[]>([]);
+  const [restoring, setRestoring] = useState(true), [restoreFailed, setRestoreFailed] = useState(false), [resumeAttempt, setResumeAttempt] = useState(0);
   const controller = useRef<AbortController | null>(null), lock = useRef(false), previousBuyer = useRef(buyerId), generation = useRef(0);
   const invalidate = useCallback(() => { generation.current++; controller.current?.abort(); }, []);
   const phone = settings.contactPhone.replace(/\D/g, ""), international = phone.length <= 11 ? `55${phone}` : phone;
@@ -40,10 +42,30 @@ export function StoreAssistantPanel({ config, api, base, settings, buyerId, onCa
     if (previousBuyer.current && previousBuyer.current !== buyerId) {
       generation.current++; controller.current?.abort(); setMessages([]); setConversationId(""); setText(""); setQuoteCart(null); setView("chat"); setSummary(""); setConfirmed([]); setError(""); setBusy(false); lock.current = false;
       setNotice("Sua conta mudou. Inicie um novo atendimento para continuar com segurança.");
+      setRestoring(false); setRestoreFailed(false);
     }
     previousBuyer.current = buyerId; setIdentified(Boolean(buyerId));
   }, [buyerId]);
-  useEffect(() => { scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: "smooth" }); }, [messages, busy, status, notice, view]);
+  useEffect(() => {
+    const abort = new AbortController(), token = ++generation.current;
+    controller.current?.abort(); setRestoring(true); setRestoreFailed(false); setError("");
+    setConversationId(""); setMessages([]); setConfirmed([]); setQuoteCart(null); setSummary(""); setView("chat");
+    void fetch(`${api}/assistant`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "resume" }), cache: "no-store", signal: abort.signal })
+      .then(async response => { if (!response.ok) throw new Error("Resume failed"); return response.json(); })
+      .then(data => {
+        if (abort.signal.aborted || token !== generation.current) return;
+        jumpToHistoryEnd.current = true;
+        setConversationId(data.conversation?.id ?? ""); setMessages(data.messages ?? []); setConfirmed(data.confirmedActionIds ?? []); setIdentified(Boolean(data.customer));
+      }).catch(() => {
+        if (!abort.signal.aborted && token === generation.current) { setRestoreFailed(true); setError("Não foi possível retomar o atendimento. Tente novamente para continuar sua conversa."); }
+      }).finally(() => { if (!abort.signal.aborted && token === generation.current) setRestoring(false); });
+    return () => abort.abort();
+  }, [api, resumeAttempt]);
+  useEffect(() => {
+    if (restoring) return;
+    scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: jumpToHistoryEnd.current ? "auto" : "smooth" });
+    jumpToHistoryEnd.current = false;
+  }, [messages, busy, status, notice, view, restoring]);
   async function request(url: string, method = "GET", body?: unknown) {
     const token = generation.current, result = await storeRequest(url, method, body);
     if (token !== generation.current) throw new DOMException("Account changed", "AbortError");
@@ -55,7 +77,7 @@ export function StoreAssistantPanel({ config, api, base, settings, buyerId, onCa
     try { await action(); } catch (e) { if (token === generation.current && !(e instanceof DOMException && e.name === "AbortError")) setError(e instanceof Error ? e.message : "Não foi possível continuar. Tente novamente."); }
     finally { if (token === generation.current) { lock.current = false; setBusy(false); setStatus(""); } }
   }
-  async function start() { await work(async () => { const data = await request(`${api}/assistant`, "POST", { action: "start", consent: true }); setConversationId(data.conversation.id); setMessages(data.messages); setIdentified(data.customer); }); }
+  async function start() { await work(async () => { const data = await request(`${api}/assistant`, "POST", { action: "start", consent: true }); setConversationId(data.conversation.id); setMessages(data.messages); setConfirmed(data.confirmedActionIds ?? []); setIdentified(data.customer); }); }
   async function send(value = text) {
     if (!value.trim() || !conversationId) return;
     await work(async () => {
@@ -93,8 +115,8 @@ export function StoreAssistantPanel({ config, api, base, settings, buyerId, onCa
       <header className={styles.header}><Bot size={24}/><div><h2 id={heading}>{config.name}</h2><small>Assistente virtual · inteligência artificial</small></div><button type="button" className={styles.icon} title="Fechar atendimento" aria-label="Fechar atendimento" onClick={onClose}><X size={20}/></button></header>
       <div ref={scroll} className={styles.messages}>
         <p className={styles.welcome}>{config.welcome}</p>
-        {!conversationId ? <section className={styles.consent}><ShieldCheck size={24}/><h3>Você decide o próximo passo</h3><p>A IA ajuda com produtos e dúvidas. Nenhuma compra ou alteração no carrinho acontece sem sua confirmação.</p><p>O histórico deste atendimento fica na plataforma por até {config.retentionDays} dias. Não envie documentos pessoais, dados de cartão, senhas ou códigos nesta conversa.</p><Link href={`${base}/assistente-privacidade`} target="_blank">Como seus dados são utilizados</Link><button className={styles.primary} type="button" disabled={busy} onClick={() => void start()}>Entendi, iniciar atendimento</button></section> : <>
-          {messages.map(m => <article className={`${styles.message} ${m.role === "user" ? styles.user : ""}`} key={m.id}><small>{m.role === "user" ? "Você" : "Assistente virtual"}</small><p>{m.text}</p>{m.cards.map((card, index) => <StoreAssistantCards key={index} card={card} api={api} base={base} identified={identified} busy={busy} confirmed={confirmed} onConfirm={id => void confirm(id)} onQuote={() => void openQuote()} onLogin={() => { setLoginPurpose("account"); setView("login"); }} onHandoff={() => void handoff()} onClose={onClose}/>)}</article>)}
+        {restoring ? <p role="status" className={styles.progress}><Loader2 size={16}/>Retomando atendimento…</p> : restoreFailed ? <button type="button" className={styles.action} onClick={() => setResumeAttempt(value => value + 1)}><RotateCcw size={16}/>Tentar retomar conversa</button> : !conversationId ? <section className={styles.consent}><ShieldCheck size={24}/><h3>Você decide o próximo passo</h3><p>A IA ajuda com produtos e dúvidas. Nenhuma compra ou alteração no carrinho acontece sem sua confirmação.</p><p>O histórico deste atendimento fica na plataforma por até {config.retentionDays} dias. Não envie documentos pessoais, dados de cartão, senhas ou códigos nesta conversa.</p><Link href={`${base}/assistente-privacidade`} target="_blank">Como seus dados são utilizados</Link><button className={styles.primary} type="button" disabled={busy} onClick={() => void start()}>Entendi, iniciar atendimento</button></section> : <>
+          {messages.map(m => <article className={`${styles.message} ${m.role === "user" ? styles.user : ""}`} key={m.id}><small>{m.role === "user" ? "Você" : "Assistente virtual"}</small><p>{m.text}</p>{m.cards.map((card, index) => <StoreAssistantCards key={index} card={card} api={api} base={base} identified={identified} busy={busy || restoring} confirmed={confirmed} onSelectProduct={product => void send(`Tenho interesse no produto "${product.name}".`)} onConfirm={id => void confirm(id)} onQuote={() => void openQuote()} onLogin={() => { setLoginPurpose("account"); setView("login"); }} onHandoff={() => void handoff()} onClose={onClose}/>)}</article>)}
           {!messages.length ? <div className={styles.quick}>{quick.filter(q => config.quotes || !q.includes("orçamento")).filter(q => config.orders || !q.includes("pedidos")).map(q => <button type="button" key={q} disabled={busy} onClick={() => void send(q)}>{q}</button>)}</div> : null}
           {quoteCart?.lines.length && config.quotes ? <button type="button" className={styles.action} disabled={busy} onClick={() => void openQuote()}><FileText size={16}/>Conferir dados e salvar orçamento</button> : null}
           {summary ? <section className={styles.card}><strong>Resumo para a equipe</strong><p>{summary}</p><button type="button" className={styles.action} onClick={() => void navigator.clipboard.writeText(summary).then(() => setNotice("Resumo copiado."), () => setError("Não foi possível copiar. Selecione o texto do resumo."))}><Copy size={16}/>Copiar resumo</button>{whatsapp ? <a className={styles.primary} href={`${whatsapp}?text=${encodeURIComponent(`Olá! Preciso de ajuda na loja. ${summary}`)}`} target="_blank" rel="noopener noreferrer">Continuar no WhatsApp</a> : null}</section> : null}

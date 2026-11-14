@@ -293,3 +293,15 @@ Sem migration ou alteração de credenciais.
 - [x] 31 testes focados aprovados: PDF, apresentação, totais/prazos e valor segurado preservado na chamada à transportadora. Lint e tipos aprovados. Playwright conferiu cartões de entrega e frete no chat sem seguro/valor declarado, nos dois temas, desktop/mobile/paisagem; capturas inspecionadas. APIs simuladas, sem cotação real ou cobrança.
 
 Sem migration. A cobertura e o cálculo do seguro permanecem ativos; somente a apresentação ao cliente foi simplificada.
+
+### Seleção de Produtos e Continuidade do Chat
+
+- [x] Produto clicável no catálogo apresentado pelo assistente, com ação "Quero este produto" que envia o nome exato como mensagem; não adiciona itens nem altera o carrinho. "Conhecer produto" continua independente.
+- [x] Retomar automaticamente o atendimento ativo pelo cookie da sessão, incluindo histórico e propostas já confirmadas. Consentimento aparece quando não existe atendimento ativo, foi apagado, encerrado ou expirou; não é repetido a cada abertura.
+- [x] Restauração no servidor sem histórico/identificadores em localStorage, sem chamada de IA e sem criar nova sessão/conversa. Escopo por loja, sessão válida e conta; falha de rede oferece nova tentativa, sem simular consentimento.
+- [x] 20 testes focados de UI/contrato/autorização aprovados e oito testes PostgreSQL em banco local isolado: sessões/contas distintas, expiração, encerramento, validade preservada e confirmação única. Sem acesso ao Supabase ou chamadas reais de IA.
+- [x] Regressão geral: 989 testes aprovados, 75 integrações condicionais não executadas nessa rodada. Mais 20 testes focados finais após o ajuste de rolagem. Tipos e lint aprovados.
+- [x] Playwright: escolha do produto envia uma única mensagem, sem alterar carrinho; visita à página, reabertura e histórico retomado sem novo consentimento; propostas confirmadas permanecem bloqueadas. Temas claro/escuro em 1440/390/320 px e paisagem, imagens carregadas, sem overflow. Capturas desktop/mobile inspecionadas. APIs simuladas, sem cobrança.
+- [x] Build de produção aprovado com uma CPU e heap limitado. Banco temporário encerrado após os testes; nenhuma alteração em produção.
+
+Sem nova migration. Conversas antigas ainda ativas também podem ser retomadas após o deploy.

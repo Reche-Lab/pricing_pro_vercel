@@ -40,6 +40,7 @@ export type AssistantMessage = { id: string; role: "user" | "assistant"; text: s
 export const assistantProposalSchema = z.object({ items: z.array(z.object({ productId: z.string().uuid(), quantity: z.number().int().min(1).max(50000), artworks: z.number().int().min(1).max(10).default(1), artworkName: z.string().trim().max(80).default("") }).strict()).min(1).max(10) }).strict();
 export type AssistantProposalInput = z.infer<typeof assistantProposalSchema>;
 export const assistantRequestSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("resume") }).strict(),
   z.object({ action: z.literal("start"), consent: z.literal(true) }).strict(),
   z.object({ action: z.literal("message"), conversationId: z.string().uuid(), messageId: z.string().uuid(), text: z.string().trim().min(1).max(2000) }).strict(),
   z.object({ action: z.literal("confirm"), conversationId: z.string().uuid(), actionId: z.string().uuid() }).strict(),

@@ -5,6 +5,8 @@ describe("store assistant contracts", () => {
     expect(assistantRequestSchema.safeParse({ action: "start", consent: true, tenantId: "other" }).success).toBe(false);
     expect(assistantProposalSchema.safeParse({ items: [{ productId: crypto.randomUUID(), quantity: 100, unitPrice: 1 }] }).success).toBe(false);
     expect(assistantSettingsSchema.safeParse({ model: "expensive-model" }).success).toBe(false);
+    expect(assistantRequestSchema.safeParse({ action: "resume" }).success).toBe(true);
+    expect(assistantRequestSchema.safeParse({ action: "resume", conversationId: crypto.randomUUID() }).success).toBe(false);
   });
   it("redacts accidental sensitive text but retains a CEP for delivery estimates", () => {
     const text = redactAssistantText("email loja@example.com CPF 529.982.247-25 CEP 01001-000 senha segredo");

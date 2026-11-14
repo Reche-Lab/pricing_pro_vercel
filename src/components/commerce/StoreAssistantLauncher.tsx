@@ -10,6 +10,7 @@ export function StoreAssistantLauncher({ api, base, settings, buyerId, onCartCha
   const [config, setConfig] = useState<AssistantPublicConfig | null>(null), [open, setOpen] = useState(false), [covered, setCovered] = useState(false);
   useEffect(() => {
     const abort = new AbortController();
+    setConfig(null); setOpen(false);
     void fetch(`${api}/assistant`, { signal: abort.signal, cache: "no-store" }).then(r => r.ok ? r.json() : null).then(value => setConfig(value?.enabled ? value : null)).catch(() => {});
     return () => abort.abort();
   }, [api]);

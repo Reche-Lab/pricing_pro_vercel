@@ -19,7 +19,7 @@ const settings = { name: "Ground Shop", description: "Produtos personalizados", 
 const product = { id: ids.product, name: "Botton - 3,5 cm", description: "Personalizado para sua campanha", category: "Bottons", imageUrl: "/mockups/botton-25mm-v1/base-verso.png", minQuantity: 1, maxQuantity: 1000, maxArtworks: 10, personalized: true, unitCents: 500 };
 const cart = { revision: 1, customer: { id: "buyer-test", name: "Cliente de teste", email: "cliente@example.test" }, lines: [{ id: ids.product, productId: ids.product, quantity: 20, artworkName: "Campanha", artworkId: null, preparation: "customer" }], artworks: [], payments: { mp_enabled: false, manual_enabled: true }, calculation: { totalCents: 6000, baseSubtotalCents: 6000, artworkDiscountCents: 0, items: [{ id: ids.product, productId: ids.product, name: product.name, quantity: 20, artworkName: "Campanha", unitCents: 300, totalCents: 6000 }] } };
 const billing = { name: "Cliente de teste", email: "fiscal@example.test", phone: "11999990000", document: "52998224725", postalCode: "01001000", street: "Praça de teste", number: "100", complement: "", district: "Centro", city: "São Paulo", state: "SP", attention: "" };
-let history = [], requests = [];
+let history = [], requests = [], conversationStarted = false, confirmedActionIds = [];
 const bundle = await build({
   stdin: { contents: `import React from 'react'; import {createRoot} from 'react-dom/client';
     import {StoreAssistantLauncher} from './src/components/commerce/StoreAssistantLauncher';
@@ -27,7 +27,8 @@ const bundle = await build({
     import {CommerceAssistantSettings} from './src/components/commerce/CommerceAssistantSettings';
     import {CommerceAssistantPolicies} from './src/components/superadmin/CommerceAssistantPolicies';
     import store from './src/components/commerce/store.module.css';
-    const query = new URLSearchParams(location.search), theme = query.get('theme') || 'light';
+    const query = new URLSearchParams(location.search), theme = query.get('theme') || sessionStorage.getItem('fixture-theme') || 'light';
+    sessionStorage.setItem('fixture-theme', theme);
     createRoot(document.getElementById('root')).render(query.has('admin') ? <main className="min-h-screen bg-zinc-950 p-5 text-zinc-100"><div className="mx-auto max-w-5xl"><CommerceAssistantSettings storeName="Ground Shop" storeSlug="ground-shop"/><CommerceAssistantPolicies/></div></main> : <main className={store.store} data-theme={theme} style={{'--accent':theme==='dark'?'#79d8d0':'#047857','--accent-ink':theme==='dark'?'#081311':'#fff'}}><header style={{padding:24,borderBottom:'1px solid var(--line)'}}>Ground Shop</header><section style={{minHeight:'100vh',padding:24}}><h1 style={{fontSize:28}}>Produtos personalizados</h1><p>Catálogo de teste local do assistente.</p><StoreShippingOptions options={[{id:'sedex',name:'Correios - SEDEX',priceCents:2200,transitDays:2,insuranceValueCents:9500},{id:'pac',name:'Correios - PAC',priceCents:1500,transitDays:6,insuranceValueCents:9500}]} selectedId="sedex" onSelect={()=>{}} quantity={100}/></section><StoreAssistantLauncher api="/api/store/test" base="/loja/test" settings={${JSON.stringify(settings)}} buyerId="buyer-test" onCartChanged={async()=>{}}/></main>);
   `, loader: "tsx", sourcefile: "assistant-fixture.tsx", resolveDir: root },
   bundle: true, write: false, outfile: "app.js", format: "iife", jsx: "automatic", loader: { ".module.css": "local-css" }, alias: { "@": resolve(root, "src") }, define: { "process.env.NODE_ENV": '"production"' },
@@ -61,20 +62,23 @@ const server = createServer(async (request, response) => {
       if (path.endsWith("/checkout-draft")) return json({ version: 1, draft: { billing, address: billing, same: true, delivery: "pickup" } });
       if (path.endsWith("/quotes")) return json({ id: ids.quote });
       if (request.method === "GET") return json({ enabled: true, name: assistant.name, welcome: assistant.welcome, retentionDays: 30, quotes: true, orders: true });
-      if (body.action === "start") return json({ conversation: { id: ids.conversation }, messages: history, customer: true });
-      if (body.action === "confirm") return json({ cart, message: "Itens adicionados ao carrinho. Revise os dados para salvar o orçamento." });
-      if (body.action === "clear") { history = []; return json({ cleared: true }); }
+      if (body.action === "resume") return json({ conversation: conversationStarted ? { id: ids.conversation } : null, messages: conversationStarted ? history : [], customer: true, confirmedActionIds });
+      if (body.action === "start") { conversationStarted = true; return json({ conversation: { id: ids.conversation }, messages: history, customer: true, confirmedActionIds }); }
+      if (body.action === "confirm") { confirmedActionIds.push(body.actionId); return json({ cart, message: "Itens adicionados ao carrinho. Revise os dados para salvar o orçamento." }); }
+      if (body.action === "clear") { history = []; conversationStarted = false; confirmedActionIds = []; return json({ cleared: true }); }
       if (body.action === "handoff") return json({ summary: "Cliente deseja orientação para sua campanha.", message: "Solicitação registrada para a equipe." });
       if (body.action === "quote_saved") { history.push({ id: "saved", role: "assistant", text: "Seu orçamento está salvo.", cards: [{ kind: "quote_saved", quoteId: ids.quote, totalCents: 6000 }] }); return json({ messages: history }); }
       if (body.action === "message") {
         const cards = body.text.includes("orçamento") ? [{ kind: "proposal", actionId: ids.action, items: cart.calculation.items, totalCents: 6000, expiresAt: "2099-01-01T00:00:00Z" }] : body.text.includes("empresa") ? [{ kind: "company", company, documents: [] }] : body.text.includes("frete") ? [{ kind: "shipping", options: [{ id: "sedex", name: "Correios - SEDEX", priceCents: 2200, insuranceValueCents: 9500, estimate: { productionDays: 3, transportDays: 2, deliveryDate: "2026-11-20" } }], warnings: [] }] : [{ kind: "products", products: [product] }];
-        history.push({ id: body.messageId, role: "user", text: body.text, cards: [] }, { id: crypto.randomUUID(), role: "assistant", text: "Confira as opções abaixo. Posso ajudar a continuar.", cards });
+        const selected = body.text.startsWith('Tenho interesse no produto "');
+        history.push({ id: body.messageId, role: "user", text: body.text, cards: [] }, { id: crypto.randomUUID(), role: "assistant", text: selected ? "Quantas unidades você precisa?" : "Confira as opções abaixo. Posso ajudar a continuar.", cards: selected ? [] : cards });
         response.setHeader("content-type", "application/x-ndjson"); return response.end(JSON.stringify({ type: "status", text: "Consultando catálogo…" }) + "\n" + JSON.stringify({ type: "done", messages: history }) + "\n");
       }
       throw new Error("Unsupported fixture API");
     }
-    response.setHeader("content-type", path === "/" ? "text/html; charset=utf-8" : ({ ".js": "text/javascript", ".css": "text/css", ".png": "image/png" })[extname(path)] || "application/octet-stream");
-    if (path === "/") return response.end(html); if (assets.has(path)) return response.end(assets.get(path));
+    const pagePath = path === "/" || path.startsWith("/loja/test/produto/");
+    response.setHeader("content-type", pagePath ? "text/html; charset=utf-8" : ({ ".js": "text/javascript", ".css": "text/css", ".png": "image/png" })[extname(path)] || "application/octet-stream");
+    if (pagePath) return response.end(html); if (assets.has(path)) return response.end(assets.get(path));
     const file = resolve(root, "public", `.${path}`); if (!file.startsWith(resolve(root, "public") + "/")) throw new Error(); response.end(await readFile(file));
   } catch { response.writeHead(404); response.end(); }
 });
@@ -84,7 +88,7 @@ try {
   const context = await browser.newContext(); await context.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   const page = await context.newPage(), errors = []; page.on("pageerror", error => errors.push(error.message));
   for (const theme of ["light", "dark"]) for (const [width, height] of [[1440, 1000], [390, 844], [320, 740], [844, 390]]) {
-    history = []; requests = []; await page.setViewportSize({ width, height }); await page.goto(`${origin}/?theme=${theme}`);
+    history = []; requests = []; conversationStarted = false; confirmedActionIds = []; await page.setViewportSize({ width, height }); await page.goto(`${origin}/?theme=${theme}`);
     const shipping = page.getByRole("group", { name: "Opções de entrega" });
     assert.doesNotMatch(await shipping.innerText(), /seguro|valor declarado/i);
     await shipping.screenshot({ path: `${output}/shipping-${theme}-${width}.png` });
@@ -97,7 +101,24 @@ try {
     const box = await page.getByRole("dialog").boundingBox(); assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= width + 1 && box.y + box.height <= height + 1, "Chat fits the viewport");
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
     const image = page.getByRole("dialog").locator("img"); await image.evaluate(image => image.decode());
+    await page.getByRole("button", { name: `Quero este produto: ${product.name}`, exact: true }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: `${output}/chat-${theme}-${width}.png` });
+    await page.getByRole("button", { name: `Quero este produto: ${product.name}`, exact: true }).click();
+    await page.getByText("Quantas unidades você precisa?", { exact: true }).waitFor();
+    assert.equal(requests.filter(r => r.body.action === "message" && r.body.text === `Tenho interesse no produto "${product.name}".`).length, 1);
+    assert.equal(requests.some(r => r.body.action === "confirm"), false);
+    await page.getByRole("link", { name: "Conhecer produto", exact: true }).click();
+    await page.waitForURL(`**/loja/test/produto/${product.id}`);
+    await page.getByRole("button", { name: "Abrir assistente virtual da loja" }).click();
+    await page.getByText("Quantas unidades você precisa?", { exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Entendi, iniciar atendimento" }).count(), 0);
+    assert.equal(requests.filter(r => r.body.action === "start").length, 1);
+    await page.getByRole("button", { name: "Fechar atendimento" }).click();
+    await page.getByRole("button", { name: "Abrir assistente virtual da loja" }).click();
+    await page.getByText("Quantas unidades você precisa?", { exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Entendi, iniciar atendimento" }).count(), 0);
+    await page.getByText("Quantas unidades você precisa?", { exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${output}/resumed-${theme}-${width}.png` });
     await page.getByRole("textbox", { name: "Mensagem para o assistente" }).fill("Quero consultar o frete"); await page.getByRole("button", { name: "Enviar mensagem" }).click();
     await page.getByText("Frete e produção · estimativa", { exact: true }).waitFor();
     assert.doesNotMatch(await page.getByRole("dialog").innerText(), /seguro|valor declarado/i);
@@ -110,6 +131,10 @@ try {
     const pdf = page.getByRole("link", { name: "Baixar PDF" }); await pdf.waitFor(); assert.equal(await pdf.getAttribute("href"), `/api/store/test/quotes/${ids.quote}/pdf`);
     assert.equal(requests.filter(r => r.body.action === "confirm").length, 1);
     assert.equal(JSON.stringify(requests.filter(r => r.path.endsWith("/assistant"))).includes(billing.document), false);
+    await page.getByRole("button", { name: "Fechar atendimento" }).click();
+    await page.getByRole("button", { name: "Abrir assistente virtual da loja" }).click();
+    await page.getByRole("button", { name: "Proposta adicionada", exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Proposta adicionada", exact: true }).isDisabled(), true);
     await page.getByRole("button", { name: "Fechar atendimento" }).click();
     await page.getByRole("button", { name: "Abrir assistente virtual da loja" }).waitFor();
     console.log(`Passed chat, proposal and quote form ${theme} ${width}x${height}`);

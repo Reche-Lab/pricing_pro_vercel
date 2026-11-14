@@ -2,7 +2,7 @@ import { getServerEnv } from "@/lib/env/server";
 import { getPool } from "@/lib/db/client";
 import { CommerceError } from "@/domain/commerce/commerce";
 import { assistantRequestSchema, redactAssistantText } from "@/domain/commerce/assistant";
-import { assistantConfig, assistantLimits, startAssistantConversation, assistantMessages, assistantDocuments, requireAssistantConversation, beginAssistantTurn, assistantHandoff, addAssistantMessage, assistantAudit } from "@/repositories/commerce-assistant";
+import { assistantConfig, assistantLimits, startAssistantConversation, findAssistantConversation, assistantConfirmedActions, assistantMessages, assistantDocuments, requireAssistantConversation, beginAssistantTurn, assistantHandoff, addAssistantMessage, assistantAudit } from "@/repositories/commerce-assistant";
 import { getCommerceStore, cartView, commerceTransaction } from "@/repositories/commerce";
 import { getBuyerQuote } from "@/repositories/commerce-buyer-quotes";
 import { buyerContext, checkCommerceOrigin, readCommerceBody, commerceFailure, commerceJson } from "@/services/commerce/http";
@@ -26,7 +26,13 @@ export async function POST(request: Request, { params }: Context) {
     checkCommerceOrigin(request); const slug = (await params).slug;
     const blocked = await enforcePublicRateLimit(request, slug, { action: "assistant.chat", limit: 20, windowSeconds: 600 }); if (blocked) return blocked;
     const input = await readCommerceBody(request, assistantRequestSchema, 7000);
-    const { store, session } = await buyerContext(slug, input.action === "start", true);
+    let buyer;
+    try { buyer = await buyerContext(slug, input.action === "start", true); }
+    catch (error) {
+      if (input.action === "resume" && error instanceof CommerceError && error.status === 401) return commerceJson({ conversation: null, messages: [], customer: false, confirmedActionIds: [] });
+      throw error;
+    }
+    const { store, session } = buyer;
     const config = await assistantConfig(store.tenant_id), policy = config ? await assistantLimits(store.tenant_id) : null;
     if (!config?.enabled || !policy?.allowed) throw new CommerceError("O assistente está desativado. Fale com a equipe da loja.", 404);
     const history = async (id: string) => {
@@ -39,9 +45,9 @@ export async function POST(request: Request, { params }: Context) {
       }
       return messages;
     };
-    if (input.action === "start") {
-      const conversation = await startAssistantConversation(store.tenant_id, session, config.settings.retentionDays);
-      return commerceJson({ conversation, messages: await history(conversation.id), customer: Boolean(session.customer_id) });
+    if (input.action === "start" || input.action === "resume") {
+      const conversation = input.action === "start" ? await startAssistantConversation(store.tenant_id, session, config.settings.retentionDays) : await findAssistantConversation(store.tenant_id, session);
+      return commerceJson({ conversation, messages: conversation ? await history(conversation.id) : [], customer: Boolean(session.customer_id), confirmedActionIds: conversation ? await assistantConfirmedActions(store.tenant_id, conversation.id) : [] });
     }
     const conversation = await requireAssistantConversation(store.tenant_id, session, input.conversationId);
     const context = { store, session, config, conversationId: conversation.id };

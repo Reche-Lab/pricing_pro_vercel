@@ -7,7 +7,7 @@ import { storeSettingsSchema } from "@/domain/commerce/schemas";
 import { executeAssistantTool, confirmAssistantCart } from "@/services/commerce/assistant-tools";
 import { ASSISTANT_FALLBACK_MODEL, ASSISTANT_PRIMARY_MODEL } from "@/domain/commerce/assistant-models";
 import { assistantSettingsSchema } from "@/domain/commerce/assistant";
-import { assistantConfig, saveAssistantConfig, setAssistantState, reserveAssistantCall, settleAssistantCall, assistantUsage, startAssistantConversation, requireAssistantConversation, beginAssistantTurn, completeAssistantTurn, assistantMessages, purgeExpiredAssistant } from "@/repositories/commerce-assistant";
+import { assistantConfig, saveAssistantConfig, setAssistantState, reserveAssistantCall, settleAssistantCall, assistantUsage, startAssistantConversation, findAssistantConversation, assistantConfirmedActions, requireAssistantConversation, beginAssistantTurn, completeAssistantTurn, assistantMessages, purgeExpiredAssistant } from "@/repositories/commerce-assistant";
 const url = process.env.COMMERCE_TEST_DATABASE_URL;
 describe.skipIf(!url)("assistant isolated database security", () => {
   let tenant: string, other: string, actor: string, session: BuyerSession, customer: string, otherCustomer: string;
@@ -84,6 +84,29 @@ describe.skipIf(!url)("assistant isolated database security", () => {
     await expect(requireAssistantConversation(tenant, visitor, another.id)).rejects.toMatchObject({ status: 404 });
     await purgeExpiredAssistant(tenant); expect((await getPool().query("select id from commerce_assistant_conversations where id=$1", [another.id])).rowCount).toBe(0);
   });
+  it("resumes only an active conversation in the exact live session and account, without creating or renewing it", async () => {
+    const visitor = (await createBuyerSession(tenant)).session, second = (await createBuyerSession(tenant)).session;
+    expect(await findAssistantConversation(tenant, visitor)).toBeNull();
+    const conv = await startAssistantConversation(tenant, visitor, 30);
+    expect(await findAssistantConversation(tenant, visitor)).toMatchObject({ id: conv.id, expires_at: conv.expires_at });
+    expect(await findAssistantConversation(other, visitor)).toBeNull();
+    expect(await findAssistantConversation(tenant, second)).toBeNull();
+    await getPool().query("update commerce_sessions set customer_id=$2 where id=$1", [visitor.id, customer]);
+    expect(await findAssistantConversation(tenant, { ...visitor, customer_id: customer })).toMatchObject({ id: conv.id });
+    expect(await findAssistantConversation(tenant, visitor)).toBeNull();
+    await getPool().query("update commerce_sessions set customer_id=$2 where id=$1", [visitor.id, otherCustomer]);
+    expect(await findAssistantConversation(tenant, { ...visitor, customer_id: otherCustomer })).toBeNull();
+    await getPool().query("update commerce_sessions set customer_id=$2 where id=$1", [visitor.id, customer]);
+    const logged = { ...visitor, customer_id: customer };
+    await getPool().query("update commerce_assistant_conversations set status='closed' where id=$1", [conv.id]);
+    expect(await findAssistantConversation(tenant, logged)).toBeNull();
+    await getPool().query("update commerce_assistant_conversations set status='active',expires_at=now()-interval '1 second' where id=$1", [conv.id]);
+    expect(await findAssistantConversation(tenant, logged)).toBeNull();
+    await getPool().query("update commerce_assistant_conversations set expires_at=now()+interval '1 day' where id=$1", [conv.id]);
+    await getPool().query("update commerce_sessions set expires_at=now()-interval '1 second' where id=$1", [visitor.id]);
+    expect(await findAssistantConversation(tenant, logged)).toBeNull();
+    expect((await getPool().query("select count(*)::int as n from commerce_assistant_conversations where session_id=$1", [visitor.id])).rows[0].n).toBe(1);
+  });
   it("denies raw tables to public Supabase roles", async () => {
     for (const role of ["anon", "authenticated"]) for (const name of ["settings", "limits", "usage", "conversations", "turns", "visitor_usage", "messages", "actions", "documents"]) {
       const client = await getPool().connect();
@@ -109,6 +132,8 @@ describe.skipIf(!url)("assistant isolated database security", () => {
     expect(proposed.card.totalCents).toBe(6000); expect(proposed.card.items.map(item => item.quantity)).toEqual([10, 10]);
     expect((await getPool().query("select cart from commerce_sessions where id=$1", [visitor.id])).rows[0].cart).toEqual([]);
     const first = await confirmAssistantCart(context, proposed.card.actionId); expect(first.alreadyApplied).toBe(false);
+    expect(await assistantConfirmedActions(tenant, conv.id)).toContain(proposed.card.actionId);
+    expect(await assistantConfirmedActions(other, conv.id)).toEqual([]);
     expect((await confirmAssistantCart(context, proposed.card.actionId)).alreadyApplied).toBe(true);
     expect((await getPool().query("select cart from commerce_sessions where id=$1", [visitor.id])).rows[0].cart).toHaveLength(2);
     const latest = (await getPool().query<BuyerSession>("select * from commerce_sessions where id=$1", [visitor.id])).rows[0];

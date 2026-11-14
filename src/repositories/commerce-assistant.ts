@@ -84,10 +84,19 @@ export async function requireAssistantConversation(tenantId: string, session: Bu
   if (!row || row.status === "closed") throw new CommerceError("Atendimento encerrado ou não encontrado nesta sessão. Inicie outro.", 404);
   return row;
 }
+export async function findAssistantConversation(tenantId: string, session: BuyerSession) {
+  const existing = (await getPool().query<AssistantConversation>("select id,tenant_id,session_id,status,expires_at::text from commerce_assistant_conversations where tenant_id=$1 and session_id=$2 and status<>'closed' and expires_at>now() and (customer_id is null or customer_id=$3) order by created_at desc limit 1", [tenantId, session.id, session.customer_id])).rows[0];
+  if (!existing) return null;
+  try { return await requireAssistantConversation(tenantId, session, existing.id); }
+  catch (error) { if (error instanceof CommerceError && error.status === 404) return null; throw error; }
+}
+export async function assistantConfirmedActions(tenantId: string, conversationId: string) {
+  return (await getPool().query<{ id: string }>("select id from commerce_assistant_actions where tenant_id=$1 and conversation_id=$2 and applied_at is not null order by applied_at desc,id limit 100", [tenantId, conversationId])).rows.map(row => row.id);
+}
 export async function startAssistantConversation(tenantId: string, session: BuyerSession, retention: number) {
   await purgeExpiredAssistant(tenantId);
-  const existing = (await getPool().query<AssistantConversation>("select id,tenant_id,session_id,status,expires_at::text from commerce_assistant_conversations where tenant_id=$1 and session_id=$2 and status<>'closed' and expires_at>now() and (customer_id is null or customer_id=$3) order by created_at desc limit 1", [tenantId, session.id, session.customer_id])).rows[0];
-  if (existing) return requireAssistantConversation(tenantId, session, existing.id);
+  const existing = await findAssistantConversation(tenantId, session);
+  if (existing) return existing;
   return (await getPool().query<AssistantConversation>("insert into commerce_assistant_conversations(tenant_id,session_id,customer_id,expires_at) values($1,$2,$4,now()+$3::integer*interval '1 day') returning id,tenant_id,session_id,status,expires_at::text", [tenantId, session.id, retention, session.customer_id])).rows[0];
 }
 export async function assistantMessages(tenantId: string, conversationId: string, client: Pick<PoolClient, "query"> = getPool()): Promise<AssistantMessage[]> {
