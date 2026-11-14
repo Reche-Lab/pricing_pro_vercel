@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runAssistantTurn } from "@/services/commerce/assistant-engine";
+import { runAssistantTurn, assistantSystemPrompt } from "@/services/commerce/assistant-engine";
 import { storeAssistantCompletion } from "@/services/openrouter/store-assistant";
 import { assistantConfig, assistantMessages, completeAssistantTurn } from "@/repositories/commerce-assistant";
 import { executeAssistantTool, type AssistantToolContext } from "@/services/commerce/assistant-tools";
@@ -11,6 +11,13 @@ vi.mock("@/services/commerce/assistant-tools", () => ({ assistantToolDefinitions
 vi.mock("@/services/openrouter/store-assistant", async original => ({ ...await original<typeof import("@/services/openrouter/store-assistant")>(), storeAssistantCompletion: vi.fn() }));
 afterEach(() => vi.clearAllMocks());
 describe("assistant fallback tool-loop continuity", () => {
+  it("keeps the virtual assistant identity without discussing internal providers or infrastructure", () => {
+    const context = { store: { slug: "test", settings: { name: "Loja teste", description: "", terms: "" } }, config: { settings: assistantSettingsSchema.parse({}) } } as AssistantToolContext;
+    const prompt = assistantSystemPrompt(context);
+    expect(prompt).toContain("Identifique-se como IA");
+    expect(prompt).toContain("Não exponha fornecedores, modelos, infraestrutura ou configurações internas");
+    expect(prompt).toContain("Não detalhe seguro nem valor declarado do frete nas respostas");
+  });
   it("keeps the fallback for the rest of the turn, preserving signatures without replaying a proposal or storing reasoning", async () => {
     const config = { tenant_id: "tenant", enabled: true, revision: 1, settings: assistantSettingsSchema.parse({}), tested_revision: 1, tested_at: null };
     const context = { store: { tenant_id: "tenant", slug: "test", settings: { name: "Loja teste", description: "", terms: "" } }, config, session: { id: "session", customer_id: null }, conversationId: "conversation" } as AssistantToolContext;

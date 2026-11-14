@@ -277,3 +277,19 @@ Sem nova migration ou variável obrigatória. Conferir a configuração de priva
 - [ ] Aplicar deploy, conferir a política **ZDR only** na conta/guardrail e repetir o teste administrativo com o provedor real. Não atribuir o erro a credencial ou saldo sem evidência, nem afrouxar políticas para obter sucesso.
 
 Referências: [esquema OpenAPI oficial](https://openrouter.ai/openapi.json), [roteamento de provedores](https://openrouter.ai/docs/guides/routing/provider-selection), [privacidade e Guardrails](https://openrouter.ai/docs/guides/features/zdr). Sem nova migration.
+
+### Textos Públicos do Assistente
+
+- [x] Remover referências a fornecedores e configurações técnicas da abertura do chat e da página pública vinculada de privacidade, mantendo identificação como IA, prazo do histórico, consentimento e cuidados com dados.
+- [x] Simplificar a mensagem de falha para visitantes e orientar o assistente a não expor fornecedores/modelos/infraestrutura. Diagnóstico técnico permanece no painel administrativo e nos logs.
+- [x] 47 testes focados aprovados, lint e tipos aprovados. Playwright conferiu ausência de termos técnicos na abertura, fluxo de proposta/orçamento e painel administrativo; loja em claro/escuro, 1440/390/320 px e paisagem. Capturas da abertura desktop/mobile inspecionadas, sem sobreposição. APIs simuladas, sem chamadas reais de IA.
+
+Sem migration ou alteração de credenciais.
+
+### Apresentação do Frete ao Cliente
+
+- [x] Retirar valor declarado e menções ao seguro das opções de frete, do PDF de orçamento da loja e do cartão de frete do assistente. Manter serviços, preços, totais e prazos de produção/transporte.
+- [x] Orientar o assistente a não detalhar seguro nas respostas, sem mudar as cotações, o armazenamento ou os controles administrativos de seguro.
+- [x] 31 testes focados aprovados: PDF, apresentação, totais/prazos e valor segurado preservado na chamada à transportadora. Lint e tipos aprovados. Playwright conferiu cartões de entrega e frete no chat sem seguro/valor declarado, nos dois temas, desktop/mobile/paisagem; capturas inspecionadas. APIs simuladas, sem cotação real ou cobrança.
+
+Sem migration. A cobertura e o cálculo do seguro permanecem ativos; somente a apresentação ao cliente foi simplificada.

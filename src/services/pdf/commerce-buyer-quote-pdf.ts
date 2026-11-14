@@ -8,7 +8,6 @@ export async function generateBuyerQuotePdf(quote: Awaited<ReturnType<typeof get
   const { billing, address } = quote.contact, production = quote.snapshot.production;
   const shippingNote = quote.shipping_cents === null ? "Frete nao incluido. Calcule a entrega antes de comprar." : quote.snapshot.delivery === "pickup" ? "Retirada no local." : `Frete: ${quote.snapshot.shippingOption?.name ?? "Entrega da loja"}.`;
   const notes = [shippingNote, `Producao: ${production.productionDays} dias uteis apos pagamento e aprovacao das artes.`,
-    quote.snapshot.shippingOption?.insuranceValueCents !== undefined ? `Valor declarado para seguro na cotacao: ${(quote.snapshot.shippingOption.insuranceValueCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.` : "",
     production.transportDays !== null ? `Transporte: ${production.transportDays} dias uteis.` : "Prazo de transporte a confirmar.",
     production.deliveryDate ? `Recebimento estimado se confirmado na data do orcamento: ${formatDeliveryDate(production.deliveryDate)}.` : "",
     ...(quote.snapshot.artworkBenefits ?? []).map(quoteArtworkBenefitDescription),

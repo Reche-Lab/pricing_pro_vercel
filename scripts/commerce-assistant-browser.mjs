@@ -23,11 +23,12 @@ let history = [], requests = [];
 const bundle = await build({
   stdin: { contents: `import React from 'react'; import {createRoot} from 'react-dom/client';
     import {StoreAssistantLauncher} from './src/components/commerce/StoreAssistantLauncher';
+    import {StoreShippingOptions} from './src/components/commerce/StoreShippingOptions';
     import {CommerceAssistantSettings} from './src/components/commerce/CommerceAssistantSettings';
     import {CommerceAssistantPolicies} from './src/components/superadmin/CommerceAssistantPolicies';
     import store from './src/components/commerce/store.module.css';
     const query = new URLSearchParams(location.search), theme = query.get('theme') || 'light';
-    createRoot(document.getElementById('root')).render(query.has('admin') ? <main className="min-h-screen bg-zinc-950 p-5 text-zinc-100"><div className="mx-auto max-w-5xl"><CommerceAssistantSettings storeName="Ground Shop" storeSlug="ground-shop"/><CommerceAssistantPolicies/></div></main> : <main className={store.store} data-theme={theme} style={{'--accent':theme==='dark'?'#79d8d0':'#047857','--accent-ink':theme==='dark'?'#081311':'#fff'}}><header style={{padding:24,borderBottom:'1px solid var(--line)'}}>Ground Shop</header><section style={{minHeight:'100vh',padding:24}}><h1 style={{fontSize:28}}>Produtos personalizados</h1><p>Catálogo de teste local do assistente.</p></section><StoreAssistantLauncher api="/api/store/test" base="/loja/test" settings={${JSON.stringify(settings)}} buyerId="buyer-test" onCartChanged={async()=>{}}/></main>);
+    createRoot(document.getElementById('root')).render(query.has('admin') ? <main className="min-h-screen bg-zinc-950 p-5 text-zinc-100"><div className="mx-auto max-w-5xl"><CommerceAssistantSettings storeName="Ground Shop" storeSlug="ground-shop"/><CommerceAssistantPolicies/></div></main> : <main className={store.store} data-theme={theme} style={{'--accent':theme==='dark'?'#79d8d0':'#047857','--accent-ink':theme==='dark'?'#081311':'#fff'}}><header style={{padding:24,borderBottom:'1px solid var(--line)'}}>Ground Shop</header><section style={{minHeight:'100vh',padding:24}}><h1 style={{fontSize:28}}>Produtos personalizados</h1><p>Catálogo de teste local do assistente.</p><StoreShippingOptions options={[{id:'sedex',name:'Correios - SEDEX',priceCents:2200,transitDays:2,insuranceValueCents:9500},{id:'pac',name:'Correios - PAC',priceCents:1500,transitDays:6,insuranceValueCents:9500}]} selectedId="sedex" onSelect={()=>{}} quantity={100}/></section><StoreAssistantLauncher api="/api/store/test" base="/loja/test" settings={${JSON.stringify(settings)}} buyerId="buyer-test" onCartChanged={async()=>{}}/></main>);
   `, loader: "tsx", sourcefile: "assistant-fixture.tsx", resolveDir: root },
   bundle: true, write: false, outfile: "app.js", format: "iife", jsx: "automatic", loader: { ".module.css": "local-css" }, alias: { "@": resolve(root, "src") }, define: { "process.env.NODE_ENV": '"production"' },
   plugins: [{ name: "next-fixture", setup(builder) {
@@ -66,7 +67,7 @@ const server = createServer(async (request, response) => {
       if (body.action === "handoff") return json({ summary: "Cliente deseja orientação para sua campanha.", message: "Solicitação registrada para a equipe." });
       if (body.action === "quote_saved") { history.push({ id: "saved", role: "assistant", text: "Seu orçamento está salvo.", cards: [{ kind: "quote_saved", quoteId: ids.quote, totalCents: 6000 }] }); return json({ messages: history }); }
       if (body.action === "message") {
-        const cards = body.text.includes("orçamento") ? [{ kind: "proposal", actionId: ids.action, items: cart.calculation.items, totalCents: 6000, expiresAt: "2099-01-01T00:00:00Z" }] : body.text.includes("empresa") ? [{ kind: "company", company, documents: [] }] : [{ kind: "products", products: [product] }];
+        const cards = body.text.includes("orçamento") ? [{ kind: "proposal", actionId: ids.action, items: cart.calculation.items, totalCents: 6000, expiresAt: "2099-01-01T00:00:00Z" }] : body.text.includes("empresa") ? [{ kind: "company", company, documents: [] }] : body.text.includes("frete") ? [{ kind: "shipping", options: [{ id: "sedex", name: "Correios - SEDEX", priceCents: 2200, insuranceValueCents: 9500, estimate: { productionDays: 3, transportDays: 2, deliveryDate: "2026-11-20" } }], warnings: [] }] : [{ kind: "products", products: [product] }];
         history.push({ id: body.messageId, role: "user", text: body.text, cards: [] }, { id: crypto.randomUUID(), role: "assistant", text: "Confira as opções abaixo. Posso ajudar a continuar.", cards });
         response.setHeader("content-type", "application/x-ndjson"); return response.end(JSON.stringify({ type: "status", text: "Consultando catálogo…" }) + "\n" + JSON.stringify({ type: "done", messages: history }) + "\n");
       }
@@ -84,7 +85,12 @@ try {
   const page = await context.newPage(), errors = []; page.on("pageerror", error => errors.push(error.message));
   for (const theme of ["light", "dark"]) for (const [width, height] of [[1440, 1000], [390, 844], [320, 740], [844, 390]]) {
     history = []; requests = []; await page.setViewportSize({ width, height }); await page.goto(`${origin}/?theme=${theme}`);
+    const shipping = page.getByRole("group", { name: "Opções de entrega" });
+    assert.doesNotMatch(await shipping.innerText(), /seguro|valor declarado/i);
+    await shipping.screenshot({ path: `${output}/shipping-${theme}-${width}.png` });
     await page.getByRole("button", { name: "Abrir assistente virtual da loja" }).click();
+    assert.doesNotMatch(await page.getByRole("dialog").innerText(), /openrouter|provedor|\bZDR\b|guardrails/i);
+    await page.screenshot({ path: `${output}/consent-${theme}-${width}.png` });
     await page.getByRole("button", { name: "Entendi, iniciar atendimento" }).click();
     await page.getByRole("button", { name: "Quero conhecer os produtos" }).click();
     await page.getByRole("link", { name: "Conhecer produto" }).waitFor();
@@ -92,6 +98,10 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
     const image = page.getByRole("dialog").locator("img"); await image.evaluate(image => image.decode());
     await page.screenshot({ path: `${output}/chat-${theme}-${width}.png` });
+    await page.getByRole("textbox", { name: "Mensagem para o assistente" }).fill("Quero consultar o frete"); await page.getByRole("button", { name: "Enviar mensagem" }).click();
+    await page.getByText("Frete e produção · estimativa", { exact: true }).waitFor();
+    assert.doesNotMatch(await page.getByRole("dialog").innerText(), /seguro|valor declarado/i);
+    await page.getByText("Frete e produção · estimativa", { exact: true }).locator("..").screenshot({ path: `${output}/freight-chat-${theme}-${width}.png` });
     await page.getByRole("textbox", { name: "Mensagem para o assistente" }).fill("Quero um orçamento"); await page.getByRole("button", { name: "Enviar mensagem" }).click();
     await page.getByRole("button", { name: "Confirmar e adicionar ao carrinho" }).click();
     await page.getByRole("button", { name: "Salvar orçamento em PDF" }).click();

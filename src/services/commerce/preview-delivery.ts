@@ -33,7 +33,7 @@ export async function carrierDelivery(connection: IntegrationConnectionRow | nul
   const priced = calculateCart(lines, products);
   const insuranceCents = declaredValueCents ?? priced.totalCents;
   if (!Number.isSafeInteger(insuranceCents) || insuranceCents < 0 || insuranceCents > 100000000)
-    throw new CommerceError("Confira o valor declarado dos produtos para calcular o seguro.", 409);
+    throw new CommerceError("Confira o valor dos produtos para calcular o frete.", 409);
   const quantities = new Map<string, number>();
   for (const line of lines) {
     const product = products.find(candidate => candidate.id === line.productId);

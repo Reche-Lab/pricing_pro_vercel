@@ -6,6 +6,7 @@ import { StoreAssistantCards } from "@/components/commerce/StoreAssistantCards";
 import { StoreAssistantLauncher } from "@/components/commerce/StoreAssistantLauncher";
 import { storeSettingsSchema } from "@/domain/commerce/schemas";
 import type { AssistantCard } from "@/domain/commerce/assistant";
+import { deliveryEstimate } from "@/domain/shipping/production-lead-time";
 const ids = { conv: "00000000-0000-4000-8000-000000000001", action: "00000000-0000-4000-8000-000000000002", quote: "00000000-0000-4000-8000-000000000003" };
 const config = { enabled: true, name: "Ajuda Ground Shop", welcome: "Olá, como posso ajudar?", retentionDays: 30, quotes: true, orders: true };
 const settings = storeSettingsSchema.parse({ name: "Loja teste", description: "", logoUrl: "", bannerUrl: "", accent: "#047857", contactEmail: "loja@example.test", contactPhone: "", pickupEnabled: true, pickupAddress: "Rua de teste", deliveryEnabled: false, deliveryCents: 0, deliveryDescription: "", terms: "Condições para testes" });
@@ -22,9 +23,18 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const props = () => ({ config, api: "/api/store/test", base: "/loja/test", settings, onCartChanged: vi.fn(async () => {}), onClose: vi.fn() });
 function response(messages: unknown[] = []) { return Response.json({ conversation: { id: ids.conv }, messages, customer: false }); }
 describe("store assistant customer UX", () => {
+  it("shows freight prices and deadlines without advertising insurance", () => {
+    const card: AssistantCard = { kind: "shipping", options: [{ id: "sedex", name: "SEDEX", priceCents: 2200, transitDays: 2, insuranceValueCents: 9500, estimate: deliveryEstimate(100, 2) }], warnings: [] };
+    const { container } = render(<StoreAssistantCards card={card} api="/api/store/test" base="/loja/test" identified={false} busy={false} confirmed={[]} onLogin={vi.fn()} onClose={vi.fn()} onQuote={vi.fn()} onConfirm={vi.fn()} onHandoff={vi.fn()}/>);
+    expect(screen.getByText(/SEDEX/)).toHaveTextContent("22,00");
+    expect(screen.getByText(/Produção:/)).toHaveTextContent("transporte: 2 dias úteis");
+    expect(container.textContent).not.toMatch(/seguro|valor declarado|95,00/i);
+  });
   it("does not create a conversation or send any model request before explicit consent", async () => {
     render(<StoreAssistantPanel {...props()}/>); expect(fetcher).not.toHaveBeenCalled();
     expect(screen.getByText(/inteligência artificial/)).toBeInTheDocument(); expect(screen.getByText(/por até 30 dias/)).toBeInTheDocument();
+    expect(screen.getByRole("dialog").textContent).not.toMatch(/openrouter|provedor|\bZDR\b|guardrails/i);
+    expect(screen.getByText(/Não envie documentos pessoais/)).toBeInTheDocument();
     fetcher.mockResolvedValueOnce(response()); fireEvent.click(screen.getByRole("button", { name: "Entendi, iniciar atendimento" }));
     await screen.findByRole("textbox", { name: "Mensagem para o assistente" });
     expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ action: "start", consent: true });

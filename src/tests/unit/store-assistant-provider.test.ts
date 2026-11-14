@@ -30,7 +30,9 @@ describe("store assistant provider boundaries", () => {
   });
   it("does not expose raw provider errors or release an unknown bill", async () => {
     const request = vi.fn(async () => Response.json({ error: { message: "private secret account details" } }, { status: 403 }));
-    await expect(storeAssistantCompletion("t", [], [], { request })).rejects.toThrow(/autorizar o provedor/);
+    const failure = await storeAssistantCompletion("t", [], [], { request }).catch(error => error);
+    expect(failure.message).toContain("O assistente está indisponível");
+    expect(failure.message).not.toMatch(/openrouter|provedor|credencial|autorização/i);
     expect(settleAssistantCall).not.toHaveBeenCalled();
   });
   it("blocks the provider when the atomic quota reservation fails", async () => {

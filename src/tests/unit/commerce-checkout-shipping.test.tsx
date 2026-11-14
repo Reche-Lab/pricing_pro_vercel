@@ -28,7 +28,7 @@ describe("checkout carrier selection", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Salvar orçamento e acessar PDF" }));
     await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ delivery: "delivery", shippingQuoteId: "22222222-2222-4222-8222-222222222222", expectedTotalCents: 12200 })));
     expect(screen.queryByText("Total sem frete")).not.toBeInTheDocument();
-    expect(screen.getAllByText(/Valor declarado/)).toHaveLength(2);
+    expect(screen.queryByText(/Valor declarado|Seguro considerado/i)).not.toBeInTheDocument();
   });
   it("lets buyers explicitly omit freight and includes it again when choosing a service", async () => {
     const submit = vi.fn(async () => {});

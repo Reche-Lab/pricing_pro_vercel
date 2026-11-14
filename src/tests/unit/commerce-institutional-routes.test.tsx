@@ -27,6 +27,17 @@ function setup(slug = "ground-shop") {
   return store;
 }
 describe("institutional storefront routes", () => {
+  it("explains assistant data use without exposing technical vendors in the store or preview", async () => {
+    setup();
+    const params = Promise.resolve({ slug: "ground-shop", path: ["assistente-privacidade"] });
+    for (const page of [await StorePage({ params }), await PreviewPage({ params })]) {
+      const html = renderToStaticMarkup(page);
+      expect(html).not.toMatch(/openrouter|\bZDR\b|guardrails/i);
+      expect(html).toContain("inteligência artificial");
+      expect(html).toContain("serviços especializados");
+      expect(html).toContain("Não envie senhas");
+    }
+  });
   it("renders complete purchase conditions in server HTML, including other tenants and preview", async () => {
     setup("other");
     const params = Promise.resolve({ slug: "other", path: ["condicoes"] });

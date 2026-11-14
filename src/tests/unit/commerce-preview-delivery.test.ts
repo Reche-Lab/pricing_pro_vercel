@@ -32,7 +32,7 @@ describe("preview tenant carrier quote", () => {
   });
   it.each([-1, NaN, 12.5])("rejects invalid declared insurance cents %s before calling the carrier", async cents => {
     const connection = await getIntegrationConnection("user", "tenant", "melhor_envio");
-    await expect(carrierDelivery(connection, "87654321", "12345678", lines as never, [product] as never, async () => packaging as never, cents)).rejects.toThrow("valor declarado");
+    await expect(carrierDelivery(connection, "87654321", "12345678", lines as never, [product] as never, async () => packaging as never, cents)).rejects.toThrow("valor dos produtos para calcular o frete");
     expect(melhorEnvioRequest).not.toHaveBeenCalled();
   });
   it("uses tenant context, combined quantities, dimensions, weight and the server-priced insurance", async () => {

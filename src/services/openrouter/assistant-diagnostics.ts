@@ -78,7 +78,7 @@ export class AssistantProviderError extends CommerceError {
   readonly code: string;
   constructor(readonly reference: string, readonly diagnostics: AssistantProviderDiagnostics, readonly attempts: AssistantFailedAttempt[], admin = false) {
     const code = `assistant_openrouter_${diagnostics.reason}`;
-    const publicMessage = [401, 403].includes(diagnostics.providerCode ?? diagnostics.httpStatus) ? "Não foi possível autorizar o provedor de IA. A equipe da loja pode continuar seu atendimento." : "O assistente está indisponível agora. Tente novamente ou fale com a equipe.";
+    const publicMessage = "O assistente está indisponível agora. Tente novamente ou fale com a equipe.";
     const details = { code, reference, upstreamStatus: diagnostics.httpStatus, providerCode: diagnostics.providerCode, reason: diagnostics.reason };
     super(admin ? `${assistantAdminFailureMessage(diagnostics)} Referência: ${reference}.` : publicMessage, 503, details);
     this.name = "AssistantProviderError"; this.code = code;

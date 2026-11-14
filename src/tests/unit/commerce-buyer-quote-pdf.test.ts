@@ -8,7 +8,7 @@ import { testCommerceBilling } from "../fixtures/commerce-checkout";
 vi.mock("@/services/pdf/quote-pdf", () => ({ generateQuotePdf: vi.fn(async () => new Uint8Array()) }));
 
 describe("buyer quote PDF totals", () => {
-  it("prints persisted shipping, insured merchandise value and the full total", async () => {
+  it("prints persisted shipping and the full total without exposing insurance details", async () => {
     await generateBuyerQuotePdf({
       id: "quote", tenant_id: "tenant", customer_id: "buyer", valid_until: "2027-01-01", created_at: "2026-11-11",
       subtotal_cents: 10000, shipping_cents: 2200, total_cents: 11700,
@@ -24,7 +24,7 @@ describe("buyer quote PDF totals", () => {
       subtotal: "100", shipping_total: "22", discount_total: "5", grand_total: "117",
       notes: expect.stringContaining("Correios - SEDEX"),
     }) }));
-    expect(vi.mocked(generateQuotePdf).mock.calls[0][0].quote.notes).toContain("95,00");
+    expect(vi.mocked(generateQuotePdf).mock.calls[0][0].quote.notes).not.toMatch(/seguro|valor declarado|95,00/i);
     expect(vi.mocked(generateQuotePdf).mock.calls[0][0].quote.notes).toContain("15% de desconto adicional");
     expect(vi.mocked(generateQuotePdf).mock.calls[0][0].quote.notes).toContain("R$ 5,00 por arte/grupo");
     expect(vi.mocked(generateQuotePdf).mock.calls[0][0].quote.notes).toContain("não incluído no total");

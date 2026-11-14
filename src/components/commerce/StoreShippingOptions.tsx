@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { CalendarDays, CheckCircle2, ShieldCheck, Zap } from "lucide-react";
+import { CalendarDays, CheckCircle2, Zap } from "lucide-react";
 import { hasTransitEstimate, sortShippingOptions, type StoreShippingOption } from "@/domain/commerce/shipping-options";
 import { deliveryEstimate, formatDeliveryDate, type ProductionSettings } from "@/domain/shipping/production-lead-time";
 import { storeMoney } from "./store-http";
@@ -27,7 +27,6 @@ export function StoreShippingOptions({ options, selectedId, onSelect, disabled, 
           <span className={styles.shippingCardPrice}><strong>{storeMoney(option.priceCents)}</strong>{option.id === fastest?.id ? <small><Zap size={12} aria-hidden="true"/>Mais rápida</small> : null}</span>
           <span className={styles.shippingCardTiming}>{estimate ? `Produção: ${estimate.productionDays} dias úteis · ` : ""}Transporte: {hasTransitEstimate(option) ? `${option.transitDays} dias úteis` : "a confirmar"}</span>
           {estimate?.deliveryDate ? <span className={styles.shippingCardDate}><CalendarDays size={14} aria-hidden="true"/>Estimativa: <strong>{formatDeliveryDate(estimate.deliveryDate)}</strong></span> : null}
-          {option.insuranceValueCents !== undefined ? <span className={styles.shippingCardInsurance}><ShieldCheck size={14} aria-hidden="true"/><span>Valor declarado: {storeMoney(option.insuranceValueCents)}<small>Seguro considerado nesta cotação</small></span></span> : null}
         </label>;
       })}
     </div>
