@@ -35,7 +35,8 @@ export type AssistantCard =
   | { kind: "guide"; topic: "artwork" | "shopping" | "policies" }
   | { kind: "handoff"; summary: string }
   | { kind: "login" }
-  | { kind: "quote_saved"; quoteId: string; totalCents: number };
+  | { kind: "quote_saved"; quoteId: string; totalCents: number }
+  | { kind: "quote_continue" };
 export type AssistantMessage = { id: string; role: "user" | "assistant"; text: string; cards: AssistantCard[] };
 export const assistantProposalSchema = z.object({ items: z.array(z.object({ productId: z.string().uuid(), quantity: z.number().int().min(1).max(50000), artworks: z.number().int().min(1).max(10).default(1), artworkName: z.string().trim().max(80).default("") }).strict()).min(1).max(10) }).strict();
 export type AssistantProposalInput = z.infer<typeof assistantProposalSchema>;
@@ -58,8 +59,29 @@ export function redactAssistantText(text: string, limit = 3000) {
     .replace(/^\s*\d{6}\s*$/, "[possível código de acesso ocultado]")
     .replace(/(?:senha|password|c[oó]digo (?:de acesso|de verifica[çc][aã]o))\s*[:=]?\s*\S+/gi, "[credencial ocultada]").slice(0, limit);
 }
+export function isQuoteContinuationRequest(text: string, quoteContext = false) {
+  const value = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[.!?]+$/, "").trim();
+  const beginning = "(?:(?:sim|ok|certo|perfeito|beleza)[, ]+)?(?:(?:pode|podemos|vamos|quero|desejo|gostaria de)\\s+)?";
+  const action = "(?:seguir|continuar|prosseguir|finalizar|gerar|emitir|formalizar)";
+  return new RegExp(`^${beginning}${action}(?:\\s+(?:com|para))?\\s+(?:(?:o|um|meu|este|esse)\\s+)?orcamento(?:\\s+(?:completo|em pdf|como esta))?$`).test(value)
+    || quoteContext && new RegExp(`^${beginning}${action}$`).test(value);
+}
+function hasAssistantNavigation(text: string) {
+  return /https?:\/\/|\bwww\.|\[[^\]\n]*(?:link|formul[aá]rio|or[cç]amento)[^\]\n]*\]|\[[^\]\n]+\]\s*\(|\b(?:url|link)_(?:do|para|aqui)|\blink\s+(?:abaixo|a seguir)|<a\b/i.test(text);
+}
+export function hasAssistantQuoteNavigation(text: string) {
+  return hasAssistantNavigation(text) && /or[cç]amento|formul[aá]rio/i.test(text);
+}
 export function safeAssistantReply(text: string) {
+  if (hasAssistantNavigation(text)) return hasAssistantQuoteNavigation(text) ? "Use o botão para continuar o orçamento." : "Posso orientar você pelos passos da loja.";
   if (/R\$|\b\d+[.,]?\d*\s*(?:reais|d[oó]lares)|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|(?:ag[eê]ncia|conta banc[aá]ria|chave pix|cnpj)\s*[:\-]?\s*\d/i.test(text))
-    return "Confira os dados oficiais e os valores atualizados nos cartões abaixo. Posso ajudar a comparar as opções e continuar seu atendimento.";
-  return redactAssistantText(text).replace(/https?:\/\/\S+/gi, "(consulte os atalhos oficiais abaixo)").slice(0, 2400);
+    return "Os valores e dados oficiais aparecem nos cartões da loja.";
+  const clean = redactAssistantText(text).replace(/\n{3,}/g, "\n\n").trim();
+  if (typeof Intl.Segmenter !== "function") return clean && clean.length <= 420 ? clean : "Vamos por partes. Qual informação você precisa primeiro?";
+  const sentences: string[] = [];
+  for (const { segment } of new Intl.Segmenter("pt-BR", { granularity: "sentence" }).segment(clean)) {
+    if (sentences.length === 3 || [...sentences, segment.trim()].join(" ").length > 420) break;
+    sentences.push(segment.trim());
+  }
+  return sentences.join(" ") || "Vamos por partes. Qual informação você precisa primeiro?";
 }

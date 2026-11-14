@@ -168,6 +168,9 @@ describe.skipIf(!url)("assistant isolated database security", () => {
     const visitor = (await createBuyerSession(tenant)).session, conv = await startAssistantConversation(tenant, visitor, 30);
     const store = (await getPool().query<CommerceStore>("select * from commerce_stores where tenant_id=$1", [tenant])).rows[0];
     let context = { store, session: visitor, config, conversationId: conv.id };
+    const continueEmpty = await executeAssistantTool(context, "continue_quote", {});
+    expect(continueEmpty).toMatchObject({ result: { hasItems: false, needsEmailVerification: true }, card: { kind: "quote_continue" } });
+    expect((await getPool().query<BuyerSession>("select * from commerce_sessions where id=$1", [visitor.id])).rows[0].cart).toEqual([]);
     const first = await executeAssistantTool(context, "prepare_quote", { items: [{ productId: catalog[0], quantity: 50 }] });
     if (first.card.kind !== "proposal") throw new Error("Expected proposal");
     await confirmAssistantCart(context, first.card.actionId);
@@ -181,9 +184,10 @@ describe.skipIf(!url)("assistant isolated database security", () => {
     expect((await confirmAssistantCart(context, second.card.actionId)).alreadyApplied).toBe(true);
     context = { ...context, session: (await getPool().query<BuyerSession>("select * from commerce_sessions where id=$1", [visitor.id])).rows[0] };
     expect(context.session.cart.map(line => line.quantity)).toEqual([50, 20]); expect(context.session.cart[0].id).toBe(originalLineId);
+    expect(await executeAssistantTool(context, "continue_quote", {})).toMatchObject({ result: { hasItems: true }, card: { kind: "quote_continue" } });
     const history = await assistantMessages(tenant, conv.id);
     expect(history.filter(message => message.cards.some(card => card.kind === "cart"))).toHaveLength(2);
-    expect(history[1].text).toContain("validar seu e-mail");
+    expect(history[1].text).toContain("continuar?"); expect(history[1].text.length).toBeLessThan(140);
     const count = Number((await getPool().query("select count(*) as n from commerce_assistant_actions where conversation_id=$1", [conv.id])).rows[0].n);
     const unchanged = await executeAssistantTool(context, "prepare_quote", { items: [{ productId: catalog[0], quantity: 50 }, { productId: catalog[1], quantity: 20 }] });
     expect(unchanged.card.kind).toBe("cart");

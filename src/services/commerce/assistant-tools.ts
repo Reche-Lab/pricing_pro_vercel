@@ -25,6 +25,7 @@ export const assistantToolDefinitions = [
   tool("my_orders", "Consultar somente pedidos da conta autenticada; exige identificação por e-mail. Não aceita ID de cliente ou email como parâmetro."),
   tool("my_quotes", "Consultar somente orçamentos da conta autenticada; exige identificação."),
   tool("view_cart", "Consultar os itens e a composição do carrinho atual sem alterações. Use quando o cliente já tem produtos no carrinho e quer um orçamento, sem adicioná-los novamente."),
+  tool("continue_quote", "Mostrar o botão oficial para continuar o orçamento, validar e-mail e preencher dados no formulário da loja. Use quando o cliente autorizar seguir/finalizar o orçamento. Não cria, confirma ou altera itens; não invente links no texto."),
   tool("store_guide", "Mostrar atalhos oficiais de uso da loja, artes ou políticas.", { type: "object", properties: { topic: { type: "string", enum: ["artwork", "shopping", "policies"] } }, required: ["topic"], additionalProperties: false }),
   tool("human_support", "Oferecer encaminhamento para equipe, sem afirmar que um humano está online ou já assumiu. Cliente confirma o encaminhamento."),
 ];
@@ -95,6 +96,11 @@ export async function executeAssistantTool(context: AssistantToolContext, name: 
     const products = await commerceProducts(store.tenant_id), calculation = await calculateCommerceCart(store.tenant_id, session.id, session.cart, products);
     return { result: { items: calculation.items.map(item => ({ productId: item.productId, name: item.name, quantity: item.quantity })), needsUserConfirmationInSecureForm: true, valuesInOfficialCard: true }, card: { kind: "cart", items: calculation.items, totalCents: calculation.totalCents } };
   }
+  if (name === "continue_quote") {
+    z.object({}).strict().parse(args);
+    if (!config.settings.allowQuotes) throw new CommerceError("Orçamentos pelo assistente estão desativados.", 403);
+    return { result: { hasItems: session.cart.length > 0, officialNavigationAvailable: true, needsEmailVerification: !session.customer_id, needsBillingInformation: true }, card: { kind: "quote_continue" } };
+  }
   if (name === "company_information") {
     z.object({}).strict().parse(args);
     return { result: { officialCardAvailable: true, note: "Cliente verá ficha e documentos oficiais. Não reproduza números bancários no texto." }, card: { kind: "company", company: config.settings.company, documents: await assistantDocuments(store.tenant_id) } };
@@ -141,7 +147,7 @@ export async function confirmAssistantCart(context: AssistantToolContext, action
     const result = await client.query("update commerce_sessions set cart=$4,revision=revision+1 where tenant_id=$1 and id=$2 and revision=$3 and expires_at>now() returning id", [store.tenant_id, session.id, payload.revision, JSON.stringify(payload.lines)]);
     if (!result.rowCount) throw new CommerceError("O carrinho mudou em outra aba. Solicite outra proposta para preservar seus itens.", 409);
     await client.query("update commerce_assistant_actions set applied_at=now() where tenant_id=$1 and id=$2", [store.tenant_id, actionId]);
-    await addAssistantMessage(store.tenant_id, conversationId, "assistant", "Rascunho do orçamento atualizado. Quer acrescentar outro produto, alterar os itens ou continuar para o orçamento completo? Para emitir o PDF, é necessário validar seu e-mail e preencher os dados da pessoa ou empresa no formulário seguro, fora do chat.", [{ kind: "cart", items: calculation.items, totalCents: calculation.totalCents }], client);
+    await addAssistantMessage(store.tenant_id, conversationId, "assistant", "Rascunho atualizado. Quer adicionar outro produto, alterar os itens ou continuar?", [{ kind: "cart", items: calculation.items, totalCents: calculation.totalCents }], client);
     await assistantAudit(client, store.tenant_id, null, "cart.confirm", { conversationId, actionId, itemCount: payload.lines.length });
     return { alreadyApplied: false };
   });

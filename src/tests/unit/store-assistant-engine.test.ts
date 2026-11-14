@@ -11,6 +11,39 @@ vi.mock("@/services/commerce/assistant-tools", () => ({ assistantToolDefinitions
 vi.mock("@/services/openrouter/store-assistant", async original => ({ ...await original<typeof import("@/services/openrouter/store-assistant")>(), storeAssistantCompletion: vi.fn() }));
 afterEach(() => vi.clearAllMocks());
 describe("assistant fallback tool-loop continuity", () => {
+  it("offers a real quote action on an explicit continuation without a model call or mutation", async () => {
+    const config = { tenant_id: "tenant", enabled: true, revision: 1, settings: assistantSettingsSchema.parse({}) };
+    const context = { store: { tenant_id: "tenant", slug: "test", settings: { name: "Loja", description: "", terms: "" } }, config, session: { id: "session", cart: [{ productId: "product", quantity: 50, artworkName: "" }] }, conversationId: "conversation" } as AssistantToolContext;
+    vi.mocked(assistantConfig).mockResolvedValue(config as never);
+    vi.mocked(assistantMessages).mockResolvedValue([{ id: "message", role: "user", text: "Pode seguir com o orçamento", cards: [] }]);
+    vi.mocked(executeAssistantTool).mockResolvedValue({ result: { hasItems: true }, card: { kind: "quote_continue" } } as never);
+    await runAssistantTurn(context, "message", vi.fn());
+    expect(storeAssistantCompletion).not.toHaveBeenCalled();
+    expect(executeAssistantTool).toHaveBeenCalledTimes(1);
+    expect(executeAssistantTool).toHaveBeenCalledWith(context, "continue_quote", {});
+    expect(completeAssistantTurn).toHaveBeenCalledWith("tenant", "conversation", "message", expect.any(String), [{ kind: "quote_continue" }], false, 1);
+  });
+  it("replaces a hallucinated quote-link placeholder with an official action card", async () => {
+    const config = { tenant_id: "tenant", enabled: true, revision: 1, settings: assistantSettingsSchema.parse({}) };
+    const context = { store: { tenant_id: "tenant", slug: "test", settings: { name: "Loja", description: "", terms: "" } }, config, session: { id: "session", cart: [{ productId: "product", quantity: 50, artworkName: "" }] }, conversationId: "conversation" } as AssistantToolContext;
+    vi.mocked(assistantConfig).mockResolvedValue(config as never);
+    vi.mocked(assistantMessages).mockResolvedValue([{ id: "message", role: "user", text: "Como faço agora?", cards: [] }]);
+    vi.mocked(storeAssistantCompletion).mockResolvedValueOnce({ model: ASSISTANT_FALLBACK_MODEL, content: "Acesse [Link para o formulário seguro de orçamento] ..." });
+    vi.mocked(executeAssistantTool).mockResolvedValue({ result: { hasItems: true }, card: { kind: "quote_continue" } } as never);
+    await runAssistantTurn(context, "message", vi.fn());
+    expect(vi.mocked(completeAssistantTurn).mock.calls[0][3]).not.toMatch(/\[Link|\.\.\./);
+    expect(vi.mocked(completeAssistantTurn).mock.calls[0][4]).toEqual([{ kind: "quote_continue" }]);
+  });
+  it("does not offer quote navigation when the tenant disabled assistant quotes", async () => {
+    const config = { tenant_id: "tenant", enabled: true, revision: 1, settings: assistantSettingsSchema.parse({ allowQuotes: false }) };
+    const context = { store: { tenant_id: "tenant", slug: "test", settings: { name: "Loja", description: "", terms: "" } }, config, session: { id: "session", cart: [] }, conversationId: "conversation" } as AssistantToolContext;
+    vi.mocked(assistantConfig).mockResolvedValue(config as never);
+    vi.mocked(assistantMessages).mockResolvedValue([{ id: "message", role: "user", text: "Pode seguir com o orçamento", cards: [] }]);
+    vi.mocked(storeAssistantCompletion).mockResolvedValueOnce({ model: ASSISTANT_FALLBACK_MODEL, content: "Abra [Link para o formulário de orçamento]." });
+    await runAssistantTurn(context, "message", vi.fn());
+    expect(executeAssistantTool).not.toHaveBeenCalled();
+    expect(vi.mocked(completeAssistantTurn).mock.calls[0][4]).toEqual([{ kind: "handoff", summary: "" }]);
+  });
   it("provides authoritative cart totals without leaking artwork personal data or corrupting product IDs", () => {
     const id = "00000000-0000-4000-8000-000000000001";
     const context = { store: { slug: "test", settings: { name: "Loja", description: "", terms: "" } }, config: { settings: assistantSettingsSchema.parse({}) }, session: { cart: [{ productId: id, quantity: 30, artworkName: "Campanha" }, { productId: id, quantity: 20, artworkName: "cliente@example.test" }] } } as AssistantToolContext;

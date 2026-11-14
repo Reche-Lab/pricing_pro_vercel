@@ -24,12 +24,15 @@ const bundle = await build({
   stdin: { contents: `import React from 'react'; import {createRoot} from 'react-dom/client';
     import {StoreAssistantLauncher} from './src/components/commerce/StoreAssistantLauncher';
     import {StoreShippingOptions} from './src/components/commerce/StoreShippingOptions';
+    import {StoreCheckout} from './src/components/commerce/StoreCheckout';
     import {CommerceAssistantSettings} from './src/components/commerce/CommerceAssistantSettings';
     import {CommerceAssistantPolicies} from './src/components/superadmin/CommerceAssistantPolicies';
     import store from './src/components/commerce/store.module.css';
     const query = new URLSearchParams(location.search), theme = query.get('theme') || sessionStorage.getItem('fixture-theme') || 'light';
     sessionStorage.setItem('fixture-theme', theme);
-    createRoot(document.getElementById('root')).render(query.has('admin') ? <main className="min-h-screen bg-zinc-950 p-5 text-zinc-100"><div className="mx-auto max-w-5xl"><CommerceAssistantSettings storeName="Ground Shop" storeSlug="ground-shop"/><CommerceAssistantPolicies/></div></main> : <main className={store.store} data-theme={theme} style={{'--accent':theme==='dark'?'#79d8d0':'#047857','--accent-ink':theme==='dark'?'#081311':'#fff'}}><header style={{padding:24,borderBottom:'1px solid var(--line)'}}>Ground Shop</header><section style={{minHeight:'100vh',padding:24}}><h1 style={{fontSize:28}}>Produtos personalizados</h1><p>Catálogo de teste local do assistente.</p><StoreShippingOptions options={[{id:'sedex',name:'Correios - SEDEX',priceCents:2200,transitDays:2,insuranceValueCents:9500},{id:'pac',name:'Correios - PAC',priceCents:1500,transitDays:6,insuranceValueCents:9500}]} selectedId="sedex" onSelect={()=>{}} quantity={100}/></section><StoreAssistantLauncher api="/api/store/test" base="/loja/test" settings={${JSON.stringify(settings)}} buyerId="buyer-test" onCartChanged={async()=>{}}/></main>);
+    const quotePage = location.pathname === '/loja/test/orcamento';
+    const content = quotePage ? <><h1>Dados do orçamento</h1><StoreCheckout cart={${JSON.stringify(cart)}} settings={${JSON.stringify(settings)}} base="/loja/test" api="/api/store/test" intent="quote" disabled={false} onSubmit={async()=>{}}/></> : <><h1 style={{fontSize:28}}>Produtos personalizados</h1><p>Catálogo de teste local do assistente.</p><StoreShippingOptions options={[{id:'sedex',name:'Correios - SEDEX',priceCents:2200,transitDays:2,insuranceValueCents:9500},{id:'pac',name:'Correios - PAC',priceCents:1500,transitDays:6,insuranceValueCents:9500}]} selectedId="sedex" onSelect={()=>{}} quantity={100}/></>;
+    createRoot(document.getElementById('root')).render(query.has('admin') ? <main className="min-h-screen bg-zinc-950 p-5 text-zinc-100"><div className="mx-auto max-w-5xl"><CommerceAssistantSettings storeName="Ground Shop" storeSlug="ground-shop"/><CommerceAssistantPolicies/></div></main> : <main className={store.store} data-theme={theme} style={{'--accent':theme==='dark'?'#79d8d0':'#047857','--accent-ink':theme==='dark'?'#081311':'#fff'}}><header style={{padding:24,borderBottom:'1px solid var(--line)'}}>Ground Shop</header><section style={{minHeight:'100vh',padding:24}}>{content}</section><StoreAssistantLauncher api="/api/store/test" base="/loja/test" settings={${JSON.stringify(settings)}} buyerId="buyer-test" onCartChanged={async()=>{}}/></main>);
   `, loader: "tsx", sourcefile: "assistant-fixture.tsx", resolveDir: root },
   bundle: true, write: false, outfile: "app.js", format: "iife", jsx: "automatic", loader: { ".module.css": "local-css" }, alias: { "@": resolve(root, "src") }, define: { "process.env.NODE_ENV": '"production"' },
   plugins: [{ name: "next-fixture", setup(builder) {
@@ -73,14 +76,15 @@ const server = createServer(async (request, response) => {
       if (body.action === "quote_saved") { history.push({ id: "saved", role: "assistant", text: "Seu orçamento está salvo.", cards: [{ kind: "quote_saved", quoteId: ids.quote, totalCents: 6000 }] }); return json({ messages: history }); }
       if (body.action === "message") {
         const adding = body.text === "Quero acrescentar outro produto ao orçamento.";
-        const cards = adding ? [{ kind: "products", products: [product] }] : body.text.includes("orçamento") ? [{ kind: "proposal", desiredQuantities: true, actionId: ids.action, items: cart.calculation.items, totalCents: 6000, expiresAt: "2099-01-01T00:00:00Z" }] : body.text.includes("empresa") ? [{ kind: "company", company, documents: [] }] : body.text.includes("frete") ? [{ kind: "shipping", options: [{ id: "sedex", name: "Correios - SEDEX", priceCents: 2200, insuranceValueCents: 9500, estimate: { productionDays: 3, transportDays: 2, deliveryDate: "2026-11-20" } }], warnings: [] }] : [{ kind: "products", products: [product] }];
+        const continuing = body.text === "Pode seguir com o orçamento";
+        const cards = continuing ? [{ kind: "quote_continue" }] : adding ? [{ kind: "products", products: [product] }] : body.text.includes("orçamento") ? [{ kind: "proposal", desiredQuantities: true, actionId: ids.action, items: cart.calculation.items, totalCents: 6000, expiresAt: "2099-01-01T00:00:00Z" }] : body.text.includes("empresa") ? [{ kind: "company", company, documents: [] }] : body.text.includes("frete") ? [{ kind: "shipping", options: [{ id: "sedex", name: "Correios - SEDEX", priceCents: 2200, insuranceValueCents: 9500, estimate: { productionDays: 3, transportDays: 2, deliveryDate: "2026-11-20" } }], warnings: [] }] : [{ kind: "products", products: [product] }];
         const selected = body.text.startsWith('Tenho interesse no produto "');
-        history.push({ id: body.messageId, role: "user", text: body.text, cards: [] }, { id: crypto.randomUUID(), role: "assistant", text: selected ? "Quantas unidades você precisa?" : adding ? "Qual outro produto você deseja?" : "Confira as opções abaixo. Posso ajudar a continuar.", cards: selected ? [] : cards });
+        history.push({ id: body.messageId, role: "user", text: body.text, cards: [] }, { id: crypto.randomUUID(), role: "assistant", text: continuing ? "Vamos continuar pelo botão abaixo." : selected ? "Quantas unidades você precisa?" : adding ? "Qual outro produto você deseja?" : "Confira as opções abaixo.", cards: selected ? [] : cards });
         response.setHeader("content-type", "application/x-ndjson"); return response.end(JSON.stringify({ type: "status", text: "Consultando catálogo…" }) + "\n" + JSON.stringify({ type: "done", messages: history }) + "\n");
       }
       throw new Error("Unsupported fixture API");
     }
-    const pagePath = path === "/" || path.startsWith("/loja/test/produto/");
+    const pagePath = path === "/" || path === "/loja/test/orcamento" || path.startsWith("/loja/test/produto/");
     response.setHeader("content-type", pagePath ? "text/html; charset=utf-8" : ({ ".js": "text/javascript", ".css": "text/css", ".png": "image/png" })[extname(path)] || "application/octet-stream");
     if (pagePath) return response.end(html); if (assets.has(path)) return response.end(assets.get(path));
     const file = resolve(root, "public", `.${path}`); if (!file.startsWith(resolve(root, "public") + "/")) throw new Error(); response.end(await readFile(file));
@@ -136,9 +140,22 @@ try {
     assert.equal(requests.filter(r => r.body.action === "confirm").length, 1);
     const draft = page.getByText("Rascunho do seu orçamento", { exact: true }).locator("..");
     await draft.screenshot({ path: `${output}/quote-next-steps-${theme}-${width}.png` });
+    await page.getByRole("textbox", { name: "Mensagem para o assistente" }).fill("Pode seguir com o orçamento");
+    await page.getByRole("button", { name: "Enviar mensagem" }).click();
+    const next = page.getByRole("link", { name: "Continuar orçamento", exact: true }); await next.waitFor();
+    assert.equal(await next.getAttribute("href"), "/loja/test/orcamento?etapa=dados");
+    assert.doesNotMatch(await page.getByRole("dialog").innerText(), /\[Link para|https:\/\//i);
+    await page.getByText("Seu orçamento completo", { exact: true }).locator("..").screenshot({ path: `${output}/quote-continue-${theme}-${width}.png` });
+    await next.click(); await page.waitForURL("**/loja/test/orcamento?etapa=dados");
+    await page.getByRole("heading", { name: "Dados do orçamento", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Revisar orçamento", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Abrir assistente virtual da loja" }).click();
+    await page.getByRole("link", { name: "Continuar orçamento", exact: true }).waitFor();
     await page.getByRole("button", { name: "Continuar para orçamento completo" }).click();
-    await page.getByRole("button", { name: "Revisar orçamento" }).click();
-    await page.getByRole("button", { name: "Salvar orçamento e acessar PDF" }).click();
+    const quoteForm = page.getByRole("dialog", { name: "Seu orçamento · dados e confirmação", exact: true });
+    await quoteForm.screenshot({ path: `${output}/quote-form-${theme}-${width}.png` });
+    await quoteForm.getByRole("button", { name: "Revisar orçamento" }).click();
+    await quoteForm.getByRole("button", { name: "Salvar orçamento e acessar PDF" }).click();
     const pdf = page.getByRole("link", { name: "Baixar PDF" }); await pdf.waitFor(); assert.equal(await pdf.getAttribute("href"), `/api/store/test/quotes/${ids.quote}/pdf`);
     assert.equal(requests.filter(r => r.body.action === "confirm").length, 1);
     assert.equal(JSON.stringify(requests.filter(r => r.path.endsWith("/assistant"))).includes(billing.document), false);

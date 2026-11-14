@@ -26,6 +26,20 @@ const props = () => ({ config, api: "/api/store/test", base: "/loja/test", setti
 function response(messages: unknown[] = []) { return Response.json({ conversation: { id: ids.conv }, messages, customer: false }); }
 async function consent() { fireEvent.click(await screen.findByRole("button", { name: "Entendi, iniciar atendimento" })); }
 describe("store assistant customer UX", () => {
+  it("replaces a saved quote-link placeholder with a real tenant URL instead of showing the invented link", async () => {
+    resume.mockResolvedValueOnce(response([{ id: "legacy", role: "assistant", text: "Para seguir, acesse [Link para o formulário seguro de orçamento] ...", cards: [] }]));
+    const p = props(); render(<StoreAssistantPanel {...p}/>);
+    const link = await screen.findByRole("link", { name: "Continuar orçamento" });
+    expect(link).toHaveAttribute("href", "/loja/test/orcamento?etapa=dados");
+    expect(screen.queryByText(/\[Link para/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Valide seu e-mail e preencha seus dados/)).toBeInTheDocument();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("uses the custom-domain route and does not ask an identified buyer to validate email again", () => {
+    render(<StoreAssistantCards card={{ kind: "quote_continue" }} api="/api/store/test" base="" identified busy={false} confirmed={[]} onConfirm={vi.fn()} onLogin={vi.fn()} onClose={vi.fn()} onQuote={vi.fn()} onHandoff={vi.fn()}/>);
+    expect(screen.getByRole("link", { name: "Continuar orçamento" })).toHaveAttribute("href", "/orcamento?etapa=dados");
+    expect(screen.queryByText(/Valide seu e-mail/)).not.toBeInTheDocument();
+  });
   it("offers add, edit and continue choices after an item is confirmed, explaining the secure quote steps", async () => {
     const cart = { lines: [{ quantity: 50 }], calculation: { totalCents: 10000 } };
     resume.mockResolvedValueOnce(response([{ id: "proposal", role: "assistant", text: "Confira o rascunho", cards: [proposal] }]));

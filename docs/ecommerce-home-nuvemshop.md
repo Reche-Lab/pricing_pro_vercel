@@ -318,3 +318,15 @@ Sem nova migration. Conversas antigas ainda ativas também podem ser retomadas a
 - [x] Build de produção aprovado com uma CPU e memória limitada. Nenhuma alteração em produção.
 
 Sem migration ou variável nova. Após deploy, propostas antigas ainda pendentes precisam ser recalculadas. Itens duplicados antes da correção devem ser revisados em "Alterar itens do orçamento"; não apagar automaticamente grupos que podem ter artes diferentes.
+
+### Respostas Curtas e Continuação Real do Orçamento
+
+- [x] Tom de WhatsApp: uma ou duas frases, uma pergunta por vez, sem repetir explicações dos cartões. Respostas de texto limitadas a três frases completas e 420 caracteres; preços, itens e documentos estruturados não são cortados.
+- [x] Pedidos claros de seguir com o orçamento mostram um atalho oficial, sem chamada adicional de IA e sem confirmar/alterar itens. Negação ou pedidos com alterações continuam na conversa normal.
+- [x] Ferramenta de navegação somente de leitura e link gerado pela loja para `orcamento?etapa=dados`, respeitando tenant/domínio, validação de e-mail e formulário existente. A IA não escreve URLs.
+- [x] Bloquear placeholders de links e recuperar o atalho também em mensagens antigas, sem modificar o histórico salvo nem cortar mensagens do cliente.
+- [x] Regressão geral: 1.005 testes aprovados, 76 integrações condicionais não executadas nessa rodada; nove testes PostgreSQL executados separadamente. Cobertos pedidos claros, negação, novas inclusões, permissão de orçamento, cap de texto, placeholders e rotas por tenant/domínio. Lint e tipos aprovados.
+- [x] Playwright: botão com href real abre a página da etapa de dados com StoreCheckout; modal de orçamento e retomada do chat também conferidos. Claro/escuro, 1440/390/320 px e paisagem, sem overflow; capturas do atalho e rascunho inspecionadas. APIs simuladas, sem chamadas reais de IA ou envio de e-mail.
+- [x] Build de produção aprovado com uma CPU e memória limitada. Nenhuma alteração em produção.
+
+Sem migration ou variável nova. APIs externas simuladas durante a validação local.
