@@ -3,6 +3,7 @@ import { getServerEnv } from "@/lib/env/server";
 import { CommerceError } from "@/domain/commerce/commerce";
 import { assistantModelAllowlist, assistantFallbackModel, ASSISTANT_FALLBACK_MODEL, ASSISTANT_PRIMARY_MODEL } from "@/domain/commerce/assistant-models";
 import { reserveAssistantCall, settleAssistantCall } from "@/repositories/commerce-assistant";
+import { assistantDiagnostics, readAssistantErrorResponse, AssistantProviderError, type AssistantProviderDiagnostics, type AssistantFailedAttempt } from "./assistant-diagnostics";
 
 // Preserve provider signatures only during the current tool loop, never in chat history.
 const reasoningDetailSchema = z.object({
@@ -51,7 +52,7 @@ export function assistantWireMessages(messages: AssistantModelMessage[], model: 
   });
 }
 class AssistantAttemptError extends Error {
-  constructor(message: string, readonly retryable: boolean, readonly httpStatus?: number) { super(message); }
+  constructor(readonly diagnostics: AssistantProviderDiagnostics, readonly retryable: boolean) { super("Assistant provider attempt failed."); }
 }
 const transientStatus = (status: number) => [404, 408, 429].includes(status) || status >= 500;
 type CompletionOptions = { request?: typeof fetch; signal?: AbortSignal; preferredModel?: string };
@@ -62,12 +63,14 @@ export async function storeAssistantCompletion(tenantId: string, messages: Assis
   const bytes = Math.max(...[messages, assistantWireMessages(messages, ASSISTANT_PRIMARY_MODEL), assistantWireMessages(messages, ASSISTANT_FALLBACK_MODEL)].map(context => Buffer.byteLength(JSON.stringify({ messages: context, tools }), "utf8")));
   if (bytes > 32768) throw new CommerceError("A conversa ficou longa. Inicie um novo atendimento para continuar.", 413);
   const reserved = bytes + 900, debugId = crypto.randomUUID(), started = Date.now();
+  const failures: AssistantFailedAttempt[] = [];
   let requestedModel = options.preferredModel;
   for (let attempt = 0; attempt < 2; attempt++) {
     options.signal?.throwIfAborted();
     // Each actual attempt reserves its own allowance; a quota refusal never retries.
     const policy = requestedModel ? await reserveAssistantCall(tenantId, reserved, requestedModel) : await reserveAssistantCall(tenantId, reserved);
     const fallback = attempt === 0 ? assistantFallbackModel(policy.model, assistantModelAllowlist(process.env.OPENROUTER_ASSISTANT_MODELS)) : undefined;
+    console.info("Store assistant request prepared.", { debugId, tenantId, model: policy.model, attempt: attempt + 1, hasTools: tools.length > 0, fallbackAvailable: Boolean(fallback), privacy: "zdr-and-deny-data-collection", timeoutMs: 8000 });
     let parsed: z.infer<typeof responseSchema>;
     try {
       const timeout = AbortSignal.timeout(8000);
@@ -82,44 +85,45 @@ export async function storeAssistantCompletion(tenantId: string, messages: Assis
             model: policy.model, temperature: .3, max_tokens: 900, messages: assistantWireMessages(messages, policy.model),
             ...(gemini ? { reasoning: { effort: "minimal" } } : {}),
             ...(tools.length ? { tools, tool_choice: "auto", ...(!gemini ? { parallel_tool_calls: false } : {}) } : {}),
-            provider: { require_parameters: true, data_collection: "deny", zdr: true, allow_safety_retention_google: false, allow_safety_retention_other: false, max_price: { prompt: 2, completion: 8, request: 0 } },
+            // Safety Retention is controlled by account/Guardrails settings, not ProviderPreferences.
+            provider: { require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: "2", completion: "8", request: "0" } },
           }),
         });
       } catch {
         options.signal?.throwIfAborted();
-        throw new AssistantAttemptError("A resposta demorou mais que o esperado. Tente novamente ou continue com a equipe.", true);
+        throw new AssistantAttemptError({ ...assistantDiagnostics(0, null), reason: timeout.aborted ? "timeout" : "transport", bodyKind: "unreadable" }, true);
       }
       if (!response.ok) {
-        await response.body?.cancel().catch(() => {});
-        throw new AssistantAttemptError(response.status === 401 || response.status === 403
-          ? "Não foi possível autorizar o provedor de IA. A equipe da loja pode continuar seu atendimento."
-          : "O assistente está indisponível agora. Tente novamente ou fale com a equipe.", transientStatus(response.status), response.status);
+        const diagnostics = await readAssistantErrorResponse(response, [env.OPENROUTER_API_KEY]);
+        throw new AssistantAttemptError(diagnostics, transientStatus(response.status) && (diagnostics.providerCode === undefined || transientStatus(diagnostics.providerCode)));
       }
       let body: unknown;
       try { body = await response.json(); }
       catch (error) {
         options.signal?.throwIfAborted();
-        if (!(error instanceof SyntaxError)) throw new AssistantAttemptError("A conexão com o assistente foi interrompida. Tente novamente ou fale com a equipe.", true);
+        if (!(error instanceof SyntaxError)) throw new AssistantAttemptError({ ...assistantDiagnostics(response.status, null, response.headers), reason: timeout.aborted ? "timeout" : "transport", bodyKind: "unreadable" }, true);
         throw new CommerceError("O assistente retornou uma resposta inválida. Tente novamente ou fale com a equipe.", 502);
       }
       const inlineError = z.object({ error: z.object({ code: z.number().int().min(400).max(599) }) }).safeParse(body);
       if (inlineError.success) {
         const code = inlineError.data.error.code;
-        throw new AssistantAttemptError("O assistente está indisponível agora. Tente novamente ou fale com a equipe.", transientStatus(code), code);
+        throw new AssistantAttemptError(assistantDiagnostics(response.status, body, response.headers, [env.OPENROUTER_API_KEY]), transientStatus(code));
       }
       const result = responseSchema.safeParse(body);
       if (!result.success) throw new CommerceError("O assistente não conseguiu concluir a resposta. Tente outra mensagem ou fale com a equipe.", 502);
       parsed = result.data;
     } catch (error) {
       if (!(error instanceof AssistantAttemptError)) throw error;
-      console.warn("Store assistant provider unavailable.", { debugId, tenantId, model: policy.model, attempt: attempt + 1, status: error.httpStatus, durationMs: Date.now() - started });
+      failures.push({ model: policy.model, attempt: attempt + 1, diagnostics: error.diagnostics });
+      console.warn("Store assistant provider unavailable.", { debugId, tenantId, model: policy.model, attempt: attempt + 1, diagnostics: error.diagnostics, durationMs: Date.now() - started });
       options.signal?.throwIfAborted();
       if (fallback && error.retryable) {
         requestedModel = fallback;
         console.info("Store assistant fallback selected.", { debugId, tenantId, fromModel: policy.model, toModel: fallback });
         continue;
       }
-      throw new CommerceError(error.message, 503);
+      console.error("Store assistant request failed.", { debugId, tenantId, attempts: failures.map(({ model, attempt, diagnostics }) => ({ model, attempt, ...diagnostics })), durationMs: Date.now() - started });
+      throw new AssistantProviderError(debugId, error.diagnostics, failures);
     }
     // A bookkeeping failure must not create another generation or replay tool work.
     await settleAssistantCall(tenantId, policy.usageMonth, reserved, { tokens: parsed.usage?.total_tokens, cost: parsed.usage?.cost });

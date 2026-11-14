@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { storeAssistantCompletion, assistantToolMessage, assistantWireMessages } from "@/services/openrouter/store-assistant";
 import { reserveAssistantCall, settleAssistantCall } from "@/repositories/commerce-assistant";
 import { ASSISTANT_FALLBACK_MODEL } from "@/domain/commerce/assistant-models";
+import { AssistantProviderError } from "@/services/openrouter/assistant-diagnostics";
 vi.mock("@/repositories/commerce-assistant", () => ({ reserveAssistantCall: vi.fn(), settleAssistantCall: vi.fn() }));
 vi.mock("@/lib/env/server", () => ({ getServerEnv: () => ({ OPENROUTER_API_KEY: process.env.TEST_ASSISTANT_KEY, OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1", APP_URL: "https://store.example.test" }) }));
 beforeEach(() => { process.env.TEST_ASSISTANT_KEY = "secret-never-for-client"; vi.mocked(reserveAssistantCall).mockResolvedValue({ model: "openai/gpt-4.1-mini", usageMonth: "2026-11-01" } as Awaited<ReturnType<typeof reserveAssistantCall>>); });
@@ -14,7 +15,8 @@ describe("store assistant provider boundaries", () => {
     expect(reply.content).toBe("Olá!");
     const input = request.mock.calls[0] as unknown as [string, RequestInit];
     const body = JSON.parse(input[1].body as string);
-    expect(body.provider).toMatchObject({ require_parameters: true, data_collection: "deny", zdr: true, allow_safety_retention_google: false, allow_safety_retention_other: false, max_price: { prompt: 2, completion: 8, request: 0 } });
+    // ProviderPreferences in https://openrouter.ai/openapi.json forbids unknown fields and uses decimal strings for max_price.
+    expect(body.provider).toEqual({ require_parameters: true, data_collection: "deny", zdr: true, max_price: { prompt: "2", completion: "8", request: "0" } });
     expect(body.tools).toBeUndefined(); expect(input[1].redirect).toBe("error"); expect(body.max_tokens).toBe(900);
     expect(settleAssistantCall).toHaveBeenCalledWith("tenant-a", "2026-11-01", expect.any(Number), { tokens: 120, cost: .001 });
     expect(JSON.stringify(reply)).not.toContain("secret-never-for-client");
@@ -112,5 +114,18 @@ describe("store assistant provider boundaries", () => {
     const tool_calls = ["Botton", "Espelho", "Ímã"].map((query, i) => ({ id: `tool-${i}`, type: "function", function: { name: "search_products", arguments: JSON.stringify({ query }) } }));
     const request = vi.fn(async () => Response.json({ choices: [{ message: { content: null, tool_calls } }] }));
     expect((await storeAssistantCompletion("t", [], [{}], { request, preferredModel: ASSISTANT_FALLBACK_MODEL })).tool_calls).toHaveLength(3);
+  });
+  it("keeps actionable upstream diagnostics for admin failures, without echoing the response body", async () => {
+    const request = vi.fn(async () => Response.json({ error: { code: 402, message: "Insufficient credits for private-customer@example.test", metadata: { limit_source: "openrouter_key_limit", raw: "private prompt" } } }, { status: 402, headers: { "x-request-id": "req-provider-reference-123" } }));
+    const failure = await storeAssistantCompletion("t", [], [], { request }).catch(error => error);
+    expect(failure).toBeInstanceOf(AssistantProviderError);
+    expect(failure.diagnostics).toMatchObject({ httpStatus: 402, reason: "credits", providerRequestId: "req-provider-reference-123" });
+    expect(failure.forAdmin().message).toMatch(/créditos|limite/);
+    expect(failure.message).not.toMatch(/key_limit|credits|private/);
+    expect(JSON.stringify(failure)).not.toContain("private");
+  });
+  it("does not switch models when a temporary HTTP envelope contains an authorization or credit refusal", async () => {
+    const request = vi.fn(async () => Response.json({ error: { code: 402, message: "Insufficient credits" } }, { status: 503 }));
+    await expect(storeAssistantCompletion("t", [], [], { request })).rejects.toBeInstanceOf(AssistantProviderError); expect(request).toHaveBeenCalledTimes(1);
   });
 });

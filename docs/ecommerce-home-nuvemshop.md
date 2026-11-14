@@ -230,7 +230,9 @@ Referências: [Place Details e FieldMask](https://developers.google.com/maps/doc
 
 ### Limites e Privacidade
 
-O atendimento é identificado como IA e só começa após confirmação do visitante. Usa seleção de provedor com `data_collection=deny`, `zdr=true`, retenção opcional de segurança desabilitada e teto de preço por milhão de tokens (entrada US$ 2 / saída US$ 8, sem taxa fixa por chamada). Se não houver rota compatível, falha com orientação para a equipe, sem relaxar as restrições. Obrigações legais/exceções do provedor continuam aplicáveis; não prometer retenção absolutamente nula. Referências: [ferramentas](https://openrouter.ai/docs/guides/features/tool-calling), [seleção de provedores](https://openrouter.ai/docs/guides/routing/provider-selection), [retenção zero](https://openrouter.ai/docs/guides/features/zdr).
+O atendimento é identificado como IA e só começa após confirmação do visitante. Usa seleção de provedor com `data_collection=deny`, `zdr=true` e teto de preço por milhão de tokens (entrada US$ 2 / saída US$ 8, sem taxa fixa por chamada). Se não houver rota compatível, falha com orientação para a equipe, sem relaxar as restrições. Obrigações legais/exceções do provedor continuam aplicáveis; não prometer retenção absolutamente nula. Referências: [ferramentas](https://openrouter.ai/docs/guides/features/tool-calling), [seleção de provedores](https://openrouter.ai/docs/guides/routing/provider-selection), [retenção zero](https://openrouter.ai/docs/guides/features/zdr).
+
+**Conferência obrigatória na conta OpenRouter:** a exclusão de Safety Retention deve ser definida como **ZDR only** nas configurações de privacidade da conta ou em guardrail vinculado à chave, para Google e demais modelos. `allow_safety_retention_google` e `allow_safety_retention_other` são campos documentados da API de Guardrails e não são enviados no corpo de inferência. `zdr=true` segue a escolha da conta/guardrail. Isso pode tornar modelos indisponíveis, inclusive o fallback. Não afrouxar a política para contornar falhas. [Política e configuração oficial](https://openrouter.ai/docs/guides/features/zdr).
 
 Histórico não é salvo em localStorage. CPF/CNPJ, e-mails e alguns padrões de telefone/credenciais são ocultados antes de persistir/enviar ao modelo; isso não reconhece todo dado pessoal. Mensagens e propostas usam a criptografia já existente da plataforma. Logs registram IDs técnicos, duração, status e uso, não transcrições nem corpo de resposta do provedor. Documentos passam pelo backend autorizado, nunca por URL pública de Storage. A página `/loja/<tenant>/assistente-privacidade` explica o fluxo ao cliente. Encaminhar para equipe registra a solicitação; não promete humano online ou resposta imediata.
 
@@ -252,3 +254,26 @@ OPENROUTER_ASSISTANT_MODELS="openai/gpt-4.1-mini,google/gemini-3.1-flash-lite"
 O fallback não é uma garantia de disponibilidade: se não houver provedor Gemini compatível com as restrições de privacidade, se a cota local acabar ou se ambas as tentativas falharem, o atendimento informa a indisponibilidade e oferece a equipe. Timeout de oito segundos por tentativa, sem retry infinito. A reserva de custo de uma tentativa malsucedida permanece quando a cobrança é desconhecida.
 
 Referências: [parâmetros dos endpoints Gemini no OpenRouter](https://openrouter.ai/api/v1/models/google/gemini-3.1-flash-lite/endpoints), [continuidade de raciocínio e ferramentas](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens), [assinaturas de ferramentas Gemini](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/thinking/thought-signatures). O mecanismo é controlado pela aplicação, não o fallback irrestrito de qualquer erro do roteador.
+
+### Diagnóstico de Falhas na Ativação
+
+- [x] Corrigir descarte do corpo de erro do OpenRouter: leitura limitada a 32 KB e classificação por HTTP/código, sem persistir nem registrar mensagens brutas, prompts, credenciais ou metadados arbitrários.
+- [x] Distinguir autenticação, permissão, saldo, limite, prazo, rede e filtros de rota/privacidade/preço/parâmetros. O painel administrativo recebe orientação e referência; visitantes continuam recebendo mensagem genérica.
+- [x] Registrar as tentativas GPT/Gemini e respectivos status no mesmo log final `Commerce operation failed.`, com `providerReference`, `providerDiagnostics` e `providerAttempts`. Não interpretar HTTP 200 com código de erro como sucesso.
+- [x] Não marcar conexão como testada/ativada após falha; manter autorização, origem, revisão e limites. Não tentar outro modelo para contornar recusa de saldo/autorização em envelope HTTP temporário.
+- [x] Regressão: 976 testes aprovados, 74 testes de integração condicionais não executados; conferência final de 12 testes de rota/página. Lint e tipos aprovados. Provedor simulado, sem consumo real de IA.
+- [x] Build de produção aprovado com uma CPU e heap limitado; sem nova migration.
+- [ ] Após deploy, repetir **Loja online → Assistente IA → Testar conexão** e conferir o diagnóstico real. O log 503 antigo, isoladamente, não identifica a causa upstream. Nenhuma chamada real ao OpenRouter foi feita na investigação local.
+
+Sem nova migration ou variável obrigatória. Conferir a configuração de privacidade da conta antes de homologar; não enviar chaves pelo chat. Para investigação, usar o log final correlacionado e a referência exibida no painel, não o corpo bruto de conversas/respostas.
+
+### HTTP 400 no Teste OpenRouter
+
+- [x] Confrontar a requisição com o esquema público oficial `ProviderPreferences`: o objeto não admite campos adicionais, e os limites `max_price` são strings decimais. Os logs antigos demonstram HTTP 400 upstream, mas não incluem a mensagem de validação para confirmar qual campo provocou a recusa.
+- [x] Retirar os dois campos de Guardrails do corpo de inferência e serializar os mesmos tetos como `prompt: "2"`, `completion: "8"`, `request: "0"`. Preservados `require_parameters`, `data_collection: "deny"`, `zdr: true`, cotas e limites financeiros.
+- [x] TDD: teste de contrato falhou com o payload antigo, identificando os campos excedentes e os tipos numéricos. O contrato exato também é aplicado ao fallback.
+- [x] Após a correção: 31 testes focados aprovados, incluindo contrato, fallback, diagnóstico seguro e autorização da rota administrativa. Lint e tipos aprovados, sem chamadas reais ao OpenRouter.
+- [x] Build de produção aprovado após a correção, com uma CPU e memória limitada. Sem nova migration ou variável obrigatória.
+- [ ] Aplicar deploy, conferir a política **ZDR only** na conta/guardrail e repetir o teste administrativo com o provedor real. Não atribuir o erro a credencial ou saldo sem evidência, nem afrouxar políticas para obter sucesso.
+
+Referências: [esquema OpenAPI oficial](https://openrouter.ai/openapi.json), [roteamento de provedores](https://openrouter.ai/docs/guides/routing/provider-selection), [privacidade e Guardrails](https://openrouter.ai/docs/guides/features/zdr). Sem nova migration.

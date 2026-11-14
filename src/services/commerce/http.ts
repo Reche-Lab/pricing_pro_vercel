@@ -5,6 +5,7 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { getSessionProfile } from "@/repositories/users";
 import { CommerceError } from "@/domain/commerce/commerce";
 import { commerceHostSlug } from "@/domain/commerce/domains";
+import { AssistantProviderError } from "@/services/openrouter/assistant-diagnostics";
 import {
   commerceEnabled,
   createBuyerSession,
@@ -125,6 +126,7 @@ export function commerceFailure(error: unknown, operation: string) {
     errorType: error instanceof Error ? error.name : "unknown",
     message: error instanceof Error ? error.message : "Unknown failure",
     code: error && typeof error === "object" && "code" in error ? error.code : undefined,
+    ...(error instanceof AssistantProviderError ? { providerReference: error.reference, providerDiagnostics: error.diagnostics, providerAttempts: error.attempts.map(({ model, attempt, diagnostics }) => ({ model, attempt, ...diagnostics })) } : {}),
   });
   return commerceJson(
     {

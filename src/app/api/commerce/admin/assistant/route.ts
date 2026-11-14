@@ -11,6 +11,7 @@ import { previewAssistantReply } from "@/services/commerce/assistant-engine";
 import type { CommerceStore } from "@/repositories/commerce";
 import { storeSettingsSchema } from "@/domain/commerce/schemas";
 import { assistantFallbackModel } from "@/domain/commerce/assistant-models";
+import { AssistantProviderError } from "@/services/openrouter/assistant-diagnostics";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 export async function GET(request: Request) {
@@ -65,6 +66,6 @@ export async function POST(request: Request) {
       return commerceJson({ answer, message: "Teste somente de leitura concluído. Não foram criados carrinho, comprador ou orçamento. As chamadas contam no limite do mês." });
     }
     const answer = input.action === "test" ? await storeAssistantCompletion(session.tenantId, [{ role: "system", content: "Você é um assistente virtual de loja. Responda brevemente em português, sem pedir dados pessoais." }, { role: "user", content: "Diga uma saudação curta e ofereça ajuda com produtos." }], [], { signal: request.signal }) : null;
-    return commerceJson({ config: await setAssistantState(session.tenantId, session.userId, input.revision, input.action === "test" ? "tested" : input.action), answer: answer?.content, message: input.action === "test" ? "Conexão validada com privacidade e limites configurados. As tentativas realizadas contam na cota, inclusive se o fallback for necessário. Use o laboratório para conferir as informações antes de ativar." : input.action === "enable" ? "Assistente ativado na loja." : "Assistente desativado." });
-  } catch (error) { return commerceFailure(error, "assistant.admin.action"); }
+    return commerceJson({ config: await setAssistantState(session.tenantId, session.userId, input.revision, input.action === "test" ? "tested" : input.action), answer: answer?.content, message: input.action === "test" ? "Conexão validada com os filtros enviados e limites da plataforma. A equipe deve conferir também a retenção de segurança nas configurações de privacidade da conta OpenRouter. As tentativas contam na cota, inclusive com fallback. Use o laboratório antes de ativar." : input.action === "enable" ? "Assistente ativado na loja." : "Assistente desativado." });
+  } catch (error) { return commerceFailure(error instanceof AssistantProviderError ? error.forAdmin() : error, "assistant.admin.action"); }
 }
