@@ -7,19 +7,19 @@ import { calculateCart, CommerceError, distributeQuantity } from "@/domain/comme
 import { rankProductCandidates, productSearchRequiresClarification } from "@/domain/products/product-search";
 import { deliveryEstimate } from "@/domain/shipping/production-lead-time";
 import { commerceProducts, publicCommerceProduct, calculateCommerceCart, commerceTransaction, hashCommerceToken, type BuyerSession, type CommerceStore } from "@/repositories/commerce";
-import { assistantAudit, assistantDocuments, requireAssistantConversation, type AssistantConfig } from "@/repositories/commerce-assistant";
+import { addAssistantMessage, assistantAudit, assistantDocuments, requireAssistantConversation, type AssistantConfig } from "@/repositories/commerce-assistant";
 import { listBuyerQuotes } from "@/repositories/commerce-buyer-quotes";
 import { publicCarrierDelivery } from "./carrier-delivery";
 import { sortShippingOptions, type StoreShippingOption } from "@/domain/commerce/shipping-options";
 import type { CartLine } from "@/domain/commerce/schemas";
 
 export type AssistantToolContext = { store: CommerceStore; session: BuyerSession; config: AssistantConfig; conversationId: string };
-type ProposedAction = { revision: number; configRevision: number; lines: CartLine[]; pricingHash: string };
+type ProposedAction = { version: 2; revision: number; configRevision: number; lines: CartLine[]; pricingHash: string };
 const empty = { type: "object", properties: {}, required: [], additionalProperties: false };
 const tool = (name: string, description: string, parameters: object = empty) => ({ type: "function", function: { name, description, parameters } });
 export const assistantToolDefinitions = [
   tool("search_products", "Buscar e comparar SOMENTE produtos publicados desta loja. Use nomes aproximados, categoria, medida ou finalidade; resultado com cards oficiais.", { type: "object", properties: { query: { type: "string", maxLength: 120 } }, required: ["query"], additionalProperties: false }),
-  tool("prepare_quote", "Simular produtos e propor ADICIONAR grupos ao carrinho atual. NÃO modifica nada; cliente precisa confirmar no botão. Use IDs do catálogo, quantidades totais e número de artes.", { type: "object", properties: { items: { type: "array", minItems: 1, maxItems: 10, items: { type: "object", properties: { productId: { type: "string" }, quantity: { type: "integer", minimum: 1, maximum: 50000 }, artworks: { type: "integer", minimum: 1, maximum: 10 }, artworkName: { type: "string", maxLength: 80 } }, required: ["productId", "quantity", "artworks", "artworkName"], additionalProperties: false } } }, required: ["items"], additionalProperties: false }),
+  tool("prepare_quote", "Propor quantidades FINAIS desejadas por produto no rascunho. Cada produto aparece uma vez. quantity não é incremento: se já há 50 e o cliente quer mais 20 do MESMO produto, envie 70. Produtos não mencionados são preservados. Repetir 50 não soma outros 50. Não modifica nada até confirmação do cliente; não altera artes existentes.", { type: "object", properties: { items: { type: "array", minItems: 1, maxItems: 10, items: { type: "object", properties: { productId: { type: "string" }, quantity: { type: "integer", minimum: 1, maximum: 50000 }, artworks: { type: "integer", minimum: 1, maximum: 10 }, artworkName: { type: "string", maxLength: 80 } }, required: ["productId", "quantity", "artworks", "artworkName"], additionalProperties: false } } }, required: ["items"], additionalProperties: false }),
   tool("estimate_delivery", "Consultar frete e produção para itens informados, sem alterar carrinho. É estimativa, não compromisso de data; dados finais serão confirmados no formulário.", { type: "object", properties: { postalCode: { type: "string", pattern: "^[0-9]{8}$" }, items: { type: "array", minItems: 1, maxItems: 10, items: { type: "object", properties: { productId: { type: "string" }, quantity: { type: "integer" }, artworks: { type: "integer" }, artworkName: { type: "string" } }, required: ["productId", "quantity", "artworks", "artworkName"], additionalProperties: false } } }, required: ["postalCode", "items"], additionalProperties: false }),
   tool("company_information", "Disponibilizar ficha cadastral, CNPJ/endereço e documentos oficiais. Os números bancários NÃO vão para o modelo: somente para o card seguro do cliente."),
   tool("my_orders", "Consultar somente pedidos da conta autenticada; exige identificação por e-mail. Não aceita ID de cliente ou email como parâmetro."),
@@ -38,6 +38,19 @@ export function assistantLines(input: z.infer<typeof assistantProposalSchema>, p
     return distributeQuantity(item.quantity, item.artworks).map((quantity, index) => ({ id: randomUUID(), productId: product.id, quantity, artworkName: item.artworks > 1 ? `${item.artworkName || "Arte"} ${index + 1}` : item.artworkName, artworkId: null, preparation: "customer" as const }));
   });
 }
+export function assistantCartLines(current: readonly CartLine[], input: z.infer<typeof assistantProposalSchema>, products: Awaited<ReturnType<typeof commerceProducts>>) {
+  if (new Set(input.items.map(item => item.productId)).size !== input.items.length) throw new CommerceError("Informe cada produto uma vez, com a quantidade final desejada.");
+  const requested = assistantLines(input, products), result = current.map(line => ({ ...line }));
+  for (const item of input.items) {
+    const existing = current.filter(line => line.productId === item.productId);
+    if (!existing.length) { result.push(...requested.filter(line => line.productId === item.productId)); continue; }
+    const total = existing.reduce((sum, line) => sum + line.quantity, 0);
+    if (existing.length !== item.artworks || existing.length > 1 && total !== item.quantity || existing.length === 1 && item.artworkName && item.artworkName.normalize("NFKC").toLowerCase() !== existing[0].artworkName.normalize("NFKC").toLowerCase())
+      throw new CommerceError("Este produto já tem grupos ou artes definidos. Use Alterar itens do orçamento para ajustar esses grupos sem perder suas artes.", 409);
+    if (existing.length === 1) result.find(line => line.id === existing[0].id)!.quantity = item.quantity;
+  }
+  return result;
+}
 export async function executeAssistantTool(context: AssistantToolContext, name: string, args: unknown, options: { adminPreview?: boolean } = {}): Promise<{ result: object; card: AssistantCard }> {
   const { store, session, config, conversationId } = context;
   if (options.adminPreview) {
@@ -54,14 +67,16 @@ export async function executeAssistantTool(context: AssistantToolContext, name: 
   if (name === "prepare_quote" || name === "estimate_delivery") {
     if (!config.settings.allowQuotes) throw new CommerceError("Orçamentos por chat não estão habilitados nesta loja.");
     const input = name === "prepare_quote" ? assistantProposalSchema.parse(args) : assistantProposalSchema.extend({ postalCode: z.string().regex(/^\d{8}$/).refine(v => v !== "00000000") }).parse(args);
-    const products = await commerceProducts(store.tenant_id), lines = assistantLines(input, products);
+    const products = await commerceProducts(store.tenant_id), lines = name === "prepare_quote" ? assistantCartLines(session.cart, input, products) : assistantLines(input, products);
     calculateCart(lines, products);
     if (name === "prepare_quote") {
-      const combined = [...session.cart, ...lines];
+      const combined = lines;
       const calculation = await calculateCommerceCart(store.tenant_id, session.id, combined, products);
-      const payload: ProposedAction = { revision: session.revision, configRevision: config.revision, lines: combined, pricingHash: hashCommerceToken(JSON.stringify(calculation)) };
+      if (combined.length === session.cart.length && combined.every((line, index) => line.id === session.cart[index].id && line.quantity === session.cart[index].quantity))
+        return { result: { unchanged: true, itemsAlreadyInDraft: true, valuesInOfficialCard: true }, card: { kind: "cart", items: calculation.items, totalCents: calculation.totalCents } };
+      const payload: ProposedAction = { version: 2, revision: session.revision, configRevision: config.revision, lines: combined, pricingHash: hashCommerceToken(JSON.stringify(calculation)) };
       const row = (await getPool().query("insert into commerce_assistant_actions(tenant_id,conversation_id,payload_encrypted) values($1,$2,$3) returning id,expires_at::text", [store.tenant_id, conversationId, encryptTenantSecret(payload)])).rows[0];
-      return { result: { proposed: true, existingCartItems: session.cart.length, items: calculation.items.map(({ name, quantity }) => ({ name, quantity })), needsUserConfirmation: true, pricesInOfficialCard: true }, card: { kind: "proposal", actionId: row.id, items: calculation.items, totalCents: calculation.totalCents, expiresAt: row.expires_at } };
+      return { result: { proposed: true, desiredFinalQuantities: true, existingCartItems: session.cart.length, items: calculation.items.map(({ name, quantity }) => ({ name, quantity })), needsUserConfirmation: true, pricesInOfficialCard: true }, card: { kind: "proposal", desiredQuantities: true, actionId: row.id, items: calculation.items, totalCents: calculation.totalCents, expiresAt: row.expires_at } };
     }
     const postalCode = "postalCode" in input ? String(input.postalCode) : "";
     const options: StoreShippingOption[] = [], warnings: string[] = [];
@@ -117,6 +132,7 @@ export async function confirmAssistantCart(context: AssistantToolContext, action
     if (policy?.allowed === false) throw new CommerceError("O assistente foi desativado. Continue pelo carrinho da loja.", 409);
     if (new Date(action.expires_at).getTime() <= Date.now()) throw new CommerceError("Proposta expirada. Solicite outra simulação.", 409);
     const payload = decryptTenantSecret<ProposedAction>(action.payload_encrypted);
+    if (payload.version !== 2) throw new CommerceError("Esta proposta foi criada antes da atualização do orçamento. Peça uma nova conferência dos itens antes de confirmar.", 409);
     if (payload.configRevision !== config.revision) throw new CommerceError("As condições da loja mudaram. Solicite outra proposta.", 409);
     const live = (await client.query("select s.enabled,s.revision from commerce_assistant_settings s join commerce_stores c on c.tenant_id=s.tenant_id where s.tenant_id=$1 and c.enabled and c.status='published' for share of s,c", [store.tenant_id])).rows[0];
     if (!live?.enabled || live.revision !== config.revision) throw new CommerceError("O assistente está indisponível. Reabra o atendimento.", 409);
@@ -125,6 +141,7 @@ export async function confirmAssistantCart(context: AssistantToolContext, action
     const result = await client.query("update commerce_sessions set cart=$4,revision=revision+1 where tenant_id=$1 and id=$2 and revision=$3 and expires_at>now() returning id", [store.tenant_id, session.id, payload.revision, JSON.stringify(payload.lines)]);
     if (!result.rowCount) throw new CommerceError("O carrinho mudou em outra aba. Solicite outra proposta para preservar seus itens.", 409);
     await client.query("update commerce_assistant_actions set applied_at=now() where tenant_id=$1 and id=$2", [store.tenant_id, actionId]);
+    await addAssistantMessage(store.tenant_id, conversationId, "assistant", "Rascunho do orçamento atualizado. Quer acrescentar outro produto, alterar os itens ou continuar para o orçamento completo? Para emitir o PDF, é necessário validar seu e-mail e preencher os dados da pessoa ou empresa no formulário seguro, fora do chat.", [{ kind: "cart", items: calculation.items, totalCents: calculation.totalCents }], client);
     await assistantAudit(client, store.tenant_id, null, "cart.confirm", { conversationId, actionId, itemCount: payload.lines.length });
     return { alreadyApplied: false };
   });

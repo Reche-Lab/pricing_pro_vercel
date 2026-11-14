@@ -1,7 +1,7 @@
 "use client";
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
-import { Bot, Copy, FileText, Loader2, RotateCcw, Send, ShieldCheck, Trash2, X } from "lucide-react";
+import { Bot, Copy, Loader2, RotateCcw, Send, ShieldCheck, Trash2, X } from "lucide-react";
 import type { AssistantMessage } from "@/domain/commerce/assistant";
 import type { StoreSettings } from "@/domain/commerce/schemas";
 import type { cartView } from "@/repositories/commerce";
@@ -103,6 +103,7 @@ export function StoreAssistantPanel({ config, api, base, settings, buyerId, onCa
   }
   async function confirm(actionId: string) { await work(async () => {
     const result = await request(`${api}/assistant`, "POST", { action: "confirm", conversationId, actionId });
+    if (result.messages) setMessages(result.messages);
     setConfirmed(current => [...current, actionId]); setQuoteCart(result.cart); setNotice(result.message); await onCartChanged();
   }); }
   async function openQuote() {
@@ -116,9 +117,8 @@ export function StoreAssistantPanel({ config, api, base, settings, buyerId, onCa
       <div ref={scroll} className={styles.messages}>
         <p className={styles.welcome}>{config.welcome}</p>
         {restoring ? <p role="status" className={styles.progress}><Loader2 size={16}/>Retomando atendimento…</p> : restoreFailed ? <button type="button" className={styles.action} onClick={() => setResumeAttempt(value => value + 1)}><RotateCcw size={16}/>Tentar retomar conversa</button> : !conversationId ? <section className={styles.consent}><ShieldCheck size={24}/><h3>Você decide o próximo passo</h3><p>A IA ajuda com produtos e dúvidas. Nenhuma compra ou alteração no carrinho acontece sem sua confirmação.</p><p>O histórico deste atendimento fica na plataforma por até {config.retentionDays} dias. Não envie documentos pessoais, dados de cartão, senhas ou códigos nesta conversa.</p><Link href={`${base}/assistente-privacidade`} target="_blank">Como seus dados são utilizados</Link><button className={styles.primary} type="button" disabled={busy} onClick={() => void start()}>Entendi, iniciar atendimento</button></section> : <>
-          {messages.map(m => <article className={`${styles.message} ${m.role === "user" ? styles.user : ""}`} key={m.id}><small>{m.role === "user" ? "Você" : "Assistente virtual"}</small><p>{m.text}</p>{m.cards.map((card, index) => <StoreAssistantCards key={index} card={card} api={api} base={base} identified={identified} busy={busy || restoring} confirmed={confirmed} onSelectProduct={product => void send(`Tenho interesse no produto "${product.name}".`)} onConfirm={id => void confirm(id)} onQuote={() => void openQuote()} onLogin={() => { setLoginPurpose("account"); setView("login"); }} onHandoff={() => void handoff()} onClose={onClose}/>)}</article>)}
+          {messages.map(m => <article className={`${styles.message} ${m.role === "user" ? styles.user : ""}`} key={m.id}><small>{m.role === "user" ? "Você" : "Assistente virtual"}</small><p>{m.text}</p>{m.cards.map((card, index) => <StoreAssistantCards key={index} card={card} api={api} base={base} identified={identified} busy={busy || restoring} confirmed={confirmed} onAddItem={() => void send("Quero acrescentar outro produto ao orçamento.")} onSelectProduct={product => void send(`Tenho interesse no produto "${product.name}".`)} onConfirm={id => void confirm(id)} onQuote={() => void openQuote()} onLogin={() => { setLoginPurpose("account"); setView("login"); }} onHandoff={() => void handoff()} onClose={onClose}/>)}</article>)}
           {!messages.length ? <div className={styles.quick}>{quick.filter(q => config.quotes || !q.includes("orçamento")).filter(q => config.orders || !q.includes("pedidos")).map(q => <button type="button" key={q} disabled={busy} onClick={() => void send(q)}>{q}</button>)}</div> : null}
-          {quoteCart?.lines.length && config.quotes ? <button type="button" className={styles.action} disabled={busy} onClick={() => void openQuote()}><FileText size={16}/>Conferir dados e salvar orçamento</button> : null}
           {summary ? <section className={styles.card}><strong>Resumo para a equipe</strong><p>{summary}</p><button type="button" className={styles.action} onClick={() => void navigator.clipboard.writeText(summary).then(() => setNotice("Resumo copiado."), () => setError("Não foi possível copiar. Selecione o texto do resumo."))}><Copy size={16}/>Copiar resumo</button>{whatsapp ? <a className={styles.primary} href={`${whatsapp}?text=${encodeURIComponent(`Olá! Preciso de ajuda na loja. ${summary}`)}`} target="_blank" rel="noopener noreferrer">Continuar no WhatsApp</a> : null}</section> : null}
         </>}
         {notice ? <p className={styles.notice} role="status">{notice}</p> : null}{error ? <p className={styles.error} role="alert">{error}</p> : null}{busy ? <p role="status" className={styles.progress}><Loader2 size={16}/>{status || "Concluindo solicitação…"}</p> : null}

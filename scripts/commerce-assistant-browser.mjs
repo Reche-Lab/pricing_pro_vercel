@@ -64,14 +64,18 @@ const server = createServer(async (request, response) => {
       if (request.method === "GET") return json({ enabled: true, name: assistant.name, welcome: assistant.welcome, retentionDays: 30, quotes: true, orders: true });
       if (body.action === "resume") return json({ conversation: conversationStarted ? { id: ids.conversation } : null, messages: conversationStarted ? history : [], customer: true, confirmedActionIds });
       if (body.action === "start") { conversationStarted = true; return json({ conversation: { id: ids.conversation }, messages: history, customer: true, confirmedActionIds }); }
-      if (body.action === "confirm") { confirmedActionIds.push(body.actionId); return json({ cart, message: "Itens adicionados ao carrinho. Revise os dados para salvar o orçamento." }); }
+      if (body.action === "confirm") {
+        if (!confirmedActionIds.includes(body.actionId)) { confirmedActionIds.push(body.actionId); history.push({ id: crypto.randomUUID(), role: "assistant", text: "Rascunho atualizado. Como deseja continuar?", cards: [{ kind: "cart", items: cart.calculation.items, totalCents: cart.calculation.totalCents }] }); }
+        return json({ cart, messages: history, message: "Rascunho atualizado." });
+      }
       if (body.action === "clear") { history = []; conversationStarted = false; confirmedActionIds = []; return json({ cleared: true }); }
       if (body.action === "handoff") return json({ summary: "Cliente deseja orientação para sua campanha.", message: "Solicitação registrada para a equipe." });
       if (body.action === "quote_saved") { history.push({ id: "saved", role: "assistant", text: "Seu orçamento está salvo.", cards: [{ kind: "quote_saved", quoteId: ids.quote, totalCents: 6000 }] }); return json({ messages: history }); }
       if (body.action === "message") {
-        const cards = body.text.includes("orçamento") ? [{ kind: "proposal", actionId: ids.action, items: cart.calculation.items, totalCents: 6000, expiresAt: "2099-01-01T00:00:00Z" }] : body.text.includes("empresa") ? [{ kind: "company", company, documents: [] }] : body.text.includes("frete") ? [{ kind: "shipping", options: [{ id: "sedex", name: "Correios - SEDEX", priceCents: 2200, insuranceValueCents: 9500, estimate: { productionDays: 3, transportDays: 2, deliveryDate: "2026-11-20" } }], warnings: [] }] : [{ kind: "products", products: [product] }];
+        const adding = body.text === "Quero acrescentar outro produto ao orçamento.";
+        const cards = adding ? [{ kind: "products", products: [product] }] : body.text.includes("orçamento") ? [{ kind: "proposal", desiredQuantities: true, actionId: ids.action, items: cart.calculation.items, totalCents: 6000, expiresAt: "2099-01-01T00:00:00Z" }] : body.text.includes("empresa") ? [{ kind: "company", company, documents: [] }] : body.text.includes("frete") ? [{ kind: "shipping", options: [{ id: "sedex", name: "Correios - SEDEX", priceCents: 2200, insuranceValueCents: 9500, estimate: { productionDays: 3, transportDays: 2, deliveryDate: "2026-11-20" } }], warnings: [] }] : [{ kind: "products", products: [product] }];
         const selected = body.text.startsWith('Tenho interesse no produto "');
-        history.push({ id: body.messageId, role: "user", text: body.text, cards: [] }, { id: crypto.randomUUID(), role: "assistant", text: selected ? "Quantas unidades você precisa?" : "Confira as opções abaixo. Posso ajudar a continuar.", cards: selected ? [] : cards });
+        history.push({ id: body.messageId, role: "user", text: body.text, cards: [] }, { id: crypto.randomUUID(), role: "assistant", text: selected ? "Quantas unidades você precisa?" : adding ? "Qual outro produto você deseja?" : "Confira as opções abaixo. Posso ajudar a continuar.", cards: selected ? [] : cards });
         response.setHeader("content-type", "application/x-ndjson"); return response.end(JSON.stringify({ type: "status", text: "Consultando catálogo…" }) + "\n" + JSON.stringify({ type: "done", messages: history }) + "\n");
       }
       throw new Error("Unsupported fixture API");
@@ -124,8 +128,15 @@ try {
     assert.doesNotMatch(await page.getByRole("dialog").innerText(), /seguro|valor declarado/i);
     await page.getByText("Frete e produção · estimativa", { exact: true }).locator("..").screenshot({ path: `${output}/freight-chat-${theme}-${width}.png` });
     await page.getByRole("textbox", { name: "Mensagem para o assistente" }).fill("Quero um orçamento"); await page.getByRole("button", { name: "Enviar mensagem" }).click();
-    await page.getByRole("button", { name: "Confirmar e adicionar ao carrinho" }).click();
-    await page.getByRole("button", { name: "Salvar orçamento em PDF" }).click();
+    await page.getByRole("button", { name: "Confirmar atualização do orçamento" }).click();
+    await page.getByText("Rascunho do seu orçamento", { exact: true }).waitFor();
+    assert.equal(await page.getByRole("link", { name: "Alterar itens do orçamento", exact: true }).getAttribute("href"), "/loja/test/orcamento");
+    await page.getByRole("button", { name: "Adicionar outro produto", exact: true }).click();
+    await page.getByText("Qual outro produto você deseja?", { exact: true }).waitFor();
+    assert.equal(requests.filter(r => r.body.action === "confirm").length, 1);
+    const draft = page.getByText("Rascunho do seu orçamento", { exact: true }).locator("..");
+    await draft.screenshot({ path: `${output}/quote-next-steps-${theme}-${width}.png` });
+    await page.getByRole("button", { name: "Continuar para orçamento completo" }).click();
     await page.getByRole("button", { name: "Revisar orçamento" }).click();
     await page.getByRole("button", { name: "Salvar orçamento e acessar PDF" }).click();
     const pdf = page.getByRole("link", { name: "Baixar PDF" }); await pdf.waitFor(); assert.equal(await pdf.getAttribute("href"), `/api/store/test/quotes/${ids.quote}/pdf`);
@@ -133,8 +144,8 @@ try {
     assert.equal(JSON.stringify(requests.filter(r => r.path.endsWith("/assistant"))).includes(billing.document), false);
     await page.getByRole("button", { name: "Fechar atendimento" }).click();
     await page.getByRole("button", { name: "Abrir assistente virtual da loja" }).click();
-    await page.getByRole("button", { name: "Proposta adicionada", exact: true }).waitFor();
-    assert.equal(await page.getByRole("button", { name: "Proposta adicionada", exact: true }).isDisabled(), true);
+    await page.getByRole("button", { name: "Orçamento atualizado", exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Orçamento atualizado", exact: true }).isDisabled(), true);
     await page.getByRole("button", { name: "Fechar atendimento" }).click();
     await page.getByRole("button", { name: "Abrir assistente virtual da loja" }).waitFor();
     console.log(`Passed chat, proposal and quote form ${theme} ${width}x${height}`);

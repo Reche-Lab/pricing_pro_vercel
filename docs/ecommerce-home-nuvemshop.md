@@ -305,3 +305,16 @@ Sem migration. A cobertura e o cálculo do seguro permanecem ativos; somente a a
 - [x] Build de produção aprovado com uma CPU e heap limitado. Banco temporário encerrado após os testes; nenhuma alteração em produção.
 
 Sem nova migration. Conversas antigas ainda ativas também podem ser retomadas após o deploy.
+
+### Orçamento Guiado sem Duplicar Produtos
+
+- [x] Tratar `prepare_quote` como quantidades finais por produto, preservando os não mencionados e os IDs/arquivos de artes existentes. Repetir itens confirmados não os adiciona novamente; propostas sem alteração retornam o rascunho, sem nova confirmação.
+- [x] Informar à IA o estado atual confirmado, separado das propostas pendentes. Grupos de artes ambíguos e exclusões seguem pela edição explícita, sem descarte automático de arquivos.
+- [x] Após confirmar, gravar uma única mensagem com o rascunho e três caminhos: adicionar produto, alterar itens ou continuar para orçamento completo. Explicar validação por e-mail e dados pessoais/empresariais no formulário, nunca no chat.
+- [x] Versionar propostas no payload criptografado para bloquear confirmações pendentes do fluxo anterior. Propostas já aplicadas continuam idempotentes; não regravar nem corrigir silenciosamente carrinhos antigos.
+- [x] 23 testes focados aprovados e nove testes PostgreSQL isolados: cenário exato 50 + 20, preços/totais, preservação de IDs e artes, no-op sem proposta extra, confirmação repetida sem mensagem duplicada e bloqueio de proposta pendente antiga. Banco temporário encerrado após execução; nenhuma chamada real de IA.
+- [x] Regressão geral com 998 testes aprovados e 76 integrações condicionais não executadas nessa rodada. Os nove testes PostgreSQL do assistente foram executados separadamente. Lint e tipos aprovados.
+- [x] Playwright validou confirmação, caminhos de adicionar/alterar/continuar, formulário real de orçamento e retomada sem repetir confirmação. Claro/escuro, 1440/390/320 px e paisagem; capturas do card guiado inspecionadas, sem overflow. APIs simuladas, sem custo real de IA, e-mail ou pagamento.
+- [x] Build de produção aprovado com uma CPU e memória limitada. Nenhuma alteração em produção.
+
+Sem migration ou variável nova. Após deploy, propostas antigas ainda pendentes precisam ser recalculadas. Itens duplicados antes da correção devem ser revisados em "Alterar itens do orçamento"; não apagar automaticamente grupos que podem ter artes diferentes.

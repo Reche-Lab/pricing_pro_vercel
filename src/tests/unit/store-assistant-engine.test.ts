@@ -11,12 +11,21 @@ vi.mock("@/services/commerce/assistant-tools", () => ({ assistantToolDefinitions
 vi.mock("@/services/openrouter/store-assistant", async original => ({ ...await original<typeof import("@/services/openrouter/store-assistant")>(), storeAssistantCompletion: vi.fn() }));
 afterEach(() => vi.clearAllMocks());
 describe("assistant fallback tool-loop continuity", () => {
+  it("provides authoritative cart totals without leaking artwork personal data or corrupting product IDs", () => {
+    const id = "00000000-0000-4000-8000-000000000001";
+    const context = { store: { slug: "test", settings: { name: "Loja", description: "", terms: "" } }, config: { settings: assistantSettingsSchema.parse({}) }, session: { cart: [{ productId: id, quantity: 30, artworkName: "Campanha" }, { productId: id, quantity: 20, artworkName: "cliente@example.test" }] } } as AssistantToolContext;
+    const prompt = assistantSystemPrompt(context);
+    expect(prompt).toContain(JSON.stringify(id)); expect(prompt).toContain('"quantity":50'); expect(prompt).toContain('"artworks":2');
+    expect(prompt).not.toContain("cliente@example.test");
+  });
   it("keeps the virtual assistant identity without discussing internal providers or infrastructure", () => {
     const context = { store: { slug: "test", settings: { name: "Loja teste", description: "", terms: "" } }, config: { settings: assistantSettingsSchema.parse({}) } } as AssistantToolContext;
     const prompt = assistantSystemPrompt(context);
     expect(prompt).toContain("Identifique-se como IA");
     expect(prompt).toContain("Não exponha fornecedores, modelos, infraestrutura ou configurações internas");
     expect(prompt).toContain("Não detalhe seguro nem valor declarado do frete nas respostas");
+    expect(prompt).toContain("quantidade FINAL desejada");
+    expect(prompt).toContain("validar o e-mail e preencher os dados pessoais ou da empresa");
   });
   it("keeps the fallback for the rest of the turn, preserving signatures without replaying a proposal or storing reasoning", async () => {
     const config = { tenant_id: "tenant", enabled: true, revision: 1, settings: assistantSettingsSchema.parse({}), tested_revision: 1, tested_at: null };

@@ -26,6 +26,24 @@ const props = () => ({ config, api: "/api/store/test", base: "/loja/test", setti
 function response(messages: unknown[] = []) { return Response.json({ conversation: { id: ids.conv }, messages, customer: false }); }
 async function consent() { fireEvent.click(await screen.findByRole("button", { name: "Entendi, iniciar atendimento" })); }
 describe("store assistant customer UX", () => {
+  it("offers add, edit and continue choices after an item is confirmed, explaining the secure quote steps", async () => {
+    const cart = { lines: [{ quantity: 50 }], calculation: { totalCents: 10000 } };
+    resume.mockResolvedValueOnce(response([{ id: "proposal", role: "assistant", text: "Confira o rascunho", cards: [proposal] }]));
+    fetcher.mockImplementation(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      if (body.action === "confirm") return Response.json({ cart, message: "Rascunho atualizado", messages: [{ id: "next", role: "assistant", text: "Como deseja continuar?", cards: [{ kind: "cart", items: proposal.items, totalCents: 10000 }] }] });
+      if (body.action === "message") return Response.json({ messages: [{ id: "more", role: "assistant", text: "Qual outro produto você deseja?", cards: [] }] });
+      throw new Error("Unexpected request");
+    });
+    render(<StoreAssistantPanel {...props()}/>);
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar e adicionar ao carrinho" }));
+    await screen.findByRole("button", { name: "Continuar para orçamento completo" });
+    expect(screen.getByRole("link", { name: "Alterar itens do orçamento" })).toHaveAttribute("href", "/loja/test/orcamento");
+    expect(screen.getByText(/valide seu e-mail e preencha os dados da pessoa ou empresa/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar outro produto" }));
+    await screen.findByText("Qual outro produto você deseja?");
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toMatchObject({ action: "message", text: "Quero acrescentar outro produto ao orçamento." });
+  });
   it("resumes an existing conversation and its confirmed proposals without requesting consent or writing again", async () => {
     resume.mockResolvedValueOnce(Response.json({ conversation: { id: ids.conv }, messages: [{ id: "old", role: "assistant", text: "Vamos continuar seu orçamento", cards: [proposal] }], customer: true, confirmedActionIds: [ids.action] }));
     render(<StoreAssistantPanel {...props()}/>);

@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
+import { decryptTenantSecret, encryptTenantSecret } from "@/lib/crypto/secrets";
 import { getPool } from "@/lib/db/client";
 import { createBuyerSession, type BuyerSession, type CommerceStore, type CommerceProduct } from "@/repositories/commerce";
 import { storeSettingsSchema } from "@/domain/commerce/schemas";
@@ -155,6 +156,46 @@ describe.skipIf(!url)("assistant isolated database security", () => {
     await expect(confirmAssistantCart({ ...context, session: another, conversationId: own.id }, changed.card.actionId)).rejects.toMatchObject({ status: 409 });
     expect((await getPool().query("select cart from commerce_sessions where id=$1", [another.id])).rows[0].cart).toEqual([]);
     await getPool().query("delete from commerce_products where tenant_id=$1", [tenant]); await getPool().query("delete from products where tenant_id=$1", [tenant]);
+  });
+  it("keeps 50 of one product and adds 20 of another without duplicating confirmed quantities or follow-up messages", async () => {
+    const config = (await assistantConfig(tenant))!, catalog: string[] = [];
+    for (const size of ["3,5 cm", "2,5 cm"]) {
+      const p = (await getPool().query("insert into products(tenant_id,name,slug,category) values($1,'Botton',$2,'Bottons') returning id", [tenant, `botton-${randomUUID()}`])).rows[0].id;
+      const variantId = (await getPool().query("insert into product_variants(tenant_id,product_id,name) values($1,$2,$3) returning id", [tenant, p, size])).rows[0].id;
+      const snapshot = { variantId, name: `Botton - ${size}`, description: "", category: "Bottons", imageUrl: "", minQuantity: 1, maxQuantity: 1000, maxArtworks: 10, pricingRule: "per_art", personalized: true, geometry: null, margins: { bleedMm: 2, safeMarginMm: 2 }, curve: { mode: "step", points: [{ quantity: 1, unitPrice: 5 }] }, platform: { commissionRate: 0, fixedFee: 0, sellerShippingCost: 0, sellerShippingThreshold: 0 } };
+      catalog.push((await getPool().query("insert into commerce_products(tenant_id,variant_id,snapshot,active) values($1,$2,$3,true) returning id", [tenant, variantId, JSON.stringify(snapshot)])).rows[0].id);
+    }
+    const visitor = (await createBuyerSession(tenant)).session, conv = await startAssistantConversation(tenant, visitor, 30);
+    const store = (await getPool().query<CommerceStore>("select * from commerce_stores where tenant_id=$1", [tenant])).rows[0];
+    let context = { store, session: visitor, config, conversationId: conv.id };
+    const first = await executeAssistantTool(context, "prepare_quote", { items: [{ productId: catalog[0], quantity: 50 }] });
+    if (first.card.kind !== "proposal") throw new Error("Expected proposal");
+    await confirmAssistantCart(context, first.card.actionId);
+    context = { ...context, session: (await getPool().query<BuyerSession>("select * from commerce_sessions where id=$1", [visitor.id])).rows[0] };
+    const originalLineId = context.session.cart[0].id;
+    const second = await executeAssistantTool(context, "prepare_quote", { items: [{ productId: catalog[0], quantity: 50 }, { productId: catalog[1], quantity: 20 }] });
+    if (second.card.kind !== "proposal") throw new Error("Expected proposal");
+    expect(second.card.items.map(item => item.quantity)).toEqual([50, 20]); expect(second.card.totalCents).toBe(35000);
+    expect((await getPool().query<BuyerSession>("select * from commerce_sessions where id=$1", [visitor.id])).rows[0].cart).toHaveLength(1);
+    await confirmAssistantCart(context, second.card.actionId);
+    expect((await confirmAssistantCart(context, second.card.actionId)).alreadyApplied).toBe(true);
+    context = { ...context, session: (await getPool().query<BuyerSession>("select * from commerce_sessions where id=$1", [visitor.id])).rows[0] };
+    expect(context.session.cart.map(line => line.quantity)).toEqual([50, 20]); expect(context.session.cart[0].id).toBe(originalLineId);
+    const history = await assistantMessages(tenant, conv.id);
+    expect(history.filter(message => message.cards.some(card => card.kind === "cart"))).toHaveLength(2);
+    expect(history[1].text).toContain("validar seu e-mail");
+    const count = Number((await getPool().query("select count(*) as n from commerce_assistant_actions where conversation_id=$1", [conv.id])).rows[0].n);
+    const unchanged = await executeAssistantTool(context, "prepare_quote", { items: [{ productId: catalog[0], quantity: 50 }, { productId: catalog[1], quantity: 20 }] });
+    expect(unchanged.card.kind).toBe("cart");
+    expect(Number((await getPool().query("select count(*) as n from commerce_assistant_actions where conversation_id=$1", [conv.id])).rows[0].n)).toBe(count);
+    const revised = await executeAssistantTool(context, "prepare_quote", { items: [{ productId: catalog[0], quantity: 70 }] });
+    if (revised.card.kind !== "proposal") throw new Error("Expected proposal");
+    expect(revised.card.items.map(item => item.quantity)).toEqual([70, 20]);
+    const row = (await getPool().query("select payload_encrypted from commerce_assistant_actions where id=$1", [revised.card.actionId])).rows[0];
+    const legacy = decryptTenantSecret<{ version?: number }>(row.payload_encrypted); delete legacy.version;
+    await getPool().query("update commerce_assistant_actions set payload_encrypted=$2 where id=$1", [revised.card.actionId, encryptTenantSecret(legacy)]);
+    await expect(confirmAssistantCart(context, revised.card.actionId)).rejects.toMatchObject({ status: 409 });
+    expect((await getPool().query<BuyerSession>("select * from commerce_sessions where id=$1", [visitor.id])).rows[0].cart.map(line => line.quantity)).toEqual([50, 20]);
   });
   it("authorizes and bills fallback attempts without changing the tenant primary or bypassing a cap", async () => {
     vi.stubEnv("OPENROUTER_ASSISTANT_MODELS", `${ASSISTANT_PRIMARY_MODEL},${ASSISTANT_FALLBACK_MODEL}`);

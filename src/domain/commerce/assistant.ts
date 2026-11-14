@@ -26,7 +26,7 @@ export type AssistantDocument = { id: string; label: string; file_name: string; 
 export type AssistantProduct = Pick<ReturnType<typeof publicCommerceProduct>, "id" | "name" | "description" | "category" | "imageUrl" | "unitCents" | "minQuantity" | "maxQuantity" | "maxArtworks" | "personalized">;
 export type AssistantCard =
   | { kind: "products"; products: AssistantProduct[]; clarification?: boolean }
-  | { kind: "proposal"; actionId: string; items: { name: string; quantity: number; artworkName: string; unitCents: number; totalCents: number }[]; totalCents: number; expiresAt: string }
+  | { kind: "proposal"; desiredQuantities?: boolean; actionId: string; items: { name: string; quantity: number; artworkName: string; unitCents: number; totalCents: number }[]; totalCents: number; expiresAt: string }
   | { kind: "cart"; items: { name: string; quantity: number; artworkName: string; unitCents: number; totalCents: number }[]; totalCents: number }
   | { kind: "shipping"; options: (StoreShippingOption & { estimate: DeliveryEstimate })[]; warnings: string[] }
   | { kind: "company"; company: AssistantSettings["company"]; documents: AssistantDocument[] }

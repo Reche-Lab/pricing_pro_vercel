@@ -59,7 +59,7 @@ export async function POST(request: Request, { params }: Context) {
       if (store.status !== "published") throw new CommerceError("A loja está pausada. Fale com a equipe.", 409);
       const result = await confirmAssistantCart(context, input.actionId);
       const { session: latest } = await buyerContext(slug);
-      return commerceJson({ ...result, cart: await cartView(store, latest), message: result.alreadyApplied ? "Esta proposta já foi adicionada. Seus itens não foram duplicados." : "Itens adicionados ao carrinho. Revise e confirme seus dados para salvar o orçamento." });
+      return commerceJson({ ...result, cart: await cartView(store, latest), messages: await history(conversation.id), message: result.alreadyApplied ? "Esta proposta já foi confirmada. Seus itens não foram duplicados." : "Rascunho atualizado. Você pode acrescentar produtos, alterar os itens ou seguir para o orçamento completo." });
     }
     if (input.action === "handoff") return commerceJson({ summary: await assistantHandoff(store.tenant_id, session, conversation.id), message: "Solicitação registrada para a equipe. O contato não é uma confirmação de atendimento imediato." });
     if (input.action === "quote_saved") {
