@@ -53,9 +53,9 @@ const server = createServer(async (request, response) => {
         if (body.action === "enable") admin.enabled = true;
         if (body.action === "preview") return json({ answer: { text: "Sou o assistente virtual. Confira os produtos oficiais abaixo.", cards: [{ kind: "products", products: [product] }] }, message: "Consulta de teste concluída sem criar carrinho." });
         if (request.method !== "GET") return json({ config: admin, answer: body.action === "test" ? "Olá! Sou o assistente virtual desta loja." : null, message: body.action === "enable" ? "Assistente ativado na loja." : "Configuração atualizada." });
-        return json({ config: admin, defaults: assistant, ready: true, storageReady: true, policy, documents: [], metrics: { conversations: 0, handoffs: 0, usage: { calls: 1, tokens: 120, cost_usd: .001 }, events: [] }, conversations: [] });
+        return json({ config: admin, defaults: assistant, ready: true, storageReady: true, policy, fallbackModel: "google/gemini-3.1-flash-lite", documents: [], metrics: { conversations: 0, handoffs: 0, usage: { calls: 1, tokens: 120, cost_usd: .001 }, events: [] }, conversations: [] });
       }
-      if (path === "/api/superadmin/commerce-assistant") return json({ models: [policy.model], tenants: [{ id: "tenant-test", name: "Ground Shop", slug: "ground-shop", policy, usage: { calls: 1, tokens: 120, cost_usd: .001 } }] });
+      if (path === "/api/superadmin/commerce-assistant") return json({ models: [policy.model, "google/gemini-3.1-flash-lite"], tenants: [{ id: "tenant-test", name: "Ground Shop", slug: "ground-shop", policy, usage: { calls: 1, tokens: 120, cost_usd: .001 } }] });
       if (path.endsWith("/cart")) return json(cart);
       if (path.endsWith("/checkout-draft")) return json({ version: 1, draft: { billing, address: billing, same: true, delivery: "pickup" } });
       if (path.endsWith("/quotes")) return json({ id: ids.quote });
@@ -107,6 +107,7 @@ try {
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 }); await page.goto(`${origin}/?admin=1`);
     await page.getByRole("button", { name: "Informações oficiais" }).click();
+    await page.getByText(/fallback: google\/gemini-3.1-flash-lite/).waitFor();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
     await page.screenshot({ path: `${output}/admin-${width}.png`, fullPage: true });
     await page.getByRole("button", { name: "Laboratório", exact: true }).click();

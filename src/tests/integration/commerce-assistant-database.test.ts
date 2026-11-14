@@ -1,10 +1,11 @@
 // @vitest-environment node
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { getPool } from "@/lib/db/client";
 import { createBuyerSession, type BuyerSession, type CommerceStore, type CommerceProduct } from "@/repositories/commerce";
 import { storeSettingsSchema } from "@/domain/commerce/schemas";
 import { executeAssistantTool, confirmAssistantCart } from "@/services/commerce/assistant-tools";
+import { ASSISTANT_FALLBACK_MODEL, ASSISTANT_PRIMARY_MODEL } from "@/domain/commerce/assistant-models";
 import { assistantSettingsSchema } from "@/domain/commerce/assistant";
 import { assistantConfig, saveAssistantConfig, setAssistantState, reserveAssistantCall, settleAssistantCall, assistantUsage, startAssistantConversation, requireAssistantConversation, beginAssistantTurn, completeAssistantTurn, assistantMessages, purgeExpiredAssistant } from "@/repositories/commerce-assistant";
 const url = process.env.COMMERCE_TEST_DATABASE_URL;
@@ -129,5 +130,21 @@ describe.skipIf(!url)("assistant isolated database security", () => {
     await expect(confirmAssistantCart({ ...context, session: another, conversationId: own.id }, changed.card.actionId)).rejects.toMatchObject({ status: 409 });
     expect((await getPool().query("select cart from commerce_sessions where id=$1", [another.id])).rows[0].cart).toEqual([]);
     await getPool().query("delete from commerce_products where tenant_id=$1", [tenant]); await getPool().query("delete from products where tenant_id=$1", [tenant]);
+  });
+  it("authorizes and bills fallback attempts without changing the tenant primary or bypassing a cap", async () => {
+    vi.stubEnv("OPENROUTER_ASSISTANT_MODELS", `${ASSISTANT_PRIMARY_MODEL},${ASSISTANT_FALLBACK_MODEL}`);
+    try {
+      const result = await reserveAssistantCall(other, 100, ASSISTANT_FALLBACK_MODEL);
+      expect(result.model).toBe(ASSISTANT_FALLBACK_MODEL);
+      expect((await getPool().query("select model from commerce_assistant_limits where tenant_id=$1", [other])).rows[0].model).toBe(ASSISTANT_PRIMARY_MODEL);
+      await expect(reserveAssistantCall(other, 100, "unauthorized/model")).rejects.toMatchObject({ status: 503 });
+      vi.stubEnv("OPENROUTER_ASSISTANT_MODELS", ASSISTANT_PRIMARY_MODEL);
+      await expect(reserveAssistantCall(other, 100, ASSISTANT_FALLBACK_MODEL)).rejects.toMatchObject({ status: 503 });
+      expect((await assistantUsage(other)).calls).toBe(1);
+      vi.stubEnv("OPENROUTER_ASSISTANT_MODELS", `${ASSISTANT_PRIMARY_MODEL},${ASSISTANT_FALLBACK_MODEL}`);
+      await getPool().query("update commerce_assistant_limits set monthly_calls=1 where tenant_id=$1", [other]);
+      await expect(reserveAssistantCall(other, 100, ASSISTANT_FALLBACK_MODEL)).rejects.toMatchObject({ status: 429 });
+      expect((await assistantUsage(other)).calls).toBe(1);
+    } finally { vi.unstubAllEnvs(); }
   });
 });

@@ -3,13 +3,14 @@ import { getPool } from "@/lib/db/client";
 import { getServerEnv } from "@/lib/env/server";
 import { CommerceError } from "@/domain/commerce/commerce";
 import { assistantSettingsSchema } from "@/domain/commerce/assistant";
-import { assistantConfig, assistantDocuments, assistantLimits, assistantMetrics, assistantMessages, listAssistantConversations, saveAssistantConfig, setAssistantState, assistantAudit } from "@/repositories/commerce-assistant";
+import { assistantConfig, assistantDocuments, assistantLimits, assistantModels, assistantMetrics, assistantMessages, listAssistantConversations, saveAssistantConfig, setAssistantState, assistantAudit } from "@/repositories/commerce-assistant";
 import { requireCommerceAdmin, checkCommerceOrigin, commerceFailure, commerceJson, readCommerceBody } from "@/services/commerce/http";
 import { enforcePublicRateLimit } from "@/lib/security/public-rate-limit";
 import { storeAssistantCompletion } from "@/services/openrouter/store-assistant";
 import { previewAssistantReply } from "@/services/commerce/assistant-engine";
 import type { CommerceStore } from "@/repositories/commerce";
 import { storeSettingsSchema } from "@/domain/commerce/schemas";
+import { assistantFallbackModel } from "@/domain/commerce/assistant-models";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 export async function GET(request: Request) {
@@ -23,8 +24,8 @@ export async function GET(request: Request) {
       await assistantAudit(getPool(), session.tenantId, session.userId, "conversation.read", { conversationId });
       return commerceJson({ messages: await assistantMessages(session.tenantId, conversationId) });
     }
-    const config = await assistantConfig(session.tenantId);
-    return commerceJson({ config, defaults: assistantSettingsSchema.parse({}), ready: Boolean(getServerEnv().OPENROUTER_API_KEY), storageReady: Boolean(getServerEnv().SUPABASE_SERVICE_ROLE_KEY && getServerEnv().SUPABASE_URL), policy: await assistantLimits(session.tenantId), documents: await assistantDocuments(session.tenantId, true), metrics: await assistantMetrics(session.tenantId), conversations: await listAssistantConversations(session.tenantId) });
+    const config = await assistantConfig(session.tenantId), policy = await assistantLimits(session.tenantId);
+    return commerceJson({ config, defaults: assistantSettingsSchema.parse({}), ready: Boolean(getServerEnv().OPENROUTER_API_KEY), storageReady: Boolean(getServerEnv().SUPABASE_SERVICE_ROLE_KEY && getServerEnv().SUPABASE_URL), policy, fallbackModel: assistantFallbackModel(policy.model, assistantModels()) ?? null, documents: await assistantDocuments(session.tenantId, true), metrics: await assistantMetrics(session.tenantId), conversations: await listAssistantConversations(session.tenantId) });
   } catch (error) { return commerceFailure(error, "assistant.admin.read"); }
 }
 export async function PUT(request: Request) {
@@ -64,6 +65,6 @@ export async function POST(request: Request) {
       return commerceJson({ answer, message: "Teste somente de leitura concluído. Não foram criados carrinho, comprador ou orçamento. As chamadas contam no limite do mês." });
     }
     const answer = input.action === "test" ? await storeAssistantCompletion(session.tenantId, [{ role: "system", content: "Você é um assistente virtual de loja. Responda brevemente em português, sem pedir dados pessoais." }, { role: "user", content: "Diga uma saudação curta e ofereça ajuda com produtos." }], [], { signal: request.signal }) : null;
-    return commerceJson({ config: await setAssistantState(session.tenantId, session.userId, input.revision, input.action === "test" ? "tested" : input.action), answer: answer?.content, message: input.action === "test" ? "Conexão validada com privacidade e limites configurados. O teste consumiu uma chamada. Use o laboratório para conferir as informações antes de ativar." : input.action === "enable" ? "Assistente ativado na loja." : "Assistente desativado." });
+    return commerceJson({ config: await setAssistantState(session.tenantId, session.userId, input.revision, input.action === "test" ? "tested" : input.action), answer: answer?.content, message: input.action === "test" ? "Conexão validada com privacidade e limites configurados. As tentativas realizadas contam na cota, inclusive se o fallback for necessário. Use o laboratório para conferir as informações antes de ativar." : input.action === "enable" ? "Assistente ativado na loja." : "Assistente desativado." });
   } catch (error) { return commerceFailure(error, "assistant.admin.action"); }
 }

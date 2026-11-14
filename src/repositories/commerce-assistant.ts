@@ -5,12 +5,12 @@ import { decryptTenantSecret, encryptTenantSecret } from "@/lib/crypto/secrets";
 import { commerceTransaction, hashCommerceToken, type BuyerSession } from "./commerce";
 import { CommerceError } from "@/domain/commerce/commerce";
 import { assistantSettingsSchema, type AssistantSettings, type AssistantLimits, type AssistantDocument, type AssistantMessage, type AssistantCard } from "@/domain/commerce/assistant";
-import { getServerEnv } from "@/lib/env/server";
+import { assistantModelAllowlist, assistantFallbackModel, ASSISTANT_PRIMARY_MODEL } from "@/domain/commerce/assistant-models";
 
 export type AssistantConfig = { tenant_id: string; settings: AssistantSettings; enabled: boolean; revision: number; tested_revision: number | null; tested_at: string | null };
 export type AssistantConversation = { id: string; tenant_id: string; session_id: string; status: string; expires_at: string };
-export const assistantModels = () => [...new Set((process.env.OPENROUTER_ASSISTANT_MODELS || getServerEnv().OPENROUTER_TEXT_MODEL).split(",").map(value => value.trim()).filter(value => /^[\w./:-]{3,150}$/.test(value)))];
-export const defaultAssistantLimits = (): AssistantLimits => ({ allowed: true, model: assistantModels()[0] || "openai/gpt-4.1-mini", monthlyCalls: 500, monthlyTokens: 2000000, monthlyUsd: 10, visitorDailyTurns: 20, revision: 0 });
+export const assistantModels = () => assistantModelAllowlist(process.env.OPENROUTER_ASSISTANT_MODELS);
+export const defaultAssistantLimits = (): AssistantLimits => ({ allowed: true, model: assistantModels().includes(ASSISTANT_PRIMARY_MODEL) ? ASSISTANT_PRIMARY_MODEL : assistantModels()[0] || ASSISTANT_PRIMARY_MODEL, monthlyCalls: 500, monthlyTokens: 2000000, monthlyUsd: 10, visitorDailyTurns: 20, revision: 0 });
 export async function assistantConfig(tenantId: string): Promise<AssistantConfig | null> {
   try {
     const row = (await getPool().query("select *,tested_at::text from commerce_assistant_settings where tenant_id=$1", [tenantId])).rows[0];
@@ -53,19 +53,20 @@ export async function assistantUsage(tenantId: string) {
 }
 
 // Reserve the full bounded request envelope; failed/unknown bills keep the reservation.
-export async function reserveAssistantCall(tenantId: string, tokens: number) {
+export async function reserveAssistantCall(tenantId: string, tokens: number, requestedModel?: string) {
   if (!Number.isInteger(tokens) || tokens < 1 || tokens > 34000) throw new CommerceError("O contexto ficou longo. Inicie uma nova conversa.", 413);
   const limits = await assistantLimits(tenantId);
   return commerceTransaction(async client => {
     await client.query(`insert into commerce_assistant_limits(tenant_id,model) values($1,$2) on conflict do nothing`, [tenantId, limits.model]);
     const row = (await client.query(`select * from commerce_assistant_limits where tenant_id=$1 for update`, [tenantId])).rows[0];
-    if (!row.allowed || !assistantModels().includes(row.model)) throw new CommerceError("O assistente está indisponível. Fale com a equipe da loja.", 503);
+    const allowed = assistantModels(), model = requestedModel ?? String(row.model);
+    if (!row.allowed || !allowed.includes(row.model) || !allowed.includes(model) || model !== row.model && model !== assistantFallbackModel(row.model, allowed)) throw new CommerceError("O assistente está indisponível. Fale com a equipe da loja.", 503);
     const used = await client.query(`insert into commerce_assistant_usage(tenant_id,month,calls,tokens,cost_usd)
       select $1,date_trunc('month',now() at time zone 'UTC')::date,1,$2,0.10 where $3::integer>=1 and $4::bigint >= $2::bigint and $5::numeric>=0.10
       on conflict(tenant_id,month) do update set calls=commerce_assistant_usage.calls+1,tokens=commerce_assistant_usage.tokens+$2,cost_usd=commerce_assistant_usage.cost_usd+0.10
       where commerce_assistant_usage.calls<$3 and commerce_assistant_usage.tokens+$2<=$4 and commerce_assistant_usage.cost_usd+0.10<=$5 returning month::text`, [tenantId, tokens, row.monthly_calls, row.monthly_tokens, row.monthly_usd]);
     if (!used.rowCount) throw new CommerceError("O limite de atendimento por IA desta loja foi atingido. Você pode continuar com a equipe.", 429);
-    return { ...limits, model: String(row.model), usageMonth: String(used.rows[0].month) };
+    return { ...limits, model, usageMonth: String(used.rows[0].month) };
   });
 }
 export async function settleAssistantCall(tenantId: string, month: string, reservedTokens: number, usage: { tokens?: number; cost?: number }) {

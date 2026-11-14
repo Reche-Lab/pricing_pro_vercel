@@ -2,7 +2,7 @@ import { CommerceError } from "@/domain/commerce/commerce";
 import { redactAssistantText, safeAssistantReply, type AssistantCard } from "@/domain/commerce/assistant";
 import { assistantConfig, assistantMessages, requireAssistantConversation, completeAssistantTurn } from "@/repositories/commerce-assistant";
 import { storeInstitutionalPages } from "@/domain/commerce/institutional";
-import { storeAssistantCompletion, type AssistantModelMessage } from "@/services/openrouter/store-assistant";
+import { storeAssistantCompletion, assistantToolMessage, type AssistantModelMessage } from "@/services/openrouter/store-assistant";
 import { assistantToolDefinitions, executeAssistantTool, type AssistantToolContext } from "./assistant-tools";
 
 export function assistantSystemPrompt(context: AssistantToolContext) {
@@ -29,13 +29,15 @@ export async function runAssistantTurn(context: AssistantToolContext, messageId:
   const history = await assistantMessages(context.store.tenant_id, context.conversationId);
   const messages: AssistantModelMessage[] = [{ role: "system", content: assistantSystemPrompt(context) }, ...history.slice(-8).map(message => ({ role: message.role, content: message.text.slice(0, 1200) + (assistantCatalogContext(message.cards).length ? `\nReferências do catálogo já apresentado: ${JSON.stringify(assistantCatalogContext(message.cards))}` : "") }))];
   const cards: AssistantCard[] = [], used = new Set<string>(); let toolCount = 0;
+  let preferredModel: string | undefined;
   let text = "Confira as opções e os atalhos abaixo. Posso ajudar a continuar.";
   try {
     for (let step = 0; step < 3; step++) {
       onStatus("Consultando as informações da loja…");
-      const response = await storeAssistantCompletion(context.store.tenant_id, messages, assistantToolDefinitions, { signal });
+      const response = await storeAssistantCompletion(context.store.tenant_id, messages, assistantToolDefinitions, { signal, preferredModel });
+      preferredModel = response.model;
       if (!response.tool_calls?.length) { text = safeAssistantReply(response.content || text); break; }
-      messages.push({ role: "assistant", content: null, tool_calls: response.tool_calls });
+      messages.push(assistantToolMessage(response));
       for (const call of response.tool_calls) {
         const name = call.function.name;
         if (++toolCount > 4) throw new CommerceError("Vamos resolver uma etapa por vez. Envie outra mensagem para continuar.");
@@ -67,10 +69,12 @@ export async function previewAssistantReply(context: AssistantToolContext, text:
   const definitions = assistantToolDefinitions.filter(tool => ["search_products", "estimate_delivery", "company_information", "store_guide"].includes(tool.function.name));
   const messages: AssistantModelMessage[] = [{ role: "system", content: assistantSystemPrompt(context) + "\nEste é um laboratório administrativo SOMENTE de leitura. Use as ferramentas disponíveis. Não crie proposta nem consulte conta de comprador." }, { role: "user", content: redactAssistantText(text) }];
   const cards: AssistantCard[] = [];
+  let preferredModel: string | undefined;
   for (let step = 0; step < 2; step++) {
-    const response = await storeAssistantCompletion(context.store.tenant_id, messages, step ? [] : definitions, { signal });
+    const response = await storeAssistantCompletion(context.store.tenant_id, messages, step ? [] : definitions, { signal, preferredModel });
+    preferredModel = response.model;
     if (!response.tool_calls?.length) return { text: safeAssistantReply(response.content || "Confira os cartões oficiais abaixo."), cards };
-    messages.push({ role: "assistant", content: null, tool_calls: response.tool_calls });
+    messages.push(assistantToolMessage(response));
     for (const call of response.tool_calls) {
       let result: object;
       try { const outcome = await executeAssistantTool(context, call.function.name, JSON.parse(call.function.arguments), { adminPreview: true }); cards.push(outcome.card); result = outcome.result; }
