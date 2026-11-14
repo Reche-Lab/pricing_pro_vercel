@@ -1,12 +1,22 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
+    "src/app/api/schedules/commerce-assistant-cleanup/route.ts": {
+      "maxDuration": 30,
+      "experimentalTriggers": [{ "type": "schedule/v1beta" }]
+    },
     "src/app/api/schedules/commerce-olist/route.ts": {
       "maxDuration": 60,
       "experimentalTriggers": [{ "type": "schedule/v1beta" }]
     }
   },
   "schedules": {
+    "commerce-assistant-cleanup": {
+      "schedule": "0 * * * *",
+      "timezone": "America/Sao_Paulo",
+      "jitter": 15,
+      "function": "api/schedules/commerce-assistant-cleanup"
+    },
     "commerce-olist": {
       "schedule": "* * * * *",
       "timezone": "America/Sao_Paulo",

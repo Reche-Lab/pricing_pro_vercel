@@ -11,6 +11,7 @@ import { AccessRequestsPanel } from "@/components/superadmin/AccessRequestsPanel
 import { EditableNumberInput } from "@/components/ui/EditableNumberInput";
 import dynamic from "next/dynamic";
 const CommerceDomainsSection = dynamic(() => import("./CommerceDomainsPanel").then(module => module.CommerceDomainsSection));
+const CommerceAssistantPolicies = dynamic(() => import("./CommerceAssistantPolicies").then(module => module.CommerceAssistantPolicies));
 
 export function SuperadminPanel({
   accessRequests,
@@ -150,6 +151,7 @@ export function SuperadminPanel({
 
       <AccessRequestsPanel plans={billingPlans} requests={accessRequests} />
       <CommerceDomainsSection/>
+      <CommerceAssistantPolicies/>
 
       <section className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-5 xl:col-span-2">
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
