@@ -23,7 +23,13 @@ export const assistantLimitsSchema = z.object({
 }).strict();
 export type AssistantLimits = z.infer<typeof assistantLimitsSchema>;
 export type AssistantDocument = { id: string; label: string; file_name: string; file_size: number; visibility: "public" | "identified"; created_at: string; active?: boolean };
-export type AssistantProduct = Pick<ReturnType<typeof publicCommerceProduct>, "id" | "name" | "description" | "category" | "imageUrl" | "unitCents" | "minQuantity" | "maxQuantity" | "maxArtworks" | "personalized">;
+export type AssistantArtworkBenefit = { percent: number; limitPerArtworkCents: number };
+export type AssistantGuide = {
+  features: { quotes: boolean; orders: boolean; personalized: boolean; studio: boolean; library: boolean; teamPreparation: boolean; pickup: boolean; delivery: boolean };
+  benefits: (AssistantArtworkBenefit & { productId: string; name: string })[];
+  moreBenefits: boolean;
+};
+export type AssistantProduct = Pick<ReturnType<typeof publicCommerceProduct>, "id" | "name" | "description" | "category" | "imageUrl" | "unitCents" | "minQuantity" | "maxQuantity" | "maxArtworks" | "personalized"> & { artworkBenefit?: AssistantArtworkBenefit };
 export type AssistantCard =
   | { kind: "products"; products: AssistantProduct[]; clarification?: boolean }
   | { kind: "proposal"; desiredQuantities?: boolean; actionId: string; items: { name: string; quantity: number; artworkName: string; unitCents: number; totalCents: number }[]; totalCents: number; expiresAt: string }
@@ -32,7 +38,7 @@ export type AssistantCard =
   | { kind: "company"; company: AssistantSettings["company"]; documents: AssistantDocument[] }
   | { kind: "orders"; orders: { id: string; totalCents: number; payment: string; fulfillment: string; createdAt: string }[] }
   | { kind: "quotes"; quotes: { id: string; totalCents: number; createdAt: string }[] }
-  | { kind: "guide"; topic: "artwork" | "shopping" | "policies" }
+  | { kind: "guide"; topic: "artwork" | "shopping" | "policies"; guide?: AssistantGuide }
   | { kind: "handoff"; summary: string }
   | { kind: "login" }
   | { kind: "quote_saved"; quoteId: string; totalCents: number }

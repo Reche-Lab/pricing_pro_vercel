@@ -330,3 +330,16 @@ Sem migration ou variável nova. Após deploy, propostas antigas ainda pendentes
 - [x] Build de produção aprovado com uma CPU e memória limitada. Nenhuma alteração em produção.
 
 Sem migration ou variável nova. APIs externas simuladas durante a validação local.
+
+### Assistente Conhece a Jornada da Loja
+
+- [x] Orientações curtas sobre criação no estúdio, envio, retoque, enquadramento, guia SVG, segurança/sangria/corte e aprovação, sem prometer geração automática de imagens pelo chat.
+- [x] Consulta de funcionalidades realmente disponíveis por tenant e catálogo: estúdio com modelo, biblioteca/campanhas, preparação pela equipe, entrega, retirada e consultas particulares.
+- [x] Desconto por arte preparada e aprovada vem das configurações de cada produto; mostra percentual e teto por arte/grupo, sem assumir 10% universal nem conceder benefício só pelo upload.
+- [x] Orçamento em PDF sem compromisso de compra, pagamento ou arte pronta; identificação por e-mail, dados e retomada na conta explicados com atalhos reais.
+- [x] Guia compacto com detalhes recolhidos e links para estúdio, artes prontas, produtos e orçamento, respeitando prefixo do tenant ou domínio próprio.
+- [x] Testes TDD de elegibilidade e recursos por tenant, ferramentas de consulta e UI. Regressão geral: 1.018 testes aprovados, 76 integrações condicionais não executadas nesta rodada; 35 testes focados aprovados na revisão final, incluindo o atalho do estúdio em domínio próprio. Lint aprovado; sem chamadas reais de IA.
+- [x] Tipos aprovados. Playwright validou guias, limites, links e fluxo de orçamento em claro/escuro, 1440/390/320 px e paisagem, além da administração; capturas inspecionadas. APIs simuladas, sem chamadas reais de IA, e-mail ou pagamentos.
+- [x] Build de produção aprovado com uma CPU e memória limitada. Nenhuma alteração em produção.
+
+Sem migration ou variável nova. Nenhum desconto ou configuração de produto alterado automaticamente.

@@ -17,6 +17,7 @@ let admin = { tenant_id: "tenant-test", settings: assistant, revision: 1, enable
 const policy = { allowed: true, model: "openai/gpt-4.1-mini", monthlyCalls: 500, monthlyTokens: 2000000, monthlyUsd: 10, visitorDailyTurns: 20, revision: 1 };
 const settings = { name: "Ground Shop", description: "Produtos personalizados", logoUrl: "", bannerUrl: "", accent: "#047857", contactEmail: "loja@example.test", contactPhone: "+55 (12) 99999-1234", pickupEnabled: true, pickupAddress: "Rua de teste, 100", deliveryEnabled: false, deliveryDescription: "", deliveryCents: 0, terms: "Condições de teste" };
 const product = { id: ids.product, name: "Botton - 3,5 cm", description: "Personalizado para sua campanha", category: "Bottons", imageUrl: "/mockups/botton-25mm-v1/base-verso.png", minQuantity: 1, maxQuantity: 1000, maxArtworks: 10, personalized: true, unitCents: 500 };
+const guide = { features: { quotes: true, orders: true, personalized: true, studio: true, library: true, teamPreparation: true, pickup: true, delivery: true }, benefits: [{ productId: ids.product, name: product.name, percent: 10, limitPerArtworkCents: 500 }], moreBenefits: false };
 const cart = { revision: 1, customer: { id: "buyer-test", name: "Cliente de teste", email: "cliente@example.test" }, lines: [{ id: ids.product, productId: ids.product, quantity: 20, artworkName: "Campanha", artworkId: null, preparation: "customer" }], artworks: [], payments: { mp_enabled: false, manual_enabled: true }, calculation: { totalCents: 6000, baseSubtotalCents: 6000, artworkDiscountCents: 0, items: [{ id: ids.product, productId: ids.product, name: product.name, quantity: 20, artworkName: "Campanha", unitCents: 300, totalCents: 6000 }] } };
 const billing = { name: "Cliente de teste", email: "fiscal@example.test", phone: "11999990000", document: "52998224725", postalCode: "01001000", street: "Praça de teste", number: "100", complement: "", district: "Centro", city: "São Paulo", state: "SP", attention: "" };
 let history = [], requests = [], conversationStarted = false, confirmedActionIds = [];
@@ -77,7 +78,7 @@ const server = createServer(async (request, response) => {
       if (body.action === "message") {
         const adding = body.text === "Quero acrescentar outro produto ao orçamento.";
         const continuing = body.text === "Pode seguir com o orçamento";
-        const cards = continuing ? [{ kind: "quote_continue" }] : adding ? [{ kind: "products", products: [product] }] : body.text.includes("orçamento") ? [{ kind: "proposal", desiredQuantities: true, actionId: ids.action, items: cart.calculation.items, totalCents: 6000, expiresAt: "2099-01-01T00:00:00Z" }] : body.text.includes("empresa") ? [{ kind: "company", company, documents: [] }] : body.text.includes("frete") ? [{ kind: "shipping", options: [{ id: "sedex", name: "Correios - SEDEX", priceCents: 2200, insuranceValueCents: 9500, estimate: { productionDays: 3, transportDays: 2, deliveryDate: "2026-11-20" } }], warnings: [] }] : [{ kind: "products", products: [product] }];
+        const cards = body.text === "Como preparar minha arte?" ? [{ kind: "guide", topic: "artwork", guide }] : body.text === "Posso pedir uma proposta sem comprar?" ? [{ kind: "guide", topic: "shopping", guide }] : continuing ? [{ kind: "quote_continue" }] : adding ? [{ kind: "products", products: [product] }] : body.text.includes("orçamento") ? [{ kind: "proposal", desiredQuantities: true, actionId: ids.action, items: cart.calculation.items, totalCents: 6000, expiresAt: "2099-01-01T00:00:00Z" }] : body.text.includes("empresa") ? [{ kind: "company", company, documents: [] }] : body.text.includes("frete") ? [{ kind: "shipping", options: [{ id: "sedex", name: "Correios - SEDEX", priceCents: 2200, insuranceValueCents: 9500, estimate: { productionDays: 3, transportDays: 2, deliveryDate: "2026-11-20" } }], warnings: [] }] : [{ kind: "products", products: [product] }];
         const selected = body.text.startsWith('Tenho interesse no produto "');
         history.push({ id: body.messageId, role: "user", text: body.text, cards: [] }, { id: crypto.randomUUID(), role: "assistant", text: continuing ? "Vamos continuar pelo botão abaixo." : selected ? "Quantas unidades você precisa?" : adding ? "Qual outro produto você deseja?" : "Confira as opções abaixo.", cards: selected ? [] : cards });
         response.setHeader("content-type", "application/x-ndjson"); return response.end(JSON.stringify({ type: "status", text: "Consultando catálogo…" }) + "\n" + JSON.stringify({ type: "done", messages: history }) + "\n");
@@ -131,6 +132,24 @@ try {
     await page.getByText("Frete e produção · estimativa", { exact: true }).waitFor();
     assert.doesNotMatch(await page.getByRole("dialog").innerText(), /seguro|valor declarado/i);
     await page.getByText("Frete e produção · estimativa", { exact: true }).locator("..").screenshot({ path: `${output}/freight-chat-${theme}-${width}.png` });
+    await page.getByRole("textbox", { name: "Mensagem para o assistente" }).fill("Como preparar minha arte?"); await page.getByRole("button", { name: "Enviar mensagem" }).click();
+    const artworkGuide = page.getByText("Sua arte, do envio à aprovação", { exact: true }).locator("..");
+    await artworkGuide.waitFor();
+    assert.equal(await artworkGuide.getByRole("link", { name: "Criar minha arte" }).getAttribute("href"), "/loja/test?estudio=1");
+    assert.equal(await artworkGuide.getByRole("link", { name: "Escolher arte pronta" }).getAttribute("href"), "/loja/test/artes");
+    assert.match(await artworkGuide.innerText(), /Até 10% extra/);
+    assert.equal(await artworkGuide.locator("details[open]").count(), 0);
+    await artworkGuide.getByText("Ver produtos e limites", { exact: true }).click();
+    assert.match(await artworkGuide.innerText(), /R\$\s*5,00 por arte\/grupo/);
+    await artworkGuide.screenshot({ path: `${output}/artwork-guide-${theme}-${width}.png` });
+    await artworkGuide.getByText("Ver produtos e limites", { exact: true }).click();
+    await page.getByRole("textbox", { name: "Mensagem para o assistente" }).fill("Posso pedir uma proposta sem comprar?"); await page.getByRole("button", { name: "Enviar mensagem" }).click();
+    const shoppingGuide = page.getByText("Compre ou peça um orçamento", { exact: true }).locator("..");
+    await shoppingGuide.waitFor();
+    assert.match(await shoppingGuide.innerText(), /sem comprar nem pagar/);
+    assert.equal(await shoppingGuide.getByRole("link", { name: "Solicitar orçamento", exact: true }).getAttribute("href"), "/loja/test/orcamento");
+    await shoppingGuide.screenshot({ path: `${output}/shopping-guide-${theme}-${width}.png` });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
     await page.getByRole("textbox", { name: "Mensagem para o assistente" }).fill("Quero um orçamento"); await page.getByRole("button", { name: "Enviar mensagem" }).click();
     await page.getByRole("button", { name: "Confirmar atualização do orçamento" }).click();
     await page.getByText("Rascunho do seu orçamento", { exact: true }).waitFor();
@@ -165,9 +184,11 @@ try {
     assert.equal(await page.getByRole("button", { name: "Orçamento atualizado", exact: true }).isDisabled(), true);
     await page.getByRole("button", { name: "Fechar atendimento" }).click();
     await page.getByRole("button", { name: "Abrir assistente virtual da loja" }).waitFor();
+    assert.deepEqual(errors, []);
     console.log(`Passed chat, proposal and quote form ${theme} ${width}x${height}`);
   }
   for (const width of [1440, 390, 320]) {
+    console.log(`Checking assistant administration ${width}`);
     await page.setViewportSize({ width, height: 1000 }); await page.goto(`${origin}/?admin=1`);
     await page.getByRole("button", { name: "Informações oficiais" }).click();
     await page.getByText(/fallback: google\/gemini-3.1-flash-lite/).waitFor();
@@ -188,4 +209,5 @@ try {
     }
   }
   assert.deepEqual(errors, []); console.log(`Browser checks passed. Screenshots: ${output}`);
-} finally { await browser.close(); await new Promise(done => server.close(done)); }
+} catch (error) { console.error(error); throw error; }
+finally { await browser.close(); server.closeAllConnections(); await new Promise(done => server.close(done)); }

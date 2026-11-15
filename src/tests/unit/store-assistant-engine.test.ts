@@ -6,11 +6,17 @@ import { assistantConfig, assistantMessages, completeAssistantTurn } from "@/rep
 import { executeAssistantTool, type AssistantToolContext } from "@/services/commerce/assistant-tools";
 import { assistantSettingsSchema } from "@/domain/commerce/assistant";
 import { ASSISTANT_FALLBACK_MODEL } from "@/domain/commerce/assistant-models";
+import { storeSettingsSchema } from "@/domain/commerce/schemas";
 vi.mock("@/repositories/commerce-assistant", () => ({ assistantConfig: vi.fn(), assistantMessages: vi.fn(), requireAssistantConversation: vi.fn(), completeAssistantTurn: vi.fn(), reserveAssistantCall: vi.fn(), settleAssistantCall: vi.fn() }));
 vi.mock("@/services/commerce/assistant-tools", () => ({ assistantToolDefinitions: [], executeAssistantTool: vi.fn() }));
 vi.mock("@/services/openrouter/store-assistant", async original => ({ ...await original<typeof import("@/services/openrouter/store-assistant")>(), storeAssistantCompletion: vi.fn() }));
 afterEach(() => vi.clearAllMocks());
 describe("assistant fallback tool-loop continuity", () => {
+  it("knows artwork creation, official benefits and no-commitment quoting without overriding store flags", () => {
+    const context = { store: { slug: "test", art_library_enabled: false, settings: { name: "Loja", description: "", terms: "" } }, config: { settings: assistantSettingsSchema.parse({ allowQuotes: false, allowOrders: false }) } } as AssistantToolContext;
+    const prompt = assistantSystemPrompt(context);
+    for (const phrase of ["estúdio para criar com texto, imagens e cores", "retoque para ajustar fundo e bordas", "guia SVG", "enquadrar E aprovar", "limitado ao valor e percentual configurados", "sem comprar nem pagar", "mesmo sem ter a arte pronta", "Não confunda o estúdio manual com geração por IA", '"quotes":false', '"artworkLibrary":false']) expect(prompt).toContain(phrase);
+  });
   it("offers a real quote action on an explicit continuation without a model call or mutation", async () => {
     const config = { tenant_id: "tenant", enabled: true, revision: 1, settings: assistantSettingsSchema.parse({}) };
     const context = { store: { tenant_id: "tenant", slug: "test", settings: { name: "Loja", description: "", terms: "" } }, config, session: { id: "session", cart: [{ productId: "product", quantity: 50, artworkName: "" }] }, conversationId: "conversation" } as AssistantToolContext;
@@ -36,7 +42,8 @@ describe("assistant fallback tool-loop continuity", () => {
   });
   it("does not offer quote navigation when the tenant disabled assistant quotes", async () => {
     const config = { tenant_id: "tenant", enabled: true, revision: 1, settings: assistantSettingsSchema.parse({ allowQuotes: false }) };
-    const context = { store: { tenant_id: "tenant", slug: "test", settings: { name: "Loja", description: "", terms: "" } }, config, session: { id: "session", cart: [] }, conversationId: "conversation" } as AssistantToolContext;
+    const settings = storeSettingsSchema.parse({ name: "Loja", description: "", logoUrl: "", bannerUrl: "", accent: "#047857", contactEmail: "loja@example.test", contactPhone: "", pickupEnabled: false, pickupAddress: "", deliveryEnabled: false, deliveryCents: 0, deliveryDescription: "", terms: "" });
+    const context: AssistantToolContext = { store: { tenant_id: "tenant", slug: "test", enabled: true, status: "published", revision: 1, platform_id: "platform", settings }, config: { ...config, tested_revision: 1, tested_at: null }, session: { id: "session", tenant_id: "tenant", customer_id: null, revision: 0, cart: [] }, conversationId: "conversation" };
     vi.mocked(assistantConfig).mockResolvedValue(config as never);
     vi.mocked(assistantMessages).mockResolvedValue([{ id: "message", role: "user", text: "Pode seguir com o orçamento", cards: [] }]);
     vi.mocked(storeAssistantCompletion).mockResolvedValueOnce({ model: ASSISTANT_FALLBACK_MODEL, content: "Abra [Link para o formulário de orçamento]." });

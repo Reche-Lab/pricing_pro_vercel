@@ -26,6 +26,40 @@ const props = () => ({ config, api: "/api/store/test", base: "/loja/test", setti
 function response(messages: unknown[] = []) { return Response.json({ conversation: { id: ids.conv }, messages, customer: false }); }
 async function consent() { fireEvent.click(await screen.findByRole("button", { name: "Entendi, iniciar atendimento" })); }
 describe("store assistant customer UX", () => {
+  it("shows concise official artwork benefits and working feature links for this store", () => {
+    const guide: Extract<AssistantCard, { kind: "guide" }> = { kind: "guide", topic: "artwork", guide: { features: { quotes: true, orders: true, personalized: true, studio: true, library: true, teamPreparation: true, pickup: true, delivery: true }, benefits: [{ productId: ids.quote, name: "Botton", percent: 10, limitPerArtworkCents: 500 }], moreBenefits: false } };
+    render(<StoreAssistantCards card={guide} api="/api/store/test" base="/loja/test" identified={false} busy={false} confirmed={[]} onConfirm={vi.fn()} onLogin={vi.fn()} onClose={vi.fn()} onQuote={vi.fn()} onHandoff={vi.fn()}/>);
+    expect(screen.getByText("Até 10% extra com arte pronta")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Criar minha arte" })).toHaveAttribute("href", "/loja/test?estudio=1");
+    expect(screen.getByRole("link", { name: "Escolher arte pronta" })).toHaveAttribute("href", "/loja/test/artes");
+    fireEvent.click(screen.getByText("Ver produtos e limites"));
+    expect(screen.getByText(/R\$\s*5,00 por arte\/grupo/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Botton" })).toHaveAttribute("href", `/loja/test/produto/${ids.quote}`);
+    expect(screen.getByText(/Somente enviar a imagem não libera/)).toBeInTheDocument();
+  });
+  it("does not advertise disabled studio, library or discounts, and supports custom domains", () => {
+    const guide: Extract<AssistantCard, { kind: "guide" }> = { kind: "guide", topic: "shopping", guide: { features: { quotes: false, orders: false, personalized: false, studio: false, library: false, teamPreparation: false, pickup: false, delivery: false }, benefits: [], moreBenefits: false } };
+    render(<StoreAssistantCards card={guide} api="/api/store/test" base="" identified={false} busy={false} confirmed={[]} onConfirm={vi.fn()} onLogin={vi.fn()} onClose={vi.fn()} onQuote={vi.fn()} onHandoff={vi.fn()}/>);
+    expect(screen.queryByText(/desconto|extra|sem compromisso/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Criar minha arte|Escolher arte pronta|Solicitar orçamento|Meus pedidos/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Revisar carrinho" })).toHaveAttribute("href", "/carrinho");
+  });
+  it("opens the studio at the custom domain root rather than relative to the current product", () => {
+    const guide: Extract<AssistantCard, { kind: "guide" }> = { kind: "guide", topic: "artwork", guide: { features: { quotes: true, orders: true, personalized: true, studio: true, library: false, teamPreparation: false, pickup: false, delivery: false }, benefits: [], moreBenefits: false } };
+    const onClose = vi.fn();
+    render(<StoreAssistantCards card={guide} api="/api/store/test" base="" identified={false} busy={false} confirmed={[]} onConfirm={vi.fn()} onLogin={vi.fn()} onClose={onClose} onQuote={vi.fn()} onHandoff={vi.fn()}/>);
+    const link = screen.getByRole("link", { name: "Criar minha arte" });
+    expect(link).toHaveAttribute("href", "/?estudio=1");
+    link.addEventListener("click", event => event.preventDefault(), { once: true });
+    fireEvent.click(link); expect(onClose).toHaveBeenCalledOnce();
+  });
+  it("explains a quote can be saved without buying or supplying artwork", () => {
+    const guide: Extract<AssistantCard, { kind: "guide" }> = { kind: "guide", topic: "shopping", guide: { features: { quotes: true, orders: true, personalized: true, studio: false, library: false, teamPreparation: false, pickup: false, delivery: false }, benefits: [], moreBenefits: false } };
+    render(<StoreAssistantCards card={guide} api="/api/store/test" base="/loja/test" identified={false} busy={false} confirmed={[]} onConfirm={vi.fn()} onLogin={vi.fn()} onClose={vi.fn()} onQuote={vi.fn()} onHandoff={vi.fn()}/>);
+    expect(screen.getByText(/sem comprar nem pagar/)).toBeInTheDocument();
+    expect(screen.getByText(/não precisa ter a arte pronta/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Solicitar orçamento" })).toHaveAttribute("href", "/loja/test/orcamento");
+  });
   it("replaces a saved quote-link placeholder with a real tenant URL instead of showing the invented link", async () => {
     resume.mockResolvedValueOnce(response([{ id: "legacy", role: "assistant", text: "Para seguir, acesse [Link para o formulário seguro de orçamento] ...", cards: [] }]));
     const p = props(); render(<StoreAssistantPanel {...p}/>);

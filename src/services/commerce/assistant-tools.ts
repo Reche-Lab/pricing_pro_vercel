@@ -12,6 +12,7 @@ import { listBuyerQuotes } from "@/repositories/commerce-buyer-quotes";
 import { publicCarrierDelivery } from "./carrier-delivery";
 import { sortShippingOptions, type StoreShippingOption } from "@/domain/commerce/shipping-options";
 import type { CartLine } from "@/domain/commerce/schemas";
+import { assistantArtworkBenefit, assistantStoreGuide } from "@/domain/commerce/assistant-guide";
 
 export type AssistantToolContext = { store: CommerceStore; session: BuyerSession; config: AssistantConfig; conversationId: string };
 type ProposedAction = { version: 2; revision: number; configRevision: number; lines: CartLine[]; pricingHash: string };
@@ -26,10 +27,10 @@ export const assistantToolDefinitions = [
   tool("my_quotes", "Consultar somente orçamentos da conta autenticada; exige identificação."),
   tool("view_cart", "Consultar os itens e a composição do carrinho atual sem alterações. Use quando o cliente já tem produtos no carrinho e quer um orçamento, sem adicioná-los novamente."),
   tool("continue_quote", "Mostrar o botão oficial para continuar o orçamento, validar e-mail e preencher dados no formulário da loja. Use quando o cliente autorizar seguir/finalizar o orçamento. Não cria, confirma ou altera itens; não invente links no texto."),
-  tool("store_guide", "Mostrar atalhos oficiais de uso da loja, artes ou políticas.", { type: "object", properties: { topic: { type: "string", enum: ["artwork", "shopping", "policies"] } }, required: ["topic"], additionalProperties: false }),
+  tool("store_guide", "Consultar funcionalidades ATIVAS e atalhos reais desta loja. Use artwork para criação no estúdio, envio, retoque, enquadramento, aprovação, artes prontas e desconto por arte pronta; shopping para orçamento sem compromisso, PDF, compra, conta e entrega; policies para condições. Benefícios vêm dos produtos publicados, nunca assuma um percentual.", { type: "object", properties: { topic: { type: "string", enum: ["artwork", "shopping", "policies"] } }, required: ["topic"], additionalProperties: false }),
   tool("human_support", "Oferecer encaminhamento para equipe, sem afirmar que um humano está online ou já assumiu. Cliente confirma o encaminhamento."),
 ];
-const productCard = (p: ReturnType<typeof publicCommerceProduct>): AssistantProduct => ({ id: p.id, name: p.name, description: p.description.slice(0, 600), category: p.category, imageUrl: p.imageUrl, unitCents: p.unitCents, minQuantity: p.minQuantity, maxQuantity: p.maxQuantity, maxArtworks: p.maxArtworks, personalized: p.personalized });
+const productCard = (p: ReturnType<typeof publicCommerceProduct>): AssistantProduct => ({ id: p.id, name: p.name, description: p.description.slice(0, 600), category: p.category, imageUrl: p.imageUrl, unitCents: p.unitCents, minQuantity: p.minQuantity, maxQuantity: p.maxQuantity, maxArtworks: p.maxArtworks, personalized: p.personalized, artworkBenefit: assistantArtworkBenefit(p) });
 
 export function assistantLines(input: z.infer<typeof assistantProposalSchema>, products: Awaited<ReturnType<typeof commerceProducts>>) {
   return input.items.flatMap(item => {
@@ -63,7 +64,7 @@ export async function executeAssistantTool(context: AssistantToolContext, name: 
     const aliases = (await getPool().query("select product_variant_id,alias,normalized_alias,source from product_search_aliases where tenant_id=$1 and active", [store.tenant_id])).rows;
     const candidates = products.map(p => ({ product_id: p.id, product_name: p.name, product_slug: "", product_category: p.category, product_description: p.description, variant_id: p.variantId, variant_name: "", variant_description: null, sku: null, unit_weight_kg: "0", height_cm: null, width_cm: null, length_cm: null, print_width_mm: p.geometry?.widthMm?.toString(), print_height_mm: p.geometry?.heightMm?.toString(), aliases: aliases.filter(a => a.product_variant_id === p.variantId).map(a => ({ alias: a.alias, normalizedAlias: a.normalized_alias, source: a.source })) }));
     const ranked = rankProductCandidates(candidates, query), cards = ranked.slice(0, 6).map(match => productCard(publicCommerceProduct(products.find(p => p.id === match.product_id)!)));
-    return { result: { products: cards.map(p => ({ id: p.id, name: p.name, description: p.description, category: p.category, minQuantity: p.minQuantity, maxQuantity: p.maxQuantity, maxArtworks: p.maxArtworks, personalized: p.personalized })), requiresClarification: productSearchRequiresClarification(ranked), hasMore: ranked.length > 6 }, card: { kind: "products", products: cards, clarification: productSearchRequiresClarification(ranked) } };
+    return { result: { products: cards.map(p => ({ id: p.id, name: p.name, description: p.description, category: p.category, minQuantity: p.minQuantity, maxQuantity: p.maxQuantity, maxArtworks: p.maxArtworks, personalized: p.personalized, artworkBenefit: p.artworkBenefit })), requiresClarification: productSearchRequiresClarification(ranked), hasMore: ranked.length > 6 }, card: { kind: "products", products: cards, clarification: productSearchRequiresClarification(ranked) } };
   }
   if (name === "prepare_quote" || name === "estimate_delivery") {
     if (!config.settings.allowQuotes) throw new CommerceError("Orçamentos por chat não estão habilitados nesta loja.");
@@ -118,7 +119,9 @@ export async function executeAssistantTool(context: AssistantToolContext, name: 
   }
   if (name === "store_guide") {
     const { topic } = z.object({ topic: z.enum(["artwork", "shopping", "policies"]) }).strict().parse(args);
-    return { result: { officialShortcutsAvailable: true }, card: { kind: "guide", topic } };
+    if (topic === "policies") return { result: { officialShortcutsAvailable: true }, card: { kind: "guide", topic } };
+    const guide = assistantStoreGuide(store, config.settings, await commerceProducts(store.tenant_id));
+    return { result: { officialShortcutsAvailable: true, ...guide, quoteWithoutPurchase: guide.features.quotes, artworkNotRequiredForQuote: guide.features.quotes, benefitRequiresCustomerPreparationAndApproval: true, uploadOnlyEarnsBenefit: false, teamPreparationEarnsBenefit: false }, card: { kind: "guide", topic, guide } };
   }
   if (name === "human_support") {
     z.object({}).strict().parse(args); return { result: { userMustConfirmHandoff: true, liveHumanNotGuaranteed: true }, card: { kind: "handoff", summary: "" } };
