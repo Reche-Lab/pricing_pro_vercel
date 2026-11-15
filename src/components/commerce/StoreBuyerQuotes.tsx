@@ -67,6 +67,6 @@ export function StoreBuyerQuotes({ api, base, quoteId, revision, hasCart, onRest
           finally { restoreLock.current = false; setBusy(false); }
         }}>{busy ? <Loader2 className="animate-spin" size={16}/> : <ArrowRight size={16}/>} {intent === "quote" ? "Abrir cópia para editar" : "Abrir carrinho para revisar"}</button>
       </div></LibraryDialog> : null}
-    </> : !quoteId && !error ? <StoreBuyerQuoteList key={api} quotes={quotes} loading={loading} api={api} base={base}/> : null}
+    </> : !quoteId && !error ? <StoreBuyerQuoteList key={api} quotes={quotes} loading={loading} api={api} base={base} onDeleted={id => setQuotes(current => current.filter(item => item.id !== id))}/> : null}
   </div>;
 }

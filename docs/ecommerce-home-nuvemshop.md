@@ -380,3 +380,15 @@ Reutiliza APIs e persistência existentes. Nenhuma migration ou variável nova n
 - [x] Build de produção aprovado com uma CPU e memória limitada. Nenhuma alteração em produção.
 
 Reutiliza APIs e persistência existentes. Nenhuma migration ou variável nova necessária; nenhuma alteração em produção.
+
+### Meus Orçamentos em Lista Vertical e Exclusão Individual
+
+- [x] Um orçamento por linha, em toda a largura, com disposição horizontal compacta no desktop e reorganização responsiva no celular. Busca, filtros e PDF preservados.
+- [x] Lixeira independente do clique de abertura, com tooltip, confirmação identificando o orçamento/valor e mensagem clara sobre a irreversibilidade. Falhas aparecem dentro do modal; bloqueio contra cliques duplicados.
+- [x] Exclusão real do documento privado via `DELETE`, exigindo origem autorizada, confirmação explícita e sessão de comprador. Tenant/cliente derivados do servidor e filtrados na mesma instrução SQL; IDs malformados e orçamentos de outra conta não são acessíveis.
+- [x] Excluir o orçamento não exclui pedidos, artes ou carrinho. A linha sai somente após sucesso confirmado; contagem, filtros e estado vazio permanecem coerentes, com confirmação acessível e retorno de foco.
+- [x] 18 testes focados aprovados: confirmação/cancelamento, falha sem perda de itens, bloqueio de repetição, ownership, validação do body, autenticação e proteção de origem.
+- [x] Revisão visual em claro/escuro, 1440/390/320 px e paisagem: um item por linha, PDF/lixeira independentes, modal compacto, cancelar, falhar, tentar novamente, excluir e recarregar sem o item. APIs simuladas, capturas inspecionadas e ausência de overflow verificada.
+- [x] Regressão geral com 1.050 testes aprovados e 76 integrações condicionais não executadas nesta rodada. Lint, tipos e build de produção aprovados com uma CPU e memória limitada; nenhuma alteração em produção.
+
+Sem migration ou variável nova. A exclusão afeta somente orçamentos particulares do cliente na loja, não o cadastro administrativo de orçamentos.

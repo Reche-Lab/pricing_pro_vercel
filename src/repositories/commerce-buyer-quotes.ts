@@ -89,6 +89,14 @@ export async function getBuyerQuote(tenantId: string, session: BuyerSession, id:
   const { contact_encrypted, ...safe } = row;
   return { ...safe, contact: decryptTenantSecret<QuoteContact>(contact_encrypted) };
 }
+export async function deleteBuyerQuote(tenantId: string, session: BuyerSession, id: string) {
+  const customerId = requireBuyer(session);
+  const result = await getPool().query<{ id: string }>(
+    "delete from commerce_buyer_quotes where tenant_id=$1 and customer_id=$2 and id=$3 returning id", [tenantId, customerId, id]);
+  if (!result.rows.length) throw new CommerceError("Orçamento não encontrado nesta conta.", 404);
+  console.info("Commerce buyer quote deleted.", { tenantId, customerId, quoteId: id });
+  return { ok: true };
+}
 export async function restoreBuyerQuote(store: CommerceStore, session: BuyerSession, id: string, revision: number) {
   const quote = await getBuyerQuote(store.tenant_id, session, id);
   // Artworks belong to their original session. A different session cannot inherit their IDs.

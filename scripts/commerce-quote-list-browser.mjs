@@ -18,7 +18,7 @@ const quotes = [0, 1, 2, 3].map(index => ({
   valid_until: new Date(now + day * (index === 1 ? -1 : 7)).toISOString(),
   total_cents: [25750, 100000000, 9000, 42000][index], shipping_cents: [2200, null, 0, 1875][index],
 }));
-let state = "loaded", calls = [];
+let state = "loaded", calls = [], saved = quotes.slice();
 const bundle = await build({
   stdin: { contents: `import React from'react';import{createRoot}from'react-dom/client';import{StoreBuyerQuotes}from'./src/components/commerce/StoreBuyerQuotes';import styles from'./src/components/commerce/store.module.css';
     const theme=new URLSearchParams(location.search).get('theme')||sessionStorage.getItem('theme')||'light';sessionStorage.setItem('theme',theme);
@@ -34,15 +34,23 @@ const assets = new Map(bundle.outputFiles.map(file => [`/${file.path.split("/").
 const utilities = await postcss([tailwind({ content: [resolve(root, "src/components/commerce/*.tsx")] })]).process("@tailwind base;@tailwind components;@tailwind utilities;", { from: undefined });
 assets.set("/tailwind.css", utilities.css);
 const html = '<!doctype html><html lang="pt-BR"><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/tailwind.css"><link rel="stylesheet" href="/app.css"><style>body{margin:0;font-family:ui-sans-serif,system-ui,sans-serif}button{cursor:pointer}</style></head><body><div id="root"></div><script src="/app.js"></script></body></html>';
-const server = createServer((request, response) => {
+const server = createServer(async (request, response) => {
   const path = new URL(request.url, "http://127.0.0.1").pathname;
   response.setHeader("cache-control", "no-store");
   if (path.startsWith("/api/")) {
     calls.push({ path, method: request.method });
-    assert.equal(request.method, "GET");
     response.setHeader("content-type", "application/json");
+    if (request.method === "DELETE") {
+      let raw = ""; for await (const chunk of request) raw += chunk;
+      assert.deepEqual(JSON.parse(raw), { confirmDelete: true });
+      assert.equal(path, `/api/store/test/quotes/${quotes[0].id}`);
+      if (state === "delete-error") { response.writeHead(503); response.end(JSON.stringify({ error: "Exclusão indisponível. Tente novamente." })); }
+      else { saved = saved.filter(quote => quote.id !== quotes[0].id); response.end(JSON.stringify({ ok: true })); }
+      return;
+    }
+    assert.equal(request.method, "GET");
     if (state === "error") { response.writeHead(503); response.end(JSON.stringify({ error: "Não foi possível carregar seus orçamentos." })); }
-    else response.end(JSON.stringify({ quotes: state === "empty" ? [] : quotes }));
+    else response.end(JSON.stringify({ quotes: state === "empty" ? [] : saved }));
     return;
   }
   response.setHeader("content-type", path.endsWith(".js") ? "text/javascript" : path.endsWith(".css") ? "text/css" : "text/html; charset=utf-8");
@@ -62,6 +70,8 @@ try {
     state = "loaded"; await page.goto(`${origin}/loja/test/orcamentos?theme=${theme}`);
     await page.getByRole("article", { name: "Orçamento AAAAAAAA", exact: true }).waitFor();
     assert.equal(await cards().count(), 4);
+    const positions = await cards().evaluateAll(elements => elements.map(element => { const rect = element.getBoundingClientRect(); return { left: rect.left, top: rect.top, bottom: rect.bottom }; }));
+    assert.equal(positions.every((rect, index) => rect.left === positions[0].left && (!index || rect.top > positions[index - 1].bottom)), true, "Quotes form one vertical list");
     await page.getByRole("combobox", { name: "Validade", exact: true }).selectOption("review");
     assert.equal(await cards().count(), 1);
     assert.equal(await cards().first().getAttribute("aria-label"), "Orçamento BBBBBBBB");
@@ -78,8 +88,9 @@ try {
     await page.screenshot({ path: `${output}/list-${theme}-${width}.png`, fullPage: true });
     const pdf = page.getByRole("link", { name: "Baixar PDF do orçamento AAAAAAAA" });
     assert.equal(await pdf.getAttribute("href"), `/api/store/test/quotes/${quotes[0].id}/pdf`);
+    await pdf.scrollIntoViewIfNeeded();
     assert.equal(await pdf.evaluate(element => { const rect = element.getBoundingClientRect(); return element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)); }), true, "PDF independent of stretched link");
-    await cards().first().click({ position: { x: 70, y: 135 } });
+    await cards().first().click({ position: { x: 20, y: 20 } });
     await page.waitForURL(`**/orcamentos/${quotes[0].id}`);
     await page.getByRole("heading", { name: "Destino do orçamento" }).waitFor();
     assert.deepEqual(errors, []);
@@ -95,11 +106,34 @@ try {
   await page.waitForFunction(() => getComputedStyle(document.querySelector("article")).transform !== "none");
   await page.emulateMedia({ reducedMotion: "reduce" });
   assert.equal(await cards().first().evaluate(element => getComputedStyle(element).transform), "none", "Reduced motion disables card movement");
+  for (const theme of ["light", "dark"]) {
+    await page.setViewportSize({ width: 320, height: 740 });
+    await page.goto(`${origin}/loja/test/orcamentos?theme=${theme}`);
+    await page.getByRole("button", { name: "Excluir orçamento AAAAAAAA" }).click();
+    const dialog = page.getByRole("dialog", { name: "Excluir orçamento", exact: true });
+    await dialog.waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+    const rect = await dialog.boundingBox();
+    assert.ok(rect && rect.x >= 0 && rect.y >= 0 && rect.y + rect.height <= 741, "Confirmation fits the mobile viewport");
+    await page.screenshot({ path: `${output}/delete-${theme}-320.png` });
+    await dialog.getByRole("button", { name: "Manter orçamento" }).click();
+    assert.equal(calls.some(call => call.method === "DELETE"), false);
+  }
+  state = "delete-error";
+  await page.getByRole("button", { name: "Excluir orçamento AAAAAAAA" }).click();
+  const dialog = page.getByRole("dialog", { name: "Excluir orçamento", exact: true });
+  await dialog.getByRole("button", { name: "Excluir definitivamente" }).click();
+  await dialog.getByRole("alert").waitFor(); assert.equal(await cards().count(), 4);
+  state = "loaded"; await dialog.getByRole("button", { name: "Excluir definitivamente" }).click();
+  await page.getByText("Orçamento AAAAAAAA excluído.", { exact: true }).waitFor();
+  assert.equal(await cards().count(), 3);
+  await page.reload(); await cards().first().waitFor(); assert.equal(await cards().count(), 3);
+  assert.equal(await page.getByRole("article", { name: "Orçamento AAAAAAAA", exact: true }).count(), 0);
   state = "error"; await page.goto(`${origin}/loja/test/orcamentos`);
   await page.getByRole("alert").waitFor(); assert.equal(await page.getByText("Seu próximo projeto começa aqui").count(), 0);
   state = "loaded"; await page.getByRole("button", { name: "Tentar novamente" }).click(); await cards().first().waitFor();
   state = "empty"; await page.reload(); await page.getByRole("link", { name: "Montar meu primeiro orçamento" }).waitFor();
-  assert.equal(calls.every(call => call.method === "GET" && call.path === "/api/store/test/quotes"), true);
+  assert.equal(calls.every(call => call.method === "GET" && call.path === "/api/store/test/quotes" || call.method === "DELETE" && call.path === `/api/store/test/quotes/${quotes[0].id}`), true);
   assert.deepEqual(errors, []);
   console.log(`Saved quote list checks passed. Screenshots: ${output}`);
 } finally { await browser.close(); server.closeAllConnections(); await new Promise(done => server.close(done)); }

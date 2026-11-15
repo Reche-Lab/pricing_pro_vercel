@@ -64,6 +64,7 @@
 .option small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
 .savedListPage { min-width: 0; overflow-wrap: anywhere; }
 .savedList { min-width: 0; }
+.savedList > dialog { width: min(560px, calc(100% - 32px)); max-width: calc(100% - 32px); height: fit-content; max-height: 92dvh; border: 1px solid var(--line); border-radius: 8px; }
 .listToolbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(130px, .45fr) minmax(150px, .5fr); gap: 14px; align-items: end; }
 .listToolbar > label { display: grid; min-width: 0; align-content: start; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .listSearch { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -71,10 +72,10 @@
 .listSearch > input { min-width: 0; flex: 1; }
 .listResults { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; margin-block: 10px; color: var(--muted); font-size: 12px; }
 .listResults button { color: var(--highlight); text-decoration: underline; text-underline-offset: 3px; min-height: 36px; }
-.quoteList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.quoteListCard { position: relative; min-width: 0; display: flex; flex-direction: column; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 3px 12px #18304309; }
+.quoteList { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.quoteListCard { position: relative; min-width: 0; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.2fr) 150px; gap: 20px; align-items: center; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 3px 12px #18304309; }
 .quoteListCard:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 8px 24px #0000000d; }
-.listCardHeader { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.listCardHeader { display: grid; justify-items: start; gap: 12px; min-width: 0; }
 .listIdentity { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .listIdentity h2 { min-width: 0; line-height: 1.5; }
 .listIdentity h2 > span { display: block; color: var(--muted); font-size: 11px; }
@@ -84,16 +85,25 @@
 .listValidity > svg { flex-shrink: 0; }
 .listValidity[data-valid="true"] { color: var(--highlight); background: var(--soft); }
 [data-theme="dark"] .listValidity[data-valid="false"] { color: #f0cf92; background: #352b1d; border-color: #685332; }
-.listAmount { display: grid; gap: 5px; margin-block: 22px 18px; }
+.listAmount { display: grid; gap: 5px; min-width: 0; }
 .listAmount > span { font-size: 12px; color: var(--muted); }
-.listAmount > strong { font-size: 24px; line-height: 1.3; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.listAmount > strong { font-size: 22px; line-height: 1.3; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .listAmount small { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; font-size: 12px; color: var(--muted); margin-top: 3px; }
 .listAmount small > svg { flex-shrink: 0; }
-.listDates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding-block: 14px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 12px; line-height: 1.6; }
+.listDates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; font-size: 12px; line-height: 1.6; min-width: 0; }
 .listDates dt { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; }
 .listDates dt > svg { flex-shrink: 0; }
 .listDates dd { margin-top: 4px; }
-.listCardActions { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 14px; margin-top: auto; }
+.listCardActions { display: grid; justify-items: end; gap: 6px; min-width: 0; }
+.listActionTools { display: flex; align-items: center; gap: 8px; }
+.listDelete { position: relative; z-index: 2; display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid var(--line); border-radius: 6px; color: #b4233b; background: var(--surface); }
+.listDelete:hover { background: #fff0f2; border-color: #b4233b; }
+[data-theme="dark"] .listDelete { color: #ffabb5; }
+[data-theme="dark"] .listDelete:hover { background: #3e2029; border-color: #ffabb5; }
+.deleteConfirm { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 16px; min-height: 44px; border-radius: 6px; background: #b4233b; color: #fff; font-size: 13px; font-weight: 600; }
+.deleteConfirm:hover { background: #991a30; }
+.deleteConfirm:disabled, .listDelete:disabled { opacity: .55; cursor: wait; }
+.listNotice { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; color: var(--highlight); font-size: 13px; }
 .listOpen { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; color: var(--highlight); font-size: 13px; font-weight: 650; }
 .listOpen::after { position: absolute; inset: 0; z-index: 1; border-radius: 8px; content: ""; }
 .listPdf { display: inline-flex; position: relative; z-index: 2; align-items: center; gap: 7px; min-height: 42px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; color: var(--ink); background: var(--surface); }
@@ -103,10 +113,16 @@
 .listEmpty h2 { color: var(--ink); font-size: 18px; font-weight: 650; }
 .listEmpty p { font-size: 14px; max-width: 54ch; line-height: 1.7; }
 .listLoading { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; margin-block: 12px 20px; }
-.quoteSkeleton { display: grid; gap: 20px; height: 240px; align-content: start; border: 1px solid var(--line); border-radius: 8px; padding: 20px; background: var(--surface); }
+.quoteSkeleton { display: grid; gap: 16px; height: 150px; align-content: start; border: 1px solid var(--line); border-radius: 8px; padding: 20px; background: var(--surface); }
 .quoteSkeleton span { display: block; height: 12px; width: 55%; background: var(--soft); border-radius: 4px; }
 .quoteSkeleton span:nth-child(2) { height: 26px; width: 42%; }
-.quoteSkeleton span:nth-child(3) { margin-top: 30px; width: 85%; }
+.quoteSkeleton span:nth-child(3) { width: 85%; }
+@media(max-width: 1100px) {
+  .quoteListCard { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .listAmount { justify-self: end; }
+  .listDates { padding-top: 14px; border-top: 1px solid var(--line); }
+  .listCardActions { display: flex; justify-content: flex-end; flex-wrap: wrap; }
+}
 @media(hover: hover) and (prefers-reduced-motion: no-preference) {
   .quoteListCard { transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
   .listOpen > svg { transition: transform .18s ease; }
@@ -118,7 +134,11 @@
   .listToolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .listToolbar > label:first-child { grid-column: 1 / -1; }
   .quoteList { grid-template-columns: minmax(0, 1fr); gap: 14px; }
-  .quoteListCard { padding: 16px; }
+  .quoteListCard { padding: 16px; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .listCardHeader { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .listAmount { justify-self: stretch; }
+  .listDates { padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .listCardActions { justify-content: space-between; gap: 8px; }
   .listAmount > strong { font-size: 22px; }
 }
 @media(max-width: 860px) {
