@@ -354,3 +354,16 @@ Sem migration ou variável nova. Nenhum desconto ou configuração de produto al
 - [x] Build de produção aprovado com uma CPU e memória limitada. Nenhuma alteração em produção.
 
 Sem migration ou variável nova. Alteração visual, sem mudanças na autenticação, nos preços ou nas ações do assistente.
+
+### Jornada de Orçamento Simplificada
+
+- [x] Produtos com miniaturas e grupos de artes recolhidos; quantidades editáveis no próprio orçamento, mantendo IDs e artes. Atualização e validação de valores pelo servidor.
+- [x] Busca de produtos em modal, filtro por categoria e escolha de quantidades/grupos, sem sair do contexto de orçamento; remoção com desfazer protegido contra alterações posteriores.
+- [x] Resumo lateral no desktop e barra inferior expansível no celular, com indicação de frete não incluído/a calcular e benefício por arte pronta separado do total.
+- [x] Dados válidos recuperados resumidos, edição recolhível, entrega/retirada/sem frete explícitos e revisão antes de salvar. Formulários e validações fiscais mantidos.
+- [x] Orçamento salvo com validade real, itens destacados, contatos recolhíveis e PDF prioritário; editar cópia e continuar compra usam confirmação segura antes de substituir itens, sem alterar o documento original ou iniciar pagamento.
+- [x] Regressão geral com 1.037 testes aprovados e 76 integrações condicionais não executadas nesta rodada; 20 testes focados finais. Cobertos limites, IDs/artes, desfazer, recálculo, frete, destinatário sem frete, cópia sem alteração do original e confirmação de substituição. Lint e tipos aprovados.
+- [x] Playwright com componentes reais e APIs simuladas: edição/remoção/desfazer, busca e inclusão por grupos, upload acessível no próprio orçamento, dados recuperados, frete mais rápido, revisão/salvamento e cópia. Claro/escuro em 1440/390/320 px e paisagem, sem overflow; moedas longas e dock do assistente verificados. Capturas inspecionadas; nenhum e-mail, pagamento ou serviço externo real acionado.
+- [x] Build de produção aprovado com uma CPU e memória limitada. Nenhuma alteração em produção.
+
+Reutiliza APIs e persistência existentes. Nenhuma migration ou variável nova necessária.

@@ -1,0 +1,94 @@
+.page { min-width: 0; overflow-wrap: anywhere; }
+.header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
+.header p { color: var(--muted); font-size: 14px; margin-top: 6px; max-width: 60ch; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); gap: 28px; align-items: start; min-width: 0; }
+.layout > * { min-width: 0; }
+.items { display: grid; gap: 16px; }
+.product { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 18px; box-shadow: 0 4px 18px #18304308; }
+.productHeader { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.productHeader > div { flex: 1; min-width: 0; }
+.productHeader h2 { font-size: 16px; font-weight: 650; overflow-wrap: anywhere; }
+.productHeader p, .muted { font-size: 12px; color: var(--muted); }
+.thumbnail { width: 64px; height: 64px; flex-shrink: 0; object-fit: contain; background: var(--soft); border-radius: 6px; }
+.productTotal { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.line { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-block: 14px; margin-top: 12px; border-top: 1px solid var(--line); }
+.line > div { min-width: 0; }
+.line strong { font-size: 13px; }
+.line small { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
+.lineTools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.quantity { display: inline-grid; grid-template-columns: 36px 76px 36px; gap: 4px; align-items: center; }
+.quantity button { display: grid; place-items: center; height: 42px; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); }
+.quantity input { text-align: center; font-variant-numeric: tabular-nums; }
+.quantity button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.details { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; min-width: 0; }
+.details summary { display: flex; align-items: center; gap: 8px; cursor: pointer; padding-block: 8px; font-size: 13px; color: var(--highlight); font-weight: 650; }
+.details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.art { padding-block: 14px; min-width: 0; border-top: 1px solid var(--line); }
+.art label { display: grid; gap: 6px; font-size: 12px; margin-bottom: 12px; }
+.status { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 0; font-size: 13px; color: var(--highlight); }
+.status button { display: inline-flex; align-items: center; gap: 5px; text-decoration: underline; min-height: 36px; }
+.error { color: var(--ink); border-left: 3px solid #d15c67; padding: 10px 12px; margin-block: 12px; background: var(--soft); font-size: 13px; }
+.summary { position: sticky; top: var(--store-header-offset, 20px); min-width: 0; padding: 20px; background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--accent); border-radius: 8px; box-shadow: 0 8px 28px #1830430b; }
+.summaryHeading { font-size: 17px; font-weight: 650; }
+.summaryToggle { display: none; }
+.summaryContent { font-size: 13px; line-height: 1.65; }
+.summaryContent > p { margin-block: 12px; color: var(--muted); }
+.summaryAction { margin-top: 18px; }
+.summaryAction > * { width: 100%; }
+.summaryAction [aria-disabled="true"] { opacity: .5; cursor: wait; }
+.search { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.catalog { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-height: 330px; overflow-y: auto; padding: 2px; }
+.catalogChoice { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px; text-align: left; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.catalogChoice:hover, .catalogChoice[aria-pressed="true"] { border-color: var(--accent); background: var(--soft); }
+.catalogChoice img { width: 46px; height: 46px; object-fit: contain; flex-shrink: 0; background: var(--soft); border-radius: 4px; }
+.catalogChoice span { min-width: 0; overflow-wrap: anywhere; }
+.catalogChoice small { display: block; color: var(--muted); font-size: 11px; }
+.selection { margin-top: 18px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.selection label { display: grid; align-content: start; gap: 5px; font-size: 13px; min-width: 0; }
+.selection p, .selection > button { grid-column: 1 / -1; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; font-size: 12px; border: 1px solid var(--line); border-radius: 5px; color: var(--highlight); background: var(--soft); }
+.savedHeader { margin-bottom: 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.savedHeader p { color: var(--muted); font-size: 12px; }
+.savedRow { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding-block: 16px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.savedRow small { display: block; color: var(--muted); margin-top: 4px; }
+.savedRow > div { min-width: 0; overflow-wrap: anywhere; }
+.actions { display: grid; gap: 10px; margin-block: 14px; }
+.confirmation { display: grid; gap: 16px; font-size: 14px; line-height: 1.7; }
+.confirmation label { display: flex; align-items: flex-start; gap: 10px; }
+.confirmation input { flex-shrink: 0; margin-top: 5px; }
+.contactSummary { font-size: 13px; color: var(--muted); line-height: 1.7; padding-block: 8px; overflow-wrap: anywhere; }
+.options { display: flex; gap: 10px; flex-wrap: wrap; margin-block: 12px; }
+.option { display: flex !important; align-items: flex-start; gap: 8px; flex: 1 1 160px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; font-size: 13px; }
+.option:has(input:checked) { border-color: var(--accent); background: var(--soft); }
+.option input { margin-top: 4px; }
+.option small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
+@media(max-width: 860px) {
+  :global([data-theme]):has(.summary) { --commerce-dock-bottom: 120px; }
+  :global([data-theme]):has(.summary[data-expanded="true"]) { --commerce-assistant-visibility: hidden; }
+  .page { padding-bottom: 120px; }
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .summary { position: fixed; top: auto; bottom: 0; inset-inline: 0; z-index: 35; border-radius: 0; padding: 12px 16px max(12px, env(safe-area-inset-bottom)); display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 10px; box-shadow: 0 -6px 24px #0002; }
+  .summaryHeading { display: none; }
+  .summaryToggle { display: grid; align-content: center; gap: 2px; min-width: 0; text-align: left; font-size: 11px; }
+  .summaryToggle > span:first-child { display: flex; align-items: center; justify-content: space-between; gap: 5px; }
+  .summaryToggle strong { display: block; min-width: 0; white-space: nowrap; font-variant-numeric: tabular-nums; line-height: 1.4; }
+  .summaryToggle svg { flex-shrink: 0; }
+  .summaryContent { display: none; grid-column: 1 / -1; max-height: min(58dvh, 500px); overflow-y: auto; overscroll-behavior: contain; }
+  .summary[data-expanded="true"] .summaryContent { display: block; }
+  .summary[data-expanded="true"] .summaryToggle svg { transform: rotate(180deg); }
+  .summaryAction { margin: 0; min-width: 0; grid-column: 2; grid-row: 1; }
+  .summaryAction > * { height: 100%; min-height: 46px; white-space: normal; font-size: 12px; padding: 10px; }
+  .product { padding: 14px; }
+  .productHeader { flex-wrap: wrap; gap: 10px; }
+  .productHeader > div { flex-basis: calc(100% - 80px); }
+  .productTotal { margin-left: auto; }
+  .catalog { grid-template-columns: minmax(0, 1fr); max-height: 260px; }
+}
+@media(prefers-reduced-motion: no-preference) { .catalogChoice, .quantity button { transition: background .15s, border-color .15s; } }
+@media(max-width: 860px) {
+  dialog .page { padding-bottom: 0; }
+  dialog .summary { position: static; display: block; border-radius: 8px; }
+  dialog .summaryHeading, dialog .summaryContent { display: block; }
+  dialog .summaryToggle { display: none; }
+  dialog .summaryAction { margin-top: 16px; }
+}

@@ -567,7 +567,10 @@ export function Storefront({
             )}
           </>
         ) : null}
-        {view === "orcamento" && !quoteDetails ? cart ? <StoreQuoteOverview cart={cart} products={products} base={base} storeName={settings.name} busy={busy || paused} onRemove={id => void action(() => update(cart.lines.filter(line => line.id !== id)))}/> : <p role="status">Recuperando seu orçamento…</p> : null}
+        {view === "orcamento" && !quoteDetails ? cart ? <StoreQuoteOverview cart={cart} products={products} base={base} storeName={settings.name} busy={busy || paused} onUpdate={update} renderArtwork={(line, disabled) => {
+          const product = products.find(item => item.id === line.productId);
+          return product ? <ArtworkTools slug={slug} storeName={settings.name} product={product} disabled={disabled} libraryEnabled={libraryEnabled} pricingLines={cart.lines} benefitContext="cart" preparation={line.preparation ?? "customer"} artwork={cart.artworks.find(art => art.id === line.artworkId)} artworks={cart.artworks.filter(art => art.product_id === product.id)} onRefresh={refresh} onPreparationChange={preparation => update(cart.lines.map(item => item.id === line.id ? { ...item, preparation } : item))} onSelect={(id, title) => update(cart.lines.map(item => item.id === line.id ? { ...item, artworkId: id, ...(title ? { artworkName: title, preparation: "customer" as const } : {}) } : item))}/>: null;
+        }}/> : <p role="status">Recuperando seu orçamento…</p> : null}
         {view === "checkout" || quoteDetails ? (
           <>
             <h1 className={styles.title}>{view === "orcamento" ? "Preparar orçamento" : "Finalizar pedido"}</h1>
@@ -615,7 +618,7 @@ export function Storefront({
             )}
           </>
         ) : null}
-        {view === "orcamentos" ? (!cart?.customer ? <BuyerLogin api={api} onLogged={refresh} disabled={!cart}/> : <StoreBuyerQuotes api={api} base={base} quoteId={path[1]} revision={cart.revision} hasCart={cart.lines.length > 0} onRestored={async () => { setQuoteMode(false); await refresh(); }}/>) : null}
+        {view === "orcamentos" ? (!cart?.customer ? <BuyerLogin api={api} onLogged={refresh} disabled={!cart}/> : <StoreBuyerQuotes api={api} base={base} quoteId={path[1]} revision={cart.revision} hasCart={cart.lines.length > 0} onRestored={async mode => { setQuoteMode(mode === "quote"); await refresh(); }}/>) : null}
         {view === "pedidos" ? (
           <>
             <h1 className={styles.title}>

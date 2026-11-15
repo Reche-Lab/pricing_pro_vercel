@@ -9,6 +9,18 @@ const settings = storeSettingsSchema.parse({ name: "Loja teste", description: ""
 const cart = { revision: 2, lines: [], artworks: [], customer: null, payments: { manual_enabled: true }, calculation: { totalCents: 10000, items: [] } };
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 describe("checkout carrier selection", () => {
+  it("keeps a valid alternate recipient when the customer later omits freight", async () => {
+    const submit = vi.fn(async () => {});
+    render(<StoreCheckout intent="quote" cart={cart as never} settings={settings} base="/preview/shop" preview disabled={false} onSubmit={submit}/>);
+    fireEvent.click(screen.getByRole("button", { name: "Preencher dados de teste" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Receber no endereço" }));
+    fireEvent.click(screen.getByRole("button", { name: "Outro destinatário ou endereço" }));
+    fireEvent.change(screen.getByLabelText("Nome do destinatário"), { target: { value: "Recebedor da empresa" } });
+    fireEvent.click(screen.getByRole("radio", { name: "Sem frete por enquanto" }));
+    fireEvent.click(screen.getByRole("button", { name: "Revisar orçamento" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Salvar orçamento e acessar PDF" }));
+    await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ delivery: "not_included", deliveryAddressSameAsBilling: false, address: expect.objectContaining({ name: "Recebedor da empresa" }), expectedTotalCents: 10000 })));
+  });
   it("automatically includes calculated freight in a quote and chooses the fastest service instead of the cheapest", async () => {
     const submit = vi.fn(async () => {});
     vi.mocked(storeRequest).mockResolvedValue({ options: [
@@ -18,9 +30,10 @@ describe("checkout carrier selection", () => {
     render(<StoreCheckout intent="quote" cart={{ ...cart, lines: [{ quantity: 301 }] } as never} settings={settings} base="/commerce/shop/preview" api="/api/commerce/shop/preview" preview disabled={false} onSubmit={submit}/>);
     fireEvent.click(screen.getByRole("button", { name: "Preencher dados de teste" }));
     expect(screen.getByText("Total sem frete")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Receber no endereço" }));
     fireEvent.click(screen.getByRole("button", { name: "Calcular frete do carrinho" }));
     await screen.findByRole("radio", { name: /Correios - SEDEX/ });
-    expect(screen.getByRole("checkbox", { name: "Incluir frete ou retirada neste orçamento" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Receber no endereço" })).toBeChecked();
     expect(screen.getByRole("radio", { name: /Correios - SEDEX/ })).toBeChecked();
     expect(screen.getByRole("radio", { name: /Correios - PAC/ })).not.toBeChecked();
     expect(screen.getByText("Mais rápida")).toBeInTheDocument();
@@ -35,16 +48,18 @@ describe("checkout carrier selection", () => {
     vi.mocked(storeRequest).mockResolvedValue({ options: [{ id: "melhor_envio:2", name: "SEDEX", priceCents: 2200, transitDays: 2, quoteId: "22222222-2222-4222-8222-222222222222" }] });
     render(<StoreCheckout intent="quote" cart={cart as never} settings={settings} base="/commerce/shop/preview" api="/api/commerce/shop/preview" preview disabled={false} onSubmit={submit}/>);
     fireEvent.click(screen.getByRole("button", { name: "Preencher dados de teste" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Receber no endereço" }));
     fireEvent.click(screen.getByRole("button", { name: "Calcular frete do carrinho" }));
     await screen.findByRole("radio", { name: /SEDEX/ });
-    fireEvent.click(screen.getByRole("checkbox", { name: "Incluir frete ou retirada neste orçamento" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Sem frete por enquanto" }));
     fireEvent.click(screen.getByRole("button", { name: "Revisar orçamento" }));
     fireEvent.click(await screen.findByRole("button", { name: "Salvar orçamento e acessar PDF" }));
     await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ delivery: "not_included", expectedTotalCents: 10000 })));
     expect(submit).toHaveBeenLastCalledWith(expect.not.objectContaining({ shippingQuoteId: expect.anything() }));
     fireEvent.click(screen.getByRole("button", { name: "Voltar aos dados e entrega" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Receber no endereço" }));
     fireEvent.click(screen.getByRole("radio", { name: /SEDEX/ }));
-    expect(screen.getByRole("checkbox", { name: "Incluir frete ou retirada neste orçamento" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Receber no endereço" })).toBeChecked();
   });
   it("requires a quote, offers PAC/SEDEX and includes the selected server quote in the total", async () => {
     const submit = vi.fn(async () => {});

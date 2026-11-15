@@ -3,7 +3,7 @@ import React, { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, Copy, Loader2, MapPin, Search, Truck, Save, RefreshCw } from "lucide-react";
 import type { cartView } from "@/repositories/commerce";
-import { addressSchema, checkoutSchema, type StoreSettings } from "@/domain/commerce/schemas";
+import { addressSchema, billingSchema, checkoutSchema, type StoreSettings } from "@/domain/commerce/schemas";
 import { formatCheckoutDocument, formatCheckoutPhone } from "@/domain/commerce/checkout";
 import { fetchCepAddress, formatCep, normalizeCep } from "@/lib/cep";
 import { StoreOrderSummary } from "./StoreOrderSummary";
@@ -18,6 +18,12 @@ import { StoreShippingOptions } from "./StoreShippingOptions";
 import { StoreQuoteArtworkBenefit } from "./StoreQuoteArtworkBenefit";
 import type { QuoteArtworkBenefit } from "@/domain/commerce/quote-artwork-benefit";
 import { StoreOrderContactDetails } from "./StoreOrderContactDetails";
+import { StoreQuoteSummary } from "./StoreQuoteSummary";
+import q from "./quote.module.css";
+
+function CheckoutSummary({ quoting, total, totalLabel, children, action }: { quoting: boolean; total: number; totalLabel: string; children: React.ReactNode; action: React.ReactNode }) {
+  return quoting ? <StoreQuoteSummary totalCents={total} totalLabel={totalLabel} action={action}>{children}</StoreQuoteSummary> : <aside className={styles.summary}><h2 className="mb-4 text-lg font-semibold">4. Revise seu pedido</h2>{children}{action}</aside>;
+}
 
 type Cart = Awaited<ReturnType<typeof cartView>>;
 const previewBilling = { ...emptyContact(), name: "Cliente de teste", email: "cliente@example.test", phone: "11999990000", document: "52998224725", postalCode: "01001000", street: "Praça de teste", number: "100", district: "Centro", city: "São Paulo", state: "SP" };
@@ -127,8 +133,16 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
   const form = useRef<HTMLFormElement>(null);
   const [includeQuoteShipping, setIncludeQuoteShipping] = useState(false);
   const [requestId] = useState(() => crypto.randomUUID());
+  const receiptId = useId();
   const quoting = intent === "quote";
   const [quoteReview, setQuoteReview] = useState<BuyerQuoteInput | null>(null);
+  const [billingCollapsed, setBillingCollapsed] = useState(false), billingRestored = useRef(false);
+  useEffect(() => {
+    if (!persistence.ready || billingRestored.current) return;
+    billingRestored.current = true;
+    if (!preview && billingSchema.safeParse({ ...postalContact(billing), email: billing.email }).success) setBillingCollapsed(true);
+  }, [persistence.ready, billing, preview]);
+  useEffect(() => { if (quoteReview && quoteReview.revision !== cart.revision) { setQuoteReview(null); setError("Os itens mudaram. Confira os valores novamente antes de salvar."); } }, [quoteReview, cart.revision]);
   const reviewHeading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { onQuoteStepChange?.(quoteReview ? "review" : "details"); }, [quoteReview, onQuoteStepChange]);
   const [freight, setFreight] = useState<{ key: string; expiresAt: number; options: StoreShippingOption[] } | null>(null);
@@ -160,14 +174,16 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
     finally { if (generation === quoteGeneration.current) setShippingBusy(false); }
   }
   function changeDeliveryAddress(next: ContactDraft) { setAddress(next); setCustomEdited(true); }
-  return <form ref={form} className={styles.columns} noValidate onSubmit={async e => {
+  return <form ref={form} className={quoting ? `${q.layout} ${q.page}` : styles.columns} noValidate onSubmit={async e => {
     e.preventDefault(); setError("");
     if (disabled || submitLock.current || !persistence.ready) return;
     if (missingFreight || ((!quoting || includeQuoteShipping) && delivery === "delivery" && selectedFreight && freight && freight.expiresAt <= Date.now())) { setError("Calcule e selecione o frete para este endereço antes de confirmar."); return; }
+    const recipient = { ...postalContact(address), document: address.document || billing.document, attention: address.attention };
+    const alternateRecipient = !same && delivery !== "pickup" && (!quoting || includeQuoteShipping || addressSchema.safeParse(recipient).success);
     const common = { revision: cart.revision, expectedTotalCents: (cart.calculation?.totalCents ?? 0) + shipping,
-      billing: { ...postalContact(billing), email: billing.email }, delivery, deliveryAddressSameAsBilling: quoting && delivery === "pickup" ? true : same,
+      billing: { ...postalContact(billing), email: billing.email }, delivery, deliveryAddressSameAsBilling: quoting && (delivery === "pickup" || !includeQuoteShipping && !alternateRecipient) ? true : same,
       ...(delivery === "delivery" && selectedFreight?.quoteId && (!quoting || includeQuoteShipping) ? { shippingQuoteId: selectedFreight.quoteId } : {}),
-      address: !same && delivery !== "pickup" && (quoting || delivery === "delivery") ? { ...postalContact(address), document: address.document || billing.document, attention: address.attention } : null };
+      address: alternateRecipient ? recipient : null };
     const parsed = quoting ? buyerQuoteSchema.safeParse({ ...common, requestId, delivery: includeQuoteShipping ? delivery : "not_included" })
       : checkoutSchema.safeParse({ ...common, provider, acceptedTerms: accepted, paymentEnvironment: cart.payments.payment_environment ?? "production" });
     if (!parsed.success) {
@@ -209,18 +225,27 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
         {pendingLines.map(id => { const issue = artworkIssues.find(issue => issue.lineId === id); return <Link key={id} className="mt-2 block text-sm font-semibold underline" href={`${base}/carrinho?item=${encodeURIComponent(id)}#item-${id}`} onClick={event => { if (persistence.status.startsWith("Salvando")) event.preventDefault(); }}>{issue ? `${issue.name} · ${issue.artworkName}: ${issue.reason}` : "Revisar arte deste item"}</Link>; })}
       </div> : null}
       <p role="status" className={styles.muted}>{persistence.status || (persistence.ready ? "Seus dados são salvos apenas para esta conta nesta loja." : "Recuperando seus dados…")}</p>
+      {error ? <p role="alert" className={q.error}>{error}</p> : null}
       {persistence.status.includes("Não foi possível") || persistence.status.includes("outra aba") ? <button type="button" className={`${styles.secondary} mb-3`} onClick={() => { if (!persistence.ready || persistence.status.includes("outra aba")) window.location.reload(); else void persistence.flush().catch(() => undefined); }}>{!persistence.ready ? <RefreshCw size={16}/> : <Save size={16}/>} {!persistence.ready || persistence.status.includes("outra aba") ? "Recarregar dados salvos" : "Tentar salvar novamente"}</button> : null}
       {quoteReview ? <section className={styles.quoteReview} aria-label="Revisão do orçamento"><h2 ref={reviewHeading} tabIndex={-1} className="text-xl font-semibold outline-none">Confira antes de salvar seu orçamento</h2><p className={`${styles.muted} mt-2`}>Revise os produtos, seus dados e a entrega. Não há cobrança nem compromisso de compra.</p><StoreOrderContactDetails billing={{ ...quoteReview.billing, personType: quoteReview.billing.document.length === 14 ? "J" : "F" }} address={quoteReview.delivery === "pickup" ? null : quoteReview.deliveryAddressSameAsBilling ? { ...quoteReview.billing, attention: "" } : quoteReview.address} same={quoteReview.deliveryAddressSameAsBilling} shippingOption={selectedFreight}/><button type="button" className={`${styles.secondary} mt-4`} onClick={() => setQuoteReview(null)}>Voltar aos dados e entrega</button><Link className="mt-4 block text-sm underline" href={`${base}/orcamento`}>Voltar aos produtos do orçamento</Link></section> : null}
-      {quoting && !quoteReview ? <div className="mb-5 border-l-2 border-current/25 pl-3"><strong>Seu orçamento, sem compromisso de compra</strong><p className="mt-1 text-sm">Você não precisa enviar nem aprovar artes agora. O PDF ficará salvo em Meus orçamentos.</p><label className="mt-3 !flex items-center gap-2"><input type="checkbox" checked={includeQuoteShipping} onChange={event => setIncludeQuoteShipping(event.target.checked)}/>Incluir frete ou retirada neste orçamento</label></div> : null}
+      {quoting && !quoteReview ? <p className="my-4 text-sm">Seu orçamento, sem compromisso de compra. Artes opcionais; o PDF fica salvo em Meus orçamentos.</p> : null}
       <fieldset hidden={Boolean(quoteReview)} disabled={!persistence.ready || submitting || disabled} className="min-w-0 border-0 p-0">
       {preview ? <button type="button" className={`${styles.secondary} justify-self-start`} onClick={() => { setBilling({ ...previewBilling }); setErrors({}); setError(""); }}>Preencher dados de teste</button> : null}
       <section className="min-w-0 space-y-4" aria-labelledby="checkout-billing"><h2 id="checkout-billing" className="text-lg font-semibold">1. Dados para faturamento</h2>
-        <ContactFields billing value={billing} onChange={setBilling} errors={errors} onBusyChange={setBillingCepBusy}/>
+        {quoting ? <details className={q.details} open={!billingCollapsed || Object.keys(errors).some(key => key.startsWith("billing."))}><summary onClick={event => { event.preventDefault(); setBillingCollapsed(value => !value); }}><span>{billingCollapsed ? "Conferir ou editar dados" : "Dados da pessoa ou empresa"}<small className="block font-normal text-zinc-500">{billingCollapsed ? `${billing.name} · ${billing.email}` : "Usados para identificar seu orçamento em PDF."}</small></span></summary><ContactFields billing value={billing} onChange={setBilling} errors={errors} onBusyChange={setBillingCepBusy}/><button type="button" className={`${styles.secondary} mt-3`} disabled={billingCepBusy} onClick={() => {
+          const parsed = billingSchema.safeParse({ ...postalContact(billing), email: billing.email });
+          if (parsed.success) { setErrors({}); setError(""); setBillingCollapsed(true); }
+          else { setErrors(Object.fromEntries(parsed.error.issues.map(issue => [`billing.${issue.path.join(".")}`, issue.message]))); setError("Confira os dados destacados."); requestAnimationFrame(() => form.current?.querySelector<HTMLElement>("[aria-invalid=true]")?.focus()); }
+        }}><Check size={16}/>Concluir dados</button></details> : <ContactFields billing value={billing} onChange={setBilling} errors={errors} onBusyChange={setBillingCepBusy}/>}
       </section>
       <section className="mt-5 min-w-0 space-y-4 border-t border-current/15 pt-5" aria-labelledby="checkout-delivery"><h2 id="checkout-delivery" className="text-lg font-semibold">2. Como deseja receber?</h2>
-        {settings.pickupEnabled ? <label className="!flex items-start gap-3"><input type="radio" name="delivery" checked={delivery === "pickup"} onChange={() => { setDeliveryCepBusy(false); setDelivery("pickup"); }}/><span>Retirar pessoalmente · Grátis<small className={`${styles.muted} mt-1 block`}>{settings.pickupAddress}</small></span></label> : null}
-        {settings.deliveryEnabled || settings.carrierEnabled ? <label className="!flex items-start gap-3"><input type="radio" name="delivery" checked={delivery === "delivery"} onChange={() => setDelivery("delivery")}/><span>{settings.carrierEnabled ? "Receber no endereço" : `Entrega · ${storeMoney(settings.deliveryCents)}`}<small className={`${styles.muted} mt-1 block`}>{settings.carrierEnabled ? "Frete calculado para todos os itens do carrinho." : settings.deliveryDescription}</small></span></label> : null}
-        {delivery === "delivery" ? <>
+        {quoting ? <div className={q.options} role="radiogroup" aria-label="Recebimento do orçamento">
+          <label className={q.option}><input type="radio" name="quote-delivery" checked={!includeQuoteShipping} onChange={() => { setIncludeQuoteShipping(false); setDeliveryCepBusy(false); }}/>Sem frete por enquanto</label>
+          {settings.deliveryEnabled || settings.carrierEnabled ? <label className={q.option}><input type="radio" name="quote-delivery" checked={includeQuoteShipping && delivery === "delivery"} onChange={() => { setIncludeQuoteShipping(true); setDelivery("delivery"); }}/>Receber no endereço</label> : null}
+          {settings.pickupEnabled ? <label className={q.option}><input type="radio" name="quote-delivery" aria-label="Retirar na loja · Grátis" aria-describedby={`${receiptId}-pickup`} checked={includeQuoteShipping && delivery === "pickup"} onChange={() => { setDeliveryCepBusy(false); setIncludeQuoteShipping(true); setDelivery("pickup"); }}/><span>Retirar na loja · Grátis<small id={`${receiptId}-pickup`}>{settings.pickupAddress}</small></span></label> : null}
+        </div> : <>{settings.pickupEnabled ? <label className="!flex items-start gap-3"><input type="radio" name="delivery" checked={delivery === "pickup"} onChange={() => { setDeliveryCepBusy(false); setDelivery("pickup"); }}/><span>Retirar pessoalmente · Grátis<small className={`${styles.muted} mt-1 block`}>{settings.pickupAddress}</small></span></label> : null}
+        {settings.deliveryEnabled || settings.carrierEnabled ? <label className="!flex items-start gap-3"><input type="radio" name="delivery" checked={delivery === "delivery"} onChange={() => setDelivery("delivery")}/><span>{settings.carrierEnabled ? "Receber no endereço" : `Entrega · ${storeMoney(settings.deliveryCents)}`}<small className={`${styles.muted} mt-1 block`}>{settings.carrierEnabled ? "Frete calculado para todos os itens do carrinho." : settings.deliveryDescription}</small></span></label> : null}</>}
+        {delivery === "delivery" && (!quoting || includeQuoteShipping) ? <>
           <div className="grid min-w-0 gap-2 sm:grid-cols-2" role="group" aria-label="Endereço e destinatário da entrega">
             <button type="button" aria-pressed={same} className={`${same ? styles.primary : styles.secondary} min-h-11 !whitespace-normal !text-left`} onClick={() => { setDeliveryCepBusy(false); setSame(true); }}><Copy size={18} className="shrink-0"/>Usar dados do faturamento</button>
             <button type="button" aria-pressed={!same} className={`${!same ? styles.primary : styles.secondary} min-h-11 !whitespace-normal !text-left`} onClick={() => { if (!customEdited && !Object.values(address).some(Boolean)) setAddress({ ...billing, email: "", attention: "" }); setSame(false); }}><MapPin size={18} className="shrink-0"/>Outro destinatário ou endereço</button>
@@ -251,16 +276,14 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
         </>}
       </section> : null}
     </div>
-    <aside className={styles.summary}><h2 className="mb-4 text-lg font-semibold">{quoting ? "Resumo do orçamento" : "4. Revise seu pedido"}</h2>
+    <CheckoutSummary quoting={quoting} total={(cart.calculation?.totalCents ?? 0) + shipping} totalLabel={quoting && !includeQuoteShipping ? "Sem frete" : missingFreight ? "Frete a calcular" : "Total"} action={<button className={`${styles.primary} w-full`} disabled={!persistence.ready || submitting || disabled || shippingBusy || missingFreight || billingCepBusy || deliveryCepBusy || (!quoting && !accepted) || !cart.calculation || (!quoting && !cart.payments.mp_enabled && !cart.payments.manual_enabled)}>{submitting ? <Loader2 className="animate-spin" size={17}/> : <Check size={17}/>} {submitting ? "Conferindo e salvando…" : quoting ? quoteReview ? "Salvar orçamento e acessar PDF" : "Revisar orçamento" : preview ? "Concluir simulação" : "Confirmar pedido"}</button>}>
       {cart.calculation?.items.map(item => <div className="mb-3 flex justify-between gap-3 text-sm" key={item.id}><span>{item.quantity} × {item.name}<small className="block text-zinc-500">{item.artworkName}</small></span><span>{storeMoney(item.totalCents)}</span></div>)}
       <StoreOrderSummary subtotal={cart.calculation?.totalCents ?? 0} shipping={shipping} shippingPending={Boolean(missingFreight)} shippingExcluded={quoting && !includeQuoteShipping} artworkDiscountCents={cart.calculation?.artworkDiscountCents}/>
       {quoting ? <StoreQuoteArtworkBenefit benefits={quoteBenefits} storeName={settings.name}/> : null}
       <DeliveryTimeline quantity={cart.lines.reduce((sum, line) => sum + line.quantity, 0)} settings={settings.production} transportDays={quoting && !includeQuoteShipping ? null : selectedFreight?.transitDays ?? (serviceId === "delivery" ? settings.deliveryTransitDays : null)} pickup={(!quoting || includeQuoteShipping) && delivery === "pickup"}/>
       {missingFreight ? <p role="status" className="mt-2 text-sm text-amber-700">Frete a calcular. O total acima ainda não inclui a entrega.</p> : null}
       {quoting ? <p className="my-5 text-sm">{includeQuoteShipping ? "Frete incluído conforme sua seleção." : "Frete não incluído no total."} Preços e frete serão conferidos novamente antes da compra.</p> : <label className="my-5 flex items-start gap-3"><input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} required/><span>Li e aceito as <Link target="_blank" href={`${base}/condicoes`} className="underline">condições de compra</Link>.</span></label>}
-      {error ? <p role="alert" className="mb-3 text-sm text-red-700">{error}</p> : null}
-      <button className={`${styles.primary} w-full`} disabled={!persistence.ready || submitting || disabled || shippingBusy || missingFreight || billingCepBusy || deliveryCepBusy || (!quoting && !accepted) || !cart.calculation || (!quoting && !cart.payments.mp_enabled && !cart.payments.manual_enabled)}>{submitting ? <Loader2 className="animate-spin" size={17}/> : <Check size={17}/>} {submitting ? "Conferindo e salvando…" : quoting ? quoteReview ? "Salvar orçamento e acessar PDF" : "Revisar orçamento" : preview ? "Concluir simulação" : "Confirmar pedido"}</button>
       <p className="mt-3 text-sm text-zinc-500">{quoting ? "Nenhum pagamento ou pedido será criado. O orçamento fica disponível somente na sua conta." : preview ? "Prévia privada. Nenhum pedido real será criado." : cart.payments.payment_environment === "test" ? "Pedido de teste: utilize apenas os dados e cartões de teste do Mercado Pago. Não haverá liberação de produção ou envio." : provider === "mercado_pago" ? "Após confirmar, escolha como pagar no detalhe do pedido." : "A produção começa após pagamento e aprovação das artes."}</p>
-    </aside>
+    </CheckoutSummary>
   </form>;
 }

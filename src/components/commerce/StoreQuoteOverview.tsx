@@ -1,30 +1,56 @@
 "use client";
-import React from "react";
+/* eslint-disable @next/next/no-img-element */
+import React, { useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, FileText, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, Check, FileText, Images, Loader2, Plus, Trash2, Undo2 } from "lucide-react";
 import type { cartView, publicCommerceProduct } from "@/repositories/commerce";
+import type { CartLine } from "@/domain/commerce/schemas";
+import { changeQuoteQuantity, quoteCartFingerprint, restoreRemovedQuoteLine, type RemovedQuoteLine } from "@/domain/commerce/quote-cart";
 import { quoteArtworkBenefits } from "@/domain/commerce/quote-artwork-benefit";
 import { StoreQuoteArtworkBenefit } from "./StoreQuoteArtworkBenefit";
 import { StoreOrderSummary } from "./StoreOrderSummary";
 import { storeMoney } from "./store-http";
 import styles from "./store.module.css";
+import q from "./quote.module.css";
+import { StoreQuoteQuantity } from "./StoreQuoteQuantity";
+import { StoreQuoteProductPicker } from "./StoreQuoteProductPicker";
+import { StoreQuoteSummary } from "./StoreQuoteSummary";
 
-export function StoreQuoteOverview({ cart, products, base, storeName, busy, onRemove }: {
+export function StoreQuoteOverview({ cart, products, base, storeName, busy, onUpdate, renderArtwork }: {
   cart: Awaited<ReturnType<typeof cartView>>; products: ReturnType<typeof publicCommerceProduct>[];
-  base: string; storeName: string; busy: boolean; onRemove: (id: string) => void;
+  base: string; storeName: string; busy: boolean; onUpdate: (lines: CartLine[]) => Promise<void>; renderArtwork?: (line: CartLine, disabled: boolean) => React.ReactNode;
 }) {
+  const [picker, setPicker] = useState(false), [saving, setSaving] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
+  const [removed, setRemoved] = useState<RemovedQuoteLine | null>(null), lock = useRef(false);
+  const disabled = busy || saving;
   const benefits = quoteArtworkBenefits(cart.lines, products, cart.calculation);
-  return <section aria-label="Produtos do seu orçamento">
-    <div className={styles.quoteOverviewHeader}><div><h1 className={styles.title}>Monte seu orçamento</h1><p className={styles.muted}>Escolha produtos e quantidades. As artes são opcionais nesta etapa.</p></div><Link href={`${base}/catalogo`} className={styles.secondary}><Plus size={17}/>Adicionar produtos ao orçamento</Link></div>
-    {!cart.lines.length ? <div className={styles.empty}><FileText size={32}/><h2>Vamos começar pelos produtos?</h2><p>Navegue pela loja e use “Adicionar ao orçamento”. Você só precisa validar seu e-mail para salvar o orçamento na sua conta.</p><Link href={`${base}/catalogo`} className={styles.primary}>Escolher produtos<ArrowRight size={17}/></Link></div> : <div className={styles.quoteOverview}>
-      <div><div className="divide-y divide-current/15">{cart.lines.map(line => {
-        const product = products.find(product => product.id === line.productId), price = cart.calculation?.items.find(item => item.id === line.id);
-        return <div key={line.id} className="flex min-w-0 items-start justify-between gap-3 py-4"><div className="min-w-0"><Link href={`${base}/produto/${line.productId}`} className="font-semibold">{product?.name ?? price?.name ?? "Produto indisponível"}</Link><p className="mt-1 text-sm">{line.quantity} un. × {storeMoney(price?.unitCents ?? 0)}{line.artworkName ? ` · ${line.artworkName}` : ""}</p>{product?.personalized ? <small className={styles.muted}>{line.artworkId ? "Arte anexada. A aprovação pode ser concluída antes da compra." : "Você pode enviar a arte depois, antes da compra."}</small> : null}</div><div className="flex shrink-0 items-center gap-2"><strong className="text-sm">{storeMoney(price?.totalCents ?? 0)}</strong><button type="button" className={styles.iconButton} title="Remover item do orçamento" aria-label={`Remover ${product?.name ?? "item"} do orçamento`} disabled={busy} onClick={() => onRemove(line.id)}><Trash2 size={17}/></button></div></div>;
-      })}</div><Link className="mt-3 inline-block text-sm underline" href={`${base}/carrinho`}>Editar quantidades e artes do orçamento</Link><StoreQuoteArtworkBenefit benefits={benefits} storeName={storeName}/></div>
-      <aside className={styles.summary}><h2 className="mb-4 text-lg font-semibold">Resumo do orçamento</h2><StoreOrderSummary subtotal={cart.calculation?.totalCents ?? 0} artworkDiscountCents={cart.calculation?.artworkDiscountCents} shippingExcluded/>
-        <Link href={`${base}/orcamento?etapa=dados`} className={`${styles.primary} mt-5 w-full`}>Continuar para dados e entrega<ArrowRight size={17}/></Link>
-        <p className={`${styles.muted} mt-3`}>{cart.customer ? "Confira seus dados para salvar e acessar o PDF." : "Na próxima etapa, valide seu e-mail com um código, sem senha. Seus itens serão mantidos."}</p><p className={`${styles.muted} mt-3`}>Nenhum pedido ou pagamento será criado. Depois de salvo, o orçamento ficará em Meus orçamentos para comprar quando quiser, com nova conferência de preços e frete.</p>
-      </aside>
+  async function apply(lines: CartLine[], message: string, undo: RemovedQuoteLine | null = null) {
+    if (lock.current || busy) return false;
+    lock.current = true; setSaving(true); setError(""); setNotice("");
+    try { await onUpdate(lines); setRemoved(undo); setNotice(message); return true; }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível atualizar. Tente novamente."); return false; }
+    finally { lock.current = false; setSaving(false); }
+  }
+  return <section className={q.page} aria-label="Produtos do seu orçamento" aria-busy={saving}>
+    <div className={q.header}><div><h1 className={styles.title}>Monte seu orçamento</h1><p>Escolha produtos e quantidades. As artes são opcionais nesta etapa.</p></div><button type="button" className={styles.secondary} disabled={disabled} onClick={() => { setError(""); setPicker(true); }}><Plus size={17}/>Adicionar produtos ao orçamento</button></div>
+    <div className={q.status} role="status">{saving ? <><Loader2 size={16} className="animate-spin"/>Atualizando itens e valores…</> : notice ? <><Check size={16}/>{notice}</> : null}{removed && !saving ? <button type="button" disabled={disabled} onClick={() => { try { void apply(restoreRemovedQuoteLine(cart.lines, removed), "Item recuperado. Valores atualizados."); } catch (cause) { setError((cause as Error).message); setRemoved(null); } }}><Undo2 size={15}/>Desfazer remoção</button> : null}</div>
+    {error && !picker ? <p className={q.error} role="alert">{error}</p> : null}
+    {!cart.lines.length ? <div className={styles.empty}><FileText size={32}/><h2>Vamos começar pelos produtos?</h2><p>Escolha seus produtos. Você só precisa validar seu e-mail para salvar o PDF na sua conta.</p><button type="button" className={styles.primary} onClick={() => setPicker(true)}>Escolher produtos<ArrowRight size={17}/></button></div> : <div className={q.layout}>
+      <div className={q.items}>{[...new Set(cart.lines.map(line => line.productId))].map(productId => {
+        const product = products.find(item => item.id === productId), lines = cart.lines.filter(line => line.productId === productId);
+        const prices = cart.calculation?.items.filter(item => item.productId === productId) ?? [];
+        const name = product?.name ?? prices[0]?.name ?? "Produto indisponível";
+        return <article className={q.product} key={productId} aria-label={name}>
+          <header className={q.productHeader}>{product ? <img className={q.thumbnail} src={product.imageUrl} alt="" width={64} height={64}/> : null}<div><h2><Link href={`${base}/produto/${productId}`}>{name}</Link></h2><p>{lines.reduce((total, line) => total + line.quantity, 0)} unidades · {lines.length} {lines.length === 1 ? "grupo" : "grupos"}</p></div><strong className={q.productTotal}>{storeMoney(prices.reduce((total, item) => total + item.totalCents, 0))}</strong></header>
+          {lines.map((line, index) => { const price = prices.find(item => item.id === line.id); return <div className={q.line} key={line.id}><div><strong>{line.artworkName || `Grupo ${index + 1}`}</strong><small>{storeMoney(price?.unitCents ?? 0)} por unidade · subtotal {storeMoney(price?.totalCents ?? 0)}</small></div><div className={q.lineTools}>{product ? <StoreQuoteQuantity value={line.quantity} label={`${name} · ${line.artworkName || `Grupo ${index + 1}`}`} disabled={disabled} onCommit={quantity => apply(changeQuoteQuantity(cart.lines, line.id, quantity, product), "Quantidade e valores atualizados.")}/> : <p className={q.muted}>Remova o produto indisponível.</p>}<button type="button" className={styles.iconButton} disabled={disabled} title="Remover grupo do orçamento" aria-label={`Remover ${name} · ${line.artworkName || `Grupo ${index + 1}`}`} onClick={() => { const next = cart.lines.filter(item => item.id !== line.id); void apply(next, "Item removido do orçamento.", { line, index: cart.lines.findIndex(item => item.id === line.id), after: quoteCartFingerprint(next) }); }}><Trash2 size={17}/></button></div></div>; })}
+          {product?.personalized ? <details className={q.details}><summary><Images size={16}/>Artes e personalização · opcional</summary>{lines.map((line, index) => <div key={`${line.id}:${line.artworkName}`} className={q.art}><label>Nome da arte / lote {index + 1}<input defaultValue={line.artworkName} maxLength={100} disabled={disabled} onBlur={event => { const artworkName = event.currentTarget.value.trim(); if (artworkName !== line.artworkName) void apply(cart.lines.map(item => item.id === line.id ? { ...item, artworkName } : item), "Nome da arte atualizado."); }}/></label>{renderArtwork?.(line, disabled) ?? <p className={q.muted}>Você pode preparar e aprovar a arte antes da compra.</p>}</div>)}</details> : null}
+        </article>;
+      })}<StoreQuoteArtworkBenefit benefits={benefits} storeName={storeName}/></div>
+      <StoreQuoteSummary totalCents={cart.calculation?.totalCents ?? 0} totalLabel="Sem frete" action={<Link href={`${base}/orcamento?etapa=dados`} className={styles.primary} aria-disabled={disabled} onClick={event => { if (disabled) event.preventDefault(); }}>Continuar para dados e entrega<ArrowRight size={17}/></Link>}>
+        <StoreOrderSummary subtotal={cart.calculation?.totalCents ?? 0} artworkDiscountCents={cart.calculation?.artworkDiscountCents} shippingExcluded/>
+        <p>{cart.customer ? "Confira seus dados para salvar e acessar o PDF." : "Na próxima etapa, valide seu e-mail com um código, sem senha."}</p><p>Sem cobrança ou reserva. Seu orçamento ficará em Meus orçamentos para retomar depois.</p>
+      </StoreQuoteSummary>
     </div>}
+    {picker ? <StoreQuoteProductPicker products={products} lines={cart.lines} busy={disabled} error={error} onClose={() => setPicker(false)} onAdd={lines => apply(lines, "Produto adicionado. Valores atualizados.")}/> : null}
   </section>;
 }

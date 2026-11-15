@@ -88,10 +88,11 @@ try {
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ options, expiresInSeconds: 900 }) });
   });
   await page.goto(`${store}/orcamento?etapa=dados`, { waitUntil: "networkidle" });
+  await page.getByRole("radio", { name: "Receber no endereço", exact: true }).check();
   await page.getByRole("button", { name: "Calcular frete do carrinho" }).click();
   await page.getByRole("radio", { name: "Correios - SEDEX", exact: true }).waitFor();
   assert.equal(await page.getByRole("radio", { name: "Correios - SEDEX", exact: true }).isChecked(), true);
-  assert.equal(await page.getByRole("checkbox", { name: "Incluir frete ou retirada neste orçamento" }).isChecked(), true);
+  assert.equal(await page.getByRole("radio", { name: "Receber no endereço", exact: true }).isChecked(), true);
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 960 });
     for (const theme of ["light", "dark"]) {
