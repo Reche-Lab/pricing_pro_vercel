@@ -13,6 +13,17 @@ vi.mock("@/components/commerce/store-http", async original => ({ ...await origin
 beforeEach(() => { vi.clearAllMocks(); Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function() { this.setAttribute("open", ""); } }); Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value: function() { this.removeAttribute("open"); } }); });
 afterEach(cleanup);
 describe("quote editing journey", () => {
+  it("retries a failed list query without showing an empty account or making changes", async () => {
+    vi.mocked(storeRequest).mockRejectedValueOnce(new Error("Não foi possível carregar seus orçamentos."))
+      .mockResolvedValueOnce({ quotes: [savedBuyerQuote] });
+    render(<StoreBuyerQuotes api="/api/store/test" base="/loja/test" revision={7} hasCart={false} onRestored={vi.fn()}/>);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível carregar");
+    expect(screen.queryByText("Seu próximo projeto começa aqui")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Tentar novamente" }));
+    expect(await screen.findByRole("link", { name: /Abrir orçamento/ })).toHaveAttribute("href", `/loja/test/orcamentos/${savedBuyerQuote.id}`);
+    expect(storeRequest).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(storeRequest).mock.calls.every(args => args.length === 1 && args[0] === "/api/store/test/quotes")).toBe(true);
+  });
   it("edits quantities inline, preserves groups, and restores a removed item", async () => {
     const updated = vi.fn();
     function Fixture() { const [cart, setCart] = useState(quoteCart); return <StoreQuoteOverview cart={cart} products={[quoteProduct]} base="/loja/test" storeName="Loja" busy={false} onUpdate={async lines => { updated(lines); setCart({ ...cart, lines }); }}/>; }

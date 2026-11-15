@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, CheckCircle2, Copy, Download, FileText, Loader2, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, Copy, Download, FileText, Loader2, RotateCcw, UserRound } from "lucide-react";
 import type { getBuyerQuote, listBuyerQuotes } from "@/repositories/commerce-buyer-quotes";
 import { formatDeliveryDate } from "@/domain/shipping/production-lead-time";
 import { storeMoney, storeRequest } from "./store-http";
@@ -11,6 +11,7 @@ import { StoreOrderSummary } from "./StoreOrderSummary";
 import { StoreQuoteSummary } from "./StoreQuoteSummary";
 import { StoreQuoteArtworkBenefit } from "./StoreQuoteArtworkBenefit";
 import { LibraryDialog } from "./LibraryUI";
+import { StoreBuyerQuoteList } from "./StoreBuyerQuoteList";
 import styles from "./store.module.css";
 import q from "./quote.module.css";
 
@@ -19,6 +20,7 @@ export function StoreBuyerQuotes({ api, base, quoteId, revision, hasCart, onRest
   const [quote, setQuote] = useState<Awaited<ReturnType<typeof getBuyerQuote>> | null>(null);
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [intent, setIntent] = useState<"quote" | "purchase" | null>(null), [replaceConfirmed, setReplaceConfirmed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const router = useRouter();
   const restoreLock = useRef(false);
   useEffect(() => {
@@ -26,13 +28,13 @@ export function StoreBuyerQuotes({ api, base, quoteId, revision, hasCart, onRest
     void storeRequest(quoteId ? `${api}/quotes/${quoteId}` : `${api}/quotes`).then(result => { if (active) { setQuotes(result.quotes ?? []); setQuote(result.quote ?? null); } })
       .catch(cause => { if (active) setError(cause.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [api, quoteId]);
+  }, [api, quoteId, attempt]);
   function prepare(mode: "quote" | "purchase") { setIntent(mode); setReplaceConfirmed(false); setError(""); }
-  if (loading) return <p role="status" className="flex items-center gap-2"><Loader2 size={18} className="animate-spin"/>Carregando seus orçamentos…</p>;
+  if (loading && quoteId) return <p role="status" className="flex items-center gap-2"><Loader2 size={18} className="animate-spin"/>Carregando seus orçamentos…</p>;
   const expired = quote ? new Date(quote.valid_until).getTime() < Date.now() : false;
-  return <div className={q.page}>
+  return <div className={quoteId ? q.page : q.savedListPage}>
     <div className={q.header}><div><h1 className={styles.title}>{quoteId ? "Seu orçamento" : "Meus orçamentos"}</h1><p>{quoteId ? "Salvo na sua conta, pronto para consultar ou baixar." : "Suas propostas, sem compromisso de compra."}</p></div><Link className={styles.secondary} href={`${base}/orcamento`}><FileText size={16}/>Montar novo orçamento</Link></div>
-    {error && !intent ? <p role="alert" className={q.error}>{error}</p> : null}
+    {error && !intent ? <div className={q.error}><p role="alert">{error}</p><button type="button" className={`${styles.secondary} mt-3`} onClick={() => setAttempt(value => value + 1)}><RotateCcw size={16}/>Tentar novamente</button></div> : null}
     {quote ? <>
       <div className={q.savedHeader}><span className={q.badge}><CheckCircle2 size={16}/>Orçamento salvo</span><span className={q.badge}>{expired ? "Valores a conferir" : "Dentro da validade"}</span><p>Sem cobrança ou reserva.</p></div>
       <div className={q.layout}>
@@ -65,6 +67,6 @@ export function StoreBuyerQuotes({ api, base, quoteId, revision, hasCart, onRest
           finally { restoreLock.current = false; setBusy(false); }
         }}>{busy ? <Loader2 className="animate-spin" size={16}/> : <ArrowRight size={16}/>} {intent === "quote" ? "Abrir cópia para editar" : "Abrir carrinho para revisar"}</button>
       </div></LibraryDialog> : null}
-    </> : !quoteId ? <div>{quotes.length ? quotes.map(item => <Link href={`${base}/orcamentos/${item.id}`} key={item.id} className={q.savedRow}><div><strong>Orçamento {item.id.slice(0, 8).toUpperCase()}</strong><small>{new Date(item.created_at).toLocaleDateString("pt-BR")} · {item.shipping_cents === null ? "Sem frete" : "Com frete/retirada"} · {new Date(item.valid_until).getTime() < Date.now() ? "Valores a conferir" : "Dentro da validade"}</small></div><strong className="inline-flex items-center gap-3">{storeMoney(item.total_cents)}<ArrowRight size={17}/></strong></Link>) : <p className="py-8">Você ainda não tem orçamentos salvos. Escolha os produtos para montar sua primeira proposta.</p>}</div> : null}
+    </> : !quoteId && !error ? <StoreBuyerQuoteList key={api} quotes={quotes} loading={loading} api={api} base={base}/> : null}
   </div>;
 }

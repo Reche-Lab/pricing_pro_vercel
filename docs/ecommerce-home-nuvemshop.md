@@ -367,3 +367,16 @@ Sem migration ou variável nova. Alteração visual, sem mudanças na autentica�
 - [x] Build de produção aprovado com uma CPU e memória limitada. Nenhuma alteração em produção.
 
 Reutiliza APIs e persistência existentes. Nenhuma migration ou variável nova necessária.
+
+### Meus Orçamentos em Cartões
+
+- [x] Cartão independente para cada proposta, com código, total, composição do frete, datas e validade real. Destaques de hover/foco e movimento reduzido respeitado.
+- [x] Abertura pelo cartão e PDF independente, mantendo links privados autenticados por cliente/tenant; nenhuma ação de alteração ou pagamento adicionada à listagem.
+- [x] Busca por código/data, filtro de validade e ordenação por data/valor, sem alterar a lista original. Contagem dos resultados disponíveis, sem apresentar o limite de 100 como total histórico da conta.
+- [x] Carregamento, conta vazia, busca sem resultados e falha de rede distintos; recuperação com “Tentar novamente”. Validade atualizada ao retomar a janela e a cada minuto, sem novas consultas à API.
+- [x] Dez testes focados aprovados, incluindo ordenação, filtros, links privados, conta vazia e recuperação de falhas sem operações de escrita.
+- [x] Playwright com componentes reais e APIs simuladas em claro/escuro, 1440/390/320 px e paisagem: filtros, navegação pelo cartão, PDF independente, valores longos, falha/repetição e conta vazia. Capturas inspecionadas, sem overflow.
+- [x] Regressão geral com 1.042 testes aprovados e 76 integrações condicionais não executadas nesta rodada. Lint e tipos aprovados; teclado e movimento reduzido também conferidos no navegador.
+- [x] Build de produção aprovado com uma CPU e memória limitada. Nenhuma alteração em produção.
+
+Reutiliza APIs e persistência existentes. Nenhuma migration ou variável nova necessária; nenhuma alteração em produção.
