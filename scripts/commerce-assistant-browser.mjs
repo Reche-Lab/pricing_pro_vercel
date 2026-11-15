@@ -9,6 +9,7 @@ import postcss from "postcss";
 import tailwind from "tailwindcss";
 const require = createRequire(import.meta.url), { chromium } = require(process.env.COMMERCE_PLAYWRIGHT_PATH || "playwright");
 const root = fileURLToPath(new URL("../", import.meta.url)), output = "/tmp/commerce-assistant-browser";
+const visualOnly = process.env.COMMERCE_ASSISTANT_BROWSER_VISUAL_ONLY === "true";
 await mkdir(output, { recursive: true });
 const ids = { product: "00000000-0000-4000-8000-000000000001", conversation: "00000000-0000-4000-8000-000000000002", action: "00000000-0000-4000-8000-000000000003", quote: "00000000-0000-4000-8000-000000000004" };
 const company = { legalName: "Empresa de teste", document: "11.222.333/0001-81", address: "Rua de teste, 100", bankName: "Banco de teste", agency: "0001", account: "123-4", accountType: "Conta empresarial", beneficiary: "Empresa de teste", pixKey: "financeiro@example.test" };
@@ -96,7 +97,9 @@ const origin = `http://127.0.0.1:${server.address().port}`, browser = await chro
 try {
   const context = await browser.newContext(); await context.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   const page = await context.newPage(), errors = []; page.on("pageerror", error => errors.push(error.message));
+  await page.addInitScript(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async text => { window.__assistantClipboard = text; } } }));
   for (const theme of ["light", "dark"]) for (const [width, height] of [[1440, 1000], [390, 844], [320, 740], [844, 390]]) {
+    await page.emulateMedia({ reducedMotion: width === 320 ? "reduce" : "no-preference" });
     history = []; requests = []; conversationStarted = false; confirmedActionIds = []; await page.setViewportSize({ width, height }); await page.goto(`${origin}/?theme=${theme}`);
     const shipping = page.getByRole("group", { name: "Opções de entrega" });
     assert.doesNotMatch(await shipping.innerText(), /seguro|valor declarado/i);
@@ -114,6 +117,34 @@ try {
     await page.screenshot({ path: `${output}/chat-${theme}-${width}.png` });
     await page.getByRole("button", { name: `Quero este produto: ${product.name}`, exact: true }).click();
     await page.getByText("Quantas unidades você precisa?", { exact: true }).waitFor();
+    const userMessage = page.getByRole("article", { name: "Sua mensagem", exact: true }).last();
+    const assistantMessage = page.getByRole("article", { name: "Mensagem do assistente virtual", exact: true }).last();
+    const transcript = page.getByRole("region", { name: "Mensagens do atendimento", exact: true });
+    assert.equal(await transcript.evaluate(element => element.scrollWidth > element.clientWidth + 1), false, "Conversation content has no horizontal overflow");
+    const composer = await page.getByRole("textbox", { name: "Mensagem para o assistente" }).evaluate(element => { const style = getComputedStyle(element); return { border: style.borderTopWidth, background: style.backgroundColor, fontSize: style.fontSize }; });
+    assert.equal(composer.border, "0px", "Composer does not inherit a second input border from the store");
+    assert.equal(composer.background, "rgba(0, 0, 0, 0)");
+    assert.equal(composer.fontSize, width <= 600 ? "16px" : "14px");
+    assert.equal(await userMessage.getAttribute("data-speaker"), "user");
+    assert.equal(await assistantMessage.getAttribute("data-speaker"), "assistant");
+    const palette = await transcript.evaluate(element => {
+      const read = selector => { const style = getComputedStyle(element.querySelector(selector)); return { background: style.backgroundColor, ink: style.color }; };
+      return { canvas: getComputedStyle(element).backgroundColor, user: read('[data-speaker="user"] [data-message-bubble]'), assistant: read('[data-speaker="assistant"] [data-message-bubble]') };
+    });
+    const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => { const channel = value / 255; return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4; }).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
+    for (const bubble of [palette.user, palette.assistant]) {
+      assert.notEqual(bubble.background, palette.canvas, "Bubbles are distinct from the conversation canvas");
+      const contrast = [luminance(bubble.background), luminance(bubble.ink)].sort((a, b) => b - a);
+      assert.ok((contrast[0] + .05) / (contrast[1] + .05) >= 4.5, "Bubble text meets WCAG AA contrast");
+    }
+    assert.notEqual(palette.user.background, palette.assistant.background, "Senders use distinct bubble colors");
+    assert.equal(await assistantMessage.locator("[data-message-bubble]").locator("a,button").count(), 0, "Structured actions remain outside the text bubble");
+    if (width === 320) assert.equal(await assistantMessage.evaluate(element => getComputedStyle(element).animationName), "none");
+    await assistantMessage.getByRole("button", { name: "Copiar resposta", exact: true }).click();
+    await assistantMessage.getByRole("status").getByText("Resposta copiada.", { exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => window.__assistantClipboard), "Quantas unidades você precisa?");
+    await page.screenshot({ path: `${output}/conversation-bubbles-${theme}-${width}.png` });
+    if (visualOnly) { assert.deepEqual(errors, []); console.log(`Passed conversation bubbles ${theme} ${width}x${height}`); continue; }
     assert.equal(requests.filter(r => r.body.action === "message" && r.body.text === `Tenho interesse no produto "${product.name}".`).length, 1);
     assert.equal(requests.some(r => r.body.action === "confirm"), false);
     await page.getByRole("link", { name: "Conhecer produto", exact: true }).click();
@@ -187,7 +218,7 @@ try {
     assert.deepEqual(errors, []);
     console.log(`Passed chat, proposal and quote form ${theme} ${width}x${height}`);
   }
-  for (const width of [1440, 390, 320]) {
+  for (const width of visualOnly ? [] : [1440, 390, 320]) {
     console.log(`Checking assistant administration ${width}`);
     await page.setViewportSize({ width, height: 1000 }); await page.goto(`${origin}/?admin=1`);
     await page.getByRole("button", { name: "Informações oficiais" }).click();

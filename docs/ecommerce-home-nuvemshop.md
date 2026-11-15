@@ -343,3 +343,14 @@ Sem migration ou variável nova. APIs externas simuladas durante a validação l
 - [x] Build de produção aprovado com uma CPU e memória limitada. Nenhuma alteração em produção.
 
 Sem migration ou variável nova. Nenhum desconto ou configuração de produto alterado automaticamente.
+
+### Chat em Balões de Conversa
+
+- [x] Balões diferentes para cliente e assistente, com nome, ícone, fundo contrastante e divisórias entre mensagens. Cartões oficiais continuam fora do balão de texto, agrupados com a resposta.
+- [x] Cabeçalho, campo de mensagem e envio com estados de foco/hover; copiar resposta com confirmação acessível e tratamento de falha.
+- [x] Entrada discreta de novas mensagens e indicador de consulta; histórico retomado sem repetir animações ou saudação. Preferência de movimento reduzido respeitada também na rolagem.
+- [x] Testes TDD de identificação, agrupamento de ações, cópia/sucesso/falha, conteúdo literal e histórico sem reanimação. Regressão geral: 1.025 testes aprovados; 76 integrações condicionais não executadas nesta rodada.
+- [x] Lint e tipos aprovados. Playwright verificou identificação, cópia, ações fora dos balões, contraste WCAG AA de pelo menos 4,5:1, campo integrado e ausência de overflow em claro/escuro e 1440/390/320 px/paisagem. Capturas inspecionadas; movimento reduzido e fluxo completo de orçamento também verificados, com APIs simuladas.
+- [x] Build de produção aprovado com uma CPU e memória limitada. Nenhuma alteração em produção.
+
+Sem migration ou variável nova. Alteração visual, sem mudanças na autenticação, nos preços ou nas ações do assistente.

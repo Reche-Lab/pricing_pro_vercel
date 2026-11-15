@@ -1,7 +1,7 @@
 "use client";
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
-import { Bot, Copy, Loader2, RotateCcw, Send, ShieldCheck, Trash2, X } from "lucide-react";
+import { Bot, Copy, Loader2, MessageCircle, RotateCcw, Send, ShieldCheck, Trash2, X } from "lucide-react";
 import type { AssistantMessage } from "@/domain/commerce/assistant";
 import { hasAssistantQuoteNavigation, safeAssistantReply } from "@/domain/commerce/assistant";
 import type { StoreSettings } from "@/domain/commerce/schemas";
@@ -10,6 +10,7 @@ import { storeRequest } from "./store-http";
 import { BuyerLogin } from "./StoreBuyerLogin";
 import { StoreCheckout } from "./StoreCheckout";
 import { StoreAssistantCards } from "./StoreAssistantCards";
+import { StoreAssistantMessage } from "./StoreAssistantMessage";
 import { LibraryDialog } from "./LibraryUI";
 import type { AssistantPublicConfig } from "./StoreAssistantLauncher";
 import styles from "./assistant.module.css";
@@ -64,7 +65,8 @@ export function StoreAssistantPanel({ config, api, base, settings, buyerId, onCa
   }, [api, resumeAttempt]);
   useEffect(() => {
     if (restoring) return;
-    scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: jumpToHistoryEnd.current ? "auto" : "smooth" });
+    const reducedMotion = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: jumpToHistoryEnd.current || reducedMotion ? "auto" : "smooth" });
     jumpToHistoryEnd.current = false;
   }, [messages, busy, status, notice, view, restoring]);
   async function request(url: string, method = "GET", body?: unknown) {
@@ -114,21 +116,21 @@ export function StoreAssistantPanel({ config, api, base, settings, buyerId, onCa
   async function handoff() { await work(async () => { const result = await request(`${api}/assistant`, "POST", { action: "handoff", conversationId }); setSummary(result.summary || "Cliente solicitou orientação pelo assistente da loja."); setNotice(result.message); }); }
   return <>
     <dialog ref={dialog} className={styles.dialog} aria-labelledby={heading} onCancel={e => { e.preventDefault(); onClose(); }}>
-      <header className={styles.header}><Bot size={24}/><div><h2 id={heading}>{config.name}</h2><small>Assistente virtual · inteligência artificial</small></div><button type="button" className={styles.icon} title="Fechar atendimento" aria-label="Fechar atendimento" onClick={onClose}><X size={20}/></button></header>
-      <div ref={scroll} className={styles.messages}>
-        <p className={styles.welcome}>{config.welcome}</p>
+      <header className={styles.header}><span className={styles.headerAvatar} aria-hidden="true"><Bot size={24}/></span><div><h2 id={heading}>{config.name}</h2><small>Assistente virtual · inteligência artificial</small></div><button type="button" className={styles.icon} title="Fechar atendimento" aria-label="Fechar atendimento" onClick={onClose}><X size={20}/></button></header>
+      <div ref={scroll} className={styles.messages} role="region" tabIndex={0} aria-label="Mensagens do atendimento">
+        {!restoring && !messages.length ? <StoreAssistantMessage speaker="assistant" text={config.welcome}/> : null}
         {restoring ? <p role="status" className={styles.progress}><Loader2 size={16}/>Retomando atendimento…</p> : restoreFailed ? <button type="button" className={styles.action} onClick={() => setResumeAttempt(value => value + 1)}><RotateCcw size={16}/>Tentar retomar conversa</button> : !conversationId ? <section className={styles.consent}><ShieldCheck size={24}/><h3>Você decide o próximo passo</h3><p>A IA ajuda com produtos e dúvidas. Nenhuma compra ou alteração no carrinho acontece sem sua confirmação.</p><p>O histórico deste atendimento fica na plataforma por até {config.retentionDays} dias. Não envie documentos pessoais, dados de cartão, senhas ou códigos nesta conversa.</p><Link href={`${base}/assistente-privacidade`} target="_blank">Como seus dados são utilizados</Link><button className={styles.primary} type="button" disabled={busy} onClick={() => void start()}>Entendi, iniciar atendimento</button></section> : <>
           {messages.map(m => {
             const recoverQuoteAction = config.quotes && m.role === "assistant" && hasAssistantQuoteNavigation(m.text) && !m.cards.some(card => ["cart", "proposal", "quote_continue"].includes(card.kind));
             const cards = recoverQuoteAction ? [...m.cards, { kind: "quote_continue" as const }] : m.cards;
-            return <article className={`${styles.message} ${m.role === "user" ? styles.user : ""}`} key={m.id}><small>{m.role === "user" ? "Você" : "Assistente virtual"}</small><p>{m.role === "assistant" ? safeAssistantReply(m.text) : m.text}</p>{cards.map((card, index) => <StoreAssistantCards key={index} card={card} api={api} base={base} identified={identified} busy={busy || restoring} confirmed={confirmed} onAddItem={() => void send("Quero acrescentar outro produto ao orçamento.")} onSelectProduct={product => void send(`Tenho interesse no produto "${product.name}".`)} onConfirm={id => void confirm(id)} onQuote={() => void openQuote()} onLogin={() => { setLoginPurpose("account"); setView("login"); }} onHandoff={() => void handoff()} onClose={onClose}/>)}</article>;
+            return <StoreAssistantMessage key={m.id} speaker={m.role} text={m.role === "assistant" ? safeAssistantReply(m.text) : m.text} animate={!jumpToHistoryEnd.current}>{cards.map((card, index) => <StoreAssistantCards key={index} card={card} api={api} base={base} identified={identified} busy={busy || restoring} confirmed={confirmed} onAddItem={() => void send("Quero acrescentar outro produto ao orçamento.")} onSelectProduct={product => void send(`Tenho interesse no produto "${product.name}".`)} onConfirm={id => void confirm(id)} onQuote={() => void openQuote()} onLogin={() => { setLoginPurpose("account"); setView("login"); }} onHandoff={() => void handoff()} onClose={onClose}/>)}</StoreAssistantMessage>;
           })}
           {!messages.length ? <div className={styles.quick}>{quick.filter(q => config.quotes || !q.includes("orçamento")).filter(q => config.orders || !q.includes("pedidos")).map(q => <button type="button" key={q} disabled={busy} onClick={() => void send(q)}>{q}</button>)}</div> : null}
           {summary ? <section className={styles.card}><strong>Resumo para a equipe</strong><p>{summary}</p><button type="button" className={styles.action} onClick={() => void navigator.clipboard.writeText(summary).then(() => setNotice("Resumo copiado."), () => setError("Não foi possível copiar. Selecione o texto do resumo."))}><Copy size={16}/>Copiar resumo</button>{whatsapp ? <a className={styles.primary} href={`${whatsapp}?text=${encodeURIComponent(`Olá! Preciso de ajuda na loja. ${summary}`)}`} target="_blank" rel="noopener noreferrer">Continuar no WhatsApp</a> : null}</section> : null}
         </>}
-        {notice ? <p className={styles.notice} role="status">{notice}</p> : null}{error ? <p className={styles.error} role="alert">{error}</p> : null}{busy ? <p role="status" className={styles.progress}><Loader2 size={16}/>{status || "Concluindo solicitação…"}</p> : null}
+        {notice ? <p className={styles.notice} role="status">{notice}</p> : null}{error ? <p className={styles.error} role="alert">{error}</p> : null}{busy ? <div role="status" className={styles.thinking}><span className={styles.avatar} aria-hidden="true"><Bot size={17}/></span><div><span className={styles.typing} aria-hidden="true"><i/><i/><i/></span><span>{status || "Concluindo solicitação…"}</span></div></div> : null}
       </div>
-      {conversationId ? <footer className={styles.composer}><form onSubmit={e => { e.preventDefault(); void send(); }}><label className="sr-only" htmlFor={`${heading}-text`}>Mensagem para o assistente</label><textarea id={`${heading}-text`} rows={2} maxLength={2000} value={text} disabled={busy} placeholder="Conte o que você precisa…" onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }}/><button type="submit" className={styles.primary} title="Enviar mensagem" aria-label="Enviar mensagem" disabled={busy || !text.trim()}><Send size={18}/></button></form><div className={styles.toolbar}><button type="button" disabled={busy} onClick={() => void handoff()}>Falar com a equipe</button><button type="button" disabled={busy} onClick={() => setRemove(true)} title="Excluir meu histórico"><Trash2 size={14}/>Limpar histórico</button></div><small>Valores e disponibilidade são confirmados nos cartões e no checkout.</small></footer> : null}
+      {conversationId ? <footer className={styles.composer}><form onSubmit={e => { e.preventDefault(); void send(); }}><label className="sr-only" htmlFor={`${heading}-text`}>Mensagem para o assistente</label><textarea id={`${heading}-text`} rows={2} maxLength={2000} value={text} disabled={busy} placeholder="Conte o que você precisa…" onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }}/><button type="submit" className={`${styles.primary} ${styles.sendMessage}`} title="Enviar mensagem" aria-label="Enviar mensagem" disabled={busy || !text.trim()}><Send size={18}/></button></form><div className={styles.toolbar}><button type="button" disabled={busy} title="Solicitar atendimento da equipe da loja" onClick={() => void handoff()}><MessageCircle size={14}/>Falar com a equipe</button><button type="button" disabled={busy} onClick={() => setRemove(true)} title="Excluir meu histórico"><Trash2 size={14}/>Limpar histórico</button></div><small>Valores e disponibilidade são confirmados nos cartões e no checkout.</small></footer> : null}
     </dialog>
     {view === "login" ? <LibraryDialog title="Acesso seguro à sua conta" onClose={() => setView("chat")}><BuyerLogin api={api} disabled={false} forQuote onLogged={async () => { await onCartChanged(); setIdentified(true); if (loginPurpose === "quote") { setQuoteCart(await request(`${api}/cart`)); setView("quote"); } else setView("chat"); setNotice("E-mail validado. Você pode consultar seus pedidos ou salvar o orçamento."); }}/></LibraryDialog> : null}
     {view === "quote" && quoteCart ? <LibraryDialog title="Seu orçamento · dados e confirmação" wide onClose={() => setView("chat")} busy={busy}><div className={storeStyles.form}><p className={styles.privacy}>Seus dados são preenchidos no formulário da loja, separados desta conversa. Salvar orçamento não realiza cobrança.</p><StoreCheckout cart={quoteCart} settings={settings} base={base} api={api} intent="quote" disabled={busy} onSubmit={async input => {
