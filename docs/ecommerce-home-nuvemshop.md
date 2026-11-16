@@ -393,13 +393,13 @@ Reutiliza APIs e persistência existentes. Nenhuma migration ou variável nova n
 
 Sem migration ou variável nova. A exclusão afeta somente orçamentos particulares do cliente na loja, não o cadastro administrativo de orçamentos.
 
-### Transições Suaves na Demonstração do Estúdio
+### Transformação Contínua na Demonstração do Estúdio
 
-- [x] Fade-out de 220 ms antes de trocar a composição, seguido de fade-in de 320 ms. Prévia frente/verso, controles e mensagem da etapa acompanham a transição; o botão de pular permanece visível.
-- [x] Aguardar a nova composição e a conclusão das duas faces reais antes de revelar o resultado, preservando os canvases e sem redesenhar a cada frame. A contagem da próxima etapa começa após o fade-in.
-- [x] Cancelar etapas pendentes ao editar, pular ou sair. Preferência de movimento reduzido elimina as transições e a reprodução automática, inclusive quando alterada durante um fade.
-- [x] 23 testes focados aprovados: sequência, espera das duas faces, interrupção, foco, movimento reduzido, descarte de renderizações antigas e falhas sem deixar a prévia escondida. Renderizador compartilhado continua compatível com os demais usos.
-- [x] Playwright conferiu as opacidades intermediárias do fade, sequência completa e pixels reais distintos das duas faces. Claro/escuro em 1440/390/320 px, interrupção durante fade, preferência de movimento reduzido e ausência de overflow; capturas inspecionadas. Sem chamadas a APIs, IA ou gravação de arte.
-- [x] Regressão geral com 1.054 testes aprovados e 76 integrações condicionais não executadas nesta rodada. Lint, tipos e build de produção aprovados com uma CPU e memória limitada. Nenhuma alteração em produção.
+- [x] Substituir o fade da interface inteira por uma mistura sobreposta de 650 ms entre a arte anterior e a próxima, nas duas faces. Controles, texto e produto permanecem visíveis, sem esmaecer em direção ao fundo.
+- [x] Manter o quadro anterior durante o preparo e misturar somente os canvases já renderizados. Alpha complementar preserva a opacidade do produto; a geometria é calculada uma única vez por etapa, não a cada frame. A mistura é apenas visual e não modifica o arquivo final usado na compra.
+- [x] A contagem da próxima etapa começa após a conclusão das duas faces. Editar, pular ou sair cancela os frames pendentes; movimento reduzido apresenta o resultado diretamente. Fora da demonstração, as prévias mantêm atualização imediata.
+- [x] 27 testes focados aprovados: mistura com alpha complementar, conclusão/cancelamento sem frames antigos, tamanho de canvas, movimento reduzido, sequência, espera das duas faces, interrupção, foco e falhas.
+- [x] Playwright em claro/escuro e 1440/390/320 px: pixels intermediários distintos nas duas faces, centro do produto opaco em todos os frames amostrados e opacidade da interface constante em 100%. Pular/interromper e movimento reduzido conferidos, sem overflow; capturas inspecionadas. Sem chamadas a APIs, IA ou gravação de arte.
+- [x] Regressão geral com 1.058 testes aprovados e 76 integrações condicionais não executadas nesta rodada. Lint, tipos e build de produção aprovados com uma CPU e memória limitada; nenhuma alteração em produção.
 
 Nenhuma migration ou variável nova necessária.

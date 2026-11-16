@@ -133,9 +133,6 @@
 .swatches button { width: 36px; height: 36px; border-radius: 50%; border: 3px solid var(--soft); box-shadow: 0 0 0 1px var(--line); }
 .swatches button[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink); }
 .demoPreview { min-width: 0; width: 100%; position: sticky; top: var(--store-header-offset, 155px); scroll-margin-top: calc(var(--store-header-offset, 130px) + 16px); }
-.introFade { opacity: 1; transition: opacity var(--studio-demo-fade-in, 320ms) ease-in-out; }
-[data-studio-demo-transition="out"] .introFade, [data-studio-demo-transition="waiting"] .introFade { opacity: .08; transition-duration: var(--studio-demo-fade-out, 220ms); }
-@media(prefers-reduced-motion: reduce) { .introFade { opacity: 1 !important; transition: none !important; } }
 .introNotice { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; min-height: 112px; margin-bottom: 18px; padding: 14px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 6px; background: var(--surface); }
 .introNotice > div { min-width: 0; }
 .introNotice small { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }

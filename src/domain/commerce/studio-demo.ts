@@ -1,7 +1,6 @@
 import type { StudioArtwork } from "./studio-artwork";
 
-export const STUDIO_DEMO_FADE_OUT_MS = 220;
-export const STUDIO_DEMO_FADE_IN_MS = 320;
+export const STUDIO_DEMO_BLEND_MS = 650;
 
 export const studioInitialArtwork = (): StudioArtwork => ({ text: "Sua ideia\nganha forma", mode: "centered", font: "modern", textColor: "#ffffff", colors: ["#226d5c"], gradient: "solid" });
 export const STUDIO_DEMO_STEPS: { title: string; tab: "text" | "background"; artwork: Partial<StudioArtwork> }[] = [

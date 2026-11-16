@@ -9,7 +9,7 @@ import postcss from "postcss";
 import tailwind from "tailwindcss";
 
 const require = createRequire(import.meta.url), { chromium } = require(process.env.COMMERCE_PLAYWRIGHT_PATH || "playwright");
-const root = fileURLToPath(new URL("../", import.meta.url)), output = "/tmp/commerce-studio-fade";
+const root = fileURLToPath(new URL("../", import.meta.url)), output = "/tmp/commerce-studio-blend";
 await mkdir(output, { recursive: true });
 const model = JSON.parse(await readFile(resolve(root, "public/mockups/botton-25mm-v1/modelo.json"), "utf8"));
 const products = [{ id: "botton", name: "Botton 3,5 cm", personalized: true, geometry: { shape: "circle", widthMm: 35, heightMm: 35, cornerRadiusMm: 0, rotationDegrees: 0 }, margins: { safeMarginMm: 3, bleedMm: 3 }, artworkOptions: { mockup: model } }];
@@ -60,14 +60,25 @@ try {
     assert.notEqual(first[0].signature, first[1].signature);
     await page.evaluate(() => {
       window.studioSamples = []; window.studioSampling = true;
-      const pair = document.querySelector("[data-studio-demo-transition] canvas").closest("section").parentElement;
-      function sample(time) { if (!window.studioSampling) return; window.studioSamples.push({ time, opacity: Number(getComputedStyle(pair).opacity) }); requestAnimationFrame(sample); }
+      const pair = document.querySelector("[data-studio-demo-transition] canvas").closest("section").parentElement, controls = document.querySelector('fieldset[aria-label="Criação da arte"]');
+      const thumbnail = document.createElement("canvas"); thumbnail.width = thumbnail.height = 32; const ctx = thumbnail.getContext("2d");
+      function sample(time) {
+        if (!window.studioSampling) return;
+        const faces = [...pair.querySelectorAll("canvas")].map(canvas => {
+          ctx.clearRect(0, 0, 32, 32); ctx.drawImage(canvas, 0, 0, 32, 32);
+          const bytes = ctx.getImageData(0, 0, 32, 32).data;
+          let signature = 0; for (let index = 0; index < bytes.length; index += 4) signature = (signature + bytes[index] * (index % 97 + 1) + bytes[index + 1]) % 1000000007;
+          return { alpha: canvas.getContext("2d").getImageData(canvas.width / 2, canvas.height / 2, 1, 1).data[3], signature, state: canvas.dataset.mockupTransition };
+        });
+        window.studioSamples.push({ time, faces, opacity: Number(getComputedStyle(pair).opacity), controlsOpacity: Number(getComputedStyle(controls).opacity) });
+        requestAnimationFrame(sample);
+      }
       requestAnimationFrame(sample);
     });
     if (theme === "light" && width === 1440 || theme === "dark" && width === 390) {
-      await page.waitForFunction(() => document.querySelector("[data-studio-demo-transition]")?.dataset.studioDemoTransition === "out");
-      await page.waitForFunction(() => { const element = document.querySelector("[data-studio-demo-transition] canvas").closest("section").parentElement; const opacity = Number(getComputedStyle(element).opacity); return opacity > .1 && opacity < .85; });
-      await page.screenshot({ path: `${output}/fade-out-${theme}-${width}.png` });
+      await page.waitForFunction(() => [...document.querySelectorAll("canvas")].some(canvas => canvas.dataset.mockupTransition === "blending"));
+      await page.waitForTimeout(250);
+      await page.screenshot({ path: `${output}/blend-${theme}-${width}.png` });
       for (let stage = 1; stage <= 4; stage++) {
         await settleStage(stage);
         const current = await pixels(); assert.ok(current.every(face => face.filled > 10000));
@@ -75,23 +86,29 @@ try {
       }
       await settleStage("complete");
       const samples = await page.evaluate(() => { window.studioSampling = false; return window.studioSamples; });
-      assert.ok(samples.filter(frame => frame.opacity > .15 && frame.opacity < .9).length > 10, "Fade includes real intermediate opacity frames");
-      assert.ok(Math.min(...samples.map(frame => frame.opacity)) < .1, "Old artwork fades out before each change");
+      assert.ok(samples.length > 50);
+      assert.ok(samples.every(frame => frame.opacity === 1 && frame.controlsOpacity === 1), "Preview and controls never fade away");
+      assert.ok(samples.every(frame => frame.faces.length === 2 && frame.faces.every(face => face.alpha >= 253)), "Product center remains opaque in every sampled frame");
+      for (let side = 0; side < 2; side++) {
+        const mixed = samples.flatMap(frame => frame.faces[side]?.state === "blending" ? [frame.faces[side].signature] : []);
+        assert.ok(new Set(mixed).size > 8, "Both faces display intermediate pixel compositions, not a hard swap");
+      }
       assert.equal(await page.evaluate(() => window.studioDraftWrites || 0), 0, "Automatic demonstration never saves a draft");
       await page.getByRole("button", { name: "Criar minha arte", exact: true }).click();
     } else {
-      await page.waitForFunction(() => document.querySelector("[data-studio-demo-transition]")?.dataset.studioDemoTransition === "out");
+      await page.waitForFunction(() => [...document.querySelectorAll("canvas")].some(canvas => canvas.dataset.mockupTransition === "blending"));
       await page.getByRole("button", { name: "Pular demonstração" }).click();
       assert.equal(await page.locator("[data-studio-demo-transition]").getAttribute("data-studio-demo-transition"), "idle");
       assert.equal(await page.getByLabel("Sua mensagem").inputValue(), "Sua ideia\nganha forma");
+      await page.waitForFunction(() => [...document.querySelectorAll("canvas")].every(canvas => canvas.dataset.mockupTransition !== "blending"));
     }
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
     await page.screenshot({ path: `${output}/studio-${theme}-${width}.png`, fullPage: true });
-    assert.deepEqual(errors, []); console.log(`Passed studio fades ${theme} ${width}px`);
+    assert.deepEqual(errors, []); console.log(`Passed continuous studio blend ${theme} ${width}px`);
   }
   await page.emulateMedia({ reducedMotion: "reduce" }); await page.reload(); await settleStage("complete");
   const controls = page.getByRole("group", { name: "Criação da arte", exact: true });
   assert.deepEqual(await controls.evaluate(element => ({ opacity: getComputedStyle(element).opacity, duration: getComputedStyle(element).transitionDuration })), { opacity: "1", duration: "0s" });
   assert.equal(await page.getByLabel("Sua mensagem").inputValue(), "Sua ideia\nganha forma");
-  assert.deepEqual(errors, []); console.log(`Studio fade checks passed. Screenshots: ${output}`);
+  assert.deepEqual(errors, []); console.log(`Studio continuous blend checks passed. Screenshots: ${output}`);
 } finally { await browser.close(); server.closeAllConnections(); await new Promise(done => server.close(done)); }

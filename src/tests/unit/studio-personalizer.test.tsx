@@ -39,36 +39,34 @@ async function settleIntroStage(stage: number | "complete") {
   throw new Error(`The studio did not settle at stage ${stage}.`);
 }
 describe("studio creative demonstration", () => {
-  it("fades out before changing the artwork and waits for both rendered sides before fading in", async () => {
+  it("keeps the previews mounted while both sides blend, then starts the next viewing interval", async () => {
     introEnvironment();
     vi.mocked(renderStudioArtwork).mockResolvedValueOnce({ dataUrl: "old", truncated: false, mimeType: "image/png", fileSize: 1 }).mockResolvedValueOnce({ dataUrl: "new", truncated: false, mimeType: "image/png", fileSize: 1 });
     const view = render(<StudioPersonalizer products={products} base="" slug="store" autoDemo/>);
     await advanceIntro(200); mockups.automatic = false;
     await advanceIntro(500);
     const preview = view.container.querySelector("[data-studio-demo-transition]")!;
-    expect(preview).toHaveAttribute("data-studio-demo-transition", "out");
-    expect(screen.getByLabelText("Sua mensagem")).toHaveValue("Sua ideia\nganha forma");
+    expect(preview).toHaveAttribute("data-studio-demo-transition", "waiting");
+    expect(screen.getByLabelText("Sua mensagem")).not.toHaveValue("Sua ideia\nganha forma");
+    expect(screen.getByLabelText("Frente do exemplo")).toBeVisible(); expect(screen.getByLabelText("Verso do exemplo")).toBeVisible();
     await advanceIntro(300); await advanceIntro(300);
     expect(preview).toHaveAttribute("data-studio-demo-transition", "waiting");
     act(() => mockups.pending.get("front")!());
     expect(preview).toHaveAttribute("data-studio-demo-transition", "waiting");
     act(() => mockups.pending.get("back")!());
-    expect(preview).toHaveAttribute("data-studio-demo-transition", "in");
-    await advanceIntro(400);
     expect(preview).toHaveAttribute("data-studio-demo-transition", "idle");
     expect(saveStudioPurchase).not.toHaveBeenCalled(); expect(writeStudioDraft).not.toHaveBeenCalled();
   });
-  it("cancels a pending fade when the customer starts editing without replacing their message", async () => {
+  it("cancels a pending blend when the customer starts editing without replacing their message", async () => {
     introEnvironment();
     const view = render(<StudioPersonalizer products={products} base="" slug="store" autoDemo/>);
     await advanceIntro(200); await advanceIntro(500);
-    expect(view.container.querySelector("[data-studio-demo-transition]")).toHaveAttribute("data-studio-demo-transition", "out");
     fireEvent.change(screen.getByLabelText("Sua mensagem"), { target: { value: "Minha arte, sem interrupções" } });
     await advanceIntro(20000);
     expect(screen.getByLabelText("Sua mensagem")).toHaveValue("Minha arte, sem interrupções");
     expect(view.container.querySelector("[data-studio-demo-transition]")).toHaveAttribute("data-studio-demo-transition", "idle");
   });
-  it("cancels a fade immediately when reduced motion is enabled during playback", async () => {
+  it("cancels a blend immediately when reduced motion is enabled during playback", async () => {
     const media = introEnvironment();
     const view = render(<StudioPersonalizer products={products} base="" slug="store" autoDemo/>);
     await advanceIntro(200); await advanceIntro(500);
@@ -76,7 +74,7 @@ describe("studio creative demonstration", () => {
     act(() => media.addEventListener.mock.calls.find(([event]) => event === "change")![1]());
     expect(view.container.querySelector("[data-studio-demo-transition]")).toHaveAttribute("data-studio-demo-transition", "idle");
     await advanceIntro(20000);
-    expect(screen.getByLabelText("Sua mensagem")).toHaveValue("Sua ideia\nganha forma");
+    expect((screen.getByLabelText("Sua mensagem") as HTMLTextAreaElement).value.length).toBeGreaterThan(40);
     expect(screen.getByText("Agora crie você mesmo a sua arte.")).toBeVisible();
   });
   it("restores the last composition without replaying the demo and keeps it when choosing a different product", async () => {
