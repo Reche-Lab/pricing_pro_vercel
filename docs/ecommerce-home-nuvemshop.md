@@ -56,7 +56,7 @@ Validação: suíte de regressão com **896 testes aprovados** (63 condicionais 
 - [x] Pausar fora da tela/aba oculta, respeitar movimento reduzido e cancelar temporizadores ao sair.
 - [x] Testes de regressão, build e conferência dos estágios reais em desktop/mobile.
 
-A abertura dura aproximadamente 10 segundos, aguardando a renderização da composição entre etapas. Não usa IA, não faz upload, não grava arte, não aprova e não adiciona nada ao carrinho. O botão de continuar com a arte fica indisponível durante a demonstração; ao final, o cliente pode aproveitar o exemplo ou criar algo próprio. “Pular” restaura o ponto de partida e seleciona a mensagem para edição. Interagir diretamente preserva a composição que estava sendo mostrada e cancela os próximos passos automáticos. Com movimento reduzido, o convite para criar aparece diretamente, sem reprodução automática. A demonstração é carregada somente na abertura já existente do Estúdio e não exige migration ou variável de ambiente.
+A abertura dura cerca de 15 segundos, podendo variar conforme a renderização das duas faces entre etapas. Não usa IA, não faz upload, não grava arte, não aprova e não adiciona nada ao carrinho. O botão de continuar com a arte fica indisponível durante a demonstração; ao final, o cliente pode aproveitar o exemplo ou criar algo próprio. “Pular” restaura o ponto de partida e seleciona a mensagem para edição. Interagir diretamente preserva a composição que estava sendo mostrada e cancela os próximos passos automáticos. Com movimento reduzido, o convite para criar aparece diretamente, sem reprodução automática. A demonstração é carregada somente na abertura já existente do Estúdio e não exige migration ou variável de ambiente.
 
 Validação: **885 testes aprovados** (62 condicionais ignorados), lint e build de produção com tipos verificados e memória limitada. `COMMERCE_STUDIO_INTRO_ONLY=true` em `scripts/commerce-studio-purchase-browser.mjs` verifica os cinco estágios com assinaturas de pixels diferentes no canvas real, mensagem final, foco e seleção do texto, pular, interrupção ao editar e movimento reduzido. Os cenários cobrem loja pública/prévia, temas claro/escuro e 320/390/1440 px, sem requisições de gravação de arte/pedido/pagamento ou overflow horizontal. As capturas dos estágios e do convite final foram inspecionadas em desktop/mobile. O teste utiliza apenas PostgreSQL isolado, imagens sintéticas e configurações temporárias restauradas ao final.
 
@@ -392,3 +392,14 @@ Reutiliza APIs e persistência existentes. Nenhuma migration ou variável nova n
 - [x] Regressão geral com 1.050 testes aprovados e 76 integrações condicionais não executadas nesta rodada. Lint, tipos e build de produção aprovados com uma CPU e memória limitada; nenhuma alteração em produção.
 
 Sem migration ou variável nova. A exclusão afeta somente orçamentos particulares do cliente na loja, não o cadastro administrativo de orçamentos.
+
+### Transições Suaves na Demonstração do Estúdio
+
+- [x] Fade-out de 220 ms antes de trocar a composição, seguido de fade-in de 320 ms. Prévia frente/verso, controles e mensagem da etapa acompanham a transição; o botão de pular permanece visível.
+- [x] Aguardar a nova composição e a conclusão das duas faces reais antes de revelar o resultado, preservando os canvases e sem redesenhar a cada frame. A contagem da próxima etapa começa após o fade-in.
+- [x] Cancelar etapas pendentes ao editar, pular ou sair. Preferência de movimento reduzido elimina as transições e a reprodução automática, inclusive quando alterada durante um fade.
+- [x] 23 testes focados aprovados: sequência, espera das duas faces, interrupção, foco, movimento reduzido, descarte de renderizações antigas e falhas sem deixar a prévia escondida. Renderizador compartilhado continua compatível com os demais usos.
+- [x] Playwright conferiu as opacidades intermediárias do fade, sequência completa e pixels reais distintos das duas faces. Claro/escuro em 1440/390/320 px, interrupção durante fade, preferência de movimento reduzido e ausência de overflow; capturas inspecionadas. Sem chamadas a APIs, IA ou gravação de arte.
+- [x] Regressão geral com 1.054 testes aprovados e 76 integrações condicionais não executadas nesta rodada. Lint, tipos e build de produção aprovados com uma CPU e memória limitada. Nenhuma alteração em produção.
+
+Nenhuma migration ou variável nova necessária.

@@ -9,23 +9,76 @@ import { saveStudioPurchase } from "@/components/commerce/studio-purchase";
 import { readStudioDraft, writeStudioDraft } from "@/components/commerce/studio-draft-cache";
 import { studioInitialArtwork } from "@/domain/commerce/studio-demo";
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+const mockups = vi.hoisted(() => ({ automatic: true, pending: new Map<string, () => void>() }));
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 vi.mock("@/components/commerce/studio-purchase", () => ({ saveStudioPurchase: vi.fn(async () => "saved-art") }));
 vi.mock("@/components/commerce/studio-draft-cache", () => ({ readStudioDraft: vi.fn(async () => null), writeStudioDraft: vi.fn(async () => true) }));
 vi.mock("@/components/commerce/studio-image", () => ({ readStudioBackground: vi.fn(async () => ({ dataUrl: "data:image/png;base64,YQ==", fileName: "fundo.png", width: 1200, height: 800 })) }));
 vi.mock("@/components/commerce/studio-artwork-canvas", () => ({ renderStudioArtwork: vi.fn(async () => ({ dataUrl: "data:image/png;base64,YQ==", truncated: false, mimeType: "image/png", fileSize: 1 })) }));
-vi.mock("@/components/commerce/StoreProductMockup", () => ({ StoreProductMockup: ({ fixedSide }: { fixedSide: string }) => <canvas aria-label={fixedSide === "front" ? "Frente do exemplo" : "Verso do exemplo"}/> }));
+vi.mock("@/components/commerce/StoreProductMockup", () => ({ StoreProductMockup: ({ fixedSide, sourceUrl, onRenderSettled }: { fixedSide: string; sourceUrl: string; onRenderSettled?: (url: string) => void }) => {
+  React.useEffect(() => { const ready = () => onRenderSettled?.(sourceUrl); mockups.pending.set(fixedSide, ready); if (mockups.automatic) ready(); }, [fixedSide, sourceUrl, onRenderSettled]);
+  return <canvas aria-label={fixedSide === "front" ? "Frente do exemplo" : "Verso do exemplo"}/>;
+} }));
 const products = [{ id: "demo", name: "Botton 3,5 cm", personalized: true, geometry: { shape: "circle", widthMm: 35, heightMm: 35 }, margins: { safeMarginMm: 3, bleedMm: 3 }, artworkOptions: { mockup: defaultMockup() } }] as StoreProduct[];
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); mockups.automatic = true; mockups.pending.clear(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.clearAllMocks(); });
 function introEnvironment(reduced = false) {
   vi.useFakeTimers();
-  vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: reduced, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+  const media = { matches: reduced, addEventListener: vi.fn(), removeEventListener: vi.fn() };
+  vi.stubGlobal("matchMedia", vi.fn(() => media));
+  return media;
 }
 async function advanceIntro(milliseconds: number) {
   await act(async () => { vi.advanceTimersByTime(milliseconds); });
   await act(async () => { vi.advanceTimersByTime(200); });
 }
+async function settleIntroStage(stage: number | "complete") {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    if (document.querySelector("[data-studio-demo-stage]")?.getAttribute("data-studio-demo-stage") === String(stage) && document.querySelector("[data-studio-demo-transition]")?.getAttribute("data-studio-demo-transition") === "idle") return;
+    await advanceIntro(100);
+  }
+  throw new Error(`The studio did not settle at stage ${stage}.`);
+}
 describe("studio creative demonstration", () => {
+  it("fades out before changing the artwork and waits for both rendered sides before fading in", async () => {
+    introEnvironment();
+    vi.mocked(renderStudioArtwork).mockResolvedValueOnce({ dataUrl: "old", truncated: false, mimeType: "image/png", fileSize: 1 }).mockResolvedValueOnce({ dataUrl: "new", truncated: false, mimeType: "image/png", fileSize: 1 });
+    const view = render(<StudioPersonalizer products={products} base="" slug="store" autoDemo/>);
+    await advanceIntro(200); mockups.automatic = false;
+    await advanceIntro(500);
+    const preview = view.container.querySelector("[data-studio-demo-transition]")!;
+    expect(preview).toHaveAttribute("data-studio-demo-transition", "out");
+    expect(screen.getByLabelText("Sua mensagem")).toHaveValue("Sua ideia\nganha forma");
+    await advanceIntro(300); await advanceIntro(300);
+    expect(preview).toHaveAttribute("data-studio-demo-transition", "waiting");
+    act(() => mockups.pending.get("front")!());
+    expect(preview).toHaveAttribute("data-studio-demo-transition", "waiting");
+    act(() => mockups.pending.get("back")!());
+    expect(preview).toHaveAttribute("data-studio-demo-transition", "in");
+    await advanceIntro(400);
+    expect(preview).toHaveAttribute("data-studio-demo-transition", "idle");
+    expect(saveStudioPurchase).not.toHaveBeenCalled(); expect(writeStudioDraft).not.toHaveBeenCalled();
+  });
+  it("cancels a pending fade when the customer starts editing without replacing their message", async () => {
+    introEnvironment();
+    const view = render(<StudioPersonalizer products={products} base="" slug="store" autoDemo/>);
+    await advanceIntro(200); await advanceIntro(500);
+    expect(view.container.querySelector("[data-studio-demo-transition]")).toHaveAttribute("data-studio-demo-transition", "out");
+    fireEvent.change(screen.getByLabelText("Sua mensagem"), { target: { value: "Minha arte, sem interrupções" } });
+    await advanceIntro(20000);
+    expect(screen.getByLabelText("Sua mensagem")).toHaveValue("Minha arte, sem interrupções");
+    expect(view.container.querySelector("[data-studio-demo-transition]")).toHaveAttribute("data-studio-demo-transition", "idle");
+  });
+  it("cancels a fade immediately when reduced motion is enabled during playback", async () => {
+    const media = introEnvironment();
+    const view = render(<StudioPersonalizer products={products} base="" slug="store" autoDemo/>);
+    await advanceIntro(200); await advanceIntro(500);
+    media.matches = true;
+    act(() => media.addEventListener.mock.calls.find(([event]) => event === "change")![1]());
+    expect(view.container.querySelector("[data-studio-demo-transition]")).toHaveAttribute("data-studio-demo-transition", "idle");
+    await advanceIntro(20000);
+    expect(screen.getByLabelText("Sua mensagem")).toHaveValue("Sua ideia\nganha forma");
+    expect(screen.getByText("Agora crie você mesmo a sua arte.")).toBeVisible();
+  });
   it("restores the last composition without replaying the demo and keeps it when choosing a different product", async () => {
     vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
     const draft = { version: 1 as const, updatedAt: Date.now(), productId: "demo", artwork: { ...studioInitialArtwork(), text: "Minha composição salva", mode: "circle" as const } };
@@ -56,20 +109,20 @@ describe("studio creative demonstration", () => {
   it("automatically shows a longer message, circle, spiral, three colors and a spiral background, then invites creation without saving", async () => {
     introEnvironment();
     render(<StudioPersonalizer products={products} base="" slug="store" autoDemo/>);
-    await advanceIntro(200); await advanceIntro(600);
+    await settleIntroStage(0);
     const message = screen.getByLabelText("Sua mensagem") as HTMLTextAreaElement;
     expect(message.value.length).toBeGreaterThan(40);
     expect(screen.getByRole("button", { name: "Usar esta arte no produto" })).toBeDisabled();
-    await advanceIntro(2000);
+    await settleIntroStage(1);
     expect(screen.getByRole("button", { name: "Texto circular" })).toHaveAttribute("aria-pressed", "true");
-    await advanceIntro(2000);
+    await settleIntroStage(2);
     expect(screen.getByRole("button", { name: "Texto em espiral" })).toHaveAttribute("aria-pressed", "true");
-    await advanceIntro(2000);
+    await settleIntroStage(3);
     expect(screen.getByRole("tab", { name: "Fundo" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getAllByLabelText(/^Cor do fundo \d$/)).toHaveLength(3);
-    await advanceIntro(2000);
+    await settleIntroStage(4);
     expect(screen.getByLabelText("Formato do fundo")).toHaveValue("spiral");
-    await advanceIntro(2000);
+    await settleIntroStage("complete");
     expect(screen.getByText("Agora crie você mesmo a sua arte.")).toBeVisible();
     expect(saveStudioPurchase).not.toHaveBeenCalled(); expect(navigation.push).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Criar minha arte" }));
@@ -122,7 +175,7 @@ describe("studio creative demonstration", () => {
     expect(screen.getByLabelText("Sua mensagem")).toHaveValue("Sua ideia\nganha forma");
     hidden.mockReturnValue(false);
     act(() => { document.dispatchEvent(new Event("visibilitychange")); });
-    await advanceIntro(600);
+    await settleIntroStage(0);
     expect((screen.getByLabelText("Sua mensagem") as HTMLTextAreaElement).value.length).toBeGreaterThan(40);
   });
   it("cleans up an active demonstration when leaving the studio", async () => {

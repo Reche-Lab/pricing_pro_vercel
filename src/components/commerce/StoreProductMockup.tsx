@@ -83,13 +83,15 @@ export async function drawProductMockup(canvas: HTMLCanvasElement, sourceUrl: st
   }
 }
 
-export function StoreProductMockup({ sourceUrl, geometry, margins, model, name, frame, fixedSide, compact = false, expandable = false }: { sourceUrl: string; geometry: PrintGeometry; margins: PrintMargins; model?: ProductMockup; name: string; frame?: ArtworkFrame; fixedSide?: "front" | "back"; compact?: boolean; expandable?: boolean }) {
+export function StoreProductMockup({ sourceUrl, geometry, margins, model, name, frame, fixedSide, compact = false, expandable = false, onRenderSettled }: { sourceUrl: string; geometry: PrintGeometry; margins: PrintMargins; model?: ProductMockup; name: string; frame?: ArtworkFrame; fixedSide?: "front" | "back"; compact?: boolean; expandable?: boolean; onRenderSettled?: (sourceUrl: string) => void }) {
   const disclaimerId = useId();
   const [side, setSide] = useState<"front" | "back">("front");
   const [expanded, setExpanded] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const canvas = useRef<HTMLCanvasElement>(null);
   const root = useRef<HTMLElement>(null);
   const zoomButton = useRef<HTMLButtonElement>(null);
+  const settled = useRef(onRenderSettled);
+  settled.current = onRenderSettled;
   // Closing the portal recreates the inline trigger, so focus must use its current node.
   const restoreFocus = useCallback((previous: HTMLElement | null) => { (zoomButton.current ?? previous)?.focus(); }, []);
   const zoomLabel = expanded ? "Fechar ampliação" : compact ? `Ampliar ${fixedSide === "back" ? "verso" : "frente"} do produto` : "Ampliar produto";
@@ -100,7 +102,7 @@ export function StoreProductMockup({ sourceUrl, geometry, margins, model, name, 
       if (!active || !canvas.current) return;
       canvas.current.width = output.width; canvas.current.height = output.height;
       canvas.current.getContext("2d")!.drawImage(output, 0, 0);
-    }).catch(e => { if (active) setError(e.message); }).finally(() => { if (active) setBusy(false); }); }, frame ? 90 : 0);
+    }).catch(e => { if (active) setError(e.message); }).finally(() => { if (active) { setBusy(false); settled.current?.(sourceUrl); } }); }, frame ? 90 : 0);
     return () => { active = false; window.clearTimeout(timer); };
   }, [sourceUrl, geometry, margins, model, side, expanded, frame, fixedSide]);
   useEffect(() => {

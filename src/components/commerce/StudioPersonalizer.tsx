@@ -1,11 +1,11 @@
 "use client";
-import React, { useEffect, useId, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { AlignCenter, ArrowRight, Check, Circle, FilePlus2, Image as ImageIcon, Images, Info, Loader2, Orbit, Paintbrush, Plus, SkipForward, Sparkles, Type, Undo2, X } from "lucide-react";
 import type { StoreProduct } from "./StoreHome";
 import type { StudioArtwork, StudioGradient } from "@/domain/commerce/studio-artwork";
-import { STUDIO_DEMO_STEPS, studioInitialArtwork } from "@/domain/commerce/studio-demo";
+import { STUDIO_DEMO_FADE_IN_MS, STUDIO_DEMO_FADE_OUT_MS, STUDIO_DEMO_STEPS, studioInitialArtwork } from "@/domain/commerce/studio-demo";
 import { renderStudioArtwork } from "./studio-artwork-canvas";
 import { StoreProductMockup } from "./StoreProductMockup";
 import { StudioImageControls } from "./StudioImageControls";
@@ -34,11 +34,17 @@ export function StudioPersonalizer({ products, base, slug, preview = false, auto
   const [artwork, setArtwork] = useState<StudioArtwork>(studioInitialArtwork);
   const [tab, setTab] = useState<"text" | "background">("text");
   const [source, setSource] = useState(""), [error, setError] = useState("");
+  const [renderedArtwork, setRenderedArtwork] = useState<StudioArtwork | null>(null);
   const [busy, setBusy] = useState(false), [truncated, setTruncated] = useState(false);
   const [saving, setSaving] = useState(false), [imageBusy, setImageBusy] = useState(false), [saveError, setSaveError] = useState("");
   const [draftReady, setDraftReady] = useState(false), [lastDraft, setLastDraft] = useState<StudioDraft | null>(null), [cacheWarning, setCacheWarning] = useState(false), [restored, setRestored] = useState(false), [libraryOpen, setLibraryOpen] = useState(false);
   const dirty = useRef(false), latestDraft = useRef<StudioDraft | null>(null);
   const [introStep, setIntroStep] = useState<number | null>(autoDemo ? -1 : null), [introPaused, setIntroPaused] = useState(false);
+  const [introTransition, setIntroTransition] = useState<"idle" | "out" | "waiting" | "in">("idle");
+  const [renderedSides, setRenderedSides] = useState({ front: "", back: "" });
+  const frontSettled = useCallback((url: string) => setRenderedSides(current => current.front === url ? current : { ...current, front: url }), []);
+  const backSettled = useCallback((url: string) => setRenderedSides(current => current.back === url ? current : { ...current, back: url }), []);
+  const previewReady = Boolean(source && renderedArtwork === artwork && renderedSides.front === source && renderedSides.back === source);
   const introRunning = useRef(autoDemo), focusRequested = useRef(false);
   const messageRef = useRef<HTMLTextAreaElement>(null), previewRef = useRef<HTMLDivElement>(null);
   const introActive = introStep !== null && introStep < STUDIO_DEMO_STEPS.length;
@@ -74,7 +80,7 @@ export function StudioPersonalizer({ products, base, slug, preview = false, auto
     setBusy(true); setError("");
     const timer = window.setTimeout(() => {
       void renderStudioArtwork(artwork, geometry, margins).then(result => {
-        if (active) { setSource(result.dataUrl); setTruncated(result.truncated); }
+        if (active) { setSource(result.dataUrl); setRenderedArtwork(artwork); setTruncated(result.truncated); }
       }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : "Não foi possível atualizar o exemplo."); })
         .finally(() => { if (active) setBusy(false); });
     }, 180);
@@ -87,7 +93,7 @@ export function StudioPersonalizer({ products, base, slug, preview = false, auto
     let inView = true;
     const refresh = () => {
       setIntroPaused(document.hidden || !inView);
-      if (motion.matches && introRunning.current) { introRunning.current = false; setIntroStep(STUDIO_DEMO_STEPS.length); }
+      if (motion.matches && introRunning.current) { introRunning.current = false; setIntroTransition("idle"); setIntroStep(STUDIO_DEMO_STEPS.length); }
     };
     const observer = typeof IntersectionObserver === "undefined" ? null : new IntersectionObserver(entries => { inView = entries[0]?.isIntersecting ?? false; refresh(); }, { threshold: .15 });
     if (previewRef.current) observer?.observe(previewRef.current);
@@ -95,24 +101,38 @@ export function StudioPersonalizer({ products, base, slug, preview = false, auto
     return () => { observer?.disconnect(); motion.removeEventListener("change", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [autoDemo]);
   useEffect(() => {
-    if (!draftReady || !introRunning.current || introStep === null || !source || busy || error || introPaused) return;
-    // Wait for each artwork render before starting the next stage's viewing time.
-    const timer = window.setTimeout(() => {
-      if (!introRunning.current) return;
-      const next = introStep + 1;
-      if (next === STUDIO_DEMO_STEPS.length) { introRunning.current = false; setIntroStep(next); return; }
-      const step = STUDIO_DEMO_STEPS[next];
-      setArtwork(current => ({ ...current, ...step.artwork })); setTab(step.tab); setIntroStep(next);
-    }, introStep < 0 ? 500 : 1800);
+    if (!draftReady || !introRunning.current || introStep === null || !previewReady || busy || error || introPaused || introTransition !== "idle") return;
+    const timer = window.setTimeout(() => { if (introRunning.current) setIntroTransition("out"); }, introStep < 0 ? 500 : 1800);
     return () => window.clearTimeout(timer);
-  }, [introStep, source, busy, error, introPaused, draftReady]);
+  }, [introStep, previewReady, busy, error, introPaused, draftReady, introTransition]);
+  useEffect(() => {
+    if (introTransition !== "out" || introStep === null) return;
+    if (introPaused) { setIntroTransition("idle"); return; }
+    // Swap only after fade-out; fade-in waits for both actual mockup canvases.
+    const timer = window.setTimeout(() => {
+      if (!introRunning.current) { setIntroTransition("idle"); return; }
+      const next = introStep + 1;
+      if (next === STUDIO_DEMO_STEPS.length) { introRunning.current = false; setIntroStep(next); setIntroTransition("in"); return; }
+      const step = STUDIO_DEMO_STEPS[next];
+      setArtwork(current => ({ ...current, ...step.artwork })); setTab(step.tab); setIntroStep(next); setIntroTransition("waiting");
+    }, STUDIO_DEMO_FADE_OUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [introStep, introTransition, introPaused]);
+  useEffect(() => {
+    if (introTransition === "waiting" && !busy && (previewReady || error)) setIntroTransition("in");
+  }, [introTransition, previewReady, busy, error]);
+  useEffect(() => {
+    if (introTransition !== "in") return;
+    const timer = window.setTimeout(() => setIntroTransition("idle"), STUDIO_DEMO_FADE_IN_MS);
+    return () => window.clearTimeout(timer);
+  }, [introTransition]);
   useEffect(() => {
     if (!draftReady || !focusRequested.current || tab !== "text" || introStep !== null) return;
     focusRequested.current = false; messageRef.current?.focus(); messageRef.current?.select();
   }, [tab, introStep, draftReady]);
   if (!geometry || !product.artworkOptions?.mockup) return null;
-  const interruptIntro = () => { introRunning.current = false; if (introStep !== null) setIntroStep(null); };
-  const pauseIntro = () => { introRunning.current = false; };
+  const interruptIntro = () => { introRunning.current = false; setIntroTransition("idle"); if (introStep !== null) setIntroStep(null); };
+  const pauseIntro = () => { introRunning.current = false; setIntroTransition("idle"); };
   const captureClick = (event: React.MouseEvent) => {
     pauseIntro();
     // Controlled inputs must read their new value before any capture-phase rerender.
@@ -125,7 +145,7 @@ export function StudioPersonalizer({ products, base, slug, preview = false, auto
   };
   const newArtwork = () => { interruptIntro(); dirty.current = false; latestDraft.current = null; resetProgress(); setArtwork(studioInitialArtwork()); setRestored(false); setTab("text"); };
   const createOwnArtwork = (skip = false) => {
-    introRunning.current = false; focusRequested.current = true; setIntroStep(null); setTab("text");
+    introRunning.current = false; setIntroTransition("idle"); focusRequested.current = true; setIntroStep(null); setTab("text");
     if (skip) setArtwork(studioInitialArtwork());
   };
   const resetProgress = () => { progress.current = { artworkId: null, prepared: false }; setSaveError(""); };
@@ -153,7 +173,7 @@ export function StudioPersonalizer({ products, base, slug, preview = false, auto
     } catch (cause) { setSaveError(cause instanceof Error ? cause.message : "Não foi possível salvar sua arte. Tente novamente."); }
     finally { savingRef.current = false; setSaving(false); }
   }
-  return <div className={styles.demoInner}>
+  return <div className={styles.demoInner} data-studio-demo-transition={introTransition} style={{ "--studio-demo-fade-out": `${STUDIO_DEMO_FADE_OUT_MS}ms`, "--studio-demo-fade-in": `${STUDIO_DEMO_FADE_IN_MS}ms` } as React.CSSProperties}>
     <div className={styles.demoHeader}>
       <p className={styles.eyebrow}><Paintbrush size={15}/>Seu pequeno estúdio de ideias</p>
       <h2>Crie sua arte. Veja dos dois lados.</h2>
@@ -163,7 +183,7 @@ export function StudioPersonalizer({ products, base, slug, preview = false, auto
       {draftReady ? <div className={styles.draftBar}><small role="status">{lastDraft ? restored ? "Sua última arte foi recuperada." : "Última arte guardada nesta aba." : "Nova composição"}</small><button type="button" disabled={!lastDraft || saving || imageBusy} title="Recuperar a última composição sem trocar o produto atual" onClick={restoreDraft}><Undo2 size={15}/>Retomar</button><button type="button" disabled={saving || imageBusy} title="Começar outra composição; a anterior continua disponível até a próxima edição" onClick={newArtwork}><FilePlus2 size={15}/>Nova arte</button></div> : null}
       {cacheWarning ? <p role="status" className={styles.imageQuality}>O navegador não permitiu guardar a arte em disco. Ela está disponível nesta navegação; não recarregue nem feche a aba antes de continuar.</p> : null}
       {!draftReady ? <p role="status" className={styles.imageQuality}>Verificando sua última arte…</p> : null}
-      <fieldset className={styles.demoControls} disabled={!draftReady || saving || imageBusy} aria-label="Criação da arte" onPointerDownCapture={pauseIntro} onKeyDownCapture={pauseIntro} onClickCapture={captureClick}>
+      <fieldset className={`${styles.demoControls} ${styles.introFade}`} disabled={!draftReady || saving || imageBusy} aria-label="Criação da arte" onPointerDownCapture={pauseIntro} onKeyDownCapture={pauseIntro} onClickCapture={captureClick}>
         <div className={styles.controlField}><label htmlFor={`${id}-product`}>Produto</label><select id={`${id}-product`} value={product.id} onChange={event => changeProduct(event.target.value)}>{products.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
         <div className={styles.demoTabs} role="tablist" aria-label="Personalização do exemplo">
           {([ ["text", "Texto", Type], ["background", "Fundo", Paintbrush] ] as const).map(([value, label, Icon]) => <button type="button" role="tab" key={value} id={`${id}-tab-${value}`} aria-selected={tab === value} aria-controls={`${id}-panel-${value}`} tabIndex={tab === value ? 0 : -1}
@@ -197,13 +217,13 @@ export function StudioPersonalizer({ products, base, slug, preview = false, auto
     </div>
     <div ref={previewRef} className={styles.demoPreview} aria-busy={busy}>
       {draftReady && (introActive || introComplete) ? <div className={styles.introNotice} data-studio-demo-stage={introComplete ? "complete" : introStep}>
-        <div><small><Sparkles size={13}/>{introComplete ? "Sua vez de criar" : "Demonstração rápida"}</small><p role="status" aria-live="polite">{introComplete ? "Agora crie você mesmo a sua arte." : introStep === -1 ? "Veja sua ideia ganhar forma." : STUDIO_DEMO_STEPS[introStep!].title}</p>
+        <div className={styles.introFade}><small><Sparkles size={13}/>{introComplete ? "Sua vez de criar" : "Demonstração rápida"}</small><p role="status" aria-live="polite">{introComplete ? "Agora crie você mesmo a sua arte." : introStep === -1 ? "Veja sua ideia ganhar forma." : STUDIO_DEMO_STEPS[introStep!].title}</p>
           {!introComplete ? <div className={styles.introProgress} role="progressbar" aria-label="Etapas da demonstração" aria-valuemin={0} aria-valuemax={STUDIO_DEMO_STEPS.length} aria-valuenow={Math.max(0, (introStep ?? -1) + 1)}>{STUDIO_DEMO_STEPS.map((_, index) => <span key={index} data-complete={index <= (introStep ?? -1)}/>)}</div> : null}
         </div>
         <button type="button" className={styles.secondary} aria-label={introComplete ? "Criar minha arte" : "Pular demonstração"} title={introComplete ? "Editar a mensagem e criar a sua própria arte" : "Pular o exemplo e começar a criar agora"} onClick={() => createOwnArtwork(!introComplete)}>{introComplete ? <ArrowRight size={15}/> : <SkipForward size={15}/>} {introComplete ? "Criar minha arte" : "Pular"}</button>
       </div> : null}
       <div className={styles.previewHeading}><strong>Sua arte em tempo real</strong><span role="status">{busy ? <><Loader2 size={13} className="animate-spin"/>Atualizando</> : "Frente e verso"}</span></div>
-      <div className={styles.previewPair} onPointerDownCapture={pauseIntro} onClickCapture={captureClick} onKeyDownCapture={pauseIntro}>{source ? (["front", "back"] as const).map(side => <StoreProductMockup key={side} sourceUrl={source} geometry={geometry} margins={margins} model={product.artworkOptions!.mockup} name={product.name} frame={frame} fixedSide={side} compact expandable/>) : <p className={styles.demoStatus}>Preparando sua prévia…</p>}</div>
+      <div className={`${styles.previewPair} ${styles.introFade}`} onPointerDownCapture={pauseIntro} onClickCapture={captureClick} onKeyDownCapture={pauseIntro}>{source ? (["front", "back"] as const).map(side => <StoreProductMockup key={side} sourceUrl={source} geometry={geometry} margins={margins} model={product.artworkOptions!.mockup} name={product.name} frame={frame} fixedSide={side} compact expandable onRenderSettled={side === "front" ? frontSettled : backSettled}/>) : <p className={styles.demoStatus}>Preparando sua prévia…</p>}</div>
       <p className={styles.demoDisclaimer}><Info size={15}/><span><strong>Simulação ilustrativa.</strong> Cores, curvatura e acabamento podem variar, principalmente no verso e no fecho. Confira a arte final na aprovação do seu produto.</span></p>
     </div>
     {libraryOpen && libraryEnabled ? <LibraryPicker slug={slug} preview={preview} productId={product.id} onClose={() => setLibraryOpen(false)} onSelect={asset => update({ backgroundType: "image", backgroundImage: { asset, scale: 1, offsetX: 0, offsetY: 0, fillColor: artwork.backgroundImage?.fillColor ?? "#ffffff" } })}/> : null}

@@ -1,5 +1,5 @@
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StoreProductMockup } from "@/components/commerce/StoreProductMockup";
 import { defaultMockup } from "@/domain/commerce/artwork-options";
@@ -12,6 +12,25 @@ const props = {
 beforeEach(() => { vi.stubGlobal("Image", class { src = ""; crossOrigin = ""; }); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 describe("illustrative product preview notice", () => {
+  it("settles failed previews, ignores canceled renders and does not redraw when only the callback changes", async () => {
+    const pending: { url: string; fail: () => void }[] = [];
+    vi.stubGlobal("Image", class {
+      onerror: (() => void) | null = null;
+      set src(url: string) { pending.push({ url, fail: () => this.onerror?.() }); }
+    });
+    const first = vi.fn(), second = vi.fn(), latest = vi.fn();
+    const view = render(<StoreProductMockup {...props} onRenderSettled={first}/>);
+    await waitFor(() => expect(pending).toHaveLength(1));
+    view.rerender(<StoreProductMockup {...props} sourceUrl="/nova.png" onRenderSettled={second}/>);
+    await waitFor(() => expect(pending).toHaveLength(2));
+    await act(async () => pending[0].fail());
+    expect(first).not.toHaveBeenCalled(); expect(second).not.toHaveBeenCalled();
+    await act(async () => pending[1].fail());
+    expect(second).toHaveBeenCalledTimes(1); expect(second).toHaveBeenCalledWith("/nova.png");
+    expect(screen.getByRole("alert")).toHaveTextContent("Não foi possível carregar");
+    view.rerender(<StoreProductMockup {...props} sourceUrl="/nova.png" onRenderSettled={latest}/>);
+    expect(pending).toHaveLength(2); expect(latest).not.toHaveBeenCalled();
+  });
   it("keeps the notice visible on both sides and when enlarged", () => {
     render(<StoreProductMockup {...props} model={defaultMockup()} />);
     expect(screen.getByText("Imagem meramente ilustrativa.")).toBeVisible();
