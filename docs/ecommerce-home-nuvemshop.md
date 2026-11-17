@@ -418,3 +418,20 @@ Nenhuma migration ou variável nova necessária.
 - [x] Build de produção aprovado com memória limitada (`npm run build:local`, um CPU, heap de 1 GB).
 
 Reutiliza autenticação, APIs e persistência existentes. Nenhuma migration ou variável nova necessária.
+
+### URLs Amigáveis de Produtos
+
+- [x] Slug persistido por produto publicado, sem acentos, com palavras separadas por hífen e unicidade por tenant. Nomes repetidos recebem `-2`, `-3`, etc.; produtos inativos continuam reservando suas URLs. Renomear/republicar não muda o slug já criado.
+- [x] Links antigos por UUID redirecionam com HTTP 308 para o endereço canônico, preservando os parâmetros de artes, estúdio e campanhas. Prévia privada permanece autorizada e usa redirecionamento temporário; domínio próprio e caminho da plataforma respeitados.
+- [x] Catálogo, menu, rodapé, estúdio, campanhas, orçamentos e assistente passam a usar os links amigáveis. UUIDs internos permanecem nas APIs, carrinho, artes, pedidos e pagamentos.
+- [x] Sitemap geral e por loja, canonical, título/descrição por produto, Open Graph/Twitter e JSON-LD de produto/breadcrumbs alinhados à URL nova. Nenhuma avaliação ou disponibilidade de estoque inventada.
+- [x] Migration `0080_commerce_product_slugs.sql` validada em PostgreSQL 16 local isolado: backfill, acentos (inclusive decompostos), nomes repetidos, isolamento por tenant, renomeação/republicação, URLs inativas, publicações concorrentes, restrições e reexecução. Seis testes de banco aprovados.
+- [x] Regressão de links, rotas, SEO, navegação e prévia: 1.087 testes aprovados, 82 ignorados (incluindo os seis testes de banco, executados e aprovados separadamente). Novos testes cobrem URLs, parâmetros, 404, metadados, JSON-LD seguro, domínio próprio, prévia autorizada e carrinho/preços mantendo UUIDs.
+- [x] Navegador com APIs simuladas: catálogo → produto por slug em 1440/390 px, claro/escuro e caminho da plataforma/domínio próprio; UUID confirmado nas chamadas de preço e capturas inspecionadas, sem overflow ou exceções. Regressão da área do cliente em 1440/390/320 px e paisagem também aprovada.
+- [x] Lint e `git diff --check` aprovados.
+- [x] Checagem de tipos aprovada.
+- [x] Build de produção aprovado (`npm run build:local`, um CPU, heap de 1 GB).
+
+Aplicar **`supabase/migrations/0080_commerce_product_slugs.sql` antes do deploy**. Preenche os produtos já cadastrados e gera URLs automaticamente nos próximos cadastros, sem precisar republicar a loja. Nenhuma variável de ambiente nova. Não altera os IDs, preços ou snapshots de pedidos anteriores.
+
+Referências: [URLs descritivas no Google Search Central](https://developers.google.com/search/docs/crawling-indexing/url-structure) e [redirecionamentos permanentes](https://developers.google.com/search/docs/crawling-indexing/301-redirects). Essas melhorias não garantem posicionamento ou exibição de resultados enriquecidos.

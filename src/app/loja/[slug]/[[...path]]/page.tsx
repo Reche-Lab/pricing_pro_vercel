@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { headers } from "next/headers";
 import { commerceHostSlug } from "@/domain/commerce/domains";
 import type { Metadata } from "next";
@@ -15,15 +15,22 @@ import { institutionalStructuredData, serializeStructuredData, storePageMetadata
 import { purchaseConditionsPage } from "@/domain/commerce/purchase-conditions";
 import { readCommerceLibrary } from "@/repositories/commerce-library";
 import { libraryQuerySchema } from "@/domain/commerce/library";
+import { findCommerceProduct, productRedirectUrl } from "@/domain/commerce/product-urls";
+import { storeProductMetadata, storeProductStructuredData } from "@/services/commerce/product-seo";
 export const dynamic = "force-dynamic";
 const loadStore = cache(getCommerceStore);
+const loadProducts = cache(async (tenantId: string) => (await commerceProducts(tenantId)).map(publicCommerceProduct));
 const loadLibrary = cache(async (tenantId: string, campaign?: string) => readCommerceLibrary(tenantId, libraryQuerySchema.parse({ ...(campaign ? { campaign } : {}) })));
-type Props = { params: Promise<{ slug: string; path?: string[] }> };
+type Props = { params: Promise<{ slug: string; path?: string[] }>; searchParams?: Promise<Record<string, string | string[] | undefined>> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug, path = [] } = await params;
   const store = await loadStore(slug, true);
   if (!store) return { title: "Loja indisponível", robots: { index: false } };
   const metadata = storePageMetadata(slug, path, store.settings, store.status === "published");
+  if (path[0] === "produto") {
+    const product = path.length === 2 ? findCommerceProduct(await loadProducts(store.tenant_id), path[1]) : undefined;
+    return product ? storeProductMetadata(slug, product, store.settings, store.status === "published") : { title: "Produto não encontrado", robots: { index: false, follow: false } };
+  }
   if (store.art_library_enabled && ["artes", "campanhas"].includes(path[0])) {
     const parsed = libraryQuerySchema.safeParse(path[1] ? { campaign: path[1] } : {});
     if (parsed.success) {
@@ -36,7 +43,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
   return metadata;
 }
-export default async function StorePage({ params }: Props) {
+export default async function StorePage({ params, searchParams }: Props) {
   const { slug, path = [] } = await params;
   const store = await loadStore(slug, true);
   if (!store) notFound();
@@ -60,12 +67,15 @@ export default async function StorePage({ params }: Props) {
   if (!supported) notFound();
   const library = libraryPath ? await loadLibrary(store.tenant_id, path[1]) : undefined;
   if (libraryPath && path[1] && !library?.campaigns.some(c => c.slug === path[1])) notFound();
-  const products = (await commerceProducts(store.tenant_id)).map(
-    publicCommerceProduct,
-  );
-  if (path[0] === "produto" && !products.some((p) => p.id === path[1]))
-    notFound();
+  const products = await loadProducts(store.tenant_id);
+  const product = path[0] === "produto" ? findCommerceProduct(products, path[1]) : undefined;
+  if (path[0] === "produto") {
+    if (!product) notFound();
+    if (product.slug && path[1] !== product.slug) permanentRedirect(productRedirectUrl(customDomain ? "" : `/loja/${slug}`, product, await searchParams ?? {}));
+  }
   return (
+    <>
+    {product && store.status === "published" ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeStructuredData(storeProductStructuredData(slug, product, store.settings)) }} /> : null}
     <Storefront
       slug={slug}
       settings={store.settings}
@@ -82,5 +92,6 @@ export default async function StorePage({ params }: Props) {
         <StoreInstitutionalPage slug={slug} page={institutional} settings={store.settings} basePath={customDomain ? "" : undefined} featuredProduct={products.find(product => Boolean(product.imageUrl))} />
       </> : null}
     </Storefront>
+    </>
   );
 }

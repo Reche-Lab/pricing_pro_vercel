@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
+import { commerceProductPath } from "@/domain/commerce/product-urls";
 import { AlignCenter, ArrowRight, Check, Circle, FilePlus2, Image as ImageIcon, Images, Info, Loader2, Orbit, Paintbrush, Plus, SkipForward, Sparkles, Type, Undo2, X } from "lucide-react";
 import type { StoreProduct } from "./StoreHome";
 import type { StudioArtwork, StudioGradient } from "@/domain/commerce/studio-artwork";
@@ -157,7 +158,7 @@ export function StudioPersonalizer({ products, base, slug, preview = false, auto
       if (rendered.truncated) throw new Error("Encurte sua mensagem para que todas as letras caibam na área segura.");
       const file = { fileName: `arte-estudio.${rendered.mimeType === "image/webp" ? "webp" : "png"}`, dataUrl: rendered.dataUrl, mimeType: rendered.mimeType, fileSize: rendered.fileSize };
       const artworkId = await saveStudioPurchase({ slug, productId: product.id, file, progress: progress.current, preview: preview ? simulation! : undefined });
-      router.push(`${base}/produto/${product.id}?arteEstudio=${encodeURIComponent(artworkId)}`);
+      router.push(`${commerceProductPath(base, product)}?arteEstudio=${encodeURIComponent(artworkId)}`);
     } catch (cause) { setSaveError(cause instanceof Error ? cause.message : "Não foi possível salvar sua arte. Tente novamente."); }
     finally { savingRef.current = false; setSaving(false); }
   }

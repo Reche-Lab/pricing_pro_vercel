@@ -38,6 +38,7 @@ export const hashCommerceToken = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 export const newCommerceToken = () => randomBytes(32).toString("base64url");
 export type CommerceProduct = PriceProduct & {
+  slug?: string;
   variantId: string;
   description: string;
   category: string;
@@ -154,12 +155,13 @@ export async function commerceProducts(
 ): Promise<CommerceProduct[]> {
   const rows = await client.query<{
     id: string;
+    slug: string;
     snapshot: Omit<CommerceProduct, "id">;
   }>(
-    `select cp.id,cp.snapshot from commerce_products cp join product_variants v on v.id=cp.variant_id and v.tenant_id=cp.tenant_id join products p on p.id=v.product_id and p.tenant_id=v.tenant_id where cp.tenant_id=$1 and cp.active and v.active and p.active and v.deleted_at is null and p.deleted_at is null order by cp.snapshot->>'name'`,
+    `select cp.id,cp.slug,cp.snapshot from commerce_products cp join product_variants v on v.id=cp.variant_id and v.tenant_id=cp.tenant_id join products p on p.id=v.product_id and p.tenant_id=v.tenant_id where cp.tenant_id=$1 and cp.active and v.active and p.active and v.deleted_at is null and p.deleted_at is null order by cp.snapshot->>'name'`,
     [tenantId],
   );
-  return rows.rows.map((row) => ({ ...row.snapshot, id: row.id }));
+  return rows.rows.map((row) => ({ ...row.snapshot, id: row.id, slug: row.slug }));
 }
 export function publicCommerceProduct(product: CommerceProduct) {
   const {
@@ -190,6 +192,7 @@ export function publicCommerceProduct(product: CommerceProduct) {
   );
   return {
     id,
+    ...(product.slug ? { slug: product.slug } : {}),
     name,
     description,
     category,

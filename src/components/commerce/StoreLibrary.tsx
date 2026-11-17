@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 import React, { useState } from "react";
 import Link from "next/link";
+import { commerceProductPath } from "@/domain/commerce/product-urls";
 import { ArrowLeft, ArrowRight, Images, Search, Sparkles } from "lucide-react";
 import {
   libraryQuerySchema,
@@ -372,7 +373,7 @@ export function StoreLibrary({
                 .map((p) => (
                   <Link
                     key={p.id}
-                    href={`${base}/produto/${p.id}?arte=${selected.id}`}
+                    href={`${commerceProductPath(base, p)}?arte=${encodeURIComponent(selected.id)}`}
                     className={styles.productChoice}
                   >
                     {p.imageUrl ? (

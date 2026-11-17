@@ -3,6 +3,7 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { commerceProductPath } from "@/domain/commerce/product-urls";
 import {
   ArrowLeft,
   ArrowRight,
@@ -30,7 +31,7 @@ export function StoreProductCard({
 }) {
   const alternate = product.media?.find(media => media.kind === "image" && media.url !== product.imageUrl);
   return (
-    <Link className={styles.product} href={`${base}/produto/${product.id}`} data-product-card>
+    <Link className={styles.product} href={commerceProductPath(base, product)} data-product-card>
       <div className={`${styles.productPhoto} ${alternate ? styles.hasAlternate : ""}`} data-product-photo>
         <img
           src={product.imageUrl}

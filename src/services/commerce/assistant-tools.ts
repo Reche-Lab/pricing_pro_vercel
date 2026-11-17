@@ -30,7 +30,7 @@ export const assistantToolDefinitions = [
   tool("store_guide", "Consultar funcionalidades ATIVAS e atalhos reais desta loja. Use artwork para criação no estúdio, envio, retoque, enquadramento, aprovação, artes prontas e desconto por arte pronta; shopping para orçamento sem compromisso, PDF, compra, conta e entrega; policies para condições. Benefícios vêm dos produtos publicados, nunca assuma um percentual.", { type: "object", properties: { topic: { type: "string", enum: ["artwork", "shopping", "policies"] } }, required: ["topic"], additionalProperties: false }),
   tool("human_support", "Oferecer encaminhamento para equipe, sem afirmar que um humano está online ou já assumiu. Cliente confirma o encaminhamento."),
 ];
-const productCard = (p: ReturnType<typeof publicCommerceProduct>): AssistantProduct => ({ id: p.id, name: p.name, description: p.description.slice(0, 600), category: p.category, imageUrl: p.imageUrl, unitCents: p.unitCents, minQuantity: p.minQuantity, maxQuantity: p.maxQuantity, maxArtworks: p.maxArtworks, personalized: p.personalized, artworkBenefit: assistantArtworkBenefit(p) });
+const productCard = (p: ReturnType<typeof publicCommerceProduct>): AssistantProduct => ({ id: p.id, ...(p.slug ? { slug: p.slug } : {}), name: p.name, description: p.description.slice(0, 600), category: p.category, imageUrl: p.imageUrl, unitCents: p.unitCents, minQuantity: p.minQuantity, maxQuantity: p.maxQuantity, maxArtworks: p.maxArtworks, personalized: p.personalized, artworkBenefit: assistantArtworkBenefit(p) });
 
 export function assistantLines(input: z.infer<typeof assistantProposalSchema>, products: Awaited<ReturnType<typeof commerceProducts>>) {
   return input.items.flatMap(item => {

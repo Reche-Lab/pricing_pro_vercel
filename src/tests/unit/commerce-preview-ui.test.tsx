@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Storefront } from "@/components/commerce/Storefront";
+import { StoreProductCard } from "@/components/commerce/StoreHome";
 import { storeSettingsSchema } from "@/domain/commerce/schemas";
 import { storeRequest } from "@/components/commerce/store-http";
 import {
@@ -57,6 +58,20 @@ const product = {
   offer: { originalUnitCents: 100, minimumUnitCents: 100, maxDiscountPercent: 0, discountQuantity: 1 },
 };
 describe("preview storefront navigation", () => {
+  it.each(["", "/loja/ground-shop", "/commerce/ground-shop/preview"])("links directly to the friendly product URL under %s", base => {
+    render(<StoreProductCard product={{ ...product, slug: "produto-teste" }} base={base}/>);
+    expect(screen.getByRole("link")).toHaveAttribute("href", `${base}/produto/produto-teste`);
+  });
+  it("opens a friendly product URL but keeps the UUID in private pricing and cart requests", async () => {
+    vi.mocked(storeRequest).mockResolvedValue({ totalCents: 100, items: [{ unitCents: 100 }] });
+    render(<CommercePreviewProvider slug="ground-shop"><Storefront slug="ground-shop" settings={settings} products={[{ ...product, slug: "produto-teste" }]} path={["produto", "produto-teste"]} paused={false} preview/></CommercePreviewProvider>);
+    expect(screen.getByRole("heading", { level: 1, name: product.name })).toBeInTheDocument();
+    await waitFor(() => expect(storeRequest).toHaveBeenCalledWith("/api/commerce/ground-shop/preview/price", "POST", expect.objectContaining({ lines: [expect.objectContaining({ productId: product.id })] })));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Adicionar ao carrinho" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar ao carrinho" }));
+    await screen.findByText("Produto adicionado ao carrinho");
+    expect(vi.mocked(storeRequest).mock.calls.every(([url]) => url.endsWith("/price"))).toBe(true);
+  });
   it("keeps institutional content readable without creating a cart session and links within the preview", () => {
     render(<Storefront slug="ground-shop" settings={settings} products={[]} path={["quem-somos"]} paused={false} preview
       institutionalLinks={[{ slug: "quem-somos", title: "Quem somos" }, { slug: "politica-de-privacidade", title: "Política de Privacidade" }]}>

@@ -13,6 +13,7 @@ import { StoreInstitutionalPage } from "@/components/commerce/StoreInstitutional
 import { purchaseConditionsPage } from "@/domain/commerce/purchase-conditions";
 import { readCommerceLibrary } from "@/repositories/commerce-library";
 import { libraryQuerySchema } from "@/domain/commerce/library";
+import { findCommerceProduct, productRedirectUrl } from "@/domain/commerce/product-urls";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -21,8 +22,10 @@ export const metadata: Metadata = {
 };
 export default async function CommercePreviewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; path?: string[] }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { slug, path = [] } = await params;
   const page = storeInstitutionalPage(slug, path);
@@ -45,11 +48,11 @@ export default async function CommercePreviewPage({
   const products = (await commerceProducts(store.tenant_id)).map(
     publicCommerceProduct,
   );
-  if (
-    path[0] === "produto" &&
-    !products.some((product) => product.id === path[1])
-  )
-    notFound();
+  if (path[0] === "produto") {
+    const product = findCommerceProduct(products, path[1]);
+    if (!product) notFound();
+    if (product.slug && path[1] !== product.slug) redirect(productRedirectUrl(`/commerce/${slug}/preview`, product, await searchParams ?? {}));
+  }
   return (
     <Storefront
       slug={slug}

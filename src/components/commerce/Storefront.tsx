@@ -65,6 +65,7 @@ import { libraryQuerySchema, type LibraryResult } from "@/domain/commerce/librar
 import { pendingCartArtworks } from "@/domain/commerce/artwork-readiness";
 import { useQuoteJourney } from "./use-quote-journey";
 import { StoreQuoteJourney } from "./StoreQuoteJourney";
+import { findCommerceProduct } from "@/domain/commerce/product-urls";
 import { StoreQuoteOverview } from "./StoreQuoteOverview";
 import { quoteArtworkBenefits } from "@/domain/commerce/quote-artwork-benefit";
 const StoreLibrary = dynamic(() => import("./StoreLibrary").then(m => m.StoreLibrary));
@@ -182,7 +183,7 @@ export function Storefront({
     });
   }
   const selectedProduct =
-    view === "produto" ? products.find((p) => p.id === path[1]) : undefined;
+    view === "produto" ? findCommerceProduct(products, path[1]) : undefined;
   return (
     <main
       className={`${styles.store} ${settings.experience?.style === "studio" ? studioStyles.theme : ""}`}

@@ -11,7 +11,7 @@ export function assistantStoreGuide(store: CommerceStore, settings: AssistantSet
   const editable = products.filter(product => product.personalized && product.geometry);
   const benefits = products.flatMap(product => {
     const benefit = assistantArtworkBenefit(product);
-    return benefit ? [{ productId: product.id, name: product.name, ...benefit }] : [];
+    return benefit ? [{ productId: product.id, ...(product.slug ? { slug: product.slug } : {}), name: product.name, ...benefit }] : [];
   });
   return {
     features: {

@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 import React from "react";
 import Link from "next/link";
+import { commerceProductPath } from "@/domain/commerce/product-urls";
 import { ArrowRight, ArrowUp, Check, ChevronDown, ChevronRight, HeartHandshake, Mail, ShieldCheck } from "lucide-react";
 import type { StoreSettings } from "@/domain/commerce/schemas";
 import { INSTITUTIONAL_UPDATED, storeInstitutionalPages, type StoreInstitutionalPage as Page } from "@/domain/commerce/institutional";
@@ -10,7 +11,7 @@ import { GoogleMapsNotice } from "./GoogleMapsNotice";
 
 export function StoreInstitutionalPage({ slug, page, settings, preview = false, featuredProduct, basePath }: {
   slug: string; page: Page; settings: StoreSettings; preview?: boolean; basePath?: string;
-  featuredProduct?: { id: string; name: string; imageUrl: string };
+  featuredProduct?: { id: string; slug?: string; name: string; imageUrl: string };
 }) {
   const base = preview ? `/commerce/${slug}/preview` : (basePath ?? `/loja/${slug}`);
   const about = page.slug === "quem-somos";
@@ -35,7 +36,7 @@ export function StoreInstitutionalPage({ slug, page, settings, preview = false, 
         <a className={styles.contactShortcut} href={`mailto:${settings.contactEmail}?subject=${encodeURIComponent(page.title)}`}><Mail size={16} aria-hidden="true" />Falar com a equipe<ArrowRight size={14} aria-hidden="true" /></a>
       </aside>
       <div className={styles.content}>
-        {about && featuredProduct ? <figure className={styles.productFigure}><Link href={`${base}/produto/${featuredProduct.id}`}><img src={featuredProduct.imageUrl} alt={featuredProduct.name} width={720} height={480} /></Link><figcaption>Uma ideia. Muitas formas de expressar.<Link href={`${base}/catalogo`}>Explorar criações <ArrowRight size={15} aria-hidden="true" /></Link></figcaption></figure> : null}
+        {about && featuredProduct ? <figure className={styles.productFigure}><Link href={commerceProductPath(base, featuredProduct)}><img src={featuredProduct.imageUrl} alt={featuredProduct.name} width={720} height={480} /></Link><figcaption>Uma ideia. Muitas formas de expressar.<Link href={`${base}/catalogo`}>Explorar criações <ArrowRight size={15} aria-hidden="true" /></Link></figcaption></figure> : null}
         {page.sections.map((section, index) => <section key={section.id} id={section.id} className={styles.section} aria-labelledby={`${section.id}-titulo`}>
           <span className={styles.sectionNumber} aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
           <div><h2 id={`${section.id}-titulo`}>{section.title}</h2>{section.paragraphs.map(paragraph => <p key={paragraph}>{paragraph}</p>)}

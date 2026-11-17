@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import Link from "next/link";
+import { commerceProductPath } from "@/domain/commerce/product-urls";
 import { FileText, Images, Paintbrush } from "lucide-react";
 import type { AssistantCard, AssistantArtworkBenefit } from "@/domain/commerce/assistant";
 import { storeMoney } from "./store-http";
@@ -28,7 +29,7 @@ export function StoreAssistantGuide({ card, base, onClose }: { card: Extract<Ass
     {guide?.benefits.length ? <>
       <strong className={styles.productHint}>Até {Math.max(...guide.benefits.map(benefit => benefit.percent)).toLocaleString("pt-BR")}% extra com arte pronta</strong>
       <small>Somente enviar a imagem não libera o benefício: prepare, enquadre e aprove na loja. Vale para produtos elegíveis, com limite por arte/grupo.</small>
-      <details className={styles.guideDetails}><summary>Ver produtos e limites</summary>{guide.benefits.map(benefit => <p key={benefit.productId}><Link href={`${base}/produto/${benefit.productId}`} onClick={onClose}>{benefit.name}</Link><AssistantArtworkBenefitNote benefit={benefit}/></p>)}{guide.moreBenefits ? <small>Consulte outros produtos no catálogo para conferir seus benefícios.</small> : null}</details>
+      <details className={styles.guideDetails}><summary>Ver produtos e limites</summary>{guide.benefits.map(benefit => <p key={benefit.productId}><Link href={commerceProductPath(base, { id: benefit.productId, slug: benefit.slug })} onClick={onClose}>{benefit.name}</Link><AssistantArtworkBenefitNote benefit={benefit}/></p>)}{guide.moreBenefits ? <small>Consulte outros produtos no catálogo para conferir seus benefícios.</small> : null}</details>
     </> : null}
   </>;
 }

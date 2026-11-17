@@ -10,7 +10,7 @@ import tailwind from "tailwindcss";
 const require = createRequire(import.meta.url), { chromium } = require(process.env.COMMERCE_PLAYWRIGHT_PATH || "playwright");
 const root = fileURLToPath(new URL("../", import.meta.url)), output = "/tmp/commerce-buyer-area";
 await mkdir(output, { recursive: true });
-const products = [{ id: "00000000-0000-4000-8000-000000000001", name: "Botton - 3,5 cm", description: "Personalizado", category: "Bottons", imageUrl: "/mockups/botton-25mm-v1/base-verso.png", personalized: true, minQuantity: 1, maxQuantity: 1000, maxArtworks: 10, unitCents: 500, offer: { originalUnitCents: 500, minimumUnitCents: 300, maxDiscountPercent: 40, discountQuantity: 100 }, geometry: null, margins: { bleedMm: 2, safeMarginMm: 2 } }];
+const products = [{ id: "00000000-0000-4000-8000-000000000001", slug: "botton-3-5-cm", name: "Botton - 3,5 cm", description: "Personalizado", category: "Bottons", imageUrl: "/mockups/botton-25mm-v1/base-verso.png", personalized: true, minQuantity: 1, maxQuantity: 1000, maxArtworks: 10, unitCents: 500, offer: { originalUnitCents: 500, minimumUnitCents: 300, maxDiscountPercent: 40, discountQuantity: 100 }, geometry: null, margins: { bleedMm: 2, safeMarginMm: 2 } }];
 const billing = { name: "Cliente de teste", email: "cliente@example.test", phone: "11999990000", document: "52998224725", personType: "F", postalCode: "01001000", street: "Praça de teste", number: "100", complement: "", district: "Centro", city: "São Paulo", state: "SP", attention: "" };
 const settings = { name: "Ground Shop", description: "Personalizados", logoUrl: "", bannerUrl: "", accent: "#047857", contactEmail: "loja@example.test", contactPhone: "", pickupEnabled: true, pickupAddress: "Rua da loja, 100", carrierEnabled: false, deliveryEnabled: true, deliveryCents: 1200, deliveryDescription: "Entrega local", terms: "Condições da loja" };
 const items = [{ id: "line", productId: products[0].id, name: products[0].name, artworkName: "Campanha de novembro", quantity: 30, unitCents: 500, totalCents: 15000 }];
@@ -41,6 +41,10 @@ const server = createServer(async (request, response) => {
       let raw = ""; for await (const chunk of request) raw += chunk; const body = raw ? JSON.parse(raw) : null;
       calls.push({ path, method: request.method, body }); response.setHeader("content-type", "application/json"); const json = value => response.end(JSON.stringify(value));
       if (path.endsWith("/auth") && request.method === "POST") { assert.deepEqual(body, { action: "logout" }); session = "guest"; return json({ ok: true }); }
+      if (path.endsWith("/price") && request.method === "POST") {
+        assert.ok(body.lines.every(line => line.productId === products[0].id), "Friendly navigation must keep UUIDs in pricing");
+        return json({ items: body.lines.map(line => ({ ...line, unitCents: 500, totalCents: line.quantity * 500 })), totalCents: body.lines.reduce((total, line) => total + line.quantity * 500, 0) });
+      }
       assert.equal(request.method, "GET", "No purchase/payment/artwork mutation");
       if (path.endsWith("/cart")) {
         await new Promise(done => setTimeout(done, 400));
@@ -53,7 +57,7 @@ const server = createServer(async (request, response) => {
       if (path.endsWith("/quotes")) return json({ quotes: [] });
       throw new Error(`Unexpected fixture API: ${path}`);
     }
-    const isPage = path.startsWith("/loja/") || ["/conta", "/pedidos", "/orcamentos"].some(prefix => path.startsWith(prefix));
+    const isPage = path.startsWith("/loja/") || ["/conta", "/pedidos", "/orcamentos", "/catalogo", "/produto/"].some(prefix => path.startsWith(prefix));
     response.setHeader("content-type", isPage ? "text/html; charset=utf-8" : ({ ".js": "text/javascript", ".css": "text/css", ".png": "image/png" })[extname(path)] || "application/octet-stream");
     if (isPage) return response.end(html); if (assets.has(path)) return response.end(assets.get(path));
     const file = resolve(root, "public", `.${path}`); assert.ok(file.startsWith(resolve(root, "public") + "/")); response.end(await readFile(file));
@@ -94,6 +98,18 @@ try {
     await page.getByRole("link", { name: "Ver pagamento", exact: true }).click();
     assert.deepEqual(errors, []); console.log(`Passed buyer area ${theme} ${width}x${height}`);
   }
+  for (const base of ["/loja/test", ""]) for (const theme of ["light", "dark"]) for (const width of [1440, 390]) {
+    session = "member"; await page.setViewportSize({ width, height: 900 });
+    await page.goto(`${origin}${base}/catalogo?theme=${theme}`);
+    const card = page.locator("[data-product-card]").first(); await card.waitFor();
+    assert.equal(await card.getAttribute("href"), `${base}/produto/botton-3-5-cm`);
+    await card.click(); await page.getByRole("heading", { name: products[0].name, exact: true }).waitFor();
+    await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent.includes('Adicionar ao carrinho') && !button.disabled));
+    assert.equal(new URL(page.url()).pathname, `${base}/produto/botton-3-5-cm`);
+    await fits(); await page.screenshot({ path: `${output}/product-url-${base ? "platform" : "domain"}-${theme}-${width}.png`, fullPage: true });
+    assert.ok(calls.some(call => call.path.endsWith("/price") && call.body.lines[0].productId === products[0].id));
+    assert.deepEqual(errors, []); console.log(`Passed friendly product URL ${base || "custom domain"} ${theme} ${width}px`);
+  }
   session = "error"; await page.goto(`${origin}/conta`); await page.getByRole("button", { name: "Tentar recuperar conta" }).waitFor(); await noLoginFlash();
   session = "member"; await page.getByRole("button", { name: "Tentar recuperar conta" }).click(); await page.getByRole("heading", { name: "Olá, Cliente de teste" }).waitFor(); await noLoginFlash();
   await page.getByRole("button", { name: "Minha conta", exact: true }).click();
@@ -104,6 +120,6 @@ try {
   orderError = false; await page.getByRole("button", { name: "Tentar novamente" }).click(); await page.getByRole("article").first().waitFor(); await noLoginFlash();
   await page.getByRole("button", { name: "Minha conta", exact: true }).click(); await page.getByRole("navigation", { name: "Atalhos da minha conta" }).getByRole("button", { name: "Sair", exact: true }).click();
   await page.getByRole("heading", { name: "Entre ou crie sua conta", exact: true }).waitFor(); assert.equal(await page.getByRole("article").count(), 0);
-  assert.ok(calls.filter(call => call.method !== "GET").every(call => call.path === "/api/store/test/auth" && call.body.action === "logout"));
+  assert.ok(calls.filter(call => call.method !== "GET").every(call => call.path === "/api/store/test/auth" && call.body.action === "logout" || call.path === "/api/store/test/price"));
   assert.deepEqual(errors, []); console.log(`Buyer area checks passed. Screenshots: ${output}`);
 } finally { await browser.close(); server.closeAllConnections(); await new Promise(done => server.close(done)); }

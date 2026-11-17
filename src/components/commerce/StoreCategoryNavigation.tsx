@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { commerceProductPath } from "@/domain/commerce/product-urls";
 import { ArrowRight, ChevronDown, FileText, Grid2X2, Images, Megaphone, Package, X } from "lucide-react";
 import type { publicCommerceProduct } from "@/repositories/commerce";
 import { campaignIsVisible } from "@/domain/commerce/library";
@@ -10,7 +11,7 @@ import { useMenuLibrary } from "./use-menu-library";
 import { StoreLibraryMenuContent } from "./StoreLibraryMenuContent";
 import styles from "./store.module.css";
 
-type MenuProduct = Pick<ReturnType<typeof publicCommerceProduct>, "id" | "name" | "category" | "imageUrl" | "unitCents" | "personalized">;
+type MenuProduct = Pick<ReturnType<typeof publicCommerceProduct>, "id" | "slug" | "name" | "category" | "imageUrl" | "unitCents" | "personalized">;
 type MenuGroup = { key: string; name: string; kind: "products"; items: MenuProduct[] } | { key: string; name: string; kind: "artworks" | "campaigns" };
 
 export function StoreCategoryNavigation({ products, base, preview, view, activeCategory, libraryEnabled = false, libraryApi = "", navigationKey = "", quoteActive = false }: {
@@ -105,7 +106,7 @@ export function StoreCategoryNavigation({ products, base, preview, view, activeC
         <button type="button" aria-label="Fechar categorias" title="Fechar categorias" className={styles.categoryClose} onClick={() => close(true)}><X size={18}/></button>
       </div>
       {selected.kind === "products" ? <div className={styles.categoryProductGrid}>
-        {selected.items.map(product => <Link prefetch={false} key={product.id} className={styles.categoryProduct} href={`${base}/produto/${product.id}`} onClick={() => close()}>
+        {selected.items.map(product => <Link prefetch={false} key={product.id} className={styles.categoryProduct} href={commerceProductPath(base, product)} onClick={() => close()}>
           <span className={styles.categoryProductImage}>{product.imageUrl ? <img src={product.imageUrl} alt="" loading="lazy" width={64} height={64}/> : <Package size={25} aria-hidden="true"/>}</span>
           <span className={styles.categoryProductText}><strong>{product.name}</strong><small>{product.personalized ? "Personalizável" : selected.name}</small><span>{storeMoney(product.unitCents)} <small>/ un.</small></span></span>
           <ArrowRight className={styles.categoryProductArrow} size={17} aria-hidden="true"/>

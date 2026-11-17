@@ -15,7 +15,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     if (!store) continue;
     const products = await commerceProducts(store.tenant_id);
     const library = store.art_library_enabled ? await readCommerceLibrary(store.tenant_id, libraryQuerySchema.parse({})) : undefined;
-    entries.push(...commerceSitemapEntries(slug, products.map(product => product.id), origin, library ? { campaigns: library.campaigns.map(c => c.slug) } : undefined));
+    entries.push(...commerceSitemapEntries(slug, products, origin, library ? { campaigns: library.campaigns.map(c => c.slug) } : undefined));
   }
   return entries;
 }

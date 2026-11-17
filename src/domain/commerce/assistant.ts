@@ -26,10 +26,10 @@ export type AssistantDocument = { id: string; label: string; file_name: string; 
 export type AssistantArtworkBenefit = { percent: number; limitPerArtworkCents: number };
 export type AssistantGuide = {
   features: { quotes: boolean; orders: boolean; personalized: boolean; studio: boolean; library: boolean; teamPreparation: boolean; pickup: boolean; delivery: boolean };
-  benefits: (AssistantArtworkBenefit & { productId: string; name: string })[];
+  benefits: (AssistantArtworkBenefit & { productId: string; slug?: string; name: string })[];
   moreBenefits: boolean;
 };
-export type AssistantProduct = Pick<ReturnType<typeof publicCommerceProduct>, "id" | "name" | "description" | "category" | "imageUrl" | "unitCents" | "minQuantity" | "maxQuantity" | "maxArtworks" | "personalized"> & { artworkBenefit?: AssistantArtworkBenefit };
+export type AssistantProduct = Pick<ReturnType<typeof publicCommerceProduct>, "id" | "slug" | "name" | "description" | "category" | "imageUrl" | "unitCents" | "minQuantity" | "maxQuantity" | "maxArtworks" | "personalized"> & { artworkBenefit?: AssistantArtworkBenefit };
 export type AssistantCard =
   | { kind: "products"; products: AssistantProduct[]; clarification?: boolean }
   | { kind: "proposal"; desiredQuantities?: boolean; actionId: string; items: { name: string; quantity: number; artworkName: string; unitCents: number; totalCents: number }[]; totalCents: number; expiresAt: string }

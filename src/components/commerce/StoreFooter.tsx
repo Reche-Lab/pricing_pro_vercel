@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { commerceProductPath } from "@/domain/commerce/product-urls";
 import { ArrowRight, ArrowUp, ArrowUpRight, ChevronDown, CreditCard, FileText, Mail, MapPin, MessageCircle, Paintbrush, Phone } from "lucide-react";
 import type { StoreSettings } from "@/domain/commerce/schemas";
 import type { StoreProduct } from "./StoreHome";
@@ -73,7 +74,7 @@ export function StoreFooter({ settings, products, base, preview = false, library
         <div className={styles.inviteCopy}><p className={styles.eyebrow}>{personalized ? "Da ideia ao seu próximo momento" : "Encontre a sua próxima escolha"}</p><h2>{personalized ? <>Vamos criar algo<br/>com a sua cara?</> : <>Seu próximo favorito<br/>está por aqui.</>}</h2>
           <div className={styles.actions}><Link className={styles.primary} href={canCreate ? `${base}?estudio=1` : `${base}/catalogo`} prefetch={false}>{canCreate ? <Paintbrush size={16}/> : <ArrowRight size={16}/>} {canCreate ? "Crie sua arte aqui" : "Explorar produtos"}<ArrowRight size={15}/></Link>{!preview ? <Link className={styles.secondary} href={`${base}/orcamento`} prefetch={false}><FileText size={15}/>Solicitar orçamento<ArrowUpRight size={14}/></Link> : null}</div>
         </div>
-        <div className={styles.miniatures} aria-label="Inspirações do catálogo">{products.filter(product => product.imageUrl).slice(0, 3).map(product => <Link href={`${base}/produto/${product.id}`} key={product.id} prefetch={false} title={product.name} aria-label={`Ver ${product.name}`}><img src={product.imageUrl} alt="" loading="lazy" width={100} height={100}/><ArrowUpRight size={14} aria-hidden="true"/></Link>)}</div>
+        <div className={styles.miniatures} aria-label="Inspirações do catálogo">{products.filter(product => product.imageUrl).slice(0, 3).map(product => <Link href={commerceProductPath(base, product)} key={product.id} prefetch={false} title={product.name} aria-label={`Ver ${product.name}`}><img src={product.imageUrl} alt="" loading="lazy" width={100} height={100}/><ArrowUpRight size={14} aria-hidden="true"/></Link>)}</div>
       </section> : null}
 
       <div className={styles.columns}>
