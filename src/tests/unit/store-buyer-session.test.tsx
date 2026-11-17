@@ -1,0 +1,88 @@
+import React from "react";
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Storefront } from "@/components/commerce/Storefront";
+import { useBuyerCart } from "@/components/commerce/use-buyer-cart";
+import { storeSettingsSchema } from "@/domain/commerce/schemas";
+import { storeRequest } from "@/components/commerce/store-http";
+import { quoteCart } from "../fixtures/commerce-quote";
+const params = vi.hoisted(() => new URLSearchParams());
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => params }));
+vi.mock("next/dynamic", () => ({ default: () => () => null }));
+vi.mock("@/components/commerce/StoreAssistantLauncher", () => ({ StoreAssistantLauncher: () => null }));
+vi.mock("@/components/commerce/store-http", async original => ({ ...await original<typeof import("@/components/commerce/store-http")>(), storeRequest: vi.fn() }));
+const settings = storeSettingsSchema.parse({ name: "Loja", accent: "#047857", description: "", logoUrl: "", bannerUrl: "", contactEmail: "test@example.test", contactPhone: "", pickupEnabled: false, pickupAddress: "", deliveryEnabled: false, deliveryCents: 0, deliveryDescription: "", terms: "Condições de teste" });
+beforeEach(() => vi.mocked(storeRequest).mockReset());
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+describe("buyer session loading without a login flash", () => {
+  it.each(["conta", "orcamentos", "pedidos"])("never shows login while the session is unresolved in %s", async view => {
+    let finish!: (value: unknown) => void;
+    vi.mocked(storeRequest).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    render(<Storefront slug="shop" settings={settings} products={[]} path={[view]} paused={false}/>);
+    expect(screen.queryByText("Entre ou crie sua conta")).not.toBeInTheDocument();
+    expect(screen.getByText("Recuperando sua conta…")).toBeInTheDocument();
+    await act(async () => finish(quoteCart));
+    await waitFor(() => expect(screen.queryByText("Recuperando sua conta…")).not.toBeInTheDocument());
+    expect(screen.queryByText("Entre ou crie sua conta")).not.toBeInTheDocument();
+  });
+  it("only offers login after the server confirms a guest and retries failures without pretending logout", async () => {
+    vi.mocked(storeRequest).mockRejectedValueOnce(new Error("Conexão indisponível"));
+    render(<Storefront slug="shop" settings={settings} products={[]} path={["conta"]} paused={false}/>);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Conexão indisponível");
+    expect(screen.queryByText("Entre ou crie sua conta")).not.toBeInTheDocument();
+    vi.mocked(storeRequest).mockResolvedValueOnce({ ...quoteCart, customer: null });
+    fireEvent.click(screen.getByRole("button", { name: "Tentar recuperar conta" }));
+    expect(await screen.findByText("Entre ou crie sua conta")).toBeInTheDocument();
+  });
+  it("does not expose a previous tenant's cart while changing scope, nor accept an old response", async () => {
+    const storage = vi.spyOn(Storage.prototype, "setItem");
+    let first!: (value: unknown) => void;
+    vi.mocked(storeRequest).mockImplementationOnce(() => new Promise(resolve => { first = resolve; })).mockResolvedValueOnce({ ...quoteCart, customer: { ...quoteCart.customer!, name: "Outra loja" } });
+    const { result, rerender } = renderHook(({ api }) => useBuyerCart(api, true), { initialProps: { api: "/api/store/first" } });
+    const previousReset = result.current.reset;
+    rerender({ api: "/api/store/second" }); expect(result.current.cart).toBeNull();
+    await waitFor(() => expect(result.current.cart?.customer?.name).toBe("Outra loja"));
+    act(() => previousReset());
+    expect(result.current.cart?.customer?.name).toBe("Outra loja");
+    await act(async () => first(quoteCart));
+    expect(result.current.cart?.customer?.name).toBe("Outra loja");
+    expect(storage).not.toHaveBeenCalled();
+  });
+  it("hides an already-loaded identity immediately when switching stores", async () => {
+    vi.mocked(storeRequest).mockResolvedValueOnce(quoteCart);
+    const { result, rerender } = renderHook(({ api }) => useBuyerCart(api, true), { initialProps: { api: "/api/store/first" } });
+    await waitFor(() => expect(result.current.cart?.customer).toEqual(quoteCart.customer));
+    let finish!: (value: unknown) => void;
+    vi.mocked(storeRequest).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    rerender({ api: "/api/store/second" }); expect(result.current.cart).toBeNull();
+    await act(async () => finish({ ...quoteCart, customer: null }));
+    expect(result.current.cart?.customer).toBeNull();
+  });
+  it("removes private content after successful logout and only shows login once guest state is confirmed", async () => {
+    vi.mocked(storeRequest).mockResolvedValueOnce(quoteCart);
+    render(<Storefront slug="shop" settings={settings} products={[]} path={["conta"]} paused={false}/>);
+    await screen.findByText("Olá, Cliente teste");
+    let logout!: (value: unknown) => void, guest!: (value: unknown) => void;
+    vi.mocked(storeRequest).mockImplementation((_url, method) => new Promise(resolve => { if (method === "POST") logout = resolve; else guest = resolve; }));
+    fireEvent.click(screen.getByRole("button", { name: "Sair" }));
+    expect(screen.queryByText("Entre ou crie sua conta")).not.toBeInTheDocument();
+    await act(async () => logout({ ok: true }));
+    await waitFor(() => expect(guest).toBeDefined());
+    expect(screen.queryByText("Olá, Cliente teste")).not.toBeInTheDocument();
+    expect(screen.queryByText("Entre ou crie sua conta")).not.toBeInTheDocument();
+    await act(async () => guest({ ...quoteCart, customer: null }));
+    expect(await screen.findByText("Entre ou crie sua conta")).toBeInTheDocument();
+  });
+  it("opens account shortcuts and closes with Escape, restoring focus", async () => {
+    vi.mocked(storeRequest).mockResolvedValue(quoteCart);
+    render(<Storefront slug="shop" settings={settings} products={[]} path={["conta"]} paused={false} basePath=""/>);
+    await screen.findByText("Olá, Cliente teste");
+    fireEvent.click(screen.getByRole("button", { name: "Minha conta" }));
+    const navigation = screen.getByRole("navigation", { name: "Atalhos da minha conta" });
+    expect(navigation.querySelector('a[href="/pedidos"]')).toHaveTextContent("Minhas compras");
+    expect(navigation.querySelector('a[href="/orcamentos"]')).toHaveTextContent("Meus orçamentos");
+    fireEvent.keyDown(navigation, { key: "Escape" });
+    expect(screen.queryByRole("navigation", { name: "Atalhos da minha conta" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Minha conta" })).toHaveFocus();
+  });
+});

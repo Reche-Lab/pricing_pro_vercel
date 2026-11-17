@@ -29,7 +29,6 @@ import {
   ImagePlus,
   Loader2,
   X,
-  Download,
   FileText,
   Paintbrush,
 } from "lucide-react";
@@ -37,12 +36,11 @@ import dynamic from "next/dynamic";
 import type {
   publicCommerceProduct,
   cartView,
-  buyerOrders,
 } from "@/repositories/commerce";
 import type { CartLine, StoreSettings } from "@/domain/commerce/schemas";
 import { artworkLimit, commerceSelectionError, distributeQuantity } from "@/domain/commerce/commerce";
 import { normalizeProductSearchTerm } from "@/domain/products/product-search";
-import { storeRequest, storeMoney } from "./store-http";
+import { storeRequest } from "./store-http";
 import styles from "./store.module.css";
 import { StoreHome, StoreProductCard } from "./StoreHome";
 import { StoreFooter } from "./StoreFooter";
@@ -53,32 +51,32 @@ import { StoreProductGallery } from "./StoreProductGallery";
 import { StorePriceBreakdown } from "./StorePriceBreakdown";
 import { StoreDeliveryInquiry } from "./StoreDeliveryInquiry";
 import { StoreArtworkGuide } from "./StoreArtworkGuide";
-import { CommerceOrderArtworks } from "./CommerceOrderArtworks";
 import { StoreOrderSummary as Summary } from "./StoreOrderSummary";
 import { StoreCheckout as Checkout } from "./StoreCheckout";
 import { BuyerLogin } from "./StoreBuyerLogin";
-import { StoreOrderContactDetails } from "./StoreOrderContactDetails";
+import { BuyerSessionBoundary } from "./BuyerSessionBoundary";
+import { StoreAccountMenu } from "./StoreAccountMenu";
+import { useBuyerCart } from "./use-buyer-cart";
+import accountStyles from "./buyer-account.module.css";
 import { useStoreTheme, accentForeground } from "./use-store-theme";
 import { useCommercePreview } from "./CommercePreviewProvider";
 import type { StoreArtwork } from "./StoreArtworkTools";
 import { libraryQuerySchema, type LibraryResult } from "@/domain/commerce/library";
 import { pendingCartArtworks } from "@/domain/commerce/artwork-readiness";
-import { formatDeliveryDate } from "@/domain/shipping/production-lead-time";
 import { useQuoteJourney } from "./use-quote-journey";
 import { StoreQuoteJourney } from "./StoreQuoteJourney";
 import { StoreQuoteOverview } from "./StoreQuoteOverview";
 import { quoteArtworkBenefits } from "@/domain/commerce/quote-artwork-benefit";
 const StoreLibrary = dynamic(() => import("./StoreLibrary").then(m => m.StoreLibrary));
 const FeaturedLibraryCampaigns = dynamic(() => import("./StoreLibrary").then(m => m.FeaturedLibraryCampaigns));
-const StorePayment = dynamic(() => import("./StorePayment").then(module => module.StorePayment), { ssr: false });
-const StoreBuyerQuotes = dynamic(() => import("./StoreBuyerQuotes").then(module => module.StoreBuyerQuotes));
+const StoreBuyerQuotes = dynamic(() => import("./StoreBuyerQuotes").then(module => module.StoreBuyerQuotes), { loading: () => <p role="status">Carregando seus orçamentos…</p> });
+const StoreBuyerOrders = dynamic(() => import("./StoreBuyerOrders").then(module => module.StoreBuyerOrders), { loading: () => <p role="status">Abrindo seus pedidos…</p> });
 const ArtworkTools = dynamic(
   () => import("./StoreArtworkTools").then((m) => m.StoreArtworkTools),
   { ssr: false },
 );
 type Product = ReturnType<typeof publicCommerceProduct>;
 type Cart = Awaited<ReturnType<typeof cartView>>;
-type Order = Awaited<ReturnType<typeof buyerOrders>>[number];
 type Props = {
   slug: string;
   settings: StoreSettings;
@@ -112,22 +110,19 @@ export function Storefront({
   const { theme, toggle } = useStoreTheme(slug, settings.theme);
   const base = preview ? `/commerce/${slug}/preview` : (basePath ?? `/loja/${slug}`);
   const api = preview ? `/api/commerce/${slug}/preview` : `/api/store/${slug}`;
-  const [buyerCart, setCart] = useState<Cart | null>(null);
+  const { cart: buyerCart, error: cartError, refresh: refreshBuyerCart, reset: resetBuyerCart } = useBuyerCart(api, !preview && !children);
   const simulation = useCommercePreview();
   const cart = preview ? (simulation?.cart ?? null) : buyerCart;
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [orders, setOrders] = useState<Order[]>([]);
   const refresh = useCallback(async () => {
     if (preview || children) return;
-    const data = await storeRequest(`${api}/cart`);
-    setCart(data);
-  }, [api, preview, children]);
-  useEffect(() => {
-    void refresh().catch((e) => setError(e.message));
-  }, [refresh]);
+    await refreshBuyerCart();
+  }, [preview, children, refreshBuyerCart]);
   const view = path[0] ?? "home";
+  const accountView = ["conta", "orcamentos", "pedidos"].includes(view);
+  const visibleError = error || (!accountView ? cartError : "");
   const { quoting, setQuoteMode } = useQuoteJourney(api, view, preview);
   const quoteDetails = view === "orcamento" && searchParams.get("etapa") === "dados";
   const [quoteStep, setQuoteStep] = useState<"details" | "review">("details");
@@ -150,15 +145,6 @@ export function Storefront({
     const element = document.getElementById(`item-${focusedItem}`);
     element?.scrollIntoView?.({ behavior: "smooth", block: "center" }); element?.focus();
   }, [view, focusedItem, cart]);
-  const refreshOrders = useCallback(async () => {
-    if (preview) return;
-    const data = await storeRequest(`${api}/orders`);
-    setOrders(data.orders);
-  }, [api, preview]);
-  useEffect(() => {
-    if (view === "pedidos" && cart?.customer)
-      void refreshOrders().catch((e) => setError(e.message));
-  }, [view, cart?.customer?.id, refreshOrders, cart?.customer]);
   async function action(work: () => Promise<void>) {
     if (busy) return false;
     setBusy(true);
@@ -187,9 +173,16 @@ export function Storefront({
     });
     await refresh();
   }
+  async function logout() {
+    await action(async () => {
+      await storeRequest(`${api}/auth`, "POST", { action: "logout" });
+      resetBuyerCart();
+      await import("./studio-draft-cache").then(cache => cache.clearStudioDraft({ slug, preview })).catch(() => undefined);
+      await refresh();
+    });
+  }
   const selectedProduct =
     view === "produto" ? products.find((p) => p.id === path[1]) : undefined;
-  const order = orders.find((o) => o.id === path[1]);
   return (
     <main
       className={`${styles.store} ${settings.experience?.style === "studio" ? studioStyles.theme : ""}`}
@@ -282,18 +275,6 @@ export function Storefront({
             >
               {theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
             </button>
-            {!preview ? (
-              <>
-                <Link
-                  href={`${base}/conta`}
-                  title="Minha conta"
-                  aria-label="Minha conta"
-                >
-                  <UserRound size={21} />
-                </Link>
-                <Link href={`${base}/orcamentos`} title="Meus orçamentos" aria-label="Meus orçamentos"><FileText size={20}/></Link>
-              </>
-            ) : null}
             <Link
               className={styles.cartButton}
               href={`${base}/carrinho`}
@@ -303,6 +284,7 @@ export function Storefront({
               {quoting ? <FileText size={21}/> : <ShoppingBag size={21} />}
               <span className="text-sm">{cart?.lines.length ?? 0}</span>
             </Link>
+            {!preview ? <StoreAccountMenu key={api} base={base} customer={cart?.customer ?? null} loading={!cart && !cartError && !children} busy={busy} navigationKey={`${base}/${path.join("/")}`} onLogout={logout}/> : null}
           </nav>
         </div>
         <StoreCategoryNavigation products={products} base={base} preview={preview} view={view}
@@ -315,7 +297,7 @@ export function Storefront({
       ) : null}
       <div
         className={
-          view === "home" && !libraryEnabled && !error && !message && !paused
+          view === "home" && !libraryEnabled && !visibleError && !message && !paused
             ? styles.emptyWrap
             : styles.wrap
         }
@@ -326,9 +308,9 @@ export function Storefront({
             disponíveis em sua conta.
           </p>
         ) : null}
-        {error ? (
+        {visibleError ? (
           <div role="alert" className={`${styles.message} ${styles.error}`}>
-            {error}
+            {visibleError}
             <button
               className="ml-3 underline"
               onClick={() => {
@@ -380,38 +362,11 @@ export function Storefront({
           />
         ) : null}
         {view === "conta" ? (
-          <>
-            {cart?.customer ? (
-              <div className="max-w-xl space-y-5">
-                <h1 className={styles.title}>Olá, {cart.customer.name}</h1>
-                <p>{cart.customer.email}</p>
-                <Link className={styles.secondary} href={`${base}/orcamentos`}><FileText size={17}/>Meus orçamentos</Link>
-                <Link className={styles.primary} href={`${base}/pedidos`}>
-                  Meus pedidos
-                  <ArrowRight size={17} />
-                </Link>
-                <button
-                  className={`${styles.secondary} ml-3`}
-                  disabled={busy}
-                  onClick={() =>
-                    action(async () => {
-                      await storeRequest(`${api}/auth`, "POST", {
-                        action: "logout",
-                      });
-                      await import("./studio-draft-cache").then(cache => cache.clearStudioDraft({ slug, preview })).catch(() => undefined);
-                      setOrders([]);
-                      await refresh();
-                    })
-                  }
-                >
-                  <LogOut size={16} />
-                  Sair
-                </button>
-              </div>
-            ) : (
-              <BuyerLogin api={api} onLogged={refresh} disabled={!cart} />
-            )}
-          </>
+          <BuyerSessionBoundary cart={cart} error={cartError} api={api} refresh={refresh} preview={preview}>{cart?.customer ? <section className={accountStyles.profile}>
+            <header className={accountStyles.profileHeading}><span className={accountStyles.avatar}><UserRound size={26}/></span><div><h1>Olá, {cart.customer.name}</h1><p>{cart.customer.email}</p></div></header>
+            <nav className={accountStyles.shortcuts} aria-label="Sua área na loja"><Link href={`${base}/orcamentos`}><FileText size={22}/><div><strong>Meus orçamentos</strong><small>Consulte suas propostas e PDFs.</small></div></Link><Link href={`${base}/pedidos`}><ShoppingBag size={22}/><div><strong>Minhas compras</strong><small>Acompanhe pedidos, pagamentos e artes.</small></div></Link></nav>
+            <div><button type="button" className={styles.secondary} disabled={busy} onClick={() => void logout()}><LogOut size={16}/>Sair</button></div>
+          </section> : null}</BuyerSessionBoundary>
         ) : null}
         {view === "carrinho" ? (
           <>
@@ -618,58 +573,9 @@ export function Storefront({
             )}
           </>
         ) : null}
-        {view === "orcamentos" ? (!cart?.customer ? <BuyerLogin api={api} onLogged={refresh} disabled={!cart}/> : <StoreBuyerQuotes api={api} base={base} quoteId={path[1]} revision={cart.revision} hasCart={cart.lines.length > 0} onRestored={async mode => { setQuoteMode(mode === "quote"); await refresh(); }}/>) : null}
+        {view === "orcamentos" ? <BuyerSessionBoundary cart={cart} error={cartError} api={api} refresh={refresh} preview={preview}>{cart?.customer ? <StoreBuyerQuotes key={`${api}:${cart.customer.id}`} api={api} base={base} quoteId={path[1]} revision={cart.revision} hasCart={cart.lines.length > 0} onRestored={async mode => { setQuoteMode(mode === "quote"); await refresh(); }}/> : null}</BuyerSessionBoundary> : null}
         {view === "pedidos" ? (
-          <>
-            <h1 className={styles.title}>
-              {path[1] ? "Seu pedido" : "Meus pedidos"}
-            </h1>
-            {!cart?.customer ? (
-              <BuyerLogin api={api} onLogged={refresh} disabled={!cart} />
-            ) : path[1] ? (
-              order ? (
-                <OrderDetail
-                  order={order}
-                  api={api}
-                  instructions={cart.payments.manual_instructions}
-                  busy={busy}
-                  onRefresh={async () => { await action(refreshOrders); }}
-                />
-              ) : (
-                <p>Carregando pedido ou pedido não encontrado nesta conta.</p>
-              )
-            ) : orders.length ? (
-              <div className="divide-y divide-zinc-200">
-                {orders.map((item) => (
-                  <Link
-                    className="flex flex-wrap items-center justify-between gap-3 py-5"
-                    key={item.id}
-                    href={`${base}/pedidos/${item.id}`}
-                  >
-                    <span>
-                      <strong>
-                        Pedido {item.id.slice(0, 8).toUpperCase()}
-                      </strong>
-                      <span className="mt-1 block text-sm text-zinc-500">
-                        {new Date(item.created_at).toLocaleDateString("pt-BR")}{" "}
-                        · {item.payment_environment === "test" ? "TESTE · " : ""}{paymentLabel(item.payment_status)}
-                      </span>
-                    </span>
-                    <span className="flex items-center gap-3 font-semibold">
-                      {storeMoney(item.total_cents)}
-                      <ArrowRight size={18} />
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <Empty
-                text="Nenhum pedido nesta conta ainda."
-                href={`${base}/catalogo`}
-                label="Ver produtos"
-              />
-            )}
-          </>
+          <BuyerSessionBoundary cart={cart} error={cartError} api={api} refresh={refresh} preview={preview}>{cart?.customer ? <StoreBuyerOrders key={`${api}:${cart.customer.id}`} api={api} base={base} buyerId={cart.customer.id} orderId={path[1]} instructions={cart.payments.manual_instructions ?? ""} products={products} onSessionExpired={refresh}/> : null}</BuyerSessionBoundary>
         ) : null}
       </div>
       <StoreFooter settings={settings} products={products} base={base} preview={preview} libraryEnabled={libraryEnabled} institutionalLinks={institutionalLinks} payments={cart?.payments} view={view}/>
@@ -1108,86 +1014,6 @@ function PreviewCheckout({
   );
 }
 
-function OrderDetail({
-  order,
-  instructions,
-  busy,
-  onRefresh,
-  api,
-}: {
-  order: Order;
-  instructions: string;
-  busy: boolean;
-  onRefresh: () => Promise<void>;
-  api: string;
-}) {
-  return (
-    <div className={styles.columns}>
-      <div>
-        {order.payment_environment === "test" ? <p className={styles.testNotice}>Pedido de teste · Validação de pagamento, sem produção ou envio.</p> : null}
-        <p className="mb-5 text-sm text-zinc-500">
-          Pedido {order.id.toUpperCase()}
-        </p>
-        <div className="mb-6 flex flex-wrap gap-3">
-          <span className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            {paymentLabel(order.payment_status)}
-          </span>
-          <span className="rounded-md bg-cyan-50 px-3 py-2 text-sm text-cyan-900">
-            {
-              (
-                {
-                  received: "Pedido recebido",
-                  production: "Em produção",
-                  shipped: "Enviado",
-                  completed: "Concluído",
-                } as Record<string, string>
-              )[order.fulfillment_status]
-            }
-          </span>
-        </div>
-        {order.items.map((item) => (
-          <div
-            className={`${styles.line} flex justify-between gap-4`}
-            key={item.id}
-          >
-            <div>
-              <strong>{item.name}</strong>
-              <p className={styles.muted}>
-                {item.quantity} unidades · {item.artworkName}
-              </p>
-            </div>
-            <span>{storeMoney(item.totalCents)}</span>
-          </div>
-        ))}
-        <CommerceOrderArtworks endpoint={`${api}/orders/${order.id}/artworks`} />
-        <StoreOrderContactDetails billing={order.billing} address={order.address} same={order.deliveryAddressSameAsBilling} shippingOption={order.shippingOption}/>
-        {order.production ? <p className="mt-4 text-sm">Previsão registrada: produção de <strong>{order.production.productionDays} dias úteis</strong>{order.production.transportDays !== null ? ` + ${order.production.transportDays} dias úteis de transporte` : " · transporte a confirmar"}.{order.production.deliveryDate ? <span className="mt-1 block font-semibold">{order.delivery === "pickup" ? "Retirada" : "Recebimento"} estimado: {formatDeliveryDate(order.production.deliveryDate)}</span> : null}<small className="mt-1 block opacity-70">Condicionada ao pagamento e à aprovação das artes na data de criação. Confirmações posteriores alteram a previsão.</small></p> : null}
-        {order.hasTerms ? <section className="mt-6 space-y-3 border-t border-current/10 pt-5"><h2 className="text-sm font-semibold">Condições desta compra</h2><p className={styles.muted}>Consulte o texto registrado neste pedido{order.termsVersion ? `, versão ${order.termsVersion}` : ""}. Alterações posteriores na loja não mudam este registro.</p><a href={`${api}/orders/${order.id}/conditions`} className={styles.secondary}><Download size={16}/>Baixar condições aceitas</a></section> : null}
-      </div>
-      <aside className={styles.summary}>
-        <Summary
-          subtotal={order.subtotal_cents}
-          shipping={order.shipping_cents}
-          artworkDiscountCents={order.artworkDiscountCents}
-        />
-        {order.payment_status === "pending" ? (
-          order.provider === "mercado_pago" ? (
-            <StorePayment key={order.id} api={api} orderId={order.id} onConfirmed={onRefresh}/>
-          ) : (
-            <p className="my-5 whitespace-pre-wrap text-sm">{instructions}</p>
-          )
-        ) : null}
-        {!(order.payment_status === "pending" && order.provider === "mercado_pago") ? <button
-          className={`${styles.secondary} mt-3 w-full`}
-          disabled={busy}
-          onClick={() => void onRefresh()}
-        >
-          Atualizar situação
-        </button> : null}
-      </aside>
-    </div>
-  );
-}
 function Empty({
   text,
   href,
@@ -1206,11 +1032,4 @@ function Empty({
       </Link>
     </div>
   );
-}
-function paymentLabel(status: string) {
-  return status === "paid"
-    ? "Pagamento confirmado"
-    : status === "refunded"
-      ? "Pagamento estornado"
-      : "Aguardando pagamento";
 }

@@ -403,3 +403,18 @@ Sem migration ou variável nova. A exclusão afeta somente orçamentos particula
 - [x] Regressão geral com 1.058 testes aprovados e 76 integrações condicionais não executadas nesta rodada. Lint, tipos e build de produção aprovados com uma CPU e memória limitada; nenhuma alteração em produção.
 
 Nenhuma migration ou variável nova necessária.
+
+### Área do Cliente, Compras e Sessão
+
+- [x] “Meus pedidos” em linhas compactas, com total, data, itens/unidades e estados separados de pagamento e andamento. Busca por código/produto/data, filtro de pagamento e ordenação, sem modificar os pedidos.
+- [x] “Seu pedido” com total no cabeçalho, etapas baseadas no estado real, itens com miniaturas do catálogo quando disponíveis, entrega/prazos registrados e resumo financeiro. Dados completos recolhidos; artes e condições aceitas preservadas nos endpoints privados existentes.
+- [x] Pagamento Mercado Pago continua no componente oficial existente e apenas para pedidos pendentes; os demais casos mostram confirmação, estorno ou instruções manuais. Pedidos de teste não apresentam uma promessa de produção/envio real.
+- [x] Menu de conta com orçamentos, compras, perfil e logout, acionável por clique/toque e teclado. Fecha ao selecionar, clicar fora ou usar Escape, com retorno de foco; posição respeita telas pequenas e domínio próprio.
+- [x] Carregamento, falha de sessão e visitante confirmado são estados distintos. O formulário de acesso só aparece após resposta de visitante, sem flash durante a recuperação. Respostas antigas são descartadas na troca de tenant/cliente; dados de identidade não são salvos em localStorage. Logout retira o conteúdo privado após sucesso do servidor, antes de carregar o estado visitante.
+- [x] Playwright com o Storefront real e APIs simuladas em claro/escuro, 1440/390/320 px e paisagem: lista/filtros, detalhe, artes recolhidas, dropdown, domínio próprio, erro/repetição e logout. Observador de DOM confirmou ausência do formulário de login durante navegação autenticada; capturas inspecionadas e ausência de overflow verificada. Nenhum pagamento, envio de e-mail ou alteração de pedido real.
+- [x] 38 testes focados aprovados: sessão pendente/visitante/falha, logout, troca de loja e respostas antigas, menu/foco, lista/filtros, detalhe, pagamento pendente/pago/teste/estorno e regressões de prévia, orçamento e pagamento existente.
+- [x] Regressão geral: 1.072 testes aprovados e 76 ignorados em 194 arquivos aprovados (um worker, memória limitada).
+- [x] Lint sem avisos, checagem de tipos e `git diff --check` aprovados.
+- [x] Build de produção aprovado com memória limitada (`npm run build:local`, um CPU, heap de 1 GB).
+
+Reutiliza autenticação, APIs e persistência existentes. Nenhuma migration ou variável nova necessária.

@@ -1,0 +1,25 @@
+.session { display: grid; justify-items: center; align-content: center; gap: 18px; min-height: 240px; padding: 28px 0; text-align: center; color: var(--muted); }
+.session > p[role="status"] { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.session > svg { color: var(--highlight); }
+.menuRoot { position: relative; }
+.menuTrigger { display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-width: 44px; min-height: 44px; border: 1px solid transparent; border-radius: 6px; }
+.menuTrigger:hover, .menuTrigger[aria-expanded="true"] { background: var(--soft); border-color: var(--line); color: var(--highlight); }
+.dropdown { position: absolute; right: 0; top: calc(100% + 8px); z-index: 70; width: 260px; max-width: calc(100vw - 32px); padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); box-shadow: 0 16px 40px #0003; }
+.menuIdentity { display: grid; gap: 4px; padding: 10px 10px 14px; margin-bottom: 6px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.menuIdentity small { font-size: 11px; color: var(--muted); }
+.menuIdentity strong { font-size: 14px; font-weight: 650; }
+.dropdown > a, .dropdown > button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; border-radius: 5px; padding: 10px; font-size: 13px; text-align: left; }
+.dropdown > a:hover, .dropdown > button:hover { color: var(--highlight); background: var(--soft); }
+.dropdown > :is(a, button) > svg { flex-shrink: 0; }
+.profile { display: grid; gap: 24px; max-width: 760px; padding-bottom: 56px; }
+.profileHeading { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
+.avatar { width: 52px; height: 52px; display: grid; place-items: center; background: var(--soft); color: var(--highlight); border-radius: 8px; flex-shrink: 0; }
+.profileHeading h1 { font-size: 24px; line-height: 1.4; font-weight: 700; overflow-wrap: anywhere; }
+.profileHeading p { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.shortcuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.shortcuts > a { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.shortcuts > a:hover { border-color: var(--accent); background: var(--soft); }
+.shortcuts strong { display: block; font-size: 15px; margin-bottom: 6px; }
+.shortcuts small { color: var(--muted); font-size: 12px; }
+.shortcuts > a > svg { color: var(--highlight); flex-shrink: 0; }
+@media(max-width: 600px) { .shortcuts { grid-template-columns: minmax(0, 1fr); } .profileHeading h1 { font-size: 22px; } }
