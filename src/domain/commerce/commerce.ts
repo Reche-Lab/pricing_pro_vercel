@@ -25,6 +25,7 @@ export type PriceProduct = {
   personalized?: boolean;
   artworkOptions?: CommerceArtworkOptions;
 };
+export const COMMERCE_MAX_TOTAL_CENTS = 100000000;
 export function artworkLimit(quantity: number, configured = 10) {
   return Math.max(0, Math.min(Number.isFinite(quantity) ? Math.floor(quantity) : 0, configured, 10));
 }
@@ -137,9 +138,9 @@ export function calculateCart(lines: CartLine[], products: PriceProduct[], ready
   if (
     !Number.isSafeInteger(totalCents) ||
     totalCents < 0 ||
-    totalCents > 100000000
+    totalCents > COMMERCE_MAX_TOTAL_CENTS
   )
-    throw new CommerceError("Total fora do limite permitido.");
+    throw new CommerceError("Total fora do limite permitido.", 400, { code: "cart_total_limit" });
   const artworkDiscountCents = items.reduce((sum, item) => sum + item.artworkDiscountCents, 0);
   return { totalCents, items, artworkDiscountCents, baseSubtotalCents: totalCents + artworkDiscountCents };
 }

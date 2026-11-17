@@ -11,7 +11,7 @@ import { Storefront } from "@/components/commerce/Storefront";
 import React, { cache } from "react";
 import { storeInstitutionalPage, storeInstitutionalPages } from "@/domain/commerce/institutional";
 import { StoreInstitutionalPage } from "@/components/commerce/StoreInstitutionalPage";
-import { institutionalStructuredData, serializeStructuredData, storePageMetadata } from "@/services/commerce/store-seo";
+import { institutionalStructuredData, serializeStructuredData, storePageMetadata, storeIdentityStructuredData } from "@/services/commerce/store-seo";
 import { purchaseConditionsPage } from "@/domain/commerce/purchase-conditions";
 import { readCommerceLibrary } from "@/repositories/commerce-library";
 import { libraryQuerySchema } from "@/domain/commerce/library";
@@ -69,13 +69,15 @@ export default async function StorePage({ params, searchParams }: Props) {
   if (libraryPath && path[1] && !library?.campaigns.some(c => c.slug === path[1])) notFound();
   const products = await loadProducts(store.tenant_id);
   const product = path[0] === "produto" ? findCommerceProduct(products, path[1]) : undefined;
+  const query = await searchParams ?? {};
   if (path[0] === "produto") {
     if (!product) notFound();
-    if (product.slug && path[1] !== product.slug) permanentRedirect(productRedirectUrl(customDomain ? "" : `/loja/${slug}`, product, await searchParams ?? {}));
+    if (product.slug && path[1] !== product.slug) permanentRedirect(productRedirectUrl(customDomain ? "" : `/loja/${slug}`, product, query));
   }
   return (
     <>
-    {product && store.status === "published" ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeStructuredData(storeProductStructuredData(slug, product, store.settings)) }} /> : null}
+    {path.length === 0 && store.status === "published" ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeStructuredData(storeIdentityStructuredData(slug, store.settings)) }} /> : null}
+    {product && store.status === "published" ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeStructuredData(storeProductStructuredData(slug, product, store.settings, undefined, typeof query.quantidade === "string" ? query.quantidade : undefined)) }} /> : null}
     <Storefront
       slug={slug}
       settings={store.settings}

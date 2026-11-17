@@ -1,6 +1,6 @@
 import { calculateFinalSubtotal } from "@/domain/quotes/composite-pricing";
 import { interpolateGeometric, normalizePricingCurvePoints, roundMoney } from "@/domain/pricing/pricing";
-import type { PriceProduct } from "./commerce";
+import { COMMERCE_MAX_TOTAL_CENTS, CommerceError, type PriceProduct } from "./commerce";
 
 export function commercePriceSummary(product: PriceProduct) {
   const points = normalizePricingCurvePoints(product.curve.points);
@@ -25,8 +25,9 @@ export function commercePriceSummary(product: PriceProduct) {
   // Scan the bounded published range once: rising curves and fee thresholds can have interior minima.
   for (let quantity = product.minQuantity; quantity <= product.maxQuantity; quantity++) {
     const cents = unitCents(quantity);
-    if (cents < minimumUnitCents) { minimumUnitCents = cents; discountQuantity = quantity; }
+    if (Number.isSafeInteger(cents * quantity) && cents * quantity <= COMMERCE_MAX_TOTAL_CENTS && cents < minimumUnitCents) { minimumUnitCents = cents; discountQuantity = quantity; }
   }
+  if (!Number.isFinite(minimumUnitCents)) throw new CommerceError("Nenhuma quantidade deste produto está dentro do limite de compra.", 409);
   return {
     originalUnitCents, minimumUnitCents, discountQuantity,
     maxDiscountPercent: originalUnitCents > 0

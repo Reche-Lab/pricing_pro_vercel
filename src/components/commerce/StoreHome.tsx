@@ -30,6 +30,8 @@ export function StoreProductCard({
   base: string;
 }) {
   const alternate = product.media?.find(media => media.kind === "image" && media.url !== product.imageUrl);
+  const best = product.quantityPricing?.bestPrice;
+  const discount = best?.discountPercent ?? product.offer.maxDiscountPercent;
   return (
     <Link className={styles.product} href={commerceProductPath(base, product)} data-product-card>
       <div className={`${styles.productPhoto} ${alternate ? styles.hasAlternate : ""}`} data-product-photo>
@@ -60,10 +62,10 @@ export function StoreProductCard({
         em {product.minQuantity}{" "}
         {product.minQuantity === 1 ? "unidade" : "unidades"}
       </p>
-      {product.offer.maxDiscountPercent > 0 ? <p className={styles.discountBadge}
-        title={`Desconto de ${product.offer.maxDiscountPercent}% em ${product.offer.discountQuantity} unidades${product.personalized ? " com uma arte" : ""}, em relação ao preço de uma unidade.`}>
-        Até {product.offer.maxDiscountPercent}% de desconto
-        <small>em {product.offer.discountQuantity.toLocaleString("pt-BR")} un.{product.personalized ? " · 1 arte" : ""}</small>
+      {discount > 0 ? <p className={styles.discountBadge}
+        title={`Desconto de ${discount}% em ${best?.quantity ?? product.offer.discountQuantity} unidades${product.personalized ? " com uma arte" : ""}, em relação ao preço de uma unidade.`}>
+        Até {discount}% de desconto
+        <small>{best ? `${storeMoney(best.unitCents)}/un. · ` : ""}em {(best?.quantity ?? product.offer.discountQuantity).toLocaleString("pt-BR")} un.{product.personalized ? " · 1 arte" : ""}</small>
       </p> : null}
     </Link>
   );

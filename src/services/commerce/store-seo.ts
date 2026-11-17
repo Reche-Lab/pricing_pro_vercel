@@ -54,3 +54,12 @@ export function institutionalStructuredData(slug: string, pageSlug: string, sett
 export function serializeStructuredData(value: unknown) {
   return JSON.stringify(value).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 }
+
+export function storeIdentityStructuredData(slug: string, settings: StoreSettings, origin = commerceSiteOrigin()) {
+  const base = commerceStoreUrl(slug, origin);
+  return { "@context": "https://schema.org", "@graph": [
+    { "@type": "Organization", "@id": `${base}#organization`, name: settings.name, url: base, email: settings.contactEmail,
+      ...(settings.contactPhone ? { telephone: settings.contactPhone } : {}), ...(settings.logoUrl ? { logo: settings.logoUrl } : {}) },
+    { "@type": "WebSite", "@id": `${base}#website`, url: base, name: settings.name, inLanguage: "pt-BR", publisher: { "@id": `${base}#organization` } },
+  ] };
+}

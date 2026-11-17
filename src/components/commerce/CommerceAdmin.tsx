@@ -22,6 +22,7 @@ import {
   Mail,
   Star,
   Bot,
+  Search,
 } from "lucide-react";
 import type { getCommerceAdmin } from "@/repositories/commerce";
 import type { StoreAdminInput, StoreSettings } from "@/domain/commerce/schemas";
@@ -36,6 +37,7 @@ import { CommerceLaunchPanel } from "./CommerceLaunchPanel";
 import { CommerceStoreAddress } from "./CommerceStoreAddress";
 import { CommercePaymentDiagnostics } from "./CommercePaymentDiagnostics";
 import { DeleteCommerceOrderButton } from "./DeleteCommerceOrderButton";
+import { CommerceMerchantProduct } from "./CommerceMerchantProduct";
 import { defaultCommercePaymentSettings, type CommercePaymentSettings } from "@/domain/commerce/payment-settings";
 import type { PaymentEnvironment } from "@/domain/commerce/payment-settings";
 import styles from "./commerce-admin.module.css";
@@ -45,6 +47,7 @@ const CommerceOlistSettings = dynamic(() => import("./CommerceOlistSettings").th
 const CommerceEmailSettings = dynamic(() => import("./CommerceEmailSettings").then(m => m.CommerceEmailSettings));
 const CommerceGoogleReviewsSettings = dynamic(() => import("./CommerceGoogleReviewsSettings").then(m => m.CommerceGoogleReviewsSettings));
 const CommerceAssistantSettings = dynamic(() => import("./CommerceAssistantSettings").then(m => m.CommerceAssistantSettings));
+const CommerceSearchSettings = dynamic(() => import("./CommerceSearchSettings").then(m => m.CommerceSearchSettings));
 const field =
   "min-w-0 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100";
 const button =
@@ -109,6 +112,7 @@ export function CommerceAdmin({
         personalized,
         pricingRule,
         artworkOptions,
+        merchant,
       } = p.snapshot;
       return {
         variantId,
@@ -123,6 +127,7 @@ export function CommerceAdmin({
         personalized,
         pricingRule,
         artworkOptions,
+        merchant,
         active: p.active,
       };
     }),
@@ -259,6 +264,7 @@ export function CommerceAdmin({
           ["address", "Domínio e DNS"],
           ["email", "E-mail da empresa"],
           ["google-reviews", "Avaliações Google"],
+          ["search", "Busca e catálogo"],
           ["assistant", "Assistente IA"],
           ["library", "Campanhas e artes"],
           ...(data.olistConfigured ? [["olist", "Olist"]] : []),
@@ -272,7 +278,7 @@ export function CommerceAdmin({
             onClick={() => setTab(id)}
             className={`${button} shrink-0 whitespace-nowrap ${tab === id ? "border-emerald-500 bg-emerald-500/10 text-emerald-200" : "text-zinc-400"}`}
           >
-            {id === "store" ? <Store size={16} /> : id === "payments" ? <CreditCard size={16} /> : id === "address" ? <Globe size={16}/> : id === "email" ? <Mail size={16}/> : id === "assistant" ? <Bot size={16}/> : id === "google-reviews" ? <Star size={16}/> : id === "library" ? <Images size={16}/> : id === "olist" ? <Link2 size={16}/> : <Package size={16} />}
+            {id === "store" ? <Store size={16} /> : id === "payments" ? <CreditCard size={16} /> : id === "address" ? <Globe size={16}/> : id === "email" ? <Mail size={16}/> : id === "assistant" ? <Bot size={16}/> : id === "google-reviews" ? <Star size={16}/> : id === "search" ? <Search size={16}/> : id === "library" ? <Images size={16}/> : id === "olist" ? <Link2 size={16}/> : <Package size={16} />}
             {label}
           </button>
         ))}
@@ -659,6 +665,7 @@ export function CommerceAdmin({
                       {publication.personalized ? <CommerceArtworkOptions value={publication.artworkOptions} onChange={artworkOptions => update({ artworkOptions })} onBusyChange={imageBusyChanged}
                         geometry={data.products.find(p => p.variant_id === publication.variantId)?.snapshot.geometry}
                         margins={data.products.find(p => p.variant_id === publication.variantId)?.snapshot.margins} /> : null}
+                      <CommerceMerchantProduct value={publication.merchant} onChange={merchant => update({ merchant })}/>
                       <button
                         className={`${button} justify-self-start text-rose-300`}
                         type="button"
@@ -819,6 +826,7 @@ export function CommerceAdmin({
       {tab === "address" ? <CommerceStoreAddress slug={data.store?.slug} urls={data.urls} value={settings.requestedDomain ?? ""} onChange={value => updateSetting("requestedDomain", value)} disabled={busy || pendingUploads > 0 || !data.store?.tenant_id}/> : null}
       {tab === "email" ? data.store?.tenant_id ? <CommerceEmailSettings storeName={settings.name} contactEmail={settings.contactEmail} onReadyChange={emailReadyChanged}/> : <p className="text-sm text-amber-200">Salve a loja antes de configurar o e-mail da empresa.</p> : null}
       {tab === "google-reviews" ? data.store?.tenant_id ? <CommerceGoogleReviewsSettings/> : <p className="text-sm text-amber-200">Salve a loja antes de configurar as avaliações Google.</p> : null}
+      {tab === "search" ? <CommerceSearchSettings publicUrl={data.urls?.public} published={Boolean(data.store?.enabled && data.store.status === "published")} selectedProducts={data.products.filter(product => product.active && product.snapshot.merchant?.enabled).length} onCatalog={() => setTab("store")}/> : null}
       {tab === "assistant" ? data.store?.tenant_id ? <CommerceAssistantSettings storeName={settings.name} storeSlug={data.store.slug}/> : <p className="text-sm text-amber-200">Salve a loja antes de configurar o assistente.</p> : null}
       {tab === "library" ? <CommerceLibraryAdmin products={data.products} slug={data.store?.slug} onBusyChange={setLibraryBusy}/> : null}
       {tab === "olist" && data.olistConfigured ? <CommerceOlistSettings/> : null}

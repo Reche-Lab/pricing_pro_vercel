@@ -4,6 +4,7 @@ import { productMediaSchema, safeCommerceMediaUrl } from "./product-media";
 import { commerceArtworkOptionsSchema } from "./artwork-options";
 import { productionSettingsSchema } from "@/domain/shipping/production-lead-time";
 import { storeExperienceSchema } from "./studio-experience";
+import { commerceMerchantSchema } from "./merchant";
 
 export const cartLineSchema = z
   .object({
@@ -90,6 +91,7 @@ export const publicationSchema = z
     maxArtworks: z.number().int().min(1).max(20),
     personalized: z.boolean(),
     artworkOptions: commerceArtworkOptionsSchema.optional(),
+    merchant: commerceMerchantSchema.optional(),
     pricingRule: z.enum(["per_art", "total", "average"]),
   })
   .strict()

@@ -4,6 +4,8 @@ import { getPool } from "@/lib/db/client";
 import { listProductVariants } from "@/repositories/products";
 import { listPlatformRules } from "@/repositories/platforms";
 import { commercePriceSummary } from "@/domain/commerce/offers";
+import { commerceQuantityPricing } from "@/domain/commerce/quantity-pricing";
+import { commerceMerchantSchema, type CommerceMerchant } from "@/domain/commerce/merchant";
 import { assertCommerceVideosReady } from "@/repositories/commerce-media";
 import type { ProductMedia } from "@/domain/commerce/product-media";
 import { paymentEnvironment, type PaymentEnvironment } from "@/domain/commerce/payment-settings";
@@ -48,6 +50,7 @@ export type CommerceProduct = PriceProduct & {
   geometry: PrintGeometry | null;
   margins: PrintMargins;
   artworkOptions?: CommerceArtworkOptions;
+  merchant?: CommerceMerchant;
 };
 export type CommerceStore = {
   art_library_enabled?: boolean;
@@ -163,7 +166,7 @@ export async function commerceProducts(
   );
   return rows.rows.map((row) => ({ ...row.snapshot, id: row.id, slug: row.slug }));
 }
-export function publicCommerceProduct(product: CommerceProduct) {
+function buildPublicCommerceProduct(product: CommerceProduct) {
   const {
     id,
     name,
@@ -190,6 +193,9 @@ export function publicCommerceProduct(product: CommerceProduct) {
     ],
     [product],
   );
+  const offer = commercePriceSummary(product);
+  const quantityPricing = commerceQuantityPricing(product, offer);
+  const merchant = commerceMerchantSchema.safeParse(product.merchant);
   return {
     id,
     ...(product.slug ? { slug: product.slug } : {}),
@@ -206,9 +212,23 @@ export function publicCommerceProduct(product: CommerceProduct) {
     geometry,
     margins,
     unitCents: price.items[0].unitCents,
-    offer: commercePriceSummary(product),
+    offer,
+    ...(quantityPricing ? { quantityPricing } : {}),
+    ...(merchant.success ? { merchant: merchant.data } : {}),
     ...(product.artworkOptions ? { artworkOptions: product.artworkOptions } : {}),
   };
+}
+const publicProductCache = new Map<string, ReturnType<typeof buildPublicCommerceProduct>>();
+export function publicCommerceProduct(product: CommerceProduct) {
+  // Cache only the public projection, keyed by the full current snapshot. Reads still verify active products in SQL.
+  const key = createHash("sha256").update(JSON.stringify(product)).digest("hex");
+  let value = publicProductCache.get(key);
+  if (value) publicProductCache.delete(key);
+  else value = structuredClone(buildPublicCommerceProduct(product));
+  publicProductCache.set(key, value);
+  if (publicProductCache.size > 256) publicProductCache.delete(publicProductCache.keys().next().value!);
+  // Callers may enrich previews; never allow one request to mutate a later request's cached prices.
+  return structuredClone(value);
 }
 export async function getCommerceAdmin(userId: string, tenantId: string) {
   const [store, products, variants, platforms, payments, orders, readiness, olist] =

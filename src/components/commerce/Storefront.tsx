@@ -66,6 +66,8 @@ import { pendingCartArtworks } from "@/domain/commerce/artwork-readiness";
 import { useQuoteJourney } from "./use-quote-journey";
 import { StoreQuoteJourney } from "./StoreQuoteJourney";
 import { findCommerceProduct } from "@/domain/commerce/product-urls";
+import { quantitySelection } from "@/domain/commerce/quantity-pricing";
+import { StoreQuantityPricing, StoreProductQuestions } from "./StoreQuantityPricing";
 import { StoreQuoteOverview } from "./StoreQuoteOverview";
 import { quoteArtworkBenefits } from "@/domain/commerce/quote-artwork-benefit";
 const StoreLibrary = dynamic(() => import("./StoreLibrary").then(m => m.StoreLibrary));
@@ -698,8 +700,18 @@ function ProductDetail({
   libraryEnabled: boolean;
   quoting?: boolean;
 }) {
-  const [quantity, setQuantity] = useState(String(product.minQuantity));
+  const productSearch = useSearchParams();
+  const quantityInput = useRef<HTMLInputElement>(null);
+  const quantityQuery = productSearch.getAll("quantidade");
+  const selectedQuantity = quantitySelection(quantityQuery.length === 1 ? quantityQuery[0] : undefined, product);
+  const selectionKey = JSON.stringify(quantityQuery);
+  const previousSelection = useRef(selectionKey);
+  const [quantity, setQuantity] = useState(() => String(selectedQuantity));
   const [groups, setGroups] = useState("1");
+  useEffect(() => {
+    if (previousSelection.current === selectionKey) return;
+    previousSelection.current = selectionKey; setQuantity(String(selectedQuantity)); setGroups("1");
+  }, [selectionKey, selectedQuantity]);
   const [draftArtworks, setDraftArtworks] = useState<Record<number, string>>({});
   const [draftNames, setDraftNames] = useState<Record<number, string>>({});
   const initialLibraryId = useSearchParams().get("arte") ?? undefined;
@@ -753,6 +765,8 @@ function ProductDetail({
   const previewPriceEvidence = JSON.stringify({ readyArtworkIds: artworks.filter(art => art.approved_at && art.crop).map(art => art.id) });
   const attachedCount = lines.filter(line => line.artworkId).length;
   const price = priced?.lines === lines ? priced.calculation : null;
+  const publishedRow = !error && lines.length === 1 && !lines[0].artworkId ? product.quantityPricing?.rows.find(row => row.quantity === lines[0].quantity) : undefined;
+  const displayPrice = price ?? (publishedRow ? { totalCents: publishedRow.totalCents, items: [{ unitCents: publishedRow.unitCents, quantity: publishedRow.quantity, artworkName: lines[0].artworkName }] } : null);
   const deliveryIssue = commerceSelectionError(lines, product);
   async function addToCart() {
     if (disabled || !price || deliveryIssue || artworkBusy || addingRef.current || (unusedArtworks > 0 && !allowUnused)) return;
@@ -810,18 +824,21 @@ function ProductDetail({
           imageUrl={product.imageUrl}
           media={product.media}
         />
-        <section>
+        <section className="min-w-0">
           <p className="mb-3 text-sm text-zinc-500">{product.category}</p>
           <h1 className={styles.title}>{product.name}</h1>
           <p className="whitespace-pre-wrap text-zinc-600">
             {product.description}
           </p>
+          {product.merchant?.enabled ? <p className="mt-2 text-xs text-zinc-500">Disponível para compra · produção e entrega conforme os prazos do pedido.</p> : null}
+          <StoreQuantityPricing product={product} disabled={adding || artworkBusy} onSelect={value => { setQuantity(String(value)); setGroups("1"); quantityInput.current?.focus({ preventScroll: true }); quantityInput.current?.scrollIntoView?.({ behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" }); }}/>
           <div className={`${styles.form} mt-7 sm:grid-cols-2`}>
             <label>
               Quantidade de produtos
               <input
                 inputMode="numeric"
                 placeholder={String(product.minQuantity)}
+                ref={quantityInput}
                 disabled={adding || artworkBusy}
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
@@ -855,8 +872,8 @@ function ProductDetail({
             </p>
           ) : null}
           <div className="my-6 border-y border-zinc-200 py-5">
-            <StorePriceBreakdown originalUnitCents={product.offer.originalUnitCents} quantity={Number(quantity) || 0} price={price} pending={lines.length > 0 && !error} />
-            {price ? (
+            <StorePriceBreakdown originalUnitCents={product.offer.originalUnitCents} quantity={Number(quantity) || 0} price={displayPrice} pending={lines.length > 0 && !error} />
+            {displayPrice ? (
               <p className="mt-2 text-sm text-zinc-500">
                 {product.pricingRule === "per_art"
                   ? "Preço calculado pela quantidade de cada arte."
@@ -930,6 +947,7 @@ function ProductDetail({
           {quantity.trim() ? <StoreDeliveryInquiry api={api} lines={lines} production={settings.production} disabled={Boolean(deliveryIssue)} disabledReason={deliveryIssue ?? undefined} /> : null}
         </section>
       </div>
+      <StoreProductQuestions product={product} settings={settings}/>
       {confirmation ? <aside className={styles.cartConfirmation} aria-label={quoting ? "Item adicionado ao orçamento" : "Confirmação do carrinho"}>
         <button type="button" className={styles.confirmationClose} title="Fechar confirmação" aria-label="Fechar confirmação" onClick={() => setConfirmation(null)}><X size={18} /></button>
         <img className={styles.confirmationImage} src={product.imageUrl} alt="" width={64} height={64} />

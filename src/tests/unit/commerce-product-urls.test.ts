@@ -44,7 +44,7 @@ describe("stable tenant-scoped product URLs", () => {
   it("publishes accurate product and breadcrumb JSON-LD without invented stock or reviews", () => {
     const data = storeProductStructuredData("ground-shop", product, settings, "https://platform.example.test");
     const item = data["@graph"][0];
-    expect(item).toMatchObject({ "@type": "Product", name: product.name, category: "Bottons", offers: { "@type": "Offer", price: "5.00", priceCurrency: "BRL", eligibleQuantity: { minValue: 1, maxValue: 1000 } } });
+    expect(item).toMatchObject({ "@type": "Product", name: product.name, category: "Bottons", offers: { "@type": "Offer", priceSpecification: { price: "5.00" }, priceCurrency: "BRL", eligibleQuantity: { minValue: 1, maxValue: 1 } } });
     expect(item).not.toHaveProperty("aggregateRating");
     expect(item.offers).not.toHaveProperty("availability");
     expect(data["@graph"][1]).toMatchObject({ "@type": "BreadcrumbList", itemListElement: [{ position: 1 }, { position: 2 }, { position: 3, item: "https://platform.example.test/loja/ground-shop/produto/botton-3-5-cm" }] });
