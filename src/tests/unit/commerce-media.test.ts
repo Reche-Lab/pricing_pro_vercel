@@ -15,6 +15,16 @@ vi.mock("@/lib/env/server", () => ({
 afterEach(() => vi.unstubAllGlobals());
 
 describe("commerce public media", () => {
+  it("contains an icon on a square transparent canvas without cropping the logo", async () => {
+    const bytes = await sharp({ create: { width: 800, height: 400, channels: 4, background: "red" } }).png().toBuffer();
+    const input = { purpose: "icon" as const, fileName: "brand.png", mimeType: "image/png" as const, fileSize: bytes.length, dataUrl: `data:image/png;base64,${bytes.toString("base64")}` };
+    expect(commerceMediaSchema.safeParse(input).success).toBe(true);
+    const result = await normalizeCommerceImage(input);
+    expect(await sharp(result).metadata()).toMatchObject({ format: "webp", width: 512, height: 512, hasAlpha: true });
+    const { data, info } = await sharp(result).raw().toBuffer({ resolveWithObject: true });
+    expect(data[3]).toBe(0);
+    expect(data[(256 * info.width + 256) * info.channels + 3]).toBe(255);
+  });
   it("optimizes a transparent logo while preserving its proportions", async () => {
     const bytes = await sharp({
       create: {

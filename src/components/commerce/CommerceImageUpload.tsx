@@ -12,7 +12,7 @@ export function CommerceImageUpload({
   saveHint = "Salve a loja para aplicar.",
 }: {
   label: string;
-  purpose: "logo" | "cover" | "product";
+  purpose: "logo" | "icon" | "cover" | "product";
   value: string;
   onChange: (url: string) => void;
   onBusyChange: (busy: boolean) => void;

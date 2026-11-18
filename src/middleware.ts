@@ -90,5 +90,5 @@ function requiresAcceptedTerms(path: string): boolean {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|site.webmanifest|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico)$).*)"]
+  matcher: ["/favicon.ico", "/icon.png", "/site.webmanifest", "/loja/:slug/icon.png", "/((?!_next/static|_next/image|favicon.ico|site.webmanifest|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico)$).*)"]
 };

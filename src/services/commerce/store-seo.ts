@@ -3,6 +3,7 @@ import type { StoreSettings } from "@/domain/commerce/schemas";
 import { INSTITUTIONAL_UPDATED, storeInstitutionalPage } from "@/domain/commerce/institutional";
 import { commerceStoreUrl } from "@/domain/commerce/domains";
 import { purchaseConditionsPage } from "@/domain/commerce/purchase-conditions";
+import { storeBrandMetadata } from "./store-branding";
 
 export function commerceSiteOrigin(appUrl = process.env.APP_URL || "https://liaflow-calcula.vercel.app") {
   const url = new URL(appUrl);
@@ -19,6 +20,7 @@ export function storePageMetadata(slug: string, path: string[], settings: StoreS
   const images = image ? [{ url: image, alt: settings.name }] : [];
   const index = published && (path.length === 0 || path[0] === "produto" || path[0] === "catalogo" || Boolean(page));
   return {
+    ...storeBrandMetadata(slug, settings, origin),
     title: { absolute: title }, description,
     applicationName: settings.name,
     authors: [{ name: settings.name }], creator: settings.name, publisher: settings.name,

@@ -7,7 +7,7 @@ import { normalizePublicArtworkUpload } from "@/services/artwork/public-upload";
 
 export const commerceMediaSchema = z
   .object({
-    purpose: z.enum(["logo", "cover", "product"]),
+    purpose: z.enum(["logo", "icon", "cover", "product"]),
     fileName: z.string().min(1).max(180),
     mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
     fileSize: z.number().int().positive().max(3145728),
@@ -24,9 +24,11 @@ export async function normalizeCommerceImage(input: Input) {
       declaredSize: input.fileSize,
       originalFileName: input.fileName,
     });
-    const dimension = { logo: 512, cover: 2400, product: 1600 }[input.purpose];
+    const dimension = { logo: 512, icon: 512, cover: 2400, product: 1600 }[input.purpose];
     return await sharp(normalized.bytes)
-      .resize(dimension, dimension, { fit: "inside", withoutEnlargement: true })
+      .resize(dimension, dimension, input.purpose === "icon"
+        ? { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } }
+        : { fit: "inside", withoutEnlargement: true })
       .webp({ quality: 90, effort: 4 })
       .toBuffer();
   } catch {

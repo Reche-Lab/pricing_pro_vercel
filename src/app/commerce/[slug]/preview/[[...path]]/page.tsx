@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import React from "react";
+import React, { cache } from "react";
 import type { Metadata } from "next";
 import { Storefront } from "@/components/commerce/Storefront";
 import {
@@ -16,10 +16,19 @@ import { libraryQuerySchema } from "@/domain/commerce/library";
 import { findCommerceProduct, productRedirectUrl } from "@/domain/commerce/product-urls";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = {
+const previewStore = cache(requireCommercePreview);
+const previewMetadata: Metadata = {
   title: { absolute: "Pré-visualização privada da loja" },
   robots: { index: false, follow: false, noarchive: true },
+  icons: { icon: [], shortcut: [], apple: [] },
+  manifest: null,
 };
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const store = await previewStore(slug).catch(() => null);
+  const icon = store?.settings.faviconUrl || store?.settings.logoUrl;
+  return { ...previewMetadata, ...(icon ? { icons: { icon: [{ url: icon }], shortcut: [{ url: icon }], apple: [{ url: icon }] } } : {}) };
+}
 export default async function CommercePreviewPage({
   params,
   searchParams,
@@ -35,7 +44,7 @@ export default async function CommercePreviewPage({
     (path.length === 1 && ["catalogo", "condicoes", "carrinho", "checkout"].includes(path[0])) ||
     (path.length === 2 && path[0] === "produto");
   if (!valid) notFound();
-  const store = await requireCommercePreview(slug).catch((error: unknown) => {
+  const store = await previewStore(slug).catch((error: unknown) => {
     if (error instanceof CommerceError) {
       if (error.status === 401) redirect("/login");
       if ([403, 404].includes(error.status)) notFound();

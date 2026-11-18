@@ -28,6 +28,7 @@ export const storeSettingsSchema = z
     name: z.string().trim().min(2).max(100),
     description: z.string().trim().max(500),
     logoUrl: safeImageUrl,
+    faviconUrl: safeImageUrl.optional(),
     bannerUrl: safeImageUrl,
     theme: z.enum(["light", "dark", "system"]).optional(),
     experience: storeExperienceSchema.optional(),

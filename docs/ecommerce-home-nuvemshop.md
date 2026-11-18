@@ -457,3 +457,21 @@ Ativação: publicar a loja, revisar os produtos e salvar suas declarações de 
 Nenhuma migration ou variável nova nesta etapa. `merchant` é opcional e persistido no snapshot JSON já existente. A migration `0080` da etapa anterior continua necessária para as URLs amigáveis.
 
 Referências oficiais: [preços e unidades no Google](https://developers.google.com/search/docs/appearance/structured-data/merchant-listing), [dados do catálogo](https://support.google.com/merchants/answer/7052112?hl=pt-BR), [identificadores reais](https://support.google.com/merchants/answer/160161?hl=en), [busca com IA do Google](https://developers.google.com/search/docs/appearance/ai-features), [buscadores da OpenAI](https://developers.openai.com/api/docs/bots). `llms.txt` não é requisito nem garantia de descoberta.
+
+### Logo e Ícone da Loja
+
+- [x] Separar logo institucional e ícone de navegador na configuração, com upload e prévias em 16, 32 e 48 px; remoção do ícone separado reutiliza o logo enviado.
+- [x] Publicar favicon PNG quadrado (512 × 512) e manifest por loja; preservar a identidade da plataforma fora do domínio da loja. Prévia privada usa a imagem salva, sem manifest nem indexação.
+- [x] Manter o logo completo em `Organization.logo`, sem substituí-lo pelo ícone simplificado.
+- [x] Isolar assets por tenant e permitir apenas imagens próprias do bucket `commerce-media` no Supabase configurado, sem credenciais no download, redirecionamentos ou URLs arbitrárias; limites de bytes/pixels e respostas de erro sem cache.
+- [x] TDD e suíte completa: 1.146 testes aprovados e 82 integrações condicionais ignoradas. Inclui upload/salvamento independente, PNG real, limites, URLs maliciosas/outros tenants, manifest, metadados e roteamento de domínio.
+- [x] Navegador em 1440/390/320 px com APIs locais simuladas: prévias usando o logo fornecido, upload/remoção sem submeter o formulário, imagens carregadas e ausência de overflow/sobreposição. Capturas inspecionadas; nenhuma gravação real ou publicação de imagens.
+- [x] Lint sem avisos, tipos, `git diff --check` e build de produção com uma CPU/heap de 1 GB aprovados.
+
+Em **Loja online → Loja e catálogo → Identidade e atendimento → Logo e ícone da loja**, envie o logo completo e, opcionalmente, um ícone simplificado. PNG, JPEG ou WebP, até 3 MB. Recomendação: 512 × 512 px, boa legibilidade em 16 px. O arquivo enviado é normalizado sem recortar a marca; os originais locais não são alterados. Clique em **Salvar loja e catálogo** para aplicar.
+
+O upload continua no bucket existente, como WebP; a rota pública `/loja/{slug}/icon.png` entrega PNG. No domínio próprio, `/icon.png`, `/favicon.ico` e `/site.webmanifest` são exclusivos da loja. O cache dura até cinco minutos; a URL nos metadados ganha uma nova versão ao trocar a imagem. Logos antigos de URLs externas não são baixados pelo servidor: envie o ícone por esse upload.
+
+Sem migration, bucket ou variável nova: `faviconUrl` é opcional no JSON de configurações já existente. Reutiliza o Supabase Storage previamente configurado e o vínculo de domínio já autorizado. Não altera o favicon global da plataforma.
+
+O Google usa um favicon por **hostname**, não por subdiretório: a loja com domínio próprio pode ter seu ícone na busca; lojas em `/loja/{slug}` compartilham o hostname da plataforma no Google, embora cada aba tenha seu ícone. Atualização depende de novo rastreamento e não há garantia de exibição. Referências: [favicon na busca](https://developers.google.com/search/docs/appearance/favicon-in-search) e [logo da organização](https://developers.google.com/search/docs/appearance/structured-data/organization).

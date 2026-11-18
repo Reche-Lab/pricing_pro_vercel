@@ -28,6 +28,7 @@ import type { getCommerceAdmin } from "@/repositories/commerce";
 import type { StoreAdminInput, StoreSettings } from "@/domain/commerce/schemas";
 import { storeRequest, storeMoney } from "./store-http";
 import { CommerceImageUpload } from "./CommerceImageUpload";
+import { CommerceBrandingFields } from "./CommerceBrandingFields";
 import { CommerceExperienceSettings } from "./CommerceExperienceSettings";
 import { StoreBannersEditor } from "./StoreBannersEditor";
 import { CommerceProductMediaEditor } from "./CommerceProductMediaEditor";
@@ -372,13 +373,6 @@ export function CommerceAdmin({
               </div>
               <div className="grid min-w-0 content-start gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
               <CommerceImageUpload
-                label="Logo da loja"
-                purpose="logo"
-                value={settings.logoUrl}
-                onChange={(url) => updateSetting("logoUrl", url)}
-                onBusyChange={imageBusyChanged}
-              />
-              <CommerceImageUpload
                 label="Capa padrão (sem carrossel)"
                 purpose="cover"
                 value={settings.bannerUrl}
@@ -386,6 +380,7 @@ export function CommerceAdmin({
                 onBusyChange={imageBusyChanged}
               />
               </div>
+              <CommerceBrandingFields name={settings.name} logoUrl={settings.logoUrl} faviconUrl={settings.faviconUrl ?? ""} onLogoChange={url => updateSetting("logoUrl", url)} onIconChange={url => updateSetting("faviconUrl", url)} onBusyChange={imageBusyChanged}/>
               <div className="grid min-w-0 gap-2 text-sm">
                 <CommerceCaption label="Tema inicial da loja" help="Define o tema ao abrir a loja. Automático acompanha o dispositivo. O cliente pode alternar entre claro e escuro." />
                 <CommerceThemePicker value={settings.theme ?? "system"} onChange={value => updateSetting("theme", value)} />

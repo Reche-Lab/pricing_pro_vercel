@@ -8,6 +8,21 @@ vi.mock("@/components/commerce/store-http", () => ({ storeRequest: vi.fn(), stor
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("commerce configuration controls", () => {
+  it("uploads an independent favicon, previews it, then persists both identity fields on save", async () => {
+    const initial = { store: { tenant_id: "tenant", settings: { logoUrl: "https://store.test/logo.webp" } }, products: [], variants: [], platforms: [{ id: "channel", name: "WhatsApp" }], orders: [], payments: null };
+    vi.mocked(storeRequest).mockResolvedValueOnce({ url: "https://store.test/icon.webp" }).mockResolvedValue(initial);
+    render(<CommerceAdmin initial={initial as never} tenantName="Loja teste"/>);
+    fireEvent.change(screen.getByLabelText("E-mail de atendimento"), { target: { value: "teste@example.com" } });
+    fireEvent.change(screen.getByLabelText("Enviar Ícone do navegador e Google"), { target: { files: [new File(["png"], "icon.png", { type: "image/png" })] } });
+    await waitFor(() => expect(screen.getByAltText("Ícone na aba")).toHaveAttribute("src", "https://store.test/icon.webp"));
+    expect(storeRequest).toHaveBeenCalledTimes(1);
+    expect(storeRequest).toHaveBeenLastCalledWith("/api/commerce/admin/media", "POST", expect.objectContaining({ purpose: "icon" }));
+    expect(screen.getByAltText("Prévia: Logo da loja")).toHaveAttribute("src", "https://store.test/logo.webp");
+    fireEvent.click(screen.getByRole("button", { name: "Salvar loja e catálogo" }));
+    await waitFor(() => expect(storeRequest).toHaveBeenLastCalledWith("/api/commerce/admin", "PUT", expect.objectContaining({ settings: expect.objectContaining({ logoUrl: "https://store.test/logo.webp", faviconUrl: "https://store.test/icon.webp" }) })));
+    fireEvent.click(screen.getByRole("button", { name: "Remover Ícone do navegador e Google" }));
+    expect(screen.getByAltText("Ícone na aba")).toHaveAttribute("src", "https://store.test/logo.webp");
+  });
   it("compares saved environments without saving the store or reusing a stale diagnostic", async () => {
     const initial = { store: { tenant_id: "tenant" }, products: [], variants: [], platforms: [], orders: [], payments: { mp_enabled: true, mp_configured: true, public_key: "APP_USR-production", test_configured: true, test_public_key: "APP_USR-sandbox", transparent_enabled: true } };
     vi.mocked(storeRequest).mockResolvedValue({ environment: "production", checks: [{ key: "orders_read", endpoint: "/v1/orders", outcome: "failed", httpStatus: 403, message: "Consulta recusada." }] });

@@ -1,12 +1,21 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { middleware } from "@/middleware";
+import { config, middleware } from "@/middleware";
 vi.mock("@/lib/auth/session-token", () => ({ sessionCookieName: () => "session", verifySessionToken: vi.fn(async () => null) }));
 beforeEach(() => { vi.stubEnv("COMMERCE_ENABLED", "true"); vi.stubEnv("COMMERCE_CUSTOM_DOMAINS", '{"groundshop.com.br":"ground-shop","www.groundshop.com.br":"ground-shop"}'); });
 afterEach(() => vi.unstubAllEnvs());
 const request = (host: string, path: string, headers: Record<string, string> = {}) => new NextRequest(`https://${host}${path}`, { headers: { host, ...headers } });
 describe("custom storefront host middleware", () => {
+  it("includes root browser icons/manifest in the middleware matcher and isolates tenant imagery", async () => {
+    for (const path of ["/favicon.ico", "/icon.png", "/site.webmanifest", "/loja/:slug/icon.png"]) expect(config.matcher).toContain(path);
+    for (const [path, target] of [["/favicon.ico", "icon.png"], ["/icon.png", "icon.png"], ["/site.webmanifest", "site.webmanifest"]]) {
+      const response = await middleware(request("groundshop.com.br", path));
+      expect(response.headers.get("x-middleware-rewrite")).toBe(`https://groundshop.com.br/loja/ground-shop/${target}`);
+    }
+    expect((await middleware(request("groundshop.com.br", "/loja/other/icon.png"))).status).toBe(404);
+    expect((await middleware(request("panel.test", "/favicon.ico"))).headers.get("x-middleware-next")).toBe("1");
+  });
   it("rewrites the public root without changing the customer's address bar", async () => {
     const response = await middleware(request("groundshop.com.br", "/catalogo?categoria=Bottons"));
     expect(response.headers.get("x-middleware-rewrite")).toBe("https://groundshop.com.br/loja/ground-shop/catalogo?categoria=Bottons");
