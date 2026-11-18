@@ -7,6 +7,7 @@ import type { LibraryCrop } from "@/domain/commerce/library";
 import { StoreProductMockup } from "./StoreProductMockup";
 import type { publicCommerceProduct } from "@/repositories/commerce";
 import { storeRequest } from "./store-http";
+import { useStoreAnalytics } from "./StoreAnalytics";
 import { useCommercePreview } from "./CommercePreviewProvider";
 import type { CartLine } from "@/domain/commerce/schemas";
 import { StoreArtworkReward } from "./StoreArtworkReward";
@@ -69,6 +70,7 @@ export function StoreArtworkTools({
   initialLibraryId?: string;
 }) {
   const simulation = useCommercePreview();
+  const analytics = useStoreAnalytics();
   const [libraryOpen, setLibraryOpen] = useState(Boolean(initialLibraryId && libraryEnabled));
   const [editor, setEditor] = useState<"crop" | "retouch" | "review" | null>(
     null,
@@ -130,6 +132,7 @@ export function StoreArtworkTools({
         });
     await onSelect(result.artwork.id);
     await onRefresh();
+    if (!preview) analytics.once(`artwork_uploaded:${result.artwork.id}`, "artwork_uploaded");
     return result.artwork.id as string;
   }
   async function upload(file?: File) {
@@ -300,6 +303,7 @@ export function StoreArtworkTools({
               action: "approve", ...(confirmation?.acceptUncovered ? { acceptUncovered: true } : {}), ...(pricingLines ? { lines: pricingLines } : {}),
             });
             const celebrate = result.newlyApproved === true && !celebrated.current.has(asset.id);
+            if (!preview) analytics.once(`artwork_approved:${asset.id}`, "artwork_approved");
             if (celebrate) celebrated.current.add(asset.id);
             let refreshFailed = false;
             try { await onRefresh(); } catch { refreshFailed = true; }

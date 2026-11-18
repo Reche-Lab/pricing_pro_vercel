@@ -30,7 +30,7 @@ export async function PUT(request: Request, { params }: Params) {
     const { slug } = await params;
     const { store, session } = await buyerContext(slug);
     const input = await readCommerceBody(request, cartSchema);
-    await replaceCart(store, session, input.revision, input.lines);
+    await replaceCart(store, session, input.revision, input.lines, input.intent);
     return commerceJson({ ok: true });
   } catch (error) {
     return commerceFailure(error, "cart.update");

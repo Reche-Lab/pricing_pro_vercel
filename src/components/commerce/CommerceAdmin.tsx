@@ -23,6 +23,7 @@ import {
   Star,
   Bot,
   Search,
+  BarChart3,
 } from "lucide-react";
 import type { getCommerceAdmin } from "@/repositories/commerce";
 import type { StoreAdminInput, StoreSettings } from "@/domain/commerce/schemas";
@@ -49,6 +50,7 @@ const CommerceEmailSettings = dynamic(() => import("./CommerceEmailSettings").th
 const CommerceGoogleReviewsSettings = dynamic(() => import("./CommerceGoogleReviewsSettings").then(m => m.CommerceGoogleReviewsSettings));
 const CommerceAssistantSettings = dynamic(() => import("./CommerceAssistantSettings").then(m => m.CommerceAssistantSettings));
 const CommerceSearchSettings = dynamic(() => import("./CommerceSearchSettings").then(m => m.CommerceSearchSettings));
+const CommerceAnalytics = dynamic(() => import("./CommerceAnalytics").then(m => m.CommerceAnalytics));
 const field =
   "min-w-0 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100";
 const button =
@@ -266,6 +268,7 @@ export function CommerceAdmin({
           ["email", "E-mail da empresa"],
           ["google-reviews", "Avaliações Google"],
           ["search", "Busca e catálogo"],
+          ["analytics", "Métricas e GA4"],
           ["assistant", "Assistente IA"],
           ["library", "Campanhas e artes"],
           ...(data.olistConfigured ? [["olist", "Olist"]] : []),
@@ -279,7 +282,7 @@ export function CommerceAdmin({
             onClick={() => setTab(id)}
             className={`${button} shrink-0 whitespace-nowrap ${tab === id ? "border-emerald-500 bg-emerald-500/10 text-emerald-200" : "text-zinc-400"}`}
           >
-            {id === "store" ? <Store size={16} /> : id === "payments" ? <CreditCard size={16} /> : id === "address" ? <Globe size={16}/> : id === "email" ? <Mail size={16}/> : id === "assistant" ? <Bot size={16}/> : id === "google-reviews" ? <Star size={16}/> : id === "search" ? <Search size={16}/> : id === "library" ? <Images size={16}/> : id === "olist" ? <Link2 size={16}/> : <Package size={16} />}
+            {id === "store" ? <Store size={16} /> : id === "payments" ? <CreditCard size={16} /> : id === "address" ? <Globe size={16}/> : id === "email" ? <Mail size={16}/> : id === "assistant" ? <Bot size={16}/> : id === "google-reviews" ? <Star size={16}/> : id === "search" ? <Search size={16}/> : id === "analytics" ? <BarChart3 size={16}/> : id === "library" ? <Images size={16}/> : id === "olist" ? <Link2 size={16}/> : <Package size={16} />}
             {label}
           </button>
         ))}
@@ -822,6 +825,7 @@ export function CommerceAdmin({
       {tab === "email" ? data.store?.tenant_id ? <CommerceEmailSettings storeName={settings.name} contactEmail={settings.contactEmail} onReadyChange={emailReadyChanged}/> : <p className="text-sm text-amber-200">Salve a loja antes de configurar o e-mail da empresa.</p> : null}
       {tab === "google-reviews" ? data.store?.tenant_id ? <CommerceGoogleReviewsSettings/> : <p className="text-sm text-amber-200">Salve a loja antes de configurar as avaliações Google.</p> : null}
       {tab === "search" ? <CommerceSearchSettings publicUrl={data.urls?.public} published={Boolean(data.store?.enabled && data.store.status === "published")} selectedProducts={data.products.filter(product => product.active && product.snapshot.merchant?.enabled).length} onCatalog={() => setTab("store")}/> : null}
+      {tab === "analytics" ? data.store?.tenant_id ? <CommerceAnalytics/> : <p className="text-sm text-amber-200">Salve o rascunho da loja antes de configurar as métricas.</p> : null}
       {tab === "assistant" ? data.store?.tenant_id ? <CommerceAssistantSettings storeName={settings.name} storeSlug={data.store.slug}/> : <p className="text-sm text-amber-200">Salve a loja antes de configurar o assistente.</p> : null}
       {tab === "library" ? <CommerceLibraryAdmin products={data.products} slug={data.store?.slug} onBusyChange={setLibraryBusy}/> : null}
       {tab === "olist" && data.olistConfigured ? <CommerceOlistSettings/> : null}

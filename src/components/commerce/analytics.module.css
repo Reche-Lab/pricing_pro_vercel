@@ -1,0 +1,12 @@
+.preferences {display:flex;justify-content:center;padding:1rem;}
+.preferences button {display:inline-flex;align-items:center;gap:.5rem;font-size:.875rem;color:var(--muted,#71717a);text-decoration:underline;text-underline-offset:3px;}
+.consent {position:fixed;bottom:1rem;left:1rem;z-index:90;width:min(28rem,calc(100% - 2rem));padding:1.25rem;border:1px solid #52525b;border-radius:8px;background:#18181b;color:#fafafa;box-shadow:0 12px 40px #0005;}
+.consentHeading {display:flex;justify-content:space-between;align-items:start;gap:1rem;}
+.consentHeading h2 {font-size:1rem;font-weight:650;margin:0;}
+.consentHeading button {padding:.25rem;border-radius:4px;}
+.consent p {font-size:.875rem;line-height:1.6;color:#d4d4d8;margin:.75rem 0;}
+.consentActions {display:flex;flex-wrap:wrap;gap:.75rem;}
+.consentActions button {flex:1;min-height:44px;padding:.625rem .75rem;border:1px solid #71717a;border-radius:6px;background:#27272a;font-size:.875rem;font-weight:600;}
+.consentActions button:hover:not(:disabled) {background:#3f3f46;border-color:#a1a1aa;}
+.consentActions button:disabled {opacity:.5;}
+.consent button:focus-visible,.preferences button:focus-visible {outline:2px solid #5eead4;outline-offset:3px;}

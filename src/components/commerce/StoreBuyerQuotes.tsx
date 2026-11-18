@@ -14,8 +14,10 @@ import { LibraryDialog } from "./LibraryUI";
 import { StoreBuyerQuoteList } from "./StoreBuyerQuoteList";
 import styles from "./store.module.css";
 import q from "./quote.module.css";
+import { useStoreAnalytics } from "./StoreAnalytics";
 
 export function StoreBuyerQuotes({ api, base, quoteId, revision, hasCart, onRestored }: { api: string; base: string; quoteId?: string; revision: number; hasCart: boolean; onRestored: (mode: "quote" | "purchase") => Promise<void> }) {
+  const analytics = useStoreAnalytics();
   const [quotes, setQuotes] = useState<Awaited<ReturnType<typeof listBuyerQuotes>>>([]);
   const [quote, setQuote] = useState<Awaited<ReturnType<typeof getBuyerQuote>> | null>(null);
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -46,7 +48,7 @@ export function StoreBuyerQuotes({ api, base, quoteId, revision, hasCart, onRest
           <p className={q.muted}>Editar uma cópia preserva este documento. Antes de comprar, você poderá revisar os preços atuais, o frete e as artes.</p>
           <StoreQuoteArtworkBenefit benefits={quote.snapshot.artworkBenefits ?? []} storeName={quote.snapshot.storeName}/>
         </section>
-        <StoreQuoteSummary totalCents={quote.total_cents} totalLabel={quote.shipping_cents === null ? "Sem frete" : "Total"} action={<a className={styles.primary} href={`${api}/quotes/${quote.id}/pdf`}><Download size={17}/>Baixar orçamento PDF</a>}>
+        <StoreQuoteSummary totalCents={quote.total_cents} totalLabel={quote.shipping_cents === null ? "Sem frete" : "Total"} action={<a className={styles.primary} href={`${api}/quotes/${quote.id}/pdf`} onClick={() => analytics.track("quote_pdf_download", { journey: "quote" })}><Download size={17}/>Baixar orçamento PDF</a>}>
           <StoreOrderSummary subtotal={quote.subtotal_cents - (quote.snapshot.artworkDiscountCents ?? 0)} artworkDiscountCents={quote.snapshot.artworkDiscountCents} shipping={quote.shipping_cents ?? undefined} shippingExcluded={quote.shipping_cents === null}/>
           <p>Produção: {quote.snapshot.production.productionDays} dias úteis após pagamento e aprovação das artes.</p>
           {quote.snapshot.production.deliveryDate ? <p>Estimativa registrada: <strong>{formatDeliveryDate(quote.snapshot.production.deliveryDate)}</strong></p> : null}
@@ -62,7 +64,7 @@ export function StoreBuyerQuotes({ api, base, quoteId, revision, hasCart, onRest
         {error ? <p role="alert" className={q.error}>{error}</p> : null}
         <button type="button" className={styles.primary} disabled={busy || (hasCart && !replaceConfirmed)} onClick={async () => {
           if (restoreLock.current) return; restoreLock.current = true; setBusy(true); setError("");
-          try { await storeRequest(`${api}/quotes/${quote.id}`, "POST", { revision, confirmReplace: true }); await onRestored(intent); router.push(`${base}/${intent === "quote" ? "orcamento" : "carrinho"}`); setIntent(null); }
+          try { await storeRequest(`${api}/quotes/${quote.id}`, "POST", { revision, confirmReplace: true }); analytics.track("quote_restored", { journey: intent === "quote" ? "quote" : "purchase" }); await onRestored(intent); router.push(`${base}/${intent === "quote" ? "orcamento" : "carrinho"}`); setIntent(null); }
           catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível recuperar o orçamento."); }
           finally { restoreLock.current = false; setBusy(false); }
         }}>{busy ? <Loader2 className="animate-spin" size={16}/> : <ArrowRight size={16}/>} {intent === "quote" ? "Abrir cópia para editar" : "Abrir carrinho para revisar"}</button>

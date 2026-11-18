@@ -475,3 +475,11 @@ O upload continua no bucket existente, como WebP; a rota pública `/loja/{slug}/
 Sem migration, bucket ou variável nova: `faviconUrl` é opcional no JSON de configurações já existente. Reutiliza o Supabase Storage previamente configurado e o vínculo de domínio já autorizado. Não altera o favicon global da plataforma.
 
 O Google usa um favicon por **hostname**, não por subdiretório: a loja com domínio próprio pode ter seu ícone na busca; lojas em `/loja/{slug}` compartilham o hostname da plataforma no Google, embora cada aba tenha seu ícone. Atualização depende de novo rastreamento e não há garantia de exibição. Referências: [favicon na busca](https://developers.google.com/search/docs/appearance/favicon-in-search) e [logo da organização](https://developers.google.com/search/docs/appearance/structured-data/organization).
+
+### Métricas e Google Analytics 4
+
+- [x] Aba **Métricas e GA4** com configuração por tenant, consentimento básico opcional, eventos das jornadas de compra/orçamento e exclusão de prévia/testes.
+- [x] Painel interno com pagamentos confirmados/pendentes, orçamentos salvos, carrinhos e rascunhos com/sem login, possível abandono e evolução diária; sem fingir que são relatórios importados do Google.
+- [x] 1.173 testes aprovados na regressão, cinco testes SQL executados em PostgreSQL descartável, navegador em três tamanhos, lint, tipos e build limitado aprovados.
+
+Aplicar **`0081_commerce_analytics.sql` antes do deploy** e configurar o `G-…` na nova aba. Nenhuma variável de ambiente nova. [Instruções, eventos, critérios e limitações](ecommerce-analytics.md).

@@ -2,6 +2,7 @@
 import React, { useState, type FormEvent } from "react";
 import { storeRequest } from "./store-http";
 import styles from "./store.module.css";
+import { useStoreAnalytics } from "./StoreAnalytics";
 export function BuyerLogin({
   api,
   onLogged,
@@ -13,6 +14,7 @@ export function BuyerLogin({
   disabled: boolean;
   forQuote?: boolean;
 }) {
+  const analytics = useStoreAnalytics();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -30,6 +32,7 @@ export function BuyerLogin({
           challengeId: challenge,
           code,
         });
+        analytics.once(`login:${challenge}`, "login", { method: "email_code", customer_state: "identified", journey: forQuote ? "quote" : "purchase" });
         await onLogged();
       } else {
         const result = await storeRequest(`${api}/auth`, "POST", {

@@ -5,8 +5,11 @@ import type { BuyerPaymentState, DirectPayment } from "@/domain/commerce/transpa
 import { cardBrickMethods, loadMercadoPago } from "./mercado-pago-sdk";
 import { storeMoney, storeRequest } from "./store-http";
 import styles from "./store.module.css";
+import { useStoreAnalytics } from "./StoreAnalytics";
+import type { AnalyticsParameters } from "@/domain/commerce/analytics";
 
-export function StorePayment({ api, orderId, onConfirmed }: { api: string; orderId: string; onConfirmed: () => Promise<void> }) {
+export function StorePayment({ api, orderId, onConfirmed, analyticsPayload }: { api: string; orderId: string; onConfirmed: () => Promise<void>; analyticsPayload?: AnalyticsParameters }) {
+  const analytics = useStoreAnalytics();
   const [state, setState] = useState<BuyerPaymentState | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -37,7 +40,9 @@ export function StorePayment({ api, orderId, onConfirmed }: { api: string; order
     if (sending.current) return;
     sending.current = true; setBusy(true); setError("");
     try {
-      accept(await storeRequest(endpoint, "POST", { orderId, requestId: crypto.randomUUID(), payment }));
+      const result = await storeRequest(endpoint, "POST", { orderId, requestId: crypto.randomUUID(), payment });
+      if (result.environment !== "test" && analyticsPayload) analytics.once(`payment:${orderId}:${payment.method}`, "add_payment_info", { ...analyticsPayload, payment_type: payment.method, journey: "purchase" });
+      accept(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível confirmar o pagamento.");
       // A transport failure is not a refusal. Recover server state before
@@ -49,7 +54,7 @@ export function StorePayment({ api, orderId, onConfirmed }: { api: string; order
   async function wallet() {
     if (sending.current) return;
     sending.current = true; setBusy(true); setError("");
-    try { const result = await storeRequest(`${api}/payment`, "POST", { orderId }); window.location.assign(result.url); }
+    try { const result = await storeRequest(`${api}/payment`, "POST", { orderId }); if (analyticsPayload) analytics.once(`payment:${orderId}:wallet`, "add_payment_info", { ...analyticsPayload, payment_type: "wallet", journey: "purchase" }); window.location.assign(result.url); }
     catch (e) { setError(e instanceof Error ? e.message : "Não foi possível abrir a carteira."); sending.current = false; setBusy(false); }
   }
   async function copyPix(code: string) {

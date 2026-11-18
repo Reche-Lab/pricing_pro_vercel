@@ -53,6 +53,8 @@ export type CommerceProduct = PriceProduct & {
   merchant?: CommerceMerchant;
 };
 export type CommerceStore = {
+  analytics_settings?: import("@/domain/commerce/analytics").AnalyticsSettings;
+  payment_environment?: "production" | "test";
   art_library_enabled?: boolean;
   tenant_id: string;
   slug: string;
@@ -126,7 +128,7 @@ export async function getCommerceStore(
   if (!commerceEnabled() || !/^[a-z0-9][a-z0-9-]{0,99}$/.test(slug))
     return null;
   const result = await getPool().query<CommerceStore>(
-    `select s.*,t.slug,s.settings || jsonb_build_object('production',t.production_settings) as settings from commerce_stores s join tenants t on t.id=s.tenant_id where t.slug=$1 and t.status='active' and s.enabled and (s.status='published' or ($2 and s.status='paused'))`,
+    `select s.*,t.slug,coalesce(pc.payment_environment,'production') as payment_environment,s.settings || jsonb_build_object('production',t.production_settings) as settings from commerce_stores s join tenants t on t.id=s.tenant_id left join commerce_payment_connections pc on pc.tenant_id=s.tenant_id where t.slug=$1 and t.status='active' and s.enabled and (s.status='published' or ($2 and s.status='paused'))`,
     [slug, allowPaused],
   );
   return result.rows[0] ?? null;
@@ -443,6 +445,7 @@ export async function replaceCart(
   session: BuyerSession,
   revision: number,
   lines: CartLine[],
+  intent?: "purchase" | "quote",
 ) {
   await commerceTransaction(async (client) => {
     const products = await commerceProducts(store.tenant_id, client);
@@ -464,6 +467,7 @@ export async function replaceCart(
         "O carrinho mudou em outra aba. Atualize antes de continuar.",
         409,
       );
+    if (intent) await client.query("update commerce_sessions set cart_intent=$3 where tenant_id=$1 and id=$2", [store.tenant_id, session.id, intent]);
   });
 }
 export async function createCommerceOrder(

@@ -17,6 +17,7 @@ import { readCommerceLibrary } from "@/repositories/commerce-library";
 import { libraryQuerySchema } from "@/domain/commerce/library";
 import { findCommerceProduct, productRedirectUrl } from "@/domain/commerce/product-urls";
 import { storeProductMetadata, storeProductStructuredData } from "@/services/commerce/product-seo";
+import { publicAnalyticsSettings } from "@/domain/commerce/analytics";
 export const dynamic = "force-dynamic";
 const loadStore = cache(getCommerceStore);
 const loadProducts = cache(async (tenantId: string) => (await commerceProducts(tenantId)).map(publicCommerceProduct));
@@ -79,6 +80,7 @@ export default async function StorePage({ params, searchParams }: Props) {
     {path.length === 0 && store.status === "published" ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeStructuredData(storeIdentityStructuredData(slug, store.settings)) }} /> : null}
     {product && store.status === "published" ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeStructuredData(storeProductStructuredData(slug, product, store.settings, undefined, typeof query.quantidade === "string" ? query.quantidade : undefined)) }} /> : null}
     <Storefront
+      analytics={store.payment_environment === "test" ? undefined : publicAnalyticsSettings(store.analytics_settings)}
       slug={slug}
       settings={store.settings}
       products={products}

@@ -20,6 +20,7 @@ export const cartSchema = z
   .object({
     revision: z.number().int().nonnegative(),
     lines: z.array(cartLineSchema).max(40),
+    intent: z.enum(["purchase", "quote"]).optional(),
   })
   .strict();
 export const safeImageUrl = safeCommerceMediaUrl;

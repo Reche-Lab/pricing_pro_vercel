@@ -13,7 +13,10 @@ export function useBuyerCart(api: string, enabled: boolean) {
     setState(current => ({ api, cart: current.api === api ? current.cart : null, error: "" }));
     try {
       const cart: Cart = await storeRequest(`${api}/cart`);
-      if (active.current && request === sequence.current && scope.current.api === api && scope.current.enabled) setState({ api, cart, error: "" });
+      if (active.current && request === sequence.current && scope.current.api === api && scope.current.enabled) {
+        setState({ api, cart, error: "" });
+        return cart;
+      }
     } catch (cause) {
       if (active.current && request === sequence.current && scope.current.api === api && scope.current.enabled) {
         const unauthorized = cause && typeof cause === "object" && "status" in cause && [401, 403].includes(Number(cause.status));

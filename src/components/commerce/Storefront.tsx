@@ -69,6 +69,9 @@ import { findCommerceProduct } from "@/domain/commerce/product-urls";
 import { quantitySelection } from "@/domain/commerce/quantity-pricing";
 import { StoreQuantityPricing, StoreProductQuestions } from "./StoreQuantityPricing";
 import { StoreQuoteOverview } from "./StoreQuoteOverview";
+import { StoreAnalyticsConsent, StoreAnalyticsProvider, useStoreAnalytics } from "./StoreAnalytics";
+import { StoreAnalyticsScreen } from "./StoreAnalyticsScreen";
+import { analyticsCartChanges, analyticsCommercePayload, type AnalyticsSettings } from "@/domain/commerce/analytics";
 import { quoteArtworkBenefits } from "@/domain/commerce/quote-artwork-benefit";
 const StoreLibrary = dynamic(() => import("./StoreLibrary").then(m => m.StoreLibrary));
 const FeaturedLibraryCampaigns = dynamic(() => import("./StoreLibrary").then(m => m.FeaturedLibraryCampaigns));
@@ -81,6 +84,7 @@ const ArtworkTools = dynamic(
 type Product = ReturnType<typeof publicCommerceProduct>;
 type Cart = Awaited<ReturnType<typeof cartView>>;
 type Props = {
+  analytics?: AnalyticsSettings;
   slug: string;
   settings: StoreSettings;
   products: Product[];
@@ -94,7 +98,12 @@ type Props = {
   children?: ReactNode;
 };
 
-export function Storefront({
+export function Storefront(props: Props) {
+  const base = props.preview ? `/commerce/${props.slug}/preview` : props.basePath ?? `/loja/${props.slug}`;
+  return <StoreAnalyticsProvider key={`${props.slug}:${props.analytics?.measurementId ?? ""}`} slug={props.slug} settings={props.analytics} base={base} disabled={Boolean(props.preview || props.paused)}><StorefrontContent {...props}/></StoreAnalyticsProvider>;
+}
+
+function StorefrontContent({
   slug,
   settings,
   products,
@@ -107,6 +116,7 @@ export function Storefront({
   libraryInitial,
   children,
 }: Props) {
+  const analytics = useStoreAnalytics();
   const router = useRouter();
   const searchParams = useSearchParams();
   const focusedItem = searchParams.get("item");
@@ -173,8 +183,22 @@ export function Storefront({
     await storeRequest(`${api}/cart`, "PUT", {
       revision: cart.revision,
       lines,
+      intent: quoting ? "quote" : "purchase",
     });
-    await refresh();
+    const next = await refreshBuyerCart();
+    if (next?.calculation && analytics.active && next.payments.payment_environment !== "test") {
+      const changes = analyticsCartChanges(cart.lines, next.lines);
+      for (const [event, deltas, source] of [["add_to_cart", changes.added, next.calculation], ["remove_from_cart", changes.removed, cart.calculation]] as const) {
+        if (!source || !deltas.length) continue;
+        const items = deltas.flatMap(delta => {
+          const rows = source.items.filter(row => row.productId === delta.productId);
+          const quantity = rows.reduce((sum, row) => sum + row.quantity, 0);
+          if (!rows.length || !quantity) return [];
+          return [{ productId: delta.productId, name: rows[0].name, quantity: delta.quantity, totalCents: Math.round(rows.reduce((sum, row) => sum + row.totalCents, 0) / quantity * delta.quantity) }];
+        });
+        analytics.track(event, { ...analyticsCommercePayload(items), journey: quoting ? "quote" : "purchase" });
+      }
+    }
   }
   async function logout() {
     await action(async () => {
@@ -199,6 +223,7 @@ export function Storefront({
         } as CSSProperties
       }
     >
+      <StoreAnalyticsScreen path={path} quoting={quoting} cart={cart} products={products}/>
       {preview ? (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           <p>
@@ -568,6 +593,7 @@ export function Storefront({
                       "POST",
                       input,
                     );
+                    analytics.once(`${view === "orcamento" ? "quote_created" : "order_created"}:${result.id}`, view === "orcamento" ? "quote_created" : "order_created", { ...analyticsCommercePayload(cart.calculation?.items ?? []), customer_state: "identified", journey: view === "orcamento" ? "quote" : "purchase" });
                     await refresh();
                     router.push(`${base}/${view === "orcamento" ? "orcamentos" : "pedidos"}/${result.id}`);
                   } finally { setBusy(false); }
@@ -582,6 +608,7 @@ export function Storefront({
         ) : null}
       </div>
       <StoreFooter settings={settings} products={products} base={base} preview={preview} libraryEnabled={libraryEnabled} institutionalLinks={institutionalLinks} payments={cart?.payments} view={view}/>
+      <StoreAnalyticsConsent/>
       {!preview && !paused ? <StoreAssistantLauncher api={api} base={base} settings={settings} buyerId={cart?.customer?.id} onCartChanged={refresh}/> : null}
     </main>
   );
@@ -595,6 +622,7 @@ function Catalog({
   base: string;
   title: string;
 }) {
+  const analytics = useStoreAnalytics();
   const params = useSearchParams();
   const [query, setQuery] = useState(params.get("q") ?? "");
   const [category, setCategory] = useState(params.get("categoria") ?? "");
@@ -614,6 +642,14 @@ function Catalog({
       ),
   );
   const sorted = [...filtered].sort((a, b) => sort === "price_asc" ? a.unitCents - b.unitCents : sort === "price_desc" ? b.unitCents - a.unitCents : sort === "name" ? a.name.localeCompare(b.name, "pt-BR") : 0);
+  const listed = JSON.stringify(sorted.slice(0, page * 12).slice(0, 200).map(product => ({ productId: product.id, name: product.name, quantity: 1, totalCents: product.unitCents })));
+  const lastList = useRef("");
+  useEffect(() => {
+    if (!analytics.active || lastList.current === listed) return;
+    lastList.current = listed;
+    analytics.track("view_item_list", analyticsCommercePayload(JSON.parse(listed)));
+    if (query.trim()) analytics.track("catalog_search", { result_count: filtered.length });
+  }, [analytics, listed, query, filtered.length]);
   return (
     <>
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
@@ -700,6 +736,7 @@ function ProductDetail({
   libraryEnabled: boolean;
   quoting?: boolean;
 }) {
+  const analytics = useStoreAnalytics(), viewedProduct = useRef("");
   const productSearch = useSearchParams();
   const quantityInput = useRef<HTMLInputElement>(null);
   const quantityQuery = productSearch.getAll("quantidade");
@@ -766,7 +803,11 @@ function ProductDetail({
   const attachedCount = lines.filter(line => line.artworkId).length;
   const price = priced?.lines === lines ? priced.calculation : null;
   const publishedRow = !error && lines.length === 1 && !lines[0].artworkId ? product.quantityPricing?.rows.find(row => row.quantity === lines[0].quantity) : undefined;
-  const displayPrice = price ?? (publishedRow ? { totalCents: publishedRow.totalCents, items: [{ unitCents: publishedRow.unitCents, quantity: publishedRow.quantity, artworkName: lines[0].artworkName }] } : null);
+  const displayPrice = useMemo(() => price ?? (publishedRow ? { totalCents: publishedRow.totalCents, items: [{ unitCents: publishedRow.unitCents, quantity: publishedRow.quantity, artworkName: lines[0].artworkName }] } : null), [price, publishedRow, lines]);
+  useEffect(() => {
+    if (!displayPrice || viewedProduct.current === product.id) return;
+    if (analytics.track("view_item", analyticsCommercePayload([{ productId: product.id, name: product.name, quantity: lines.reduce((sum, line) => sum + line.quantity, 0), totalCents: displayPrice.totalCents }]))) viewedProduct.current = product.id;
+  }, [analytics, displayPrice, product, lines]);
   const deliveryIssue = commerceSelectionError(lines, product);
   async function addToCart() {
     if (disabled || !price || deliveryIssue || artworkBusy || addingRef.current || (unusedArtworks > 0 && !allowUnused)) return;

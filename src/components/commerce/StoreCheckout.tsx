@@ -20,6 +20,8 @@ import type { QuoteArtworkBenefit } from "@/domain/commerce/quote-artwork-benefi
 import { StoreOrderContactDetails } from "./StoreOrderContactDetails";
 import { StoreQuoteSummary } from "./StoreQuoteSummary";
 import q from "./quote.module.css";
+import { useStoreAnalytics } from "./StoreAnalytics";
+import { analyticsCommercePayload } from "@/domain/commerce/analytics";
 
 function CheckoutSummary({ quoting, total, totalLabel, children, action }: { quoting: boolean; total: number; totalLabel: string; children: React.ReactNode; action: React.ReactNode }) {
   return quoting ? <StoreQuoteSummary totalCents={total} totalLabel={totalLabel} action={action}>{children}</StoreQuoteSummary> : <aside className={styles.summary}><h2 className="mb-4 text-lg font-semibold">4. Revise seu pedido</h2>{children}{action}</aside>;
@@ -116,6 +118,7 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
   quoteBenefits?: QuoteArtworkBenefit[];
   onQuoteStepChange?: (step: "details" | "review") => void;
 }) {
+  const analytics = useStoreAnalytics();
   const persistence = useCheckoutDraft(api, preview, { billing: { ...emptyContact(), name: cart.customer?.name ?? "", email: cart.customer?.email ?? "" }, address: emptyContact(), same: true, delivery: settings.pickupEnabled ? "pickup" : "delivery" });
   const { billing, address, same, delivery } = persistence.draft;
   const setBilling = (value: ContactDraft) => persistence.setDraft(current => ({ ...current, billing: value }));
@@ -168,6 +171,7 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
       const options = sortShippingOptions(result.options);
       setFreight({ key, options, expiresAt: Date.now() + 900000 });
       setServiceId(options[0]?.id ?? "delivery");
+      analytics.track("shipping_quote", { journey: quoting ? "quote" : "purchase", result_count: options.length });
       if (result.warnings?.length) setShippingError(result.warnings.join(" "));
       else if (!options.length) setShippingError("Nenhuma opção de entrega disponível para este CEP. Tente novamente ou consulte a loja.");
     } catch (cause) { if (generation === quoteGeneration.current) setShippingError(cause instanceof Error ? cause.message : "Não foi possível calcular o frete."); }
@@ -198,6 +202,7 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
     try {
       if (!preview) await persistence.flush();
       if (quoting && !quoteReview) {
+        analytics.once(`quote_review:${requestId}:${cart.revision}`, "quote_review", { ...analyticsCommercePayload(cart.calculation?.items ?? []), customer_state: "identified", journey: "quote" });
         setQuoteReview(buyerQuoteSchema.parse(parsed.data));
         requestAnimationFrame(() => { reviewHeading.current?.scrollIntoView?.({ behavior: "smooth", block: "center" }); reviewHeading.current?.focus(); });
         return;
@@ -207,6 +212,8 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
         requestAnimationFrame(() => { pendingRef.current?.scrollIntoView?.({ behavior: "smooth", block: "center" }); pendingRef.current?.focus(); });
         return;
       }
+      if (!quoting) analytics.once(`shipping:${cart.revision}:${delivery}:${shipping}`, "add_shipping_info", { ...analyticsCommercePayload(cart.calculation?.items ?? []), shipping_tier: delivery, journey: "purchase" });
+      if (!quoting && provider === "manual") analytics.once(`payment_manual:${cart.revision}`, "add_payment_info", { ...analyticsCommercePayload(cart.calculation?.items ?? []), payment_type: "manual", journey: "purchase" });
       await onSubmit(parsed.data);
     }
     catch (cause) {

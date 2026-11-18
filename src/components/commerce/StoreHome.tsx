@@ -18,6 +18,8 @@ import { storeMoney } from "./store-http";
 import styles from "./store.module.css";
 import studio from "./studio.module.css";
 import { StudioHero } from "./StudioHero";
+import { useStoreAnalytics } from "./StoreAnalytics";
+import { analyticsCommercePayload } from "@/domain/commerce/analytics";
 const StudioPersonalizer = dynamic(() => import("./StudioPersonalizer").then(module => module.StudioPersonalizer), { loading: () => <p role="status" className={studio.demoStatus}>Preparando o estúdio…</p>, ssr: false });
 const StoreGoogleReviews = dynamic(() => import("./StoreGoogleReviews").then(module => module.StoreGoogleReviews));
 export type StoreProduct = ReturnType<typeof publicCommerceProduct>;
@@ -29,11 +31,12 @@ export function StoreProductCard({
   product: StoreProduct;
   base: string;
 }) {
+  const analytics = useStoreAnalytics();
   const alternate = product.media?.find(media => media.kind === "image" && media.url !== product.imageUrl);
   const best = product.quantityPricing?.bestPrice;
   const discount = best?.discountPercent ?? product.offer.maxDiscountPercent;
   return (
-    <Link className={styles.product} href={commerceProductPath(base, product)} data-product-card>
+    <Link className={styles.product} href={commerceProductPath(base, product)} data-product-card onClick={() => analytics.track("select_item", analyticsCommercePayload([{ productId: product.id, name: product.name, quantity: 1, totalCents: product.unitCents }]))}>
       <div className={`${styles.productPhoto} ${alternate ? styles.hasAlternate : ""}`} data-product-photo>
         <img
           src={product.imageUrl}
