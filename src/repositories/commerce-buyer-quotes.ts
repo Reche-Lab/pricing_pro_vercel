@@ -37,6 +37,8 @@ export async function createBuyerQuote(store: CommerceStore, session: BuyerSessi
       return { id: previous.id };
     }
     if (current.revision !== input.revision) throw new CommerceError("O carrinho mudou. Confira os valores antes de gerar o orçamento.", 409);
+    if ((await client.query("select id from commerce_orders where tenant_id=$1 and session_id=$2 and cart_revision=$3 and cancelled_at is null and deleted_at is null and payment_status='pending'", [store.tenant_id, session.id, current.revision])).rows.length)
+      throw new CommerceError("Use Salvar como orçamento no pedido pendente para encerrar a compra sem perder seus itens.", 409);
     const lockedStore = (await client.query<CommerceStore>("select s.*,s.settings || jsonb_build_object('production',t.production_settings) as settings from commerce_stores s join tenants t on t.id=s.tenant_id where s.tenant_id=$1 for share of s,t", [store.tenant_id])).rows[0];
     if (!lockedStore?.enabled || lockedStore.status !== "published") throw new CommerceError("A loja não está recebendo novos orçamentos.", 409);
     const products = await commerceProducts(store.tenant_id, client);
@@ -101,9 +103,13 @@ export async function restoreBuyerQuote(store: CommerceStore, session: BuyerSess
   const quote = await getBuyerQuote(store.tenant_id, session, id);
   // Artworks belong to their original session. A different session cannot inherit their IDs.
   await commerceTransaction(async client => {
+    const current = (await client.query("select id from commerce_sessions where tenant_id=$1 and id=$2 and customer_id=$3 and revision=$4 and expires_at>now() for update", [store.tenant_id, session.id, requireBuyer(session), revision])).rows[0];
+    if (!current) throw new CommerceError("O carrinho mudou. Confira antes de substituí-lo.", 409);
+    if ((await client.query("select id from commerce_orders where tenant_id=$1 and session_id=$2 and cart_revision=$3 and cancelled_at is null and deleted_at is null and payment_status='pending'", [store.tenant_id, session.id, revision])).rows.length)
+      throw new CommerceError("Encerre o pedido pendente antes de substituir os itens do carrinho.", 409);
     const products = await commerceProducts(store.tenant_id, client);
     const reusable = (await client.query<{ id: string }>(`select a.id from commerce_artworks a where a.tenant_id=$1 and a.session_id=$2 and not exists(
-      select 1 from commerce_orders o where o.tenant_id=a.tenant_id and exists(select 1 from jsonb_array_elements(o.snapshot->'lines') l where l->>'artworkId'=a.id::text))`, [store.tenant_id, session.id])).rows;
+      select 1 from commerce_orders o where o.tenant_id=a.tenant_id and o.cancelled_at is null and exists(select 1 from jsonb_array_elements(o.snapshot->'lines') l where l->>'artworkId'=a.id::text))`, [store.tenant_id, session.id])).rows;
     const lines = quote.snapshot.lines.map(line => {
       const artworkId = reusable.some(art => art.id === line.artworkId) ? line.artworkId : null;
       return { ...line, id: randomUUID(), artworkId, preparation: artworkId ? line.preparation : products.find(product => product.id === line.productId)?.artworkOptions?.allowTeamPreparation ? "team" as const : "customer" as const };

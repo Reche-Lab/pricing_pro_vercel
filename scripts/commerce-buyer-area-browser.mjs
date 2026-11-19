@@ -145,6 +145,30 @@ try {
     await page.screenshot({ path: `${output}/search-admin-${width}.png`, fullPage: true }); console.log(`Passed search administration ${width}px`);
   }
   if (!discoveryOnly) {
+  const pendingOrder = orders[1];
+  cart.lines = items.map(({ id, productId, quantity, artworkName }) => ({ id, productId, quantity, artworkName, artworkId: null }));
+  cart.calculation = { totalCents: 15000, baseSubtotalCents: 15000, artworkDiscountCents: 0, items };
+  cart.pendingOrder = { id: pendingOrder.id, total_cents: pendingOrder.total_cents, shipping_cents: pendingOrder.shipping_cents };
+  for (const theme of ["light", "dark"]) for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(`${origin}/loja/test/carrinho?theme=${theme}`);
+    await page.getByRole("heading", { name: "Seu carrinho", exact: true }).waitFor();
+    await page.getByRole("link", { name: "Continuar pagamento", exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Atualizar quantidade", exact: true }).isDisabled(), true);
+    await fits(); await page.screenshot({ path: `${output}/pending-cart-${theme}-${width}.png`, fullPage: true });
+    for (const label of ["Editar itens", "Salvar como orçamento", "Limpar carrinho"]) {
+      await page.getByRole("button", { name: label, exact: true }).click();
+      const dialog = page.getByRole("dialog"); await dialog.waitFor(); await fits();
+      const bounds = await dialog.boundingBox(); assert.ok(bounds.x >= -1 && bounds.x + bounds.width <= width + 1, "Pending purchase dialog fits viewport");
+      await page.screenshot({ path: `${output}/pending-${label.split(" ")[0]}-${theme}-${width}.png`, fullPage: true });
+      await dialog.getByRole("button", { name: "Voltar", exact: true }).click();
+    }
+    await page.goto(`${origin}/loja/test/pedidos/${pendingOrder.id}?theme=${theme}`);
+    await page.getByRole("button", { name: "Salvar como orçamento", exact: true }).waitFor();
+    await fits(); await page.screenshot({ path: `${output}/pending-order-${theme}-${width}.png`, fullPage: true });
+    console.log(`Passed pending purchase controls ${theme} ${width}px`);
+  }
+  cart.lines = []; cart.pendingOrder = null; cart.calculation = { totalCents: 0, items: [] };
   session = "error"; await page.goto(`${origin}/conta`); await page.getByRole("button", { name: "Tentar recuperar conta" }).waitFor(); await noLoginFlash();
   session = "member"; await page.getByRole("button", { name: "Tentar recuperar conta" }).click(); await page.getByRole("heading", { name: "Olá, Cliente de teste" }).waitFor(); await noLoginFlash();
   await page.getByRole("button", { name: "Minha conta", exact: true }).click();

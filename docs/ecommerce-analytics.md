@@ -67,6 +67,18 @@ Parâmetros públicos: itens com ID/nome do catálogo, quantidade, preço, moeda
 
 Esta entrega não configura a conta Google nem importa relatórios da GA4 Data API. Para exibir usuários, origens e funis Google no painel da plataforma, adicionar autorização de leitura por tenant e tratar limites/latência separadamente. Para enviar compras por webhook sem depender de retorno do navegador, projetar Measurement Protocol com consentimento verificável, identificação GA apropriada, segredo protegido no servidor e uma fila transacional/idempotente. Não enviar conversões financeiras sem consentimento nem acrescentar uma segunda fonte que duplique `purchase`.
 
+## Carrinho e compras pendentes
+
+Aplicar `0082_commerce_pending_cart.sql` antes de publicar a atualização do carrinho. Não há novas variáveis de ambiente.
+
+- Criar um pedido não esvazia mais o carrinho. A confirmação de pagamento limpa somente o carrinho da mesma sessão, comprador, revisão e conteúdo; um pagamento atrasado não apaga itens novos.
+- O carrinho pendente exibe os preços e o frete congelados no pedido. Para alterar os itens é necessário confirmar o encerramento da compra anterior; os valores e o frete são conferidos novamente no novo checkout.
+- Carrinho e pedido oferecem editar itens, limpar carrinho e salvar como orçamento. A conversão salva o documento na conta com produtos, artes, descontos, frete e contatos, encerrando o pedido e limpando o carrinho na mesma transação.
+- O encerramento não exclui o histórico nem efetua reembolsos. Compras encerradas ficam no filtro administrativo correspondente, fora dos pedidos ativos e dos totais pendentes. Valores efetivamente recebidos após um encerramento continuam nos indicadores financeiros e exigem revisão; não liberam o Olist ou produção automaticamente.
+- Antes de liberar alterações, o servidor verifica pagamentos. Pix do Checkout Transparente pode ser cancelado quando o provedor permite, com conferência posterior por GET. Links do Checkout Pro são expirados e é feita uma consulta de pagamentos já iniciados. Cobranças em processamento, resultados incertos, falhas de consulta ou cancelamentos não confirmados bloqueiam a alteração e preservam o carrinho.
+- Para pedidos anteriores a esta atualização, os itens continuam no snapshot do pedido: o comprador pode recuperá-los por **Meus pedidos → pedido pendente → Editar itens**.
+- O evento GA4 histórico `order_created` permanece como tentativa de compra, nunca como pagamento. A conversão bem-sucedida para orçamento envia `quote_created` quando houver consentimento; `purchase` continua dependendo de pagamento confirmado.
+
 ## Referências
 
 - [Comércio eletrônico no GA4](https://developers.google.com/analytics/devguides/collection/ga4/ecommerce)

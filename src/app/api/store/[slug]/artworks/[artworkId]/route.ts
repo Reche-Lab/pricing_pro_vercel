@@ -130,7 +130,7 @@ export async function POST(request: Request, { params }: Params) {
         )
       ).rows[0];
       const used = await client.query(
-        `select id from commerce_orders o where tenant_id=$1 and exists(select 1 from jsonb_array_elements(o.snapshot->'lines') l where l->>'artworkId'=$2) limit 1`,
+        `select id from commerce_orders o where tenant_id=$1 and cancelled_at is null and exists(select 1 from jsonb_array_elements(o.snapshot->'lines') l where l->>'artworkId'=$2) limit 1`,
         [store.tenant_id, artworkId],
       );
       if (used.rowCount)

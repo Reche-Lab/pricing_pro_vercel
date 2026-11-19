@@ -16,6 +16,7 @@ import {
   saveCommerceStore,
   hashCommerceToken,
   calculateCommerceCart,
+  cartView,
   geometryHash,
   getCommerceAdmin,
 } from "@/repositories/commerce";
@@ -46,6 +47,7 @@ import { readCheckoutDraft, saveCheckoutDraft } from "@/repositories/commerce-ch
 import { createBuyerQuote, getBuyerQuote, listBuyerQuotes, restoreBuyerQuote } from "@/repositories/commerce-buyer-quotes";
 import { emptyContact } from "@/domain/commerce/checkout-draft";
 import { generateBuyerQuotePdf } from "@/services/pdf/commerce-buyer-quote-pdf";
+import { changePendingOrder } from "@/services/commerce/pending-order";
 vi.mock("@/lib/auth/session", () => ({ getCurrentSession: vi.fn() }));
 const objects = vi.hoisted(() => new Map<string, { bytes: Uint8Array; contentType: string }>());
 vi.mock("@/services/storage/artwork-storage", async importOriginal => ({
@@ -176,7 +178,7 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
     }
   });
   it("persists the cart and creates only one order under concurrent checkout", async () => {
-    const { session } = await createBuyerSession(tenantId);
+    const { session, token } = await createBuyerSession(tenantId);
     const store = (await getCommerceStore("ground-shop"))!;
     const products = await commerceProducts(tenantId);
     const customer = (
@@ -233,6 +235,9 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
     ).rows[0];
     expect(order.total_cents).toBe(total);
     expect(order.payment_status).toBe("pending");
+    const pendingCart = await cartView(store, (await findBuyerSession(tenantId, token))!);
+    expect(pendingCart.pendingOrder).toMatchObject({ id: a.id, shipping_cents: 0 });
+    expect(pendingCart.calculation?.totalCents).toBe(total);
     expect(order.snapshot.termsVersion).toBe(PURCHASE_CONDITIONS_VERSION);
     expect(order.snapshot.terms).toContain("Quem participa da compra");
     expect(order.snapshot.terms).toContain(store.settings.terms);
@@ -250,7 +255,10 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
           [session.id],
         )
       ).rows[0].cart,
-    ).toEqual([]);
+    ).toEqual(lines);
+    await expect(replaceCart(store, session, 1, [])).rejects.toThrow("pedido aguardando pagamento");
+    await getPool().query("update commerce_orders set payment_status='paid' where tenant_id=$1 and id=$2", [tenantId, a.id]);
+    expect((await getPool().query("select cart,revision from commerce_sessions where id=$1", [session.id])).rows[0]).toMatchObject({ cart: [], revision: 2 });
   });
   it("limits login attempts, isolates challenges and rotates the session token", async () => {
     const { session, token } = await createBuyerSession(tenantId);
@@ -756,5 +764,68 @@ describe.skipIf(!url)("commerce isolated Postgres integration", () => {
     expect(quote.total_cents).toBe(calculation.totalCents + 1499);
     expect(quote.snapshot.shippingOption).toEqual(option);
     await expect(createBuyerQuote(store, session, { ...input, billing: { ...input.billing, name: "Outro nome" } })).rejects.toMatchObject({ status: 409 });
+  });
+
+  async function pendingFixture() {
+    await saveCommerceStore(actorId, tenantId, { ...published, settings: { ...published.settings, deliveryEnabled: true, deliveryCents: 1200 }, products: published.products.map(p => ({ ...p, personalized: false })) });
+    await getPool().query("update commerce_payment_connections set manual_enabled=true,payment_environment='production' where tenant_id=$1", [tenantId]);
+    const store = (await getCommerceStore("ground-shop"))!;
+    const product = (await commerceProducts(tenantId))[0];
+    const buyer = (await getPool().query("insert into commerce_customers(tenant_id,email,name) values($1,$2,'Comprador pendente') returning id", [tenantId, `${crypto.randomUUID()}@example.test`])).rows[0];
+    const created = await createBuyerSession(tenantId);
+    await getPool().query("update commerce_sessions set customer_id=$3 where tenant_id=$1 and id=$2", [tenantId, created.session.id, buyer.id]);
+    const lines = [{ id: crypto.randomUUID(), productId: product.id, quantity: 20, artworkName: "Campanha", artworkId: null }];
+    await replaceCart(store, created.session, 0, lines);
+    const session = (await findBuyerSession(tenantId, created.token))!;
+    const input = { revision: 1, expectedTotalCents: calculateCart(lines, [product]).totalCents + 1200, delivery: "delivery" as const, address: null, billing: testCommerceBilling, deliveryAddressSameAsBilling: true, provider: "manual" as const, acceptedTerms: true as const };
+    const order = await createCommerceOrder(store, session, input);
+    return { store, session, token: created.token, order, input, lines };
+  }
+  it("reopens an unpaid purchase without losing its items or contacts and creates a new version only after review", async () => {
+    const f = await pendingFixture();
+    await changePendingOrder(tenantId, f.session, f.order.id, { action: "edit", revision: 1, confirm: true });
+    const current = (await findBuyerSession(tenantId, f.token))!;
+    expect(current.cart).toEqual(f.lines); expect(current.revision).toBe(2);
+    expect((await readCheckoutDraft(tenantId, current)).draft?.billing.email).toBe(testCommerceBilling.email);
+    const history = (await buyerOrders(tenantId, f.session.customer_id!)).find(order => order.id === f.order.id)!;
+    expect(history.cancelled_at).toBeTruthy(); expect(history.cancellation_reason).toBe("edit");
+    expect((await getOrderWorkspace(tenantId, actorId)).orders.some(order => order.id === f.order.id)).toBe(false);
+    expect((await getOrderWorkspace(tenantId, actorId, { filter: "cancelled" })).orders.some(order => order.id === f.order.id)).toBe(true);
+    await expect(createCommerceOrder(f.store, current, f.input)).rejects.toMatchObject({ status: 409 });
+    const next = await createCommerceOrder(f.store, current, { ...f.input, revision: 2 });
+    expect(next.id).not.toBe(f.order.id);
+    expect((await findBuyerSession(tenantId, f.token))!.cart).toEqual(f.lines);
+  });
+  it("converts a purchase exactly once into a private quote with shipping, totals and billing, then clears the cart", async () => {
+    const f = await pendingFixture();
+    const [first, repeated] = await Promise.all([0, 1].map(() => changePendingOrder(tenantId, f.session, f.order.id, { action: "quote", revision: 1, confirm: true })));
+    expect(first.quoteId).toBe(repeated.quoteId);
+    const quote = await getBuyerQuote(tenantId, f.session, first.quoteId!);
+    expect(quote.shipping_cents).toBe(1200); expect(quote.total_cents).toBe(f.input.expectedTotalCents);
+    expect(quote.contact.billing.document).toBe(testCommerceBilling.document);
+    expect(quote.snapshot.lines).toEqual(f.lines);
+    expect(Buffer.from(await generateBuyerQuotePdf(quote, { name: f.store.settings.name, logo_url: null, company_phone: null, company_site: null, company_document: null })).subarray(0, 5).toString()).toBe("%PDF-");
+    expect((await findBuyerSession(tenantId, f.token))!.cart).toEqual([]);
+    expect((await findBuyerSession(tenantId, f.token))!.revision).toBe(2);
+    await expect(getBuyerQuote(otherTenant, f.session, first.quoteId!)).rejects.toMatchObject({ status: 404 });
+    await expect(changePendingOrder(otherTenant, f.session, f.order.id, { action: "clear", revision: 2, confirm: true })).rejects.toMatchObject({ status: 404 });
+  });
+  it("never clears a newer cart when a cancelled purchase gets a late payment", async () => {
+    const f = await pendingFixture();
+    await changePendingOrder(tenantId, f.session, f.order.id, { action: "edit", revision: 1, confirm: true });
+    const edited = [{ ...f.lines[0], quantity: 30 }];
+    await replaceCart(f.store, (await findBuyerSession(tenantId, f.token))!, 2, edited);
+    await getPool().query("update commerce_orders set payment_status='paid' where tenant_id=$1 and id=$2", [tenantId, f.order.id]);
+    const current = (await findBuyerSession(tenantId, f.token))!;
+    expect(current.cart).toEqual(edited); expect(current.revision).toBe(3);
+    expect((await getPool().query("select order_id from commerce_olist_orders where tenant_id=$1 and order_id=$2", [tenantId, f.order.id])).rows).toEqual([]);
+  });
+  it("requires a current revision and explicit action before clearing the pending cart", async () => {
+    const f = await pendingFixture();
+    await expect(changePendingOrder(tenantId, f.session, f.order.id, { action: "clear", revision: 0, confirm: true })).rejects.toMatchObject({ status: 409 });
+    expect((await findBuyerSession(tenantId, f.token))!.cart).toEqual(f.lines);
+    await changePendingOrder(tenantId, f.session, f.order.id, { action: "clear", revision: 1, confirm: true });
+    expect((await findBuyerSession(tenantId, f.token))!.cart).toEqual([]);
+    expect((await getPool().query("select type from commerce_order_events where tenant_id=$1 and order_id=$2", [tenantId, f.order.id])).rows.map(row => row.type)).toContain("order.buyer_closed");
   });
 });

@@ -9,7 +9,7 @@ import { storeSettingsSchema } from "@/domain/commerce/schemas";
 import { testCommerceBilling } from "../fixtures/commerce-checkout";
 vi.mock("@/lib/cep", async original => ({ ...await original<typeof import("@/lib/cep")>(), fetchCepAddress: vi.fn() }));
 const settings = storeSettingsSchema.parse({ name: "Loja teste", description: "", logoUrl: "", bannerUrl: "", accent: "#047857", contactEmail: "store@example.test", contactPhone: "", pickupEnabled: true, pickupAddress: "Rua da loja, 10", deliveryEnabled: true, deliveryDescription: "Entrega local", deliveryCents: 1200, terms: "Condições" });
-const cart = { revision: 1, lines: [], artworks: [], customer: { id: "buyer", name: "Comprador", email: "login@example.test" }, payments: { mp_enabled: false, manual_enabled: true, manual_instructions: "Pagar na loja" }, calculation: { totalCents: 9500, baseSubtotalCents: 10000, artworkDiscountCents: 500, items: [] } } as Awaited<ReturnType<typeof cartView>>;
+const cart = { pendingOrder: null, revision: 1, lines: [], artworks: [], customer: { id: "buyer", name: "Comprador", email: "login@example.test" }, payments: { mp_enabled: false, manual_enabled: true, manual_instructions: "Pagar na loja" }, calculation: { totalCents: 9500, baseSubtotalCents: 10000, artworkDiscountCents: 500, items: [] } } as Awaited<ReturnType<typeof cartView>>;
 beforeEach(() => { vi.mocked(fetchCepAddress).mockResolvedValue(null); });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 function show() {

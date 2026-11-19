@@ -33,6 +33,7 @@ type PreviewSession = {
 };
 const Context = createContext<PreviewSession | null>(null);
 const emptyCart = (): Cart => ({
+  pendingOrder: null,
   lines: [],
   revision: 0,
   calculation: null,

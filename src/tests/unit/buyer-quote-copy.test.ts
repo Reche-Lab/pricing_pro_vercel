@@ -13,7 +13,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(getPool).mockReturnValue({ query: vi.fn(async () => ({ rows: [{ ...savedBuyerQuote, contact_encrypted: encryptTenantSecret(savedBuyerQuote.contact) }] })) } as never);
   vi.mocked(commerceTransaction).mockImplementation(async work => work({ query } as never));
-  query.mockImplementation(async (sql: string) => ({ rows: sql.includes("update commerce_sessions") ? [{ id: "session" }] : [], rowCount: 1 }));
+  query.mockImplementation(async (sql: string) => ({ rows: sql.includes("commerce_sessions") ? [{ id: "session" }] : [], rowCount: 1 }));
   vi.mocked(commerceProducts).mockResolvedValue([{ ...quoteProduct, variantId: "variant", margins: { bleedMm: 2, safeMarginMm: 2 }, geometry: null, pricingRule: "per_art", curve: { mode: "step", points: [{ quantity: 1, unitPrice: 5 }] }, platform: { commissionRate: 0, fixedFee: 0, sellerShippingCost: 0, sellerShippingThreshold: 0 } }] as never);
 });
 describe("safe quote copy through the existing restore operation", () => {

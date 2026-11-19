@@ -44,7 +44,7 @@ export async function processCommerceOlistOrder(tenantId: string, orderId: strin
       if (job.status === "pending" && new Date(job.next_attempt_at).getTime() > Date.now()) return;
       const settings = await getCommerceOlistSettings(tenantId);
       if (!settings.enabled) { await client.query("update commerce_olist_orders set status='waiting',updated_at=now() where tenant_id=$1 and order_id=$2 and status<>'stopped'", [tenantId, orderId]); return; }
-      if (order.deleted_at || order.payment_status !== "paid" || order.payment_environment !== "production") {
+      if (order.deleted_at || order.cancelled_at || order.payment_status !== "paid" || order.payment_environment !== "production") {
         await client.query("update commerce_olist_orders set status='stopped',updated_at=now() where tenant_id=$1 and order_id=$2", [tenantId, orderId]); return;
       }
       const stage = nextCommerceOlistStage(order, job, settings);
@@ -61,9 +61,9 @@ export async function processCommerceOlistOrder(tenantId: string, orderId: strin
         return commerceOlistRequest(tenantId, path, method, body, deadline);
       };
       const mutate = async (path: string, body: unknown, method: "POST" | "PUT" = "POST") => {
-        const fresh = (await client.query("select payment_status,payment_environment,deleted_at from commerce_orders where tenant_id=$1 and id=$2", [tenantId, orderId])).rows[0];
+        const fresh = (await client.query("select payment_status,payment_environment,deleted_at,cancelled_at from commerce_orders where tenant_id=$1 and id=$2", [tenantId, orderId])).rows[0];
         const liveSettings = (await client.query("select settings from commerce_olist_settings where tenant_id=$1", [tenantId])).rows[0]?.settings;
-        if (!fresh || fresh.payment_status !== "paid" || fresh.payment_environment !== "production" || fresh.deleted_at || !liveSettings?.enabled) throw new CommerceError("Pedido ou integração não permite mais esta operação.", 409);
+        if (!fresh || fresh.payment_status !== "paid" || fresh.payment_environment !== "production" || fresh.deleted_at || fresh.cancelled_at || !liveSettings?.enabled) throw new CommerceError("Pedido ou integração não permite mais esta operação.", 409);
         if ((stage.startsWith("invoice_") || stage === "shipping") && liveSettings.autoInvoice === false) throw new CommerceError("O faturamento automático foi desativado. Confira as configurações antes de retomar.", 409);
         if (stage === "dispatch" && liveSettings.autoDispatch === false) throw new CommerceError("A expedição automática foi desativada. Confira as configurações antes de retomar.", 409);
         await client.query("update commerce_olist_orders set attempt_stage=$3,attempts=attempts+1,updated_at=now() where tenant_id=$1 and order_id=$2", [tenantId, orderId, stage]);

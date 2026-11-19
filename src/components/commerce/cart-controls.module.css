@@ -1,0 +1,8 @@
+.root { min-width: 0; margin: 1rem 0; padding: 1rem 0; border-block: 1px solid var(--store-border, #88959c40); }
+.notice { display: flex; align-items: flex-start; gap: .65rem; margin-bottom: .85rem; }
+.notice > svg { flex: 0 0 auto; color: var(--accent); margin-top: .1rem; }
+.notice strong { display: block; font-size: .95rem; }
+.notice p, .hint { font-size: .875rem; line-height: 1.6; opacity: .8; margin-top: .3rem; overflow-wrap: anywhere; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; }
+.actions > button, .actions > a { min-height: 44px; max-width: 100%; white-space: normal; }
+@media (max-width: 480px) { .actions > button, .actions > a { flex: 1 1 100%; } }

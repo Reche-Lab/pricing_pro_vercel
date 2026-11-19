@@ -24,6 +24,11 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe("persisted payment attempts", () => {
+  it("never starts a new charge for a purchase closed by its buyer", async () => {
+    query.mockResolvedValue({ rows: [{ ...order, cancelled_at: "2026-11-19T12:00:00Z" }] });
+    await expect(startDirectPayment(tenant, buyer, { orderId, requestId, payment: { method: "pix" } })).rejects.toMatchObject({ status: 409 });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it("uses only test credentials and the documented APRO payer in test mode", async () => {
     const base = query.getMockImplementation()!;
     query.mockImplementation(async (sql: string, ...args: unknown[]) => {

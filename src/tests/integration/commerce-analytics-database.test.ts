@@ -20,7 +20,7 @@ describe.skipIf(!url)("commerce analytics isolated PostgreSQL", () => {
       create table commerce_stores(tenant_id uuid primary key,updated_at timestamptz default now());
       create table commerce_payment_connections(tenant_id uuid primary key,payment_environment text);
       create table commerce_sessions(id uuid primary key,tenant_id uuid,customer_id uuid,cart jsonb default '[]',revision int default 0,created_at timestamptz default now(),expires_at timestamptz default now()+interval '14 days');
-      create table commerce_orders(id uuid primary key,tenant_id uuid,session_id uuid,cart_revision int,snapshot jsonb,total_cents int,payment_status text,payment_environment text,deleted_at timestamptz,created_at timestamptz default now());
+      create table commerce_orders(id uuid primary key,tenant_id uuid,session_id uuid,cart_revision int,snapshot jsonb,total_cents int,payment_status text,payment_environment text,deleted_at timestamptz,cancelled_at timestamptz,created_at timestamptz default now());
       create table commerce_buyer_quotes(id uuid primary key,tenant_id uuid,session_id uuid,snapshot jsonb,total_cents int,created_at timestamptz default now());
       create table audit_logs(tenant_id uuid,actor_user_id uuid,action text,entity_type text,entity_id uuid,metadata jsonb);
     `);
@@ -83,5 +83,12 @@ describe.skipIf(!url)("commerce analytics isolated PostgreSQL", () => {
   it("can reapply the migration without resetting existing settings or activity", async () => {
     const current = await cart(); await sql(await migration());
     expect((await sql("select cart_updated_at from commerce_sessions where id=$1",[current.id])).rows[0].cart_updated_at).toBeInstanceOf(Date);
+  });
+  it("excludes closed unpaid purchases without hiding money received after closure", async () => {
+    await order(a,"pending","production",12000);
+    await sql("update commerce_orders set cancelled_at=now() where tenant_id=$1", [a]);
+    expect((await commerceAnalyticsReport(a,{ days: "30", environment: "production" })).summary).toMatchObject({ orders: 0, pendingOrders: 0, pendingCents: 0 });
+    await sql("update commerce_orders set payment_status='paid' where tenant_id=$1", [a]);
+    expect((await commerceAnalyticsReport(a,{ days: "30", environment: "production" })).summary).toMatchObject({ orders: 1, paidOrders: 1, paidCents: 12000 });
   });
 });

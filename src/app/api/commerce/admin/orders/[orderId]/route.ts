@@ -41,6 +41,7 @@ export async function POST(
         )
       ).rows[0];
       if (!order) throw new CommerceError("Pedido não encontrado.", 404);
+      if (order.cancelled_at) throw new CommerceError("O cliente encerrou esta compra. Revise o histórico antes de qualquer operação.", 409);
       if (order.payment_environment === "test") throw new CommerceError("Pedido de teste: produção, expedição e confirmação real de pagamento estão bloqueadas.", 409);
       if (input.action === "confirm_manual") {
         if (order.provider !== "manual" || order.payment_status !== "pending")

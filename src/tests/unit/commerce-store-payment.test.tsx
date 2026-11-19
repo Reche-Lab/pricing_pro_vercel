@@ -11,6 +11,13 @@ const onConfirmed = vi.fn().mockResolvedValue(undefined);
 beforeEach(() => { vi.clearAllMocks(); vi.mocked(storeRequest).mockResolvedValue(initial()); });
 afterEach(() => { cleanup(); delete window.MercadoPago; });
 describe("buyer payment experience", () => {
+  it("removes old Pix and wallet controls when the purchase was closed in another tab", async () => {
+    vi.mocked(storeRequest).mockResolvedValue({ ...initial(), paymentStatus: "cancelled", canStart: false, attempt: { id: "attempt", method: "pix", status: "pending", result: { qrCode: "old-code" } } });
+    render(<StorePayment api="/api/store/shop" orderId="order" onConfirmed={onConfirmed}/>);
+    expect(await screen.findByRole("status")).toHaveTextContent("Esta compra foi encerrada");
+    expect(screen.queryByDisplayValue("old-code")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Gerar Pix|Pagar no Mercado Pago|Abrir pagamento seguro/ })).not.toBeInTheDocument();
+  });
   it("identifies test payments and never offers a production wallet fallback", async () => {
     vi.mocked(storeRequest).mockResolvedValue({ ...initial(), environment: "test", canStart: true });
     render(<StorePayment api="/api/store/shop" orderId="order" onConfirmed={onConfirmed}/>);

@@ -17,7 +17,7 @@ adminUrl.pathname = "/postgres";
 const admin = new pg.Client({ connectionString: adminUrl.toString() });
 await admin.connect();
 try {
-  await admin.query(`create database "${database}"`);
+  await admin.query(`create database "${database}" template template0 encoding 'UTF8'`);
   for (const role of ["anon", "authenticated"]) {
     if (
       !(await admin.query("select 1 from pg_roles where rolname=$1", [role]))

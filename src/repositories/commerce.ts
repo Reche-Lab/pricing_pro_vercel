@@ -72,6 +72,9 @@ export type BuyerSession = {
   revision: number;
 };
 export type CommerceOrder = {
+  cancelled_at?: string | Date | null;
+  cancellation_reason?: string | null;
+  converted_quote_id?: string | null;
   deleted_at?: string | Date | null;
   payment_environment?: PaymentEnvironment;
   id: string;
@@ -250,7 +253,7 @@ export async function getCommerceAdmin(userId: string, tenantId: string) {
         [tenantId],
       ),
       getPool().query(
-        `select id,total_cents,payment_status,fulfillment_status,provider,payment_environment,created_at::text,snapshot->'customer' as customer from commerce_orders where tenant_id=$1 and deleted_at is null order by created_at desc limit 100`,
+        `select id,total_cents,payment_status,fulfillment_status,provider,payment_environment,created_at::text,snapshot->'customer' as customer from commerce_orders where tenant_id=$1 and deleted_at is null and cancelled_at is null order by created_at desc limit 100`,
         [tenantId],
       ),
       commerceLaunchReadiness(tenantId),
@@ -400,6 +403,10 @@ export async function createBuyerSession(tenantId: string) {
   return { session: result.rows[0], token };
 }
 export async function cartView(store: CommerceStore, session: BuyerSession) {
+  const pendingOrder = session.customer_id ? (await getPool().query<Pick<CommerceOrder, "id" | "total_cents" | "shipping_cents" | "subtotal_cents" | "snapshot">>(
+    `select id,total_cents,shipping_cents,subtotal_cents,snapshot from commerce_orders where tenant_id=$1 and session_id=$2 and customer_id=$3 and cart_revision=$4
+     and payment_status='pending' and cancelled_at is null and deleted_at is null`,
+    [store.tenant_id, session.id, session.customer_id, session.revision])).rows[0] ?? null : null;
   const products = await commerceProducts(store.tenant_id);
   const customer = session.customer_id
     ? (
@@ -427,7 +434,10 @@ export async function cartView(store: CommerceStore, session: BuyerSession) {
   } catch {
     /* Keep unavailable lines removable. */
   }
+  if (pendingOrder) calculation = { items: pendingOrder.snapshot.items, totalCents: pendingOrder.subtotal_cents,
+    baseSubtotalCents: pendingOrder.subtotal_cents + (pendingOrder.snapshot.artworkDiscountCents ?? 0), artworkDiscountCents: pendingOrder.snapshot.artworkDiscountCents ?? 0 };
   return {
+    pendingOrder: pendingOrder ? { id: pendingOrder.id, total_cents: pendingOrder.total_cents, shipping_cents: pendingOrder.shipping_cents } : null,
     lines: session.cart,
     revision: session.revision,
     calculation,
@@ -448,6 +458,10 @@ export async function replaceCart(
   intent?: "purchase" | "quote",
 ) {
   await commerceTransaction(async (client) => {
+    const current = (await client.query<BuyerSession>("select * from commerce_sessions where tenant_id=$1 and id=$2 and revision=$3 and expires_at>now() for update", [store.tenant_id, session.id, revision])).rows[0];
+    if (!current) throw new CommerceError("O carrinho mudou em outra aba. Atualize antes de continuar.", 409);
+    const pending = (await client.query("select id from commerce_orders where tenant_id=$1 and session_id=$2 and cart_revision=$3 and cancelled_at is null and deleted_at is null and payment_status='pending'", [store.tenant_id, session.id, revision])).rows[0];
+    if (pending) throw new CommerceError("Seu carrinho possui um pedido aguardando pagamento. Use Editar itens para encerrar o pagamento anterior e continuar.", 409, { code: "pending_order" });
     const products = await commerceProducts(store.tenant_id, client);
     calculateCart(lines, products);
     for (const line of lines.filter((line) => line.artworkId)) {
@@ -489,11 +503,14 @@ export async function createCommerceOrder(
     const current = locked.rows[0];
     if (!current || !current.customer_id)
       throw new CommerceError("Sessão expirada.", 401);
-    const previous = await client.query<{ id: string }>(
-      "select id from commerce_orders where tenant_id=$1 and session_id=$2 and cart_revision=$3",
-      [store.tenant_id, session.id, input.revision],
+    const previous = await client.query<{ id: string; cancelled_at: unknown; deleted_at: unknown }>(
+      "select id,cancelled_at,deleted_at from commerce_orders where tenant_id=$1 and session_id=$2 and cart_revision=$3 and customer_id=$4",
+      [store.tenant_id, session.id, input.revision, current.customer_id],
     );
-    if (previous.rows[0]) return previous.rows[0];
+    if (previous.rows[0]) {
+      if (previous.rows[0].cancelled_at || previous.rows[0].deleted_at) throw new CommerceError("O pedido anterior foi encerrado. Atualize o carrinho antes de continuar.", 409);
+      return { id: previous.rows[0].id };
+    }
     if (current.revision !== input.revision)
       throw new CommerceError(
         "Carrinho alterado. Confira os valores novamente.",
@@ -627,10 +644,6 @@ export async function createCommerceOrder(
         from commerce_artworks where tenant_id=$1 and session_id=$2 and id=$6`,
       [store.tenant_id, session.id, result.rows[0].id, line.id, line.preparation === "team", line.artworkId]);
     }
-    await client.query(
-      "update commerce_sessions set cart='[]',revision=revision+1 where tenant_id=$1 and id=$2",
-      [store.tenant_id, session.id],
-    );
     return result.rows[0];
   });
 }
@@ -678,6 +691,9 @@ export async function buyerOrders(tenantId: string, customerId: string) {
       created_at,
       snapshot,
       payment_environment,
+      cancelled_at,
+      cancellation_reason,
+      converted_quote_id,
     }) => ({
       id,
       total_cents,
@@ -688,6 +704,9 @@ export async function buyerOrders(tenantId: string, customerId: string) {
       provider,
       checkout_url,
       created_at,
+      cancelled_at: cancelled_at ? new Date(cancelled_at).toISOString() : null,
+      cancellation_reason: cancellation_reason ?? null,
+      converted_quote_id: converted_quote_id ?? null,
       items: snapshot.items,
       payment_environment: paymentEnvironment(payment_environment),
       address: snapshot.address,

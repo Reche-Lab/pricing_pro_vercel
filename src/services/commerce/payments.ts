@@ -174,7 +174,7 @@ export async function checkoutPayment(
     ).rows[0];
     if (!order || order.provider !== "mercado_pago")
       throw new CommerceError("Pedido não encontrado.", 404);
-    if (order.payment_status !== "pending")
+    if (order.cancelled_at || order.deleted_at || order.payment_status !== "pending")
       throw new CommerceError(
         "Este pedido já teve seu pagamento processado.",
         409,
@@ -314,6 +314,7 @@ export async function reconcileCommercePayment(
     )
       return;
     if (row.payment_status === "refunded") return;
+    if (row.cancelled_at && status === "paid") console.error("Commerce payment received after buyer closed purchase. Manual review required.", { tenantId, orderId: row.id, paymentId: String(payment.id) });
     await client.query(
       "update commerce_orders set payment_status=$3,provider_payment_id=$4,updated_at=now() where tenant_id=$1 and id=$2",
       [tenantId, row.id, status, String(payment.id)],
@@ -332,4 +333,16 @@ export async function reconcileCommercePayment(
       ],
     );
   });
+}
+
+export async function refreshHostedPayment(tenantId: string, order: CommerceOrder) {
+  if (!order.checkout_url || paymentEnvironment(order.payment_environment) !== "production") return;
+  const credentials = await paymentCredentials(tenantId);
+  const search = new URLSearchParams({ external_reference: order.id, limit: "50", sort: "date_created", criteria: "desc" });
+  const data = await mpRequest(`/v1/payments/search?${search}`, credentials.accessToken);
+  if (!Array.isArray(data.results)) throw new CommerceError("Não foi possível consultar o pagamento anterior. Tente novamente.", 502);
+  for (const payment of data.results) {
+    if (payment.external_reference === order.id && String(payment.collector_id) === credentials.sellerId && /^\d+$/.test(String(payment.id)) && ["approved", "refunded", "charged_back"].includes(payment.status))
+      await reconcileCommercePayment(tenantId, String(payment.id));
+  }
 }

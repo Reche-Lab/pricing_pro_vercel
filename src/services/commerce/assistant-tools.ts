@@ -145,6 +145,10 @@ export async function confirmAssistantCart(context: AssistantToolContext, action
     if (payload.configRevision !== config.revision) throw new CommerceError("As condições da loja mudaram. Solicite outra proposta.", 409);
     const live = (await client.query("select s.enabled,s.revision from commerce_assistant_settings s join commerce_stores c on c.tenant_id=s.tenant_id where s.tenant_id=$1 and c.enabled and c.status='published' for share of s,c", [store.tenant_id])).rows[0];
     if (!live?.enabled || live.revision !== config.revision) throw new CommerceError("O assistente está indisponível. Reabra o atendimento.", 409);
+    const current = (await client.query("select id from commerce_sessions where tenant_id=$1 and id=$2 and revision=$3 and expires_at>now() for update", [store.tenant_id, session.id, payload.revision])).rows[0];
+    if (!current) throw new CommerceError("O carrinho mudou. Solicite uma nova proposta.", 409);
+    if ((await client.query("select id from commerce_orders where tenant_id=$1 and session_id=$2 and cart_revision=$3 and cancelled_at is null and deleted_at is null and payment_status='pending'", [store.tenant_id, session.id, payload.revision])).rows.length)
+      throw new CommerceError("Há uma compra aguardando pagamento. Abra o carrinho e escolha Editar itens ou Salvar como orçamento antes de continuar pelo assistente.", 409);
     const products = await commerceProducts(store.tenant_id, client), calculation = await calculateCommerceCart(store.tenant_id, session.id, payload.lines, products, client);
     if (hashCommerceToken(JSON.stringify(calculation)) !== payload.pricingHash) throw new CommerceError("Os preços ou benefícios mudaram. Solicite uma nova simulação.", 409);
     const result = await client.query("update commerce_sessions set cart=$4,revision=revision+1 where tenant_id=$1 and id=$2 and revision=$3 and expires_at>now() returning id", [store.tenant_id, session.id, payload.revision, JSON.stringify(payload.lines)]);

@@ -26,7 +26,7 @@ export async function commerceAnalyticsReport(tenantId: string, query: Analytics
   const settings = await loadCommerceAnalyticsSettings(tenantId);
   const result = await getPool().query<{ summary: CommerceAnalyticsReport["summary"]; daily: CommerceAnalyticsReport["daily"]; products: CommerceAnalyticsReport["products"] }>(`
     with orders as (
-      select id,total_cents,payment_status,created_at,snapshot->'items' as items from commerce_orders where tenant_id=$1 and deleted_at is null
+      select id,total_cents,payment_status,created_at,snapshot->'items' as items from commerce_orders where tenant_id=$1 and deleted_at is null and (cancelled_at is null or payment_status in ('paid','refunded'))
       and created_at >= date_trunc('day',now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo' - (($2::int-1)*interval '1 day')
       and ($3::text='all' or payment_environment=$3::text)
     ), quotes as (
@@ -59,7 +59,7 @@ export async function commerceAnalyticsReport(tenantId: string, query: Analytics
       'guestQuoteDrafts',(select count(*) from carts where cart_intent='quote' and customer_id is null),
       'identifiedQuoteDrafts',(select count(*) from carts where cart_intent='quote' and customer_id is not null),
       'abandonedCarts',(select count(*) from carts s where s.cart_intent='purchase' and s.cart_updated_at < now()-($4::int*interval '1 hour')
-        and not exists(select 1 from commerce_orders o where o.tenant_id=$1 and o.session_id=s.id and o.cart_revision=s.revision and o.deleted_at is null)
+        and not exists(select 1 from commerce_orders o where o.tenant_id=$1 and o.session_id=s.id and o.cart_revision=s.revision and o.deleted_at is null and o.cancelled_at is null)
         and not exists(select 1 from commerce_buyer_quotes q where q.tenant_id=$1 and q.session_id=s.id and q.snapshot->'lines'=s.cart)),
       'legacyQuotes',(select count(*) from commerce_buyer_quotes where tenant_id=$1 and environment='unknown'
         and created_at >= date_trunc('day',now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo' - (($2::int-1)*interval '1 day'))

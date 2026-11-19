@@ -73,6 +73,7 @@ import { StoreAnalyticsConsent, StoreAnalyticsProvider, useStoreAnalytics } from
 import { StoreAnalyticsScreen } from "./StoreAnalyticsScreen";
 import { analyticsCartChanges, analyticsCommercePayload, type AnalyticsSettings } from "@/domain/commerce/analytics";
 import { quoteArtworkBenefits } from "@/domain/commerce/quote-artwork-benefit";
+import { StoreCartControls } from "./StoreCartControls";
 const StoreLibrary = dynamic(() => import("./StoreLibrary").then(m => m.StoreLibrary));
 const FeaturedLibraryCampaigns = dynamic(() => import("./StoreLibrary").then(m => m.FeaturedLibraryCampaigns));
 const StoreBuyerQuotes = dynamic(() => import("./StoreBuyerQuotes").then(module => module.StoreBuyerQuotes), { loading: () => <p role="status">Carregando seus orçamentos…</p> });
@@ -210,6 +211,7 @@ function StorefrontContent({
   }
   const selectedProduct =
     view === "produto" ? findCommerceProduct(products, path[1]) : undefined;
+  const pendingCartControls = !preview && cart?.pendingOrder ? <StoreCartControls api={api} base={base} revision={cart.revision} orderId={cart.pendingOrder.id} onChanged={async () => { setQuoteMode(false); await refresh(); }} disabled={busy} showPaymentLink analyticsPayload={cart.payments.payment_environment === "test" ? undefined : analyticsCommercePayload(cart.calculation?.items ?? [])}/> : null;
   return (
     <main
       className={`${styles.store} ${settings.experience?.style === "studio" ? studioStyles.theme : ""}`}
@@ -358,6 +360,7 @@ function StorefrontContent({
             </Link>
           </p>
         ) : null}
+        {["checkout", "orcamento", "produto", "catalogo"].includes(view) ? pendingCartControls : null}
         {children}
         {view === "home" && libraryEnabled ? <FeaturedLibraryCampaigns slug={slug} preview={preview} base={base}/> : null}
         {libraryInitial && ["artes", "campanhas"].includes(view) ? <StoreLibrary key={`${view}/${path[1] ?? ""}?${searchParams.toString()}`} slug={slug} preview={preview} base={base} products={products} initial={libraryInitial} campaignSlug={view === "campanhas" ? path[1] : undefined} campaignsOnly={view === "campanhas" && !path[1]} initialCategoryId={libraryFilters.success ? libraryFilters.data.category : undefined} initialArtworkId={libraryFilters.success ? libraryFilters.data.artwork : undefined}/> : null}
@@ -381,7 +384,7 @@ function StorefrontContent({
             onArtworkRefresh={refresh}
             base={base}
             api={api}
-            disabled={busy || !cart || paused}
+            disabled={busy || !cart || paused || Boolean(cart?.pendingOrder)}
             onAdd={(lines) =>
               action(async () => {
                 await update([...(cart?.lines ?? []), ...lines]);
@@ -399,6 +402,7 @@ function StorefrontContent({
         {view === "carrinho" ? (
           <>
             <h1 className={styles.title}>{quoting ? "Itens do seu orçamento" : "Seu carrinho"}</h1>
+            {pendingCartControls}
             {quoting ? <p className={`${styles.muted} mb-4`}>Ajuste os produtos e quantidades. Enviar e aprovar artes não é obrigatório para gerar o orçamento.</p> : null}
             {!cart ? (
               <p>Carregando…</p>
@@ -440,7 +444,7 @@ function StorefrontContent({
                           <button
                             aria-label="Remover item"
                             title="Remover item"
-                            disabled={busy}
+                            disabled={busy || Boolean(cart.pendingOrder)}
                             className="self-start rounded-md p-2 text-zinc-500 hover:bg-rose-50 hover:text-rose-700"
                             onClick={() =>
                               action(() =>
@@ -481,13 +485,14 @@ function StorefrontContent({
                               inputMode="numeric"
                               key={line.quantity}
                               defaultValue={line.quantity}
+                              disabled={busy || Boolean(cart.pendingOrder)}
                               required
                               pattern="[0-9]+"
                             />
                           </label>
                           <button
                             className={`${styles.secondary} shrink-0`}
-                            disabled={busy || paused}
+                            disabled={busy || paused || Boolean(cart.pendingOrder)}
                             type="submit"
                             title="Atualizar quantidade"
                             aria-label="Atualizar quantidade"
@@ -498,6 +503,7 @@ function StorefrontContent({
                         {product?.personalized ? (
                           <ArtworkTools
                             preview={preview}
+                            disabled={busy || Boolean(cart.pendingOrder)}
                             slug={slug}
                             storeName={settings.name}
                             libraryEnabled={libraryEnabled}
@@ -530,12 +536,12 @@ function StorefrontContent({
                 </div>
                 <aside className={styles.summary}>
                   <h2 className="text-xl font-semibold">{quoting ? "Resumo do orçamento" : "Resumo"}</h2>
-                  <Summary subtotal={cart.calculation?.totalCents ?? 0} artworkDiscountCents={cart.calculation?.artworkDiscountCents} />
+                  <Summary subtotal={cart.calculation?.totalCents ?? 0} artworkDiscountCents={cart.calculation?.artworkDiscountCents} shipping={cart.pendingOrder?.shipping_cents}/>
                   <Link
                     className={`${styles.primary} mt-5 w-full`}
-                    href={quoting ? `${base}/orcamento?etapa=dados` : `${base}/checkout`}
+                    href={cart.pendingOrder ? `${base}/pedidos/${cart.pendingOrder.id}` : quoting ? `${base}/orcamento?etapa=dados` : `${base}/checkout`}
                   >
-                    {quoting ? "Continuar para dados e entrega" : "Continuar para entrega"}
+                    {cart.pendingOrder ? "Continuar pagamento do pedido" : quoting ? "Continuar para dados e entrega" : "Continuar para entrega"}
                     <ArrowRight size={17} />
                   </Link>
                   <Link
@@ -544,13 +550,14 @@ function StorefrontContent({
                   >
                     {quoting ? "Adicionar mais produtos ao orçamento" : "Continuar comprando"}
                   </Link>
-                  {!preview && !quoting ? <Link href={`${base}/orcamento`} className={`${styles.secondary} mt-4 w-full`}><FileText size={17}/>Gerar orçamento sem comprar</Link> : null}
+                  {!preview && !quoting && !cart.pendingOrder ? <Link href={`${base}/orcamento`} className={`${styles.secondary} mt-4 w-full`}><FileText size={17}/>Gerar orçamento sem comprar</Link> : null}
+                  {!preview && !cart.pendingOrder ? <StoreCartControls api={api} base={base} revision={cart.revision} onChanged={refresh} disabled={busy} analyticsPayload={cart.payments.payment_environment === "test" ? undefined : analyticsCommercePayload(cart.calculation?.items ?? [])}/> : null}
                 </aside>
               </div>
             )}
           </>
         ) : null}
-        {view === "orcamento" && !quoteDetails ? cart ? <StoreQuoteOverview cart={cart} products={products} base={base} storeName={settings.name} busy={busy || paused} onUpdate={update} renderArtwork={(line, disabled) => {
+        {view === "orcamento" && !quoteDetails ? cart ? <StoreQuoteOverview cart={cart} products={products} base={base} storeName={settings.name} busy={busy || paused || Boolean(cart.pendingOrder)} onUpdate={update} renderArtwork={(line, disabled) => {
           const product = products.find(item => item.id === line.productId);
           return product ? <ArtworkTools slug={slug} storeName={settings.name} product={product} disabled={disabled} libraryEnabled={libraryEnabled} pricingLines={cart.lines} benefitContext="cart" preparation={line.preparation ?? "customer"} artwork={cart.artworks.find(art => art.id === line.artworkId)} artworks={cart.artworks.filter(art => art.product_id === product.id)} onRefresh={refresh} onPreparationChange={preparation => update(cart.lines.map(item => item.id === line.id ? { ...item, preparation } : item))} onSelect={(id, title) => update(cart.lines.map(item => item.id === line.id ? { ...item, artworkId: id, ...(title ? { artworkName: title, preparation: "customer" as const } : {}) } : item))}/>: null;
         }}/> : <p role="status">Recuperando seu orçamento…</p> : null}
@@ -565,7 +572,7 @@ function StorefrontContent({
                 href={`${base}/catalogo`}
                 label={quoteDetails ? "Escolher produtos para o orçamento" : "Ver produtos"}
               />
-            ) : !cart.customer && !preview ? (
+            ) : cart.pendingOrder ? <p className={styles.muted}>Seu pedido já está salvo. Continue o pagamento ou use as opções acima para editar, limpar ou salvar como orçamento.</p> : !cart.customer && !preview ? (
               <BuyerLogin api={api} onLogged={refresh} disabled={false} forQuote={quoteDetails}/>
             ) : preview ? (
               <PreviewCheckout
@@ -604,7 +611,7 @@ function StorefrontContent({
         ) : null}
         {view === "orcamentos" ? <BuyerSessionBoundary cart={cart} error={cartError} api={api} refresh={refresh} preview={preview}>{cart?.customer ? <StoreBuyerQuotes key={`${api}:${cart.customer.id}`} api={api} base={base} quoteId={path[1]} revision={cart.revision} hasCart={cart.lines.length > 0} onRestored={async mode => { setQuoteMode(mode === "quote"); await refresh(); }}/> : null}</BuyerSessionBoundary> : null}
         {view === "pedidos" ? (
-          <BuyerSessionBoundary cart={cart} error={cartError} api={api} refresh={refresh} preview={preview}>{cart?.customer ? <StoreBuyerOrders key={`${api}:${cart.customer.id}`} api={api} base={base} buyerId={cart.customer.id} orderId={path[1]} instructions={cart.payments.manual_instructions ?? ""} products={products} onSessionExpired={refresh}/> : null}</BuyerSessionBoundary>
+          <BuyerSessionBoundary cart={cart} error={cartError} api={api} refresh={refresh} preview={preview}>{cart?.customer ? <StoreBuyerOrders key={`${api}:${cart.customer.id}`} api={api} base={base} buyerId={cart.customer.id} orderId={path[1]} instructions={cart.payments.manual_instructions ?? ""} products={products} onSessionExpired={refresh} cartRevision={cart.revision} onCartChanged={refresh}/> : null}</BuyerSessionBoundary>
         ) : null}
       </div>
       <StoreFooter settings={settings} products={products} base={base} preview={preview} libraryEnabled={libraryEnabled} institutionalLinks={institutionalLinks} payments={cart?.payments} view={view}/>

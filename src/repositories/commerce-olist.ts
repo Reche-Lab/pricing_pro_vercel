@@ -36,7 +36,7 @@ export async function queueCommerceOlistOrder(tenantId: string, orderId: string,
   await commerceTransaction(async client => {
     const order = (await client.query<CommerceOrder>("select * from commerce_orders where tenant_id=$1 and id=$2 and deleted_at is null for update", [tenantId, orderId])).rows[0];
     if (!order) throw new CommerceError("Pedido não encontrado.", 404);
-    if (order.payment_status !== "paid" || order.payment_environment !== "production") throw new CommerceError("Somente pedidos pagos de produção podem ser sincronizados.", 409);
+    if (order.cancelled_at || order.payment_status !== "paid" || order.payment_environment !== "production") throw new CommerceError("Somente pedidos ativos e pagos de produção podem ser sincronizados.", 409);
     const settings = (await client.query("select settings from commerce_olist_settings where tenant_id=$1", [tenantId])).rows[0]?.settings;
     if (!settings?.enabled) throw new CommerceError("Ative a integração em Loja online > Olist.", 409);
     await client.query("insert into commerce_olist_orders(tenant_id,order_id) values($1,$2) on conflict(tenant_id,order_id) do update set status=case when commerce_olist_orders.status='stopped' then 'stopped' else 'pending' end,next_attempt_at=now(),updated_at=now()", [tenantId, orderId]);

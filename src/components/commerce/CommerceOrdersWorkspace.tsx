@@ -7,7 +7,7 @@ import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, Eye, PackageCheck, Paintbr
 import { orderProductionState, type OrderFilter, type OrderWorkspace } from "@/domain/commerce/order-workflow";
 import { storeMoney } from "./store-http";
 
-const filters: [OrderFilter, string][] = [["all", "Todos"], ["unread", "Não vistos"], ["payment", "Pagamento pendente"], ["preparation", "Preparar artes"], ["approval", "Aguardando aprovação"], ["ready", "Prontos para produção"], ["production", "Em produção"], ["shipped", "Enviados"], ["completed", "Concluídos"], ["test", "Testes"]];
+const filters: [OrderFilter, string][] = [["all", "Todos"], ["unread", "Não vistos"], ["payment", "Pagamento pendente"], ["preparation", "Preparar artes"], ["approval", "Aguardando aprovação"], ["ready", "Prontos para produção"], ["production", "Em produção"], ["shipped", "Enviados"], ["completed", "Concluídos"], ["test", "Testes"], ["cancelled", "Encerrados pelo cliente"]];
 export function CommerceOrdersWorkspace({ data, filter, canDelete = false }: { data: OrderWorkspace; filter: OrderFilter; canDelete?: boolean }) {
   const router = useRouter();
   const [notice, setNotice] = useState("");

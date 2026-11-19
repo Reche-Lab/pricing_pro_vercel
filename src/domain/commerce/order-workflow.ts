@@ -1,4 +1,5 @@
 export type OrderProductionFacts = {
+  cancelled_at?: string | null;
   payment_environment?: "production" | "test";
   payment_status: string;
   fulfillment_status: string;
@@ -6,9 +7,10 @@ export type OrderProductionFacts = {
   prepared_artworks: number;
   approved_artworks: number;
 };
-export const orderFilters = ["all", "unread", "payment", "preparation", "approval", "ready", "production", "shipped", "completed", "test"] as const;
+export const orderFilters = ["all", "unread", "payment", "preparation", "approval", "ready", "production", "shipped", "completed", "test", "cancelled"] as const;
 export type OrderFilter = typeof orderFilters[number];
 export function orderProductionState(order: OrderProductionFacts) {
+  if (order.cancelled_at) return { key: "cancelled", label: order.payment_status === "paid" ? "Pagamento após encerramento · revisar" : "Compra encerrada pelo cliente", editable: false, printable: false } as const;
   if (order.payment_environment === "test") return { key: "test", label: "Pedido de teste · sem produção ou envio", editable: true, printable: false } as const;
   const paid = order.payment_status === "paid";
   const approved = order.approved_artworks >= order.required_artworks;
@@ -27,6 +29,7 @@ export function orderProductionState(order: OrderProductionFacts) {
 export function orderEventLabel(event: string) {
   if (event.startsWith("olist.")) return ({ "olist.queued": "Sincronização Olist solicitada", "olist.customer": "Cliente vinculado no Olist", "olist.sales_order": "Pedido de venda Olist vinculado", "olist.production_ready": "Produção concluída para faturamento", "olist.invoice_create": "Nota fiscal gerada", "olist.invoice_authorize": "Autorização fiscal solicitada", "olist.invoice_status": "Situação fiscal conferida", "olist.dispatch": "Expedição vinculada no Olist", "olist.tracking": "Rastreio atualizado no Olist", "olist.error": "Integração Olist precisa de atenção" } as Record<string, string>)[event] ?? "Integração Olist atualizada";
   if (event === "order.admin_deleted") return "Pedido excluído da gestão administrativa";
+  if (event === "order.buyer_closed") return "Compra encerrada pelo cliente";
   if (event === "payment.test_paid") return "Pagamento de teste aprovado";
   if (event === "payment.test_pending") return "Pagamento de teste pendente";
   if (event === "payment.test_refunded") return "Pagamento de teste estornado";

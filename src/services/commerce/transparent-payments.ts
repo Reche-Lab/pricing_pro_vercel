@@ -5,7 +5,7 @@ import { CommerceError } from "@/domain/commerce/commerce";
 import { commercePaymentSettingsSchema, paymentEnvironment, type PaymentEnvironment } from "@/domain/commerce/payment-settings";
 import { amountString, assertPaymentAllowed, validateProviderOrder, type BuyerPaymentState, type directPaymentSchema, type PaymentAttemptStatus, type PaymentResult } from "@/domain/commerce/transparent-payment";
 import { commerceTransaction, type CommerceOrder } from "@/repositories/commerce";
-import { paymentCredentials } from "./payments";
+import { paymentCredentials, refreshHostedPayment } from "./payments";
 import { paymentFailureMessage, readPaymentProviderResponse } from "./payment-diagnostics";
 
 type Attempt = {
@@ -34,11 +34,11 @@ export async function buyerPaymentState(tenantId: string, customerId: string, or
   const environment = paymentEnvironment(order.payment_environment);
   const publicKey = environment === "test" ? account?.test_public_key : account?.public_key;
   return {
-    environment, canStart: environment === paymentEnvironment(account?.payment_environment),
+    environment, canStart: !order.cancelled_at && !order.deleted_at && environment === paymentEnvironment(account?.payment_environment),
     enabled: Boolean(account?.mp_enabled && account?.transparent_enabled && publicKey),
     publicKey: publicKey ?? "", amountCents: order.total_cents,
     settings: commercePaymentSettingsSchema.parse(account?.checkout_settings ?? {}),
-    hosted: Boolean(order.checkout_url), paymentStatus: order.payment_status,
+    hosted: Boolean(order.checkout_url), paymentStatus: order.cancelled_at || order.deleted_at ? "cancelled" : order.payment_status,
     payer: environment === "test" ? { email: "test_payer@example.com", identification: { type: "CPF", number: "12345678909" } } : { email: order.snapshot.billing?.email ?? order.snapshot.customer.email, ...(order.snapshot.billing?.document ? { identification: { type: order.snapshot.billing.personType === "J" ? "CNPJ" as const : "CPF" as const, number: order.snapshot.billing.document.replace(/\D/g, "") } } : {}) },
     attempt: attempt ? { id: attempt.id, method: attempt.method, status: attempt.status, result: attempt.result } : null,
   };
@@ -51,7 +51,7 @@ export async function startDirectPayment(tenantId: string, customerId: string, i
   const reservation = await commerceTransaction(async client => {
     const order = (await client.query<CommerceOrder>("select * from commerce_orders where tenant_id=$1 and customer_id=$2 and id=$3 for update", [tenantId, customerId, input.orderId])).rows[0];
     if (!order || order.provider !== "mercado_pago") throw new CommerceError("Pedido não encontrado.", 404);
-    if (order.payment_status !== "pending") throw new CommerceError("Este pedido já teve seu pagamento processado.", 409);
+    if (order.cancelled_at || order.deleted_at || order.payment_status !== "pending") throw new CommerceError("Este pedido foi encerrado ou já teve seu pagamento processado.", 409);
     if (order.checkout_url) throw new CommerceError("Este pedido já possui um pagamento na carteira Mercado Pago. Continue pelo link emitido.", 409);
     const previous = (await client.query<Attempt>("select * from commerce_payment_attempts where tenant_id=$1 and order_id=$2 and (request_id=$3 or status=any($4::text[])) order by created_at desc limit 1", [tenantId, order.id, input.requestId, activeStatuses])).rows[0];
     if (previous) {
@@ -153,6 +153,7 @@ export async function reconcileDirectPayment(tenantId: string, id: string, envir
     if (order.payment_status === "refunded" || (order.payment_status === "paid" && !["paid", "refunded"].includes(verified.status))) return;
     await client.query("update commerce_payment_attempts set provider_order_id=$3,status=$4,result=$5,updated_at=now() where tenant_id=$1 and id=$2", [tenantId, attempt.id, id, verified.status, JSON.stringify(verified.result)]);
     if (["paid", "refunded"].includes(verified.status)) {
+      if (order.cancelled_at && verified.status === "paid") console.error("Commerce direct payment received after buyer closed purchase. Manual review required.", { tenantId, orderId: order.id, providerOrderId: id });
       await client.query("update commerce_orders set payment_status=$3,provider_payment_id=$4,updated_at=now() where tenant_id=$1 and id=$2", [tenantId, order.id, verified.status, id]);
     }
     if (attempt.status !== verified.status) {
@@ -163,7 +164,8 @@ export async function reconcileDirectPayment(tenantId: string, id: string, envir
 }
 
 export async function refreshDirectPayment(tenantId: string, customerId: string, orderId: string) {
-  await ownedOrder(tenantId, customerId, orderId);
+  const order = await ownedOrder(tenantId, customerId, orderId);
+  if (order.checkout_url) await refreshHostedPayment(tenantId, order);
   const attempt = (await getPool().query<Attempt>("select * from commerce_payment_attempts where tenant_id=$1 and order_id=$2 order by created_at desc,id desc limit 1", [tenantId, orderId])).rows[0];
   if (attempt?.provider_order_id) await reconcileDirectPayment(tenantId, attempt.provider_order_id, paymentEnvironment(attempt.payment_environment));
   return buyerPaymentState(tenantId, customerId, orderId);
