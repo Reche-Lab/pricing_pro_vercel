@@ -1,8 +1,39 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { PDFPage } from "pdf-lib";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 import { generateQuotePdf } from "@/services/pdf/quote-pdf";
 
+afterEach(() => vi.restoreAllMocks());
+
 describe("quote PDF", () => {
+  it.each([
+    ["draft", "Orçamento"],
+    ["sent", "Enviado"],
+    ["accepted", "Aceito"],
+    ["rejected", "Recusado"],
+    ["expired", "Expirado"],
+    ["cancelled", "Cancelado"]
+  ] as const)("prints the customer-facing label for %s without changing the internal status", async (status, label) => {
+    const draw = vi.spyOn(PDFPage.prototype, "drawText");
+    const input = pdfInput("");
+    input.quote.status = status;
+    await generateQuotePdf(input);
+    const texts = draw.mock.calls.map(([text]) => text);
+    expect(texts[texts.indexOf("Status") + 1]).toBe(label);
+    expect(input.quote.status).toBe(status);
+  });
+
+  it("preserves Portuguese accents while removing unsupported image symbols", async () => {
+    const draw = vi.spyOn(PDFPage.prototype, "drawText");
+    const input = pdfInput("");
+    input.quote.customer_name = "João Conceição \u{1F3A8}";
+    const pdf = await generateQuotePdf(input);
+    const texts = draw.mock.calls.map(([text]) => text).join("\n");
+    expect(texts).toContain("João Conceição");
+    expect(texts).not.toContain("\u{1F3A8}");
+    expect(Buffer.from(pdf.subarray(0, 4)).toString("ascii")).toBe("%PDF");
+  });
+
   it("generates a PDF buffer", async () => {
     const pdf = await generateQuotePdf(pdfInput("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="));
 

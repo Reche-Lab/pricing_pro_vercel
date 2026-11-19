@@ -8,6 +8,7 @@ import {
   type QuotePdfArtworkVariant
 } from "@/domain/quotes/pdf-artwork";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
+import type { QuoteStatus } from "@/domain/quotes/types";
 import { loadArtworkDataUrl } from "@/services/storage/artwork-storage";
 import { deliveryEstimate, formatDeliveryDate, type DeliveryEstimate, type ProductionSettings } from "@/domain/shipping/production-lead-time";
 
@@ -17,6 +18,14 @@ const margin = 42;
 const LOGO_BOX = { width: 82, height: 52 };
 const ARTWORK_THUMBNAIL = { width: 96, height: 96 };
 const ARTWORK_CARD_HEIGHT = 118;
+const STATUS_LABELS: Record<QuoteStatus, string> = {
+  draft: "Orçamento",
+  sent: "Enviado",
+  accepted: "Aceito",
+  rejected: "Recusado",
+  expired: "Expirado",
+  cancelled: "Cancelado"
+};
 
 export async function generateQuotePdf(input: {
   tenantName: string;
@@ -96,7 +105,7 @@ export async function generateQuotePdf(input: {
     ["Orcamento", shortId(input.quote.id)],
     ["Data", formatDate(input.quote.created_at)],
     ["Validade", input.quote.valid_until ? formatDate(input.quote.valid_until) : "-"],
-    ["Status", input.quote.status]
+    ["Status", STATUS_LABELS[input.quote.status] ?? "Orçamento"]
   ]);
 
   drawSectionTitle("Cliente");
@@ -450,9 +459,8 @@ function formatDate(value: string): string {
 
 function sanitizePdfText(value: string): string {
   return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\x20-\x7E]/g, " ");
+    .normalize("NFC")
+    .replace(/[^\x20-\x7E\xA0-\xFF]/g, " ");
 }
 
 function shortId(value: string) {
