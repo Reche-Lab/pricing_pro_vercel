@@ -9,7 +9,8 @@ import postcss from "postcss";
 import tailwind from "tailwindcss";
 const require = createRequire(import.meta.url), { chromium } = require(process.env.COMMERCE_PLAYWRIGHT_PATH || "playwright");
 const root = fileURLToPath(new URL("../", import.meta.url)), output = "/tmp/commerce-buyer-area";
-const discoveryOnly = process.env.COMMERCE_BROWSER_DISCOVERY_ONLY === "true";
+const paletteOnly = process.env.COMMERCE_BROWSER_PRODUCT_PALETTE_ONLY === "true";
+const discoveryOnly = process.env.COMMERCE_BROWSER_DISCOVERY_ONLY === "true" || paletteOnly;
 await mkdir(output, { recursive: true });
 const products = [{ id: "00000000-0000-4000-8000-000000000001", slug: "botton-3-5-cm", name: "Botton - 3,5 cm", description: "Personalizado", category: "Bottons", imageUrl: "/mockups/botton-25mm-v1/base-verso.png", personalized: true, minQuantity: 1, maxQuantity: 1000, maxArtworks: 10, unitCents: 500, offer: { originalUnitCents: 500, minimumUnitCents: 300, maxDiscountPercent: 40, discountQuantity: 100 }, geometry: null, margins: { bleedMm: 2, safeMarginMm: 2 } }];
 const pricingBundle = await build({ stdin: { contents: "export {commerceQuantityPricing} from './src/domain/commerce/quantity-pricing';export {calculateCart} from './src/domain/commerce/commerce';", resolveDir: root, loader: "ts" }, bundle: true, write: false, platform: "node", format: "esm", alias: { "@": resolve(root, "src") } });
@@ -30,9 +31,9 @@ const orders = ["aaaaaaaa", "bbbbbbbb", "cccccccc"].map((code, index) => ({
 const cart = { customer: { id: "buyer", name: "Cliente de teste", email: "cliente@example.test" }, revision: 1, lines: [], artworks: [], calculation: { totalCents: 0, items: [] }, payments: { manual_enabled: true, mp_enabled: false, manual_instructions: "Realize o pagamento combinado com a loja." } };
 let session = "member", orderError = false, calls = [];
 const bundle = await build({ stdin: { contents: `import React from'react';import{createRoot}from'react-dom/client';import{Storefront}from'./src/components/commerce/Storefront';import{CommerceSearchSettings}from'./src/components/commerce/CommerceSearchSettings';import{CommerceMerchantProduct}from'./src/components/commerce/CommerceMerchantProduct';
-  const query=new URLSearchParams(location.search),theme=query.get('theme')||sessionStorage.getItem('buyer-theme')||'light';sessionStorage.setItem('buyer-theme',theme);localStorage.setItem('commerce-theme:test',theme);
+  const query=new URLSearchParams(location.search),theme=query.get('theme')||sessionStorage.getItem('buyer-theme')||'light',storeStyle=query.get('style')||sessionStorage.getItem('buyer-style')||'classic';sessionStorage.setItem('buyer-theme',theme);sessionStorage.setItem('buyer-style',storeStyle);localStorage.setItem('commerce-theme:test',theme);const experience=storeStyle==='studio'?{style:'studio',motion:false}:undefined;
   function SearchFixture(){const[value,setValue]=React.useState();return <main style={{background:'#09090b',color:'#f4f4f5',minHeight:'100vh',padding:'24px'}}><div style={{maxWidth:'1100px',margin:'auto'}}><CommerceSearchSettings publicUrl={location.origin} published selectedProducts={1} onCatalog={()=>{}}/><CommerceMerchantProduct value={value} onChange={setValue}/></div></main>}
-  const base=location.pathname.startsWith('/loja/test')?'/loja/test':'',path=location.pathname.slice(base.length).split('/').filter(Boolean);createRoot(document.getElementById('root')).render(path[0]==='admin-search'?<SearchFixture/>:<Storefront slug='test' settings={${JSON.stringify(settings)}} products={${JSON.stringify(products)}} path={path} basePath={base} paused={false}/>);`, loader: "tsx", sourcefile: "buyer-area-fixture.tsx", resolveDir: root },
+  const base=location.pathname.startsWith('/loja/test')?'/loja/test':'',path=location.pathname.slice(base.length).split('/').filter(Boolean);createRoot(document.getElementById('root')).render(path[0]==='admin-search'?<SearchFixture/>:<Storefront slug='test' settings={{...${JSON.stringify(settings)},...(experience?{experience}:{})}} products={${JSON.stringify(products)}} path={path} basePath={base} paused={false}/>);`, loader: "tsx", sourcefile: "buyer-area-fixture.tsx", resolveDir: root },
   bundle: true, write: false, outfile: "app.js", format: "iife", jsx: "automatic", loader: { ".module.css": "local-css" }, alias: { "@": resolve(root, "src") }, define: { "process.env.NODE_ENV": '"production"' },
   plugins: [{ name: "fixture", setup(builder) {
     builder.onResolve({ filter: /^next\/(link|navigation|dynamic)$/ }, args => ({ path: args.path, namespace: "fixture" }));
@@ -113,11 +114,35 @@ try {
     await page.getByRole("link", { name: "Ver pagamento", exact: true }).click();
     assert.deepEqual(errors, []); console.log(`Passed buyer area ${theme} ${width}x${height}`);
   }
-  for (const base of ["/loja/test", ""]) for (const theme of ["light", "dark"]) for (const width of [1440, 390, 320]) {
+  const contrast = (foreground, background) => {
+    const luminance = color => color.match(/[\d.]+/g).slice(0,3).map(Number).map(value => value / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [.2126,.7152,.0722][index], 0);
+    const a = luminance(foreground), b = luminance(background);
+    return (Math.max(a,b) + .05) / (Math.min(a,b) + .05);
+  };
+  for (const style of paletteOnly ? ["classic", "studio"] : ["classic"]) for (const base of ["/loja/test", ""]) for (const theme of ["light", "dark"]) for (const width of [1440, 390, 320]) {
     session = "member"; await page.setViewportSize({ width, height: 900 });
-    await page.goto(`${origin}${base}/catalogo?theme=${theme}`);
+    await page.goto(`${origin}${base}/catalogo?theme=${theme}&style=${style}`);
     const card = page.locator("[data-product-card]").first(); await card.waitFor();
     assert.equal(await card.getAttribute("href"), `${base}/produto/botton-3-5-cm`);
+    if (paletteOnly) {
+      const colors = await card.evaluate(element => {
+        const css = selector => { const node = element.querySelector(selector) || element.querySelector('[class*="discountBadge"]'), computed = getComputedStyle(node); return { color: computed.color, background: computed.backgroundColor }; };
+        return { tag: css('[class*="productTag"]'), price: css('[class*="priceLine"]'), benefit: css('[class*="discountHeadline"]'), surface: getComputedStyle(element).backgroundColor };
+      });
+      assert.equal(colors.tag.color, theme === "light" ? "rgb(14, 96, 112)" : "rgb(217, 255, 251)");
+      assert.equal(colors.tag.background, theme === "light" ? "rgb(231, 245, 251)" : "rgb(37, 79, 76)");
+      assert.equal(colors.price.color, theme === "light" ? style === "studio" ? "rgb(32, 39, 35)" : "rgb(32, 48, 56)" : style === "studio" ? "rgb(244, 246, 243)" : "rgb(243, 246, 249)");
+      assert.equal(colors.benefit.color, theme === "light" ? "rgb(22, 101, 52)" : "rgb(140, 222, 192)");
+      for (const [foreground, background] of [[colors.tag.color, colors.tag.background], [colors.price.color, colors.surface], [colors.benefit.color, colors.benefit.background]]) assert.ok(contrast(foreground, background) >= 4.5, "Product text contrast must be at least 4.5:1");
+      const title = card.locator("h3"), size = await title.boundingBox();
+      await card.focus(); await page.waitForTimeout(250);
+      assert.equal(await title.evaluate(element => getComputedStyle(element).color), theme === "light" ? "rgb(14, 96, 112)" : "rgb(111, 208, 201)");
+      await card.hover(); await page.waitForTimeout(250);
+      assert.equal(await title.evaluate(element => getComputedStyle(element).color), theme === "light" ? "rgb(14, 96, 112)" : "rgb(111, 208, 201)");
+      assert.equal((await title.boundingBox()).height, size.height, "Hover must not change product title height");
+      await fits(); await card.screenshot({ path: `${output}/palette-card-${style}-${base ? "platform" : "domain"}-${theme}-${width}.png` });
+      await page.screenshot({ path: `${output}/palette-catalog-${style}-${base ? "platform" : "domain"}-${theme}-${width}.png`, fullPage: true });
+    }
     await card.click(); await page.getByRole("heading", { name: products[0].name, exact: true }).waitFor();
     await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent.includes('Adicionar ao carrinho') && !button.disabled));
     assert.equal(new URL(page.url()).pathname, `${base}/produto/botton-3-5-cm`);
@@ -126,6 +151,11 @@ try {
     const recalculated = page.waitForResponse(response => response.url().endsWith("/price"));
     await page.getByRole("button", { name: "Simular 100 unidades com uma arte", exact: true }).click(); await recalculated;
     assert.equal(await page.getByLabel("Quantidade de produtos", { exact: true }).inputValue(), "100");
+    if (paletteOnly) {
+      assert.equal(await page.locator('[class*="savings"]').first().evaluate(element => getComputedStyle(element).color), theme === "light" ? "rgb(22, 101, 52)" : "rgb(140, 222, 192)");
+      assert.equal(await page.locator('[class*="heading"] > span').filter({ hasText: "Até" }).first().evaluate(element => getComputedStyle(element).color), theme === "light" ? "rgb(22, 101, 52)" : "rgb(140, 222, 192)");
+      await page.screenshot({ path: `${output}/palette-product-${style}-${base ? "platform" : "domain"}-${theme}-${width}.png`, fullPage: true });
+    }
     await page.getByText("Posso enviar mais de uma arte?", { exact: true }).click();
     assert.ok(await page.getByText(/O preço considera separadamente a quantidade de cada arte/).count());
     await page.evaluate(() => scrollTo(0, 0));
@@ -133,7 +163,7 @@ try {
     assert.ok(calls.some(call => call.path.endsWith("/price") && call.body.lines[0].productId === products[0].id));
     assert.deepEqual(errors, []); console.log(`Passed friendly product URL ${base || "custom domain"} ${theme} ${width}px`);
   }
-  for (const width of [1440, 390, 320]) {
+  for (const width of paletteOnly ? [] : [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 900 }); await page.goto(`${origin}/admin-search`);
     await page.getByRole("heading", { name: "Busca e catálogo", exact: true }).waitFor();
     assert.equal(await page.getByRole("link", { name: "Abrir Catálogo Merchant Center" }).getAttribute("href"), `${origin}/produtos.xml`);

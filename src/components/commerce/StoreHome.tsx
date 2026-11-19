@@ -7,6 +7,7 @@ import { commerceProductPath } from "@/domain/commerce/product-urls";
 import {
   ArrowLeft,
   ArrowRight,
+  BadgePercent,
   CheckCheck,
   Layers3,
   Paintbrush,
@@ -67,7 +68,7 @@ export function StoreProductCard({
       </p>
       {discount > 0 ? <p className={styles.discountBadge}
         title={`Desconto de ${discount}% em ${best?.quantity ?? product.offer.discountQuantity} unidades${product.personalized ? " com uma arte" : ""}, em relação ao preço de uma unidade.`}>
-        Até {discount}% de desconto
+        <span className={styles.discountHeadline}><BadgePercent size={14} aria-hidden="true"/><span>Até {discount}% de desconto</span></span>
         <small>{best ? `${storeMoney(best.unitCents)}/un. · ` : ""}em {(best?.quantity ?? product.offer.discountQuantity).toLocaleString("pt-BR")} un.{product.personalized ? " · 1 arte" : ""}</small>
       </p> : null}
     </Link>

@@ -41,7 +41,9 @@ describe("product offers UI", () => {
   });
   it("advertises achievable discounts with the quantity and single artwork condition", () => {
     render(<StoreProductCard base="/loja/shop" product={{ id: "p", name: "Produto", description: "", category: "Produtos", imageUrl: "/p.png", minQuantity: 1, maxQuantity: 100, maxArtworks: 5, personalized: true, pricingRule: "per_art", geometry: null, margins: { bleedMm: 0, safeMarginMm: 0 }, unitCents: 1000, offer: { originalUnitCents: 1000, minimumUnitCents: 600, maxDiscountPercent: 40, discountQuantity: 50 } }} />);
-    expect(screen.getByText(/Até 40% de desconto/)).toHaveTextContent("em 50 un. · 1 arte");
+    const benefit = screen.getByText(/Até 40% de desconto/).closest("p");
+    expect(benefit).toHaveTextContent("em 50 un. · 1 arte");
+    expect(benefit?.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
   });
   it("consults using the active product and quantity without adding it to the cart", async () => {
     vi.mocked(storeRequest).mockResolvedValue({ options: [{ id: "delivery", name: "Entrega local", priceCents: 1500 }] });

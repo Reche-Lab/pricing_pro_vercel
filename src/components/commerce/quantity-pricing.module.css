@@ -1,6 +1,6 @@
 .pricing{margin-top:24px;padding:18px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);min-width:0}
 .heading{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--ink)}
-.heading h2{font-size:15px;font-weight:650;margin:0}.heading>span{margin-left:auto;font-size:12px;font-weight:700;background:var(--soft);color:var(--highlight);padding:4px 8px;border-radius:4px}
+.heading h2{font-size:15px;font-weight:650;margin:0}.heading>svg{color:var(--product-benefit)}.heading>span{margin-left:auto;font-size:12px;font-weight:700;background:var(--product-benefit-bg);color:var(--product-benefit);padding:4px 8px;border-radius:4px}
 .lowest{margin:12px 0 8px;font-size:14px;display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}.lowest strong{font-size:22px;color:var(--ink);line-height:1.4}.lowest small{font-size:13px;font-weight:400}.lowest>span{flex-basis:100%;font-size:13px;color:var(--muted)}
 .note{font-size:12px;line-height:1.7;color:var(--muted);overflow-wrap:anywhere;margin:8px 0}.note strong{color:var(--ink);font-weight:600}
 .tableDetails{margin-top:14px}.tableDetails>summary,.questions summary{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:16px;list-style:none;font-size:13px;font-weight:600;min-height:44px;color:var(--ink)}
