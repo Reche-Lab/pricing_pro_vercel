@@ -31,6 +31,7 @@ export function storeProductStructuredData(slug: string, product: Product, setti
   const { base, url, description, images } = productSeo(slug, product, settings, origin);
   const quantity = quantitySelection(selection, product);
   const row = product.quantityPricing?.rows.find(row => row.quantity === quantity) ?? { quantity: product.minQuantity, totalCents: product.unitCents * product.minQuantity };
+  const offerPrice = (row.totalCents / 100).toFixed(2);
   const offerUrl = row.quantity === product.minQuantity ? url : `${url}?quantidade=${row.quantity}`;
   const merchant = commerceMerchantSchema.safeParse(product.merchant);
   const configured = merchant.success && merchant.data.enabled ? merchant.data : undefined;
@@ -45,10 +46,10 @@ export function storeProductStructuredData(slug: string, product: Product, setti
           { "@type": "PropertyValue", name: "Menor preço unitário por quantidade", value: `${publicPriceMoney(product.quantityPricing.bestPrice.unitCents)} em ${product.quantityPricing.bestPrice.quantity} unidades${product.personalized ? " com uma mesma arte" : ""}` },
           { "@type": "PropertyValue", name: "Economia máxima por quantidade", value: `${product.quantityPricing.bestPrice.discountPercent}% em relação à referência de uma unidade; sem benefícios condicionais` },
         ] } : {}),
-        offers: { "@type": "Offer", url: offerUrl, priceCurrency: "BRL",
+        offers: { "@type": "Offer", url: offerUrl, price: offerPrice, priceCurrency: "BRL",
           name: `${row.quantity} unidades${product.personalized ? " com uma arte" : ""} · preço total sem frete`,
           eligibleQuantity: { "@type": "QuantitativeValue", minValue: row.quantity, maxValue: row.quantity, unitCode: "C62" },
-          priceSpecification: { "@type": "UnitPriceSpecification", price: (row.totalCents / 100).toFixed(2), priceCurrency: "BRL", referenceQuantity: { "@type": "QuantitativeValue", value: row.quantity, unitCode: "C62", valueReference: { "@type": "QuantitativeValue", value: 1, unitCode: "C62" } } },
+          priceSpecification: { "@type": "UnitPriceSpecification", price: offerPrice, priceCurrency: "BRL", referenceQuantity: { "@type": "QuantitativeValue", value: row.quantity, unitCode: "C62", valueReference: { "@type": "QuantitativeValue", value: 1, unitCode: "C62" } } },
           ...(configured ? { availability: "https://schema.org/InStock", itemCondition: "https://schema.org/NewCondition" } : {}),
           seller: { "@type": "Organization", name: settings.name, url: base } } },
       { "@type": "BreadcrumbList", "@id": `${url}#breadcrumb`, itemListElement: [

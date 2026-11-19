@@ -27,7 +27,8 @@ describe("discoverable real price conditions", () => {
   it("marks up the minimum purchasable total, never the cheapest conditional unit price", () => {
     const item = storeProductStructuredData("shop", product, settings)["@graph"][0];
     expect(item.offers.priceSpecification.price).toBe("50.00");
-    expect(item.offers).not.toHaveProperty("price");
+    expect(item.offers).toHaveProperty("price", "50.00");
+    expect(item.offers).toHaveProperty("priceCurrency", "BRL");
     expect(item.offers.eligibleQuantity).toMatchObject({ minValue: 10, maxValue: 10 });
     expect(item.offers.priceSpecification.referenceQuantity).toMatchObject({ value: 10, valueReference: { value: 1 } });
     expect(item.offers).not.toHaveProperty("availability");
@@ -36,9 +37,26 @@ describe("discoverable real price conditions", () => {
   it("matches the selected published quantity while canonical stays the product URL", () => {
     const item = storeProductStructuredData("shop", product, settings, "https://platform.example.test", "100")["@graph"][0];
     expect(item.offers.priceSpecification.price).toBe("300.00");
+    expect(item.offers).toHaveProperty("price", "300.00");
     expect(item.offers.url).toBe("https://platform.example.test/loja/shop/produto/botton-3-5-cm?quantidade=100");
     expect(item.url).toBe("https://platform.example.test/loja/shop/produto/botton-3-5-cm");
     expect(storeProductStructuredData("shop", product, settings, undefined, "101")["@graph"][0].offers.priceSpecification.price).toBe("50.00");
+    expect(storeProductStructuredData("shop", product, settings, undefined, "101")["@graph"][0].offers).toHaveProperty("price", "50.00");
+  });
+  it("provides a direct positive offer price for every published quantity, matching its pricing specification", () => {
+    for (const row of product.quantityPricing!.rows) {
+      const { offers } = storeProductStructuredData("shop", product, settings, undefined, String(row.quantity))["@graph"][0];
+      expect(offers).toHaveProperty("price", (row.totalCents / 100).toFixed(2));
+      expect(offers).toHaveProperty("price", offers.priceSpecification.price);
+      expect(Number(Reflect.get(offers, "price"))).toBeGreaterThan(0);
+      expect(offers.priceCurrency).toBe("BRL");
+      expect(offers.eligibleQuantity.minValue).toBe(row.quantity);
+    }
+  });
+  it("keeps a direct decimal price for legacy products without a published quantity table", () => {
+    const { offers } = storeProductStructuredData("shop", { ...product, quantityPricing: undefined, unitCents: 499 }, settings)["@graph"][0];
+    expect(offers).toHaveProperty("price", "49.90");
+    expect(offers.priceSpecification.referenceQuantity.value).toBe(10);
   });
   it("publishes only configured factual benefits and production rules", () => {
     const withBenefit = publicCommerceProduct({ ...discoverySource, artworkOptions: { discountFixedCents: 1500, maxDiscountPercent: 10 } as typeof discoverySource.artworkOptions });

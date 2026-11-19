@@ -8,6 +8,8 @@ import { requireCommercePreview } from "@/services/commerce/preview";
 import { headers } from "next/headers";
 import { storeSettingsSchema } from "@/domain/commerce/schemas";
 import { quoteProduct } from "../fixtures/commerce-quote";
+import { discoverySource } from "../fixtures/commerce-discovery";
+import { commerceQuantityPricing } from "@/domain/commerce/quantity-pricing";
 
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
 vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("NOT_FOUND"); }, permanentRedirect: (url: string) => { throw new Error(`308:${url}`); }, redirect: (url: string) => { throw new Error(`307:${url}`); } }));
@@ -32,9 +34,26 @@ describe("product page routing and SEO", () => {
     expect(doc.querySelector("main")?.getAttribute("data-reference")).toBe(product.slug);
     expect(doc.querySelector("main")?.getAttribute("data-has-children")).toBe("false");
     const script = doc.querySelector('script[type="application/ld+json"]')!;
-    expect(JSON.parse(script.textContent!)["@graph"][0].name).toBe(product.name);
+    const structuredProduct = JSON.parse(script.textContent!)["@graph"][0];
+    expect(structuredProduct.name).toBe(product.name);
+    expect(structuredProduct.offers.price).toBe((product.unitCents * product.minQuantity / 100).toFixed(2));
+    expect(structuredProduct.offers.priceCurrency).toBe("BRL");
     expect(doc.querySelector("main script")).toBeNull();
     expect(commerceProducts).toHaveBeenCalledWith("tenant-a");
+  });
+  it.each([false, true])("includes the selected purchase price in server-rendered JSON-LD on a custom domain: %s", async customDomain => {
+    if (customDomain) {
+      vi.stubEnv("COMMERCE_CUSTOM_DOMAINS", JSON.stringify({ "groundshop.com.br": "ground-shop" }));
+      vi.mocked(headers).mockResolvedValue(new Headers({ host: "groundshop.com.br" }) as Awaited<ReturnType<typeof headers>>);
+    }
+    const pricing = commerceQuantityPricing(discoverySource);
+    const pricedProduct = { ...product, minQuantity: discoverySource.minQuantity, maxQuantity: discoverySource.maxQuantity, unitCents: pricing.minimumPurchase.unitCents, quantityPricing: pricing };
+    vi.mocked(commerceProducts).mockResolvedValue([pricedProduct] as unknown as Awaited<ReturnType<typeof commerceProducts>>);
+    const html = renderToStaticMarkup(await StorePage({ ...props(pricedProduct.slug!), searchParams: Promise.resolve({ quantidade: "100" }) }));
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const data = JSON.parse(doc.querySelector('script[type="application/ld+json"]')!.textContent!);
+    expect(data["@graph"][0].offers).toMatchObject({ "@type": "Offer", price: "300.00", priceCurrency: "BRL", eligibleQuantity: { minValue: 100, maxValue: 100 } });
+    expect(data["@graph"][0].offers.price).toBe(data["@graph"][0].offers.priceSpecification.price);
   });
   it("permanently redirects old UUIDs while keeping pending artwork selections", async () => {
     await expect(StorePage({ ...props(product.id), searchParams: Promise.resolve({ arte: "library", arteEstudio: "draft" }) })).rejects.toThrow("308:/loja/ground-shop/produto/botton-3-5-cm?arte=library&arteEstudio=draft");
