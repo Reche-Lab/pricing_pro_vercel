@@ -38,13 +38,15 @@ export function buildMelhorEnvioAuthUrl(
 
 export async function refreshMelhorEnvioToken(
   settings: MelhorEnvioSettings,
-  credentials: MelhorEnvioCredentials
+  credentials: MelhorEnvioCredentials,
+  signal?: AbortSignal
 ): Promise<MelhorEnvioOAuthTokenResponse> {
   if (!credentials.clientId || !credentials.clientSecret || !credentials.refreshToken) {
     throw new Error("Melhor Envio clientId, clientSecret and refreshToken are required.");
   }
 
   const response = await fetch(`${appBaseUrl(settings)}/oauth/token`, {
+    signal,
     method: "POST",
     headers: {
       accept: "application/json",

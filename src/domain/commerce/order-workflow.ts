@@ -27,6 +27,7 @@ export function orderProductionState(order: OrderProductionFacts) {
   return { key, label, editable, printable };
 }
 export function orderEventLabel(event: string) {
+  if (event.startsWith("shipping.")) return ({ "shipping.cart": "Etiqueta incluída no carrinho Melhor Envio", "shipping.purchased": "Compra da etiqueta confirmada", "shipping.label_ready": "Etiqueta pronta para impressão", "shipping.posted": "Postagem confirmada pela transportadora", "shipping.delivered": "Entrega confirmada pela transportadora", "shipping.exception": "Entrega com ocorrência", "shipping.tracking_available": "Código de rastreamento disponível", "shipping.review": "Envio precisa de conferência" } as Record<string, string>)[event] ?? "Envio atualizado";
   if (event.startsWith("olist.")) return ({ "olist.queued": "Sincronização Olist solicitada", "olist.customer": "Cliente vinculado no Olist", "olist.sales_order": "Pedido de venda Olist vinculado", "olist.production_ready": "Produção concluída para faturamento", "olist.invoice_create": "Nota fiscal gerada", "olist.invoice_authorize": "Autorização fiscal solicitada", "olist.invoice_status": "Situação fiscal conferida", "olist.dispatch": "Expedição vinculada no Olist", "olist.tracking": "Rastreio atualizado no Olist", "olist.error": "Integração Olist precisa de atenção" } as Record<string, string>)[event] ?? "Integração Olist atualizada";
   if (event === "order.admin_deleted") return "Pedido excluído da gestão administrativa";
   if (event === "order.buyer_closed") return "Compra encerrada pelo cliente";

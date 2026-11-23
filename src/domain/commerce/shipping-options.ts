@@ -6,6 +6,7 @@ export type StoreShippingOption = {
   transitDays?: number | null;
   quoteId?: string;
   insuranceValueCents?: number;
+  carrierSnapshot?: import("./order-shipping").CarrierSnapshot;
 };
 
 export function hasTransitEstimate(option: StoreShippingOption) {

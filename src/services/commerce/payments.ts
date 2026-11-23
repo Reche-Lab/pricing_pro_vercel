@@ -4,6 +4,7 @@ import { decryptTenantSecret, encryptTenantSecret } from "@/lib/crypto/secrets";
 import { CommerceError, validatePayment } from "@/domain/commerce/commerce";
 import { mercadoPagoPaymentMethods, paymentEnvironment, type PaymentEnvironment, type CommercePaymentSettings } from "@/domain/commerce/payment-settings";
 import { commerceStoreUrl } from "@/domain/commerce/domains";
+import { scheduleCommerceOrderNotifications } from "./order-notification-schedule";
 import {
   commerceTransaction,
   type CommerceOrder,
@@ -333,6 +334,7 @@ export async function reconcileCommercePayment(
       ],
     );
   });
+  scheduleCommerceOrderNotifications(tenantId, payment.external_reference);
 }
 
 export async function refreshHostedPayment(tenantId: string, order: CommerceOrder) {

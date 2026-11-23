@@ -3,6 +3,7 @@ import { buyerContext, checkCommerceOrigin, commerceFailure } from "./http";
 import { requireCommerceOrderAccess } from "./order-access";
 import { authorizedCommerceOrder, readCommerceProofs, mutateCommerceProof } from "./order-artworks";
 import { enforcePublicRateLimit } from "@/lib/security/public-rate-limit";
+import { scheduleCommerceOrderNotifications } from "./order-notification-schedule";
 
 export async function commerceProofRequest(request: Request, params: { orderId: string; slug?: string }, admin: boolean) {
   try {
@@ -19,6 +20,8 @@ export async function commerceProofRequest(request: Request, params: { orderId: 
     if (request.method === "GET") return await readCommerceProofs(request, order, admin, canEdit);
     const blocked = await enforcePublicRateLimit(request, `${tenantId}:${params.orderId}`, { action: "commerce.order.artwork", limit: 120, windowSeconds: 600 });
     if (blocked) return blocked;
-    return await mutateCommerceProof(request, order, actorId);
+    const response = await mutateCommerceProof(request, order, actorId);
+    scheduleCommerceOrderNotifications(tenantId, order.id);
+    return response;
   } catch (error) { return commerceFailure(error, "order.artworks"); }
 }

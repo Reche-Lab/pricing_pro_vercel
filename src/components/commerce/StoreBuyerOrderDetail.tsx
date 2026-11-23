@@ -15,6 +15,7 @@ import o from "./buyer-orders.module.css";
 import { useStoreAnalytics } from "./StoreAnalytics";
 import { analyticsCommercePayload } from "@/domain/commerce/analytics";
 import { StoreCartControls } from "./StoreCartControls";
+import { StoreOrderTracking } from "./StoreOrderTracking";
 const StorePayment = dynamic(() => import("./StorePayment").then(module => module.StorePayment), { ssr: false });
 export function StoreBuyerOrderDetail({ order, api, base, instructions, busy, onRefresh, products, cartRevision = 0, onCartChanged }: {
   order: BuyerOrder; api: string; base: string; instructions: string; busy: boolean; onRefresh: () => Promise<void>; products: OrderCatalogImage[]; cartRevision?: number; onCartChanged?: () => Promise<void>;
@@ -43,6 +44,7 @@ export function StoreBuyerOrderDetail({ order, api, base, instructions, busy, on
         {order.address ? <p className={o.destination}>{order.address.name} · {order.address.city}/{order.address.state}{order.address.attention ? ` · Aos cuidados de ${order.address.attention}` : ""}</p> : null}
         {!test && order.production ? <><div className={o.leadTime}><span>Produção<strong>{order.production.productionDays} dias úteis</strong></span><span>{order.delivery === "pickup" ? "Recebimento" : "Transporte"}<strong>{order.delivery === "pickup" ? "Retirada na loja" : order.production.transportDays !== null ? `${order.production.transportDays} dias úteis` : "A confirmar"}</strong></span></div>{order.production.deliveryDate ? <p className={o.estimate}>{order.delivery === "pickup" ? "Retirada" : "Recebimento"} estimado: <strong>{formatDeliveryDate(order.production.deliveryDate)}</strong></p> : null}<p className={o.small}>Previsão registrada na criação do pedido. A produção depende do pagamento e da aprovação das artes; confirmações posteriores podem alterar essa data.</p></> : null}
       </section>
+      {!test && !order.cancelled_at && order.delivery !== "pickup" ? <StoreOrderTracking shipping={order.shipping ?? null}/> : null}
       <CommerceOrderArtworks key={order.id} endpoint={`${api}/orders/${order.id}/artworks`}/>
       <details className={o.details}><summary><UserRound size={17}/>Dados de faturamento e recebimento</summary><StoreOrderContactDetails billing={order.billing} address={order.address} same={order.deliveryAddressSameAsBilling} shippingOption={order.shippingOption}/></details>
       {order.hasTerms ? <section className={o.terms}><h2>Condições desta compra</h2><p className={o.small}>Documento registrado na compra{order.termsVersion ? ` · versão ${order.termsVersion}` : ""}.</p><a href={`${api}/orders/${order.id}/conditions`} className={styles.secondary}><Download size={16}/>Baixar condições aceitas</a></section> : null}

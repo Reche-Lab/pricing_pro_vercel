@@ -12,6 +12,7 @@ import {
 import { deleteCommerceOrder } from "@/repositories/commerce-orders";
 import { orderDeletionSchema, assertOrderDeletionConfirmation } from "@/domain/commerce/order-deletion";
 import { requireCommerceOrderAccess } from "@/services/commerce/order-access";
+import { scheduleCommerceOrderNotifications } from "@/services/commerce/order-notification-schedule";
 import { scheduleCommerceOlist } from "@/services/commerce/olist-schedule";
 import { commerceOlistSettingsSchema, commerceOlistShippingBlock } from "@/domain/commerce/olist";
 export const maxDuration = 60;
@@ -68,6 +69,10 @@ export async function POST(
           throw new CommerceError("Confira a etapa atual do pedido.", 409);
         if (input.action === "production") await assertCommerceProofsReady(client, order);
         if (input.action === "shipped") {
+          if (order.snapshot.shippingOption?.id?.startsWith("melhor_envio:") && order.snapshot.delivery !== "pickup") {
+            const shipment = (await client.query("select status from commerce_order_shipments where tenant_id=$1 and order_id=$2", [session.tenantId, orderId])).rows[0];
+            if (shipment && !["posted", "delivered"].includes(shipment.status)) throw new CommerceError("Aguarde a confirmação de postagem do Melhor Envio. Etiqueta emitida ainda não significa pedido postado.", 409);
+          }
           const config = (await client.query("select c.settings from commerce_olist_settings c join integration_connections i on i.tenant_id=c.tenant_id and i.provider='olist' and i.status<>'disabled' and i.credentials_encrypted is not null where c.tenant_id=$1", [session.tenantId])).rows[0]?.settings;
           if (config?.enabled && config.autoInvoice !== false) {
             const job = (await client.query("select invoice_status,expedition_id,production_completed_at from commerce_olist_orders where tenant_id=$1 and order_id=$2", [session.tenantId, orderId])).rows[0];
@@ -92,6 +97,7 @@ export async function POST(
     });
     console.info("Commerce order state updated.", { tenantId: session.tenantId, orderId, actorId: session.userId, action: input.action });
     if (input.action === "confirm_manual") scheduleCommerceOlist(session.tenantId, orderId);
+    scheduleCommerceOrderNotifications(session.tenantId, orderId);
     return commerceJson({ ok: true });
   } catch (error) {
     return commerceFailure(error, "order.admin_action");

@@ -80,9 +80,17 @@ export async function carrierDelivery(connection: IntegrationConnectionRow | nul
     const days = numeric(row.custom_delivery_time) ?? numeric(row.delivery_time);
     const company = typeof row.company?.name === "string" ? row.company.name : "Melhor Envio";
     const name = typeof row.name === "string" ? row.name : "Frete";
+    const quotedVolumes = Array.isArray(row.packages) ? row.packages.map((pack: Record<string, unknown>) => {
+      const dimensions = pack && typeof pack.dimensions === "object" && pack.dimensions ? pack.dimensions as Record<string, unknown> : pack;
+      if (!dimensions || !pack) return null;
+      const width = numeric(dimensions.width), height = numeric(dimensions.height), length = numeric(dimensions.length), weight = numeric(pack.weight);
+      return width && height && length && weight && [width, height, length, weight].every(v => v > 0) ? { width, height, length, weight } : null;
+    }) : [];
+    const savedVolumes = quotedVolumes.length > 0 && quotedVolumes.length <= 50 && quotedVolumes.every(Boolean) ? quotedVolumes as Array<{ width: number; height: number; length: number; weight: number }> : volumes;
     return [{ id: `melhor_envio:${String(row.id)}`, name: `${company} - ${name}`, priceCents: Math.round(amount * 100),
       transitDays: days !== null && Number.isInteger(days) && days >= 0 ? days : null,
-      description: "Cotação Melhor Envio", insuranceValueCents: insuranceCents }];
+      description: "Cotação Melhor Envio", insuranceValueCents: insuranceCents,
+      carrierSnapshot: { originPostalCode: origin, destinationPostalCode: postalCode, volumes: savedVolumes, insuranceValueCents: insuranceCents } }];
   }).sort((a, b) => a.priceCents - b.priceCents) : [];
   if (!options.length) throw new CommerceError("O Melhor Envio não retornou serviços disponíveis para este CEP e embalagem. Confira também os serviços habilitados na integração.", 409);
   return { options };

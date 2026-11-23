@@ -9,6 +9,7 @@ import {
   readCommerceBody,
 } from "@/services/commerce/http";
 import { enforcePublicRateLimit } from "@/lib/security/public-rate-limit";
+import { scheduleCommerceOrderNotifications } from "@/services/commerce/order-notification-schedule";
 type Params = { params: Promise<{ slug: string }> };
 export async function GET(_request: Request, { params }: Params) {
   try {
@@ -36,14 +37,12 @@ export async function POST(request: Request, { params }: Params) {
     });
     if (blocked) return blocked;
     const { store, session } = await buyerContext((await params).slug);
+    const order = await createCommerceOrder(store, session, await readCommerceBody(request, checkoutSchema));
+    scheduleCommerceOrderNotifications(store.tenant_id, order.id);
     return commerceJson(
       {
         ok: true,
-        ...(await createCommerceOrder(
-          store,
-          session,
-          await readCommerceBody(request, checkoutSchema),
-        )),
+        ...order,
       },
       201,
     );

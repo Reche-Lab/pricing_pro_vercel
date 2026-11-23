@@ -1,5 +1,7 @@
 # Integracao Melhor Envio
 
+Para pedidos da loja online, consulte [Expedição do e-commerce](ecommerce-expedicao-melhor-envio.md), incluindo migrations, webhook, etiquetas e notificações ao comprador.
+
 ## Status
 
 Implementacao backend inicial por tenant.

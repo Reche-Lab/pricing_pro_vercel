@@ -43,6 +43,7 @@ export async function checkoutDelivery(request: Request, slug: string) {
       return saved;
     });
     console.info("Commerce checkout delivery quoted.", { tenantId: store.tenant_id, sessionId: session.id, revision: session.revision, optionCount: options.length, warningCount: warnings.length });
-    return commerceJson({ options, warnings, postalCode: input.postalCode, expiresInSeconds: 900 });
+    return commerceJson({ options: options.map(option => ({ id: option.id, name: option.name, priceCents: option.priceCents,
+      description: option.description, transitDays: option.transitDays, quoteId: option.quoteId, insuranceValueCents: option.insuranceValueCents })), warnings, postalCode: input.postalCode, expiresInSeconds: 900 });
   } catch (error) { return commerceFailure(error, "checkout.delivery"); }
 }

@@ -7,6 +7,7 @@ import { amountString, assertPaymentAllowed, validateProviderOrder, type BuyerPa
 import { commerceTransaction, type CommerceOrder } from "@/repositories/commerce";
 import { paymentCredentials, refreshHostedPayment } from "./payments";
 import { paymentFailureMessage, readPaymentProviderResponse } from "./payment-diagnostics";
+import { scheduleCommerceOrderNotifications } from "./order-notification-schedule";
 
 type Attempt = {
   payment_environment?: PaymentEnvironment;
@@ -161,6 +162,7 @@ export async function reconcileDirectPayment(tenantId: string, id: string, envir
       console.info("Commerce direct payment reconciled.", { tenantId, orderId: order.id, attemptId: attempt.id, status: verified.status, environment });
     }
   });
+  if (environment === "production") scheduleCommerceOrderNotifications(tenantId, candidate.order_id);
 }
 
 export async function refreshDirectPayment(tenantId: string, customerId: string, orderId: string) {

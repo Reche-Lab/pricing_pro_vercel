@@ -17,6 +17,7 @@ import { DeleteCommerceOrderButton } from "@/components/commerce/DeleteCommerceO
 import { CommerceOrderOlist } from "@/components/commerce/CommerceOrderOlist";
 import { getCommerceOlistSettings, getCommerceOlistJob } from "@/repositories/commerce-olist";
 import { commerceOlistShippingBlock } from "@/domain/commerce/olist";
+import { CommerceOrderShipping } from "@/components/commerce/CommerceOrderShipping";
 export const dynamic = "force-dynamic";
 export default async function OrderPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { session, profile, access } = await requireCommerceOrderAccess().catch(error => {
@@ -39,6 +40,7 @@ export default async function OrderPage({ params }: { params: Promise<{ orderId:
       <section className="min-w-0 space-y-5">
         <div><h2 className="font-semibold">Itens da compra</h2><div className="mt-3 divide-y divide-zinc-800 border-y border-zinc-800">{order.snapshot.items.map(item => <div key={item.id} className="flex min-w-0 flex-wrap justify-between gap-3 py-4"><div className="min-w-0"><h3 className="break-words text-sm font-medium">{item.name}</h3><p className="mt-1 text-xs text-zinc-400">{item.quantity} un. × {storeMoney(item.unitCents)}{item.artworkName ? ` · ${item.artworkName}` : ""}</p></div><strong className="text-sm tabular-nums">{storeMoney(item.totalCents)}</strong></div>)}</div></div>
         <CommerceOrderArtworks endpoint={`/api/commerce/admin/orders/${order.id}/artworks`} admin />
+        {order.snapshot.delivery !== "pickup" && order.snapshot.shippingOption?.id.startsWith("melhor_envio:") ? <CommerceOrderShipping orderId={order.id} canManage={access.manage}/> : null}
         <details className="border-y border-zinc-800 py-3"><summary className="cursor-pointer text-sm font-semibold">Histórico do pedido</summary><ol className="mt-4 space-y-3">{events.map((event, index) => <li key={index} className="border-l border-zinc-700 pl-3 text-xs leading-5 text-zinc-400"><strong className="block font-medium text-zinc-200">{orderEventLabel(event.type)}</strong><time>{new Date(event.created_at).toLocaleString("pt-BR")}</time>{event.metadata?.note ? <p className="break-words">{String(event.metadata.note)}</p> : null}</li>)}</ol></details>
       </section>
       <aside className="order-first min-w-0 space-y-5 xl:order-none">

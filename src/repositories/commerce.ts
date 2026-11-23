@@ -96,7 +96,7 @@ export type CommerceOrder = {
     billing?: CommerceBillingSnapshot;
     deliveryAddressSameAsBilling?: boolean;
     delivery: string;
-    shippingOption?: { id: string; name: string; priceCents: number; description?: string; transitDays?: number | null } | null;
+    shippingOption?: import("@/domain/commerce/shipping-options").StoreShippingOption | null;
     production?: ReturnType<typeof deliveryEstimate>;
     terms: string;
     termsVersion?: string;
@@ -530,7 +530,7 @@ export async function createCommerceOrder(
     if (!current.cart.length || calculated.totalCents <= 0)
       throw new CommerceError("Inclua produtos no carrinho.");
     let shipping = input.delivery === "pickup" ? 0 : settings.deliveryCents;
-    type ShippingOption = { id: string; name: string; priceCents: number; description?: string; transitDays?: number | null };
+    type ShippingOption = import("@/domain/commerce/shipping-options").StoreShippingOption;
     let shippingOption: ShippingOption | null = null;
     if (input.delivery === "delivery" && input.shippingQuoteId) {
       if (!settings.carrierEnabled || !address) throw new CommerceError("O frete automático não está disponível.", 409);
@@ -678,6 +678,8 @@ export async function buyerOrders(tenantId: string, customerId: string) {
     "select *,created_at::text from commerce_orders where tenant_id=$1 and customer_id=$2 order by commerce_orders.created_at desc limit 100",
     [tenantId, customerId],
   );
+  const { buyerShippingForOrders } = await import("./commerce-shipping");
+  const shippingByOrder = await buyerShippingForOrders(tenantId, result.rows.map(row => row.id));
   return result.rows.map(
     ({
       id,
@@ -713,7 +715,8 @@ export async function buyerOrders(tenantId: string, customerId: string) {
       billing: snapshot.billing ?? null,
       deliveryAddressSameAsBilling: snapshot.deliveryAddressSameAsBilling ?? false,
       delivery: snapshot.delivery,
-      shippingOption: snapshot.shippingOption ?? null,
+      shippingOption: snapshot.shippingOption ? { id: snapshot.shippingOption.id, name: snapshot.shippingOption.name, priceCents: snapshot.shippingOption.priceCents, description: snapshot.shippingOption.description, transitDays: snapshot.shippingOption.transitDays } : null,
+      shipping: shippingByOrder.get(id) ?? null,
       production: snapshot.production ?? null,
       artworkDiscountCents: snapshot.artworkDiscountCents ?? 0,
       hasTerms: Boolean(snapshot.terms),
