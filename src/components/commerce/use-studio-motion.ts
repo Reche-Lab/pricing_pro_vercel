@@ -13,10 +13,17 @@ export function studioHeartbeatScale(elapsedMs: number) {
 }
 
 /** Two smooth beats share one clock; pausing never advances the hidden phase. */
-export function useStudioMotion(enabled: boolean) {
+export function useStudioMotion(enabled: boolean, { onAdvance, cycleKey, cyclesPerAdvance = 1 }: {
+  onAdvance?: () => void;
+  cycleKey?: string;
+  cyclesPerAdvance?: number;
+} = {}) {
   const ref = useRef<HTMLElement>(null);
   const elapsed = useRef(0);
+  const cycleCallback = useRef(onAdvance);
   const [active, setActive] = useState(false);
+  useEffect(() => { cycleCallback.current = onAdvance; }, [onAdvance]);
+  useEffect(() => { elapsed.current = 0; }, [cycleKey, cyclesPerAdvance]);
   useEffect(() => {
     const node = ref.current;
     if (!node || !window.matchMedia) return;
@@ -31,9 +38,12 @@ export function useStudioMotion(enabled: boolean) {
     };
     const tick = (time: number) => {
       if (disposed || !running) { stop(); return; }
+      const advancePeriod = STUDIO_HEARTBEAT_PERIOD_MS * cyclesPerAdvance;
+      const previousCycle = Math.floor(elapsed.current / advancePeriod);
       if (previousTime !== null) elapsed.current += Math.min(64, Math.max(0, time - previousTime));
       previousTime = time;
       if (imageLayer) imageLayer.style.transform = `scale(${studioHeartbeatScale(elapsed.current).toFixed(6)})`;
+      if (Math.floor(elapsed.current / advancePeriod) > previousCycle) cycleCallback.current?.();
       frame = requestAnimationFrame(tick);
     };
     const configure = () => {
@@ -58,6 +68,6 @@ export function useStudioMotion(enabled: boolean) {
       reduce.removeEventListener("change", configure);
       document.removeEventListener("visibilitychange", configure);
     };
-  }, [enabled]);
+  }, [enabled, cycleKey, cyclesPerAdvance]);
   return { ref, active: enabled && active };
 }
