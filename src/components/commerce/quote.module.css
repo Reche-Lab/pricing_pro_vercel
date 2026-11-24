@@ -4,8 +4,13 @@
 .emptyEyebrow { display: inline-flex; align-items: center; gap: 8px; color: var(--product-accent); font-size: 12px; font-weight: 650; }
 .emptyHeading h1 { margin: 14px 0 10px; color: var(--ink); font-size: 30px; font-weight: 700; line-height: 1.25; text-wrap: balance; }
 .emptyHeading p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
-.emptyProducts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin: 26px 0; padding: 0; list-style: none; }
-.emptyProducts li { min-width: 0; }
+.emptyCarousel { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 12px; margin: 20px 0; min-width: 0; }
+.emptyProducts { display: flex; gap: 18px; min-width: 0; margin: 0; padding: 6px 4px 16px; overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: x proximity; scroll-padding-inline: 4px; scrollbar-width: thin; list-style: none; }
+.emptyProducts li { min-width: 0; flex: 0 0 calc((100% - 54px) / 4); scroll-snap-align: start; }
+.emptyCarouselArrow { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--product-accent); box-shadow: 0 4px 12px #0000000c; }
+.emptyCarouselArrow:hover:not(:disabled) { background: var(--soft); border-color: var(--product-accent); }
+.emptyCarouselArrow:disabled { opacity: .35; cursor: default; box-shadow: none; }
+.emptyCarouselArrow:focus-visible, .emptyProducts:focus-visible { outline: 3px solid var(--product-accent); outline-offset: 3px; }
 .emptyProduct { display: grid; justify-items: center; grid-template-rows: auto 1fr auto; gap: 7px; width: 100%; height: 100%; padding: 14px 12px 16px; text-align: center; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--surface); box-shadow: var(--product-card-shadow); }
 .emptyProductImage { position: relative; display: grid; place-items: center; width: min(100%, 160px); aspect-ratio: 1; margin-bottom: 6px; color: var(--muted); }
 .emptyProductImage > img { width: 100%; height: 100%; object-fit: contain; filter: var(--product-shadow); }
@@ -28,13 +33,21 @@
   .emptyProduct:hover:not(:disabled) .emptyProductImage > img { transform: scale(1.04); }
 }
 @media (prefers-reduced-motion: no-preference) {
+  .emptyCarouselArrow { transition: background .18s ease, border-color .18s ease, opacity .18s ease; }
   .emptyWorkspace, .populated .items { animation: quote-content-in .25s ease-out both; }
   @keyframes quote-content-in { from { opacity: .75; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+}
+@media (min-width: 701px) and (max-width: 1000px) {
+  .emptyProducts li { flex-basis: calc((100% - 36px) / 3); }
 }
 @media (max-width: 700px) {
   .emptyWorkspace { padding: 24px 16px 20px; }
   .emptyHeading h1 { font-size: 24px; }
-  .emptyProducts { display: flex; gap: 12px; overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: x proximity; margin-inline: -4px; padding: 6px 4px 16px; }
+  .emptyCarousel { grid-template-columns: minmax(0, 1fr) 40px 40px; gap: 8px; margin: 18px 0; }
+  .emptyCarouselArrow { width: 40px; height: 40px; }
+  .emptyPrevious { grid-column: 2; grid-row: 1; }
+  .emptyNext { grid-column: 3; grid-row: 1; }
+  .emptyProducts { grid-column: 1 / -1; grid-row: 2; gap: 12px; margin-inline: -4px; }
   .emptyProducts li { flex: 0 0 148px; scroll-snap-align: start; }
   .emptyProductImage { width: 112px; }
   .emptyProduct { padding: 12px 10px; }

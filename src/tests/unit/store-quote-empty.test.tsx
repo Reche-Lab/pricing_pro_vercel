@@ -16,7 +16,7 @@ beforeEach(() => {
   Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function() { this.setAttribute("open", ""); } });
   Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value: function() { this.removeAttribute("open"); } });
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("empty quote workspace", () => {
   it("has one clear primary action, real products with category variety and no empty totals", () => {
@@ -26,8 +26,11 @@ describe("empty quote workspace", () => {
     expect(screen.getAllByRole("button", { name: "Escolher produtos" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Adicionar produtos ao orçamento" })).not.toBeInTheDocument();
     const suggestions = screen.getByRole("list", { name: "Sugestões para começar seu orçamento" });
-    expect(within(suggestions).getAllByRole("button")).toHaveLength(4);
-    expect(within(suggestions).queryByRole("button", { name: "Orçar Botton - 2,5 cm" })).not.toBeInTheDocument();
+    expect(within(suggestions).getAllByRole("button")).toHaveLength(products.length);
+    expect(within(suggestions).getAllByRole("button").slice(0, 4).map(button => button.getAttribute("aria-label"))).toEqual([
+      "Orçar Botton - 3,5 cm", "Orçar Espelho", "Orçar Ímã", "Orçar Abridor",
+    ]);
+    expect(within(suggestions).getByRole("button", { name: "Orçar Botton - 2,5 cm" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Meus orçamentos" })).toHaveAttribute("href", "/loja/test/orcamentos");
     expect(screen.queryByRole("complementary", { name: "Resumo do orçamento" })).not.toBeInTheDocument();
     expect(screen.queryByText(/R\$/)).not.toBeInTheDocument();
@@ -46,6 +49,37 @@ describe("empty quote workspace", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Escolher produtos" }));
     expect(screen.queryByLabelText("Quantidade de produtos")).not.toBeInTheDocument();
+  });
+
+  it("navigates the carousel with arrows or the keyboard and updates limits after scrolling or resizing", () => {
+    const media = { matches: false };
+    vi.stubGlobal("matchMedia", () => media);
+    render(<StoreQuoteOverview cart={emptyCart} products={products} base="" storeName="Loja" busy={false} onUpdate={vi.fn()}/>);
+    const rail = screen.getByRole("list", { name: "Sugestões para começar seu orçamento" });
+    const previous = screen.getByRole("button", { name: "Produtos anteriores do orçamento" });
+    const next = screen.getByRole("button", { name: "Próximos produtos do orçamento" });
+    let width = 400;
+    Object.defineProperty(rail, "clientWidth", { configurable: true, get: () => width });
+    Object.defineProperty(rail, "scrollWidth", { configurable: true, get: () => 1000 });
+    const scrollBy = vi.fn();
+    Object.defineProperty(rail, "scrollBy", { configurable: true, value: scrollBy });
+    fireEvent(window, new Event("resize"));
+    expect(previous).toBeDisabled(); expect(next).toBeEnabled();
+    expect(next).toHaveAttribute("aria-controls", rail.id);
+    fireEvent.click(next);
+    expect(scrollBy).toHaveBeenLastCalledWith({ left: 360, behavior: "smooth" });
+    rail.scrollLeft = 600; fireEvent.scroll(rail);
+    expect(next).toBeDisabled(); expect(previous).toBeEnabled();
+    fireEvent.click(previous);
+    expect(scrollBy).toHaveBeenLastCalledWith({ left: -360, behavior: "smooth" });
+    media.matches = true;
+    fireEvent.keyDown(rail, { key: "ArrowLeft" });
+    expect(scrollBy).toHaveBeenLastCalledWith({ left: -360, behavior: "auto" });
+    const calls = scrollBy.mock.calls.length;
+    fireEvent.keyDown(within(rail).getAllByRole("button")[0], { key: "ArrowRight" });
+    expect(scrollBy).toHaveBeenCalledTimes(calls);
+    rail.scrollLeft = 0; width = 1000; fireEvent(window, new Event("resize"));
+    expect(previous).toBeDisabled(); expect(next).toBeDisabled();
   });
 
   it("transitions to the real quote after confirmed inclusion, preserving its existing controls", async () => {

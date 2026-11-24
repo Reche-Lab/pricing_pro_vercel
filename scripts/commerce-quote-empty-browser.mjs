@@ -94,9 +94,27 @@ if (process.argv.includes("--serve")) {
       await page.getByRole("heading", { name: "Sua próxima ideia começa aqui." }).waitFor();
       const suggestions = page.getByRole("list", { name: "Sugestões para começar seu orçamento" });
       await suggestions.locator("img").evaluateAll(images => Promise.all(images.map(image => { image.loading = "eager"; return image.decode(); })));
-      assert.equal(await suggestions.getByRole("button").count(), 4);
+      assert.equal(await suggestions.getByRole("button").count(), 5);
+      const previous = page.getByRole("button", { name: "Produtos anteriores do orçamento", exact: true });
+      const next = page.getByRole("button", { name: "Próximos produtos do orçamento", exact: true });
+      assert.equal(await previous.isDisabled(), true, `Initial carousel position: ${theme} ${width}x${height}, scrollLeft=${await suggestions.evaluate(element => element.scrollLeft)}`);
+      assert.equal(await next.isEnabled(), true);
       await noOverflow();
       await page.screenshot({ path: `/tmp/quote-empty-${theme}-${width}x${height}.png`, fullPage: true });
+      for (let step = 0; step < 8 && await next.isEnabled(); step++) { await next.click(); await page.waitForTimeout(80); }
+      assert.equal(await next.isDisabled(), true);
+      assert.equal(await previous.isEnabled(), true);
+      await page.getByRole("button", { name: "Orçar Chaveiro personalizado", exact: true }).click();
+      const lastModal = page.getByRole("dialog", { name: "Adicionar produtos ao orçamento" });
+      assert.equal(await lastModal.getByRole("button", { name: /Chaveiro personalizado/ }).getAttribute("aria-pressed"), "true");
+      await lastModal.getByRole("button", { name: "Fechar janela" }).click();
+      for (let step = 0; step < 8 && await previous.isEnabled(); step++) { await previous.click(); await page.waitForTimeout(80); }
+      assert.equal(await previous.isDisabled(), true);
+      await suggestions.focus();
+      await suggestions.press("ArrowRight");
+      await page.waitForTimeout(80);
+      assert.ok(await suggestions.evaluate(element => element.scrollLeft) > 0);
+      for (let step = 0; step < 8 && await previous.isEnabled(); step++) { await previous.click(); await page.waitForTimeout(80); }
       await page.getByRole("button", { name: "Orçar Botton - 3,5 cm", exact: true }).click();
       const modal = page.getByRole("dialog", { name: "Adicionar produtos ao orçamento" });
       const quantity = modal.getByLabel("Quantidade de produtos", { exact: true });
