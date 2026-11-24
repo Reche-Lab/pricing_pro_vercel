@@ -393,7 +393,7 @@ export function StoreHome({
             <div className={styles.categoryRail}>
               {categories.map(category => (
                 <Link key={category} href={`${base}/catalogo?categoria=${encodeURIComponent(category)}`}>
-                  <img src={products.find(product => product.category === category)!.imageUrl} alt="" loading="lazy" width={96} height={96} />
+                  <img src={products.find(product => product.category === category)!.imageUrl} alt="" loading="lazy" width={140} height={140} />
                   <span>{category}</span>
                 </Link>
               ))}

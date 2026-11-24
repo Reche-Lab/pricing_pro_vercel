@@ -70,6 +70,8 @@ describe("storefront merchandising", () => {
     expect(categories.compareDocumentPosition(featured) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(featured.compareDocumentPosition(screen.getByText("Você aprova primeiro")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole("link", { name: "Bottons" })).toHaveAttribute("href", "/commerce/ground-shop/preview/catalogo?categoria=Bottons");
+    expect(categories.querySelector("img")).toHaveAttribute("width", "140");
+    expect(categories.querySelector("img")).toHaveAttribute("height", "140");
   });
   it("provides a second product image for hover without extra navigation or video autoplay", () => {
     const { container } = render(<StoreProductCard product={product} base="/loja/ground-shop" />);
