@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { commerceProductPath } from "@/domain/commerce/product-urls";
-import { ArrowRight, ChevronDown, FileText, Grid2X2, Images, Megaphone, Package, X } from "lucide-react";
+import { ArrowRight, BookOpen, ChevronDown, FileText, Grid2X2, Images, Megaphone, Package, X } from "lucide-react";
 import type { publicCommerceProduct } from "@/repositories/commerce";
 import { campaignIsVisible } from "@/domain/commerce/library";
 import { storeMoney } from "./store-http";
@@ -14,9 +14,10 @@ import styles from "./store.module.css";
 type MenuProduct = Pick<ReturnType<typeof publicCommerceProduct>, "id" | "slug" | "name" | "category" | "imageUrl" | "unitCents" | "personalized">;
 type MenuGroup = { key: string; name: string; kind: "products"; items: MenuProduct[] } | { key: string; name: string; kind: "artworks" | "campaigns" };
 
-export function StoreCategoryNavigation({ products, base, preview, view, activeCategory, libraryEnabled = false, libraryApi = "", navigationKey = "", quoteActive = false }: {
+export function StoreCategoryNavigation({ products, base, preview, view, activeCategory, libraryEnabled = false, libraryApi = "", navigationKey = "", quoteActive = false, blogEnabled = false }: {
   products: MenuProduct[]; base: string; preview: boolean; view: string; activeCategory?: string | null;
   libraryEnabled?: boolean; libraryApi?: string; navigationKey?: string; quoteActive?: boolean;
+  blogEnabled?: boolean;
 }) {
   const categories = useMemo(() => {
     const grouped = new Map<string, MenuProduct[]>();
@@ -96,6 +97,7 @@ export function StoreCategoryNavigation({ products, base, preview, view, activeC
         }}>
         {category.kind === "artworks" ? <Images size={15} aria-hidden="true"/> : category.kind === "campaigns" ? <Megaphone size={15} aria-hidden="true"/> : null}<span>{category.name}</span><ChevronDown size={14} aria-hidden="true"/>
       </button>)}
+      {blogEnabled ? <Link className={styles.categoryCatalogLink} href={`${base}/blog`} aria-current={view === "blog" ? "page" : undefined} onClick={() => close()}><BookOpen size={16} aria-hidden="true"/>Blog e ideias</Link> : null}
     </div>
       {!preview ? <Link className={styles.categoryUtilityLink} href={`${base}/orcamento`} aria-current={view === "orcamento" ? "page" : undefined} data-quote-active={quoteActive} onClick={() => close()}><FileText size={16} aria-hidden="true"/><span>Solicitar orçamento</span><ArrowRight size={14} aria-hidden="true"/></Link> : null}
     </div>

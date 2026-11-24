@@ -14,6 +14,9 @@ import { purchaseConditionsPage } from "@/domain/commerce/purchase-conditions";
 import { readCommerceLibrary } from "@/repositories/commerce-library";
 import { libraryQuerySchema } from "@/domain/commerce/library";
 import { findCommerceProduct, productRedirectUrl } from "@/domain/commerce/product-urls";
+import { storeBlogEnabled } from "@/domain/commerce/blog";
+import { findGroundShopArticle } from "@/content/ground-shop-blog";
+import { StoreBlog, StoreBlogTeaser } from "@/components/commerce/blog/StoreBlog";
 
 export const dynamic = "force-dynamic";
 const previewStore = cache(requireCommercePreview);
@@ -38,8 +41,10 @@ export default async function CommercePreviewPage({
 }) {
   const { slug, path = [] } = await params;
   const page = storeInstitutionalPage(slug, path);
+  const blogArticle = path.length === 2 && path[0] === "blog" ? findGroundShopArticle(path[1]) : undefined;
+  const blogPath = storeBlogEnabled(slug) && path[0] === "blog" && (path.length === 1 || Boolean(blogArticle));
   const libraryPath = (path.length === 1 && ["artes", "campanhas"].includes(path[0])) || (path.length === 2 && path[0] === "campanhas" && libraryQuerySchema.safeParse({ campaign: path[1] }).success);
-  const valid = libraryPath || Boolean(page) ||
+  const valid = blogPath || libraryPath || Boolean(page) ||
     path.length === 0 ||
     (path.length === 1 && ["catalogo", "condicoes", "carrinho", "checkout"].includes(path[0])) ||
     (path.length === 2 && path[0] === "produto");
@@ -72,9 +77,10 @@ export default async function CommercePreviewPage({
       path={path}
       paused={false}
       preview
+      editorial={path.length === 0 && storeBlogEnabled(slug) ? <StoreBlogTeaser base={`/commerce/${slug}/preview`}/> : undefined}
       institutionalLinks={storeInstitutionalPages(slug).map(({ slug, title }) => ({ slug, title }))}
     >
-      {institutional ? <StoreInstitutionalPage slug={slug} page={institutional} settings={store.settings} preview featuredProduct={products.find(product => Boolean(product.imageUrl))} /> : null}
+      {blogPath ? <StoreBlog base={`/commerce/${slug}/preview`} article={blogArticle} products={products} preview/> : institutional ? <StoreInstitutionalPage slug={slug} page={institutional} settings={store.settings} preview featuredProduct={products.find(product => Boolean(product.imageUrl))} /> : null}
     </Storefront>
   );
 }

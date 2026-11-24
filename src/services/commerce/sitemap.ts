@@ -3,11 +3,14 @@ import { INSTITUTIONAL_UPDATED, storeInstitutionalPages } from "@/domain/commerc
 import { commerceSiteOrigin } from "./store-seo";
 import { commerceStoreUrl } from "@/domain/commerce/domains";
 import { commerceProductPath, type CommerceProductLink } from "@/domain/commerce/product-urls";
+import { blogPath, storeBlogEnabled } from "@/domain/commerce/blog";
+import { groundShopArticles } from "@/content/ground-shop-blog";
 
 export function commerceSitemapEntries(slug: string, products: (CommerceProductLink | string)[], origin = commerceSiteOrigin(), library?: { campaigns: string[] }): MetadataRoute.Sitemap {
   const base = commerceStoreUrl(slug, origin);
   return [
     { url: base }, { url: `${base}/catalogo` },
+    ...(storeBlogEnabled(slug) ? [{ url: blogPath(base), lastModified: groundShopArticles.reduce((latest, a) => a.updated > latest ? a.updated : latest, groundShopArticles[0].updated) }, ...groundShopArticles.map(article => ({ url: blogPath(base, article.slug), lastModified: article.updated }))] : []),
     ...(library ? [{ url: `${base}/artes` }, { url: `${base}/campanhas` }, ...library.campaigns.map(campaign => ({ url: `${base}/campanhas/${encodeURIComponent(campaign)}` }))] : []),
     ...storeInstitutionalPages(slug).map(page => ({ url: `${base}/${page.slug}`, lastModified: INSTITUTIONAL_UPDATED })),
     ...products.map(product => ({ url: commerceProductPath(base, typeof product === "string" ? { id: product } : product) }))

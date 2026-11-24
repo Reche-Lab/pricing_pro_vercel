@@ -27,6 +27,24 @@ function setup(slug = "ground-shop") {
   return store;
 }
 describe("institutional storefront routes", () => {
+  it("serves the blog only to Ground Shop and keeps unknown/deep article URLs as 404", async () => {
+    setup();
+    const params = Promise.resolve({ slug: "ground-shop", path: ["blog", "bottons-eventos-corporativos-summits"] });
+    const html = renderToStaticMarkup(await StorePage({ params }));
+    expect(html).toContain("A conta acontece por arte");
+    expect(html).toContain("BlogPosting");
+    expect((await generateMetadata({ params })).openGraph).toMatchObject({ type: "article" });
+    const preview = renderToStaticMarkup(await PreviewPage({ params }));
+    expect(preview).toContain("/commerce/ground-shop/preview/blog");
+    expect(preview).not.toContain("application/ld+json");
+    for (const path of [["blog", "unknown"], ["blog", "bottons-eventos-corporativos-summits", "extra"]]) {
+      await expect(StorePage({ params: Promise.resolve({ slug: "ground-shop", path }) })).rejects.toThrow("NOT_FOUND");
+      await expect(PreviewPage({ params: Promise.resolve({ slug: "ground-shop", path }) })).rejects.toThrow("NOT_FOUND");
+    }
+    setup("other");
+    await expect(StorePage({ params: Promise.resolve({ slug: "other", path: ["blog"] }) })).rejects.toThrow("NOT_FOUND");
+    expect((await generateMetadata({ params: Promise.resolve({ slug: "other", path: ["blog"] }) })).robots).toMatchObject({ index: false });
+  });
   it("explains assistant data use without exposing technical vendors in the store or preview", async () => {
     setup();
     const params = Promise.resolve({ slug: "ground-shop", path: ["assistente-privacidade"] });
@@ -89,7 +107,7 @@ describe("institutional storefront routes", () => {
     setup();
     vi.mocked(publishedCommerceSitemapStores).mockResolvedValue([{ slug: "ground-shop" }]);
     const entries = await sitemap();
-    expect(entries).toHaveLength(8);
+    expect(entries).toHaveLength(17);
     expect(entries.some(item => item.url.endsWith("/politica-de-troca"))).toBe(true);
     expect(entries.every(item => !item.url.includes("preview"))).toBe(true);
   });

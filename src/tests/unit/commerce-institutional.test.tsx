@@ -60,11 +60,11 @@ describe("Ground Shop institutional content and SEO", () => {
   });
   it("generates a parseable sitemap with all pages and products but no private flows", () => {
     const entries = commerceSitemapEntries("ground-shop", ["published-product"], origin);
-    expect(entries).toHaveLength(8);
+    expect(entries).toHaveLength(17);
     expect(entries.some(item => /preview|checkout|carrinho|conta|pedidos/.test(item.url))).toBe(false);
     const document = new DOMParser().parseFromString(commerceSitemapXml(entries), "application/xml");
     expect(document.querySelector("parsererror")).toBeNull();
-    expect(document.querySelectorAll("loc")).toHaveLength(8);
+    expect(document.querySelectorAll("loc")).toHaveLength(17);
     expect(commerceSitemapEntries("other", [], origin)).toHaveLength(2);
     const escaped = commerceSitemapXml([{ url: `${origin}/?q=<test>&a=2` }]);
     expect(new DOMParser().parseFromString(escaped, "application/xml").querySelector("loc")?.textContent).toBe(`${origin}/?q=<test>&a=2`);

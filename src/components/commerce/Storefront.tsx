@@ -47,6 +47,7 @@ import { StoreFooter } from "./StoreFooter";
 import { StoreAssistantLauncher } from "./StoreAssistantLauncher";
 import studioStyles from "./studio.module.css";
 import { StoreCategoryNavigation } from "./StoreCategoryNavigation";
+import { storeBlogEnabled } from "@/domain/commerce/blog";
 import { StoreProductGallery } from "./StoreProductGallery";
 import { StorePriceBreakdown } from "./StorePriceBreakdown";
 import { StoreDeliveryInquiry } from "./StoreDeliveryInquiry";
@@ -97,6 +98,7 @@ type Props = {
   libraryEnabled?: boolean;
   libraryInitial?: LibraryResult;
   children?: ReactNode;
+  editorial?: ReactNode;
 };
 
 export function Storefront(props: Props) {
@@ -116,6 +118,7 @@ function StorefrontContent({
   libraryEnabled = false,
   libraryInitial,
   children,
+  editorial,
 }: Props) {
   const analytics = useStoreAnalytics();
   const router = useRouter();
@@ -318,6 +321,7 @@ function StorefrontContent({
           </nav>
         </div>
         <StoreCategoryNavigation products={products} base={base} preview={preview} view={view}
+          blogEnabled={storeBlogEnabled(slug)}
           activeCategory={selectedProduct?.category ?? (view === "catalogo" ? searchParams.get("categoria") : null)}
           quoteActive={quoting} libraryEnabled={libraryEnabled} libraryApi={`${api}/library`} navigationKey={`${base}/${path.join("/")}?${searchParams.toString()}`}/>
         {showQuoteJourney ? <StoreQuoteJourney base={base} step={savedQuote ? 4 : quoteDetails ? quoteStep === "review" ? 3 : 2 : 1} count={cart?.lines.length ?? 0} totalCents={cart?.calculation?.totalCents ?? 0} identified={Boolean(cart?.customer)} onPurchase={() => { setQuoteMode(false); router.push(`${base}/carrinho`); }}/>: null}
@@ -614,7 +618,8 @@ function StorefrontContent({
           <BuyerSessionBoundary cart={cart} error={cartError} api={api} refresh={refresh} preview={preview}>{cart?.customer ? <StoreBuyerOrders key={`${api}:${cart.customer.id}`} api={api} base={base} buyerId={cart.customer.id} orderId={path[1]} instructions={cart.payments.manual_instructions ?? ""} products={products} onSessionExpired={refresh} cartRevision={cart.revision} onCartChanged={refresh}/> : null}</BuyerSessionBoundary>
         ) : null}
       </div>
-      <StoreFooter settings={settings} products={products} base={base} preview={preview} libraryEnabled={libraryEnabled} institutionalLinks={institutionalLinks} payments={cart?.payments} view={view}/>
+      {view === "home" && editorial ? <div className={styles.wrap}>{editorial}</div> : null}
+      <StoreFooter settings={settings} products={products} base={base} preview={preview} blogEnabled={storeBlogEnabled(slug)} libraryEnabled={libraryEnabled} institutionalLinks={institutionalLinks} payments={cart?.payments} view={view}/>
       <StoreAnalyticsConsent/>
       {!preview && !paused ? <StoreAssistantLauncher api={api} base={base} settings={settings} buyerId={cart?.customer?.id} onCartChanged={refresh}/> : null}
     </main>
