@@ -73,17 +73,18 @@ try {
             assert.equal(await panel.evaluate(element => element.contains(document.activeElement)), true);
             await page.keyboard.press("Escape"); assert.equal(await trigger.evaluate(element => element === document.activeElement), true);
           }
-          for (const [label, region] of [["Campanhas", "Campanhas da loja"], ["Artes prontas", "Artes prontas da loja"]]) {
+          assert.equal(await page.getByRole("button", { name: "Artes prontas", exact: true }).count(), 0);
+          for (const [label, region] of [["Campanhas", "Campanhas da loja"], ["Blog", "Blog da loja"]]) {
             const libraryTrigger = page.getByRole("button", { name: label, exact: true });
             if (mobile) await libraryTrigger.tap(); else await libraryTrigger.hover();
             const libraryPanel = page.getByRole("region", { name: region, exact: true });
-            const target = libraryPanel.getByRole("link", { name: label === "Campanhas" ? /Campanha do menu/ : /Arte do menu/ });
+            const target = label === "Campanhas" ? libraryPanel.getByRole("link", { name: /Campanha do menu/ }) : libraryPanel.locator('a[href*="/blog/"]').first();
             await target.waitFor();
             const libraryBounds = await libraryPanel.boundingBox();
             assert.ok(libraryBounds && libraryBounds.x >= 0 && libraryBounds.x + libraryBounds.width <= width + 1 && libraryBounds.y + libraryBounds.height <= height + 1, `${label} fits ${width}x${height}`);
             for (const image of await libraryPanel.locator("img").all()) await image.evaluate(element => element.decode());
-            if (label === "Artes prontas") assert.equal(await libraryPanel.getByRole("link", { name: "Outubro rosa", exact: true }).getAttribute("href"), `${prefix}/artes?categoria=${childId}`);
-            await page.screenshot({ path: `/tmp/commerce-menu-library-${label === "Campanhas" ? "campaigns" : "artworks"}-${prefix.includes("preview") ? "preview" : "public"}-${width}-${theme}.png` });
+            if (label === "Blog") assert.equal(await libraryPanel.getByRole("link", { name: "Ver todos os artigos", exact: true }).getAttribute("href"), `${prefix}/blog`);
+            await page.screenshot({ path: `/tmp/commerce-menu-library-${label === "Campanhas" ? "campaigns" : "blog"}-${prefix.includes("preview") ? "preview" : "public"}-${width}-${theme}.png` });
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
             await page.getByRole("button", { name: "Fechar categorias", exact: true }).click();
           }
@@ -103,13 +104,11 @@ try {
         await page.getByRole("region", { name: "Campanhas da loja", exact: true }).getByRole("link", { name: /Campanha do menu/ }).click();
         await page.waitForURL(`${base}${prefix}/campanhas/${campaignSlug}`);
         await page.getByRole("heading", { name: "Campanha do menu", exact: true }).waitFor();
-        await openLibrary("Artes prontas");
-        await page.getByRole("region", { name: "Artes prontas da loja", exact: true }).getByRole("link", { name: "Outubro rosa", exact: true }).click();
+        await page.goto(`${base}${prefix}/artes?categoria=${childId}`, { waitUntil: "networkidle" });
         await page.waitForURL(`${base}${prefix}/artes?categoria=${childId}`);
         await page.getByTitle("Ver Arte do menu", { exact: true }).waitFor();
         assert.equal(await page.getByRole("combobox", { name: /^Categoria/ }).inputValue(), childId);
-        await openLibrary("Artes prontas");
-        await page.getByRole("region", { name: "Artes prontas da loja", exact: true }).getByRole("link", { name: /Arte do menu/ }).click();
+        await page.goto(`${base}${prefix}/artes?arte=${artworkId}`, { waitUntil: "networkidle" });
         await page.waitForURL(`${base}${prefix}/artes?arte=${artworkId}`);
         await page.getByTitle("Ver Arte do menu", { exact: true }).waitFor();
       }
@@ -117,7 +116,7 @@ try {
     await context.close();
   }
   assert.deepEqual(errors, []);
-  console.log("Product, campaign and artwork dropdowns passed: public/preview, light/dark, desktop hover, mobile taps, keyboard/Escape, image loading, bounded scrolling and real gallery/category/artwork navigation at 1440/1920/390/320/844px.");
+  console.log("Product, campaign and blog dropdowns passed: public/preview, light/dark, desktop hover, mobile taps, keyboard/Escape, image loading, bounded scrolling and retained artwork gallery at 1440/1920/390/320/844px.");
 } finally {
   await browser.close();
   if (store) {

@@ -19,6 +19,7 @@ import { findCommerceProduct, productRedirectUrl } from "@/domain/commerce/produ
 import { storeProductMetadata, storeProductStructuredData } from "@/services/commerce/product-seo";
 import { publicAnalyticsSettings } from "@/domain/commerce/analytics";
 import { readPublicBlog } from "@/repositories/commerce-blog";
+import { blogCard } from "@/domain/commerce/blog";
 import { StoreBlog, StoreBlogTeaser } from "@/components/commerce/blog/StoreBlog";
 import { storeBlogMetadata, storeBlogStructuredData } from "@/services/commerce/blog-seo";
 export const dynamic = "force-dynamic";
@@ -104,6 +105,7 @@ export default async function StorePage({ params, searchParams }: Props) {
       basePath={customDomain ? "" : undefined}
       blogEnabled={hasBlog}
       blogTitle={blog.settings.title}
+      blogArticles={hasBlog ? blog.articles.map(blogCard) : []}
       editorial={path.length === 0 && hasBlog ? <StoreBlogTeaser base={customDomain ? "" : `/loja/${slug}`} blog={blog}/> : undefined}
       institutionalLinks={storeInstitutionalPages(slug).map(({ slug, title }) => ({ slug, title }))}
     >

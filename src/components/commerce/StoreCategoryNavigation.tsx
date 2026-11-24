@@ -3,7 +3,8 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { commerceProductPath } from "@/domain/commerce/product-urls";
-import { ArrowRight, BookOpen, ChevronDown, FileText, Grid2X2, Images, Megaphone, Package, X } from "lucide-react";
+import { ArrowRight, BookOpen, ChevronDown, FileText, Grid2X2, Megaphone, Package, X } from "lucide-react";
+import { blogPath, type BlogCard } from "@/domain/commerce/blog";
 import type { publicCommerceProduct } from "@/repositories/commerce";
 import { campaignIsVisible } from "@/domain/commerce/library";
 import { storeMoney } from "./store-http";
@@ -12,12 +13,13 @@ import { StoreLibraryMenuContent } from "./StoreLibraryMenuContent";
 import styles from "./store.module.css";
 
 type MenuProduct = Pick<ReturnType<typeof publicCommerceProduct>, "id" | "slug" | "name" | "category" | "imageUrl" | "unitCents" | "personalized">;
-type MenuGroup = { key: string; name: string; kind: "products"; items: MenuProduct[] } | { key: string; name: string; kind: "artworks" | "campaigns" };
+type MenuGroup = { key: string; name: string; kind: "products"; items: MenuProduct[] } | { key: string; name: string; kind: "campaigns" } | { key: string; name: string; kind: "blog"; items: BlogCard[] };
+const noArticles: BlogCard[] = [];
 
-export function StoreCategoryNavigation({ products, base, preview, view, activeCategory, libraryEnabled = false, libraryApi = "", navigationKey = "", quoteActive = false, blogEnabled = false }: {
+export function StoreCategoryNavigation({ products, base, preview, view, activeCategory, libraryEnabled = false, libraryApi = "", navigationKey = "", quoteActive = false, blogEnabled = false, blogArticles = noArticles, blogTitle = "Blog", activeBlogSlug }: {
   products: MenuProduct[]; base: string; preview: boolean; view: string; activeCategory?: string | null;
   libraryEnabled?: boolean; libraryApi?: string; navigationKey?: string; quoteActive?: boolean;
-  blogEnabled?: boolean;
+  blogEnabled?: boolean; blogArticles?: BlogCard[]; blogTitle?: string; activeBlogSlug?: string;
 }) {
   const categories = useMemo(() => {
     const grouped = new Map<string, MenuProduct[]>();
@@ -26,9 +28,10 @@ export function StoreCategoryNavigation({ products, base, preview, view, activeC
       if (group) group.push(product); else grouped.set(product.category, [product]);
     }
     const groups: MenuGroup[] = [...grouped].map(([name, items]) => ({ key: `product:${name}`, kind: "products", name, items }));
-    if (libraryEnabled) groups.push({ key: "library:artworks", name: "Artes prontas", kind: "artworks" }, { key: "library:campaigns", name: "Campanhas", kind: "campaigns" });
+    if (libraryEnabled) groups.push({ key: "library:campaigns", name: "Campanhas", kind: "campaigns" });
+    if (blogEnabled) groups.push({ key: "blog", name: "Blog", kind: "blog", items: blogArticles });
     return groups;
-  }, [products, libraryEnabled]);
+  }, [products, libraryEnabled, blogEnabled, blogArticles]);
   const [open, setOpen] = useState<string | null>(null);
   const [requestedLibraryApi, setRequestedLibraryApi] = useState<string | null>(null);
   const library = useMenuLibrary(libraryApi, libraryEnabled && requestedLibraryApi === libraryApi);
@@ -46,9 +49,9 @@ export function StoreCategoryNavigation({ products, base, preview, view, activeC
   }
   function openCategory(key: string, focus = false) {
     cancelClose(); focusPanel.current = focus; setOpen(key);
-    if (categories.find(category => category.key === key)?.kind !== "products" && libraryApi) setRequestedLibraryApi(libraryApi);
+    if (categories.find(category => category.key === key)?.kind === "campaigns" && libraryApi) setRequestedLibraryApi(libraryApi);
   }
-  function isActive(category: MenuGroup) { return category.kind === "products" ? activeCategory === category.name : view === (category.kind === "artworks" ? "artes" : "campanhas"); }
+  function isActive(category: MenuGroup) { return category.kind === "products" ? activeCategory === category.name : view === (category.kind === "blog" ? "blog" : "campanhas"); }
   function scheduleClose() {
     cancelClose();
     closeTimer.current = setTimeout(() => {
@@ -95,16 +98,15 @@ export function StoreCategoryNavigation({ products, base, preview, view, activeC
             triggers.current.get(categories[next].key)?.focus(); if (open) openCategory(categories[next].key);
           }
         }}>
-        {category.kind === "artworks" ? <Images size={15} aria-hidden="true"/> : category.kind === "campaigns" ? <Megaphone size={15} aria-hidden="true"/> : null}<span>{category.name}</span><ChevronDown size={14} aria-hidden="true"/>
+        {category.kind === "blog" ? <BookOpen size={15} aria-hidden="true"/> : category.kind === "campaigns" ? <Megaphone size={15} aria-hidden="true"/> : null}<span>{category.name}</span><ChevronDown size={14} aria-hidden="true"/>
       </button>)}
-      {blogEnabled ? <Link className={styles.categoryCatalogLink} href={`${base}/blog`} aria-current={view === "blog" ? "page" : undefined} onClick={() => close()}><BookOpen size={16} aria-hidden="true"/>Blog e ideias</Link> : null}
     </div>
       {!preview ? <Link className={styles.categoryUtilityLink} href={`${base}/orcamento`} aria-current={view === "orcamento" ? "page" : undefined} data-quote-active={quoteActive} onClick={() => close()}><FileText size={16} aria-hidden="true"/><span>Solicitar orçamento</span><ArrowRight size={14} aria-hidden="true"/></Link> : null}
     </div>
     {selected ? <section ref={panel} id={`${id}-panel-${categories.indexOf(selected)}`} aria-label={selected.kind === "products" ? `Produtos de ${selected.name}` : `${selected.name} da loja`} className={styles.categoryDropdown}>
       <div className={styles.categoryDropdownHeading}>
-        <div><h2>{selected.name}</h2><span>{selected.kind === "products" ? `${selected.items.length} ${selected.items.length === 1 ? "produto" : "produtos"}` : library.data ? selected.kind === "campaigns" ? `${campaigns.length} ${campaigns.length === 1 ? "campanha" : "campanhas"}` : `${library.data.total} ${library.data.total === 1 ? "arte" : "artes"}` : "Biblioteca da loja"}</span></div>
-        <Link prefetch={false} className={styles.categoryViewAll} href={selected.kind === "products" ? `${base}/catalogo?categoria=${encodeURIComponent(selected.name)}` : `${base}/${selected.kind === "artworks" ? "artes" : "campanhas"}`} onClick={() => close()}>{selected.kind === "products" ? "Ver categoria completa" : selected.kind === "artworks" ? "Ver todas as artes" : "Ver todas as campanhas"}<ArrowRight size={15} aria-hidden="true"/></Link>
+        <div><h2>{selected.kind === "blog" ? blogTitle : selected.name}</h2><span>{selected.kind === "products" ? `${selected.items.length} ${selected.items.length === 1 ? "produto" : "produtos"}` : selected.kind === "blog" ? `${selected.items.length} ${selected.items.length === 1 ? "artigo" : "artigos"}` : library.data ? `${campaigns.length} ${campaigns.length === 1 ? "campanha" : "campanhas"}` : "Biblioteca da loja"}</span></div>
+        <Link prefetch={false} className={styles.categoryViewAll} href={selected.kind === "products" ? `${base}/catalogo?categoria=${encodeURIComponent(selected.name)}` : selected.kind === "blog" ? blogPath(base) : `${base}/campanhas`} onClick={() => close()}>{selected.kind === "products" ? "Ver categoria completa" : selected.kind === "blog" ? "Ver todos os artigos" : "Ver todas as campanhas"}<ArrowRight size={15} aria-hidden="true"/></Link>
         <button type="button" aria-label="Fechar categorias" title="Fechar categorias" className={styles.categoryClose} onClick={() => close(true)}><X size={18}/></button>
       </div>
       {selected.kind === "products" ? <div className={styles.categoryProductGrid}>
@@ -113,7 +115,13 @@ export function StoreCategoryNavigation({ products, base, preview, view, activeC
           <span className={styles.categoryProductText}><strong>{product.name}</strong><small>{product.personalized ? "Personalizável" : selected.name}</small><span>{storeMoney(product.unitCents)} <small>/ un.</small></span></span>
           <ArrowRight className={styles.categoryProductArrow} size={17} aria-hidden="true"/>
         </Link>)}
-      </div> : <StoreLibraryMenuContent kind={selected.kind} base={base} api={libraryApi} preview={preview} data={library.data} campaigns={campaigns} loading={library.loading} error={library.error} reload={library.reload} onNavigate={() => close()}/>}
+      </div> : selected.kind === "blog" ? selected.items.length ? <div className={styles.categoryProductGrid}>
+        {selected.items.map(article => <Link prefetch={false} key={article.slug} className={styles.categoryProduct} href={blogPath(base, article.slug)} aria-current={activeBlogSlug === article.slug ? "page" : undefined} onClick={() => close()}>
+          <span className={`${styles.categoryProductImage} ${styles.categoryCampaignImage}`}>{article.image ? <img src={article.image} alt="" loading="lazy" width={96} height={64}/> : <BookOpen size={25} aria-hidden="true"/>}</span>
+          <span className={styles.categoryProductText}><strong>{article.title}</strong><small>{article.category}</small><span>{article.minutes} min de leitura</span></span>
+          <ArrowRight className={styles.categoryProductArrow} size={17} aria-hidden="true"/>
+        </Link>)}
+      </div> : <div className={styles.categoryLibraryStatus}><p>Novas histórias estarão disponíveis em breve.</p></div> : <StoreLibraryMenuContent kind="campaigns" base={base} api={libraryApi} preview={preview} data={library.data} campaigns={campaigns} loading={library.loading} error={library.error} reload={library.reload} onNavigate={() => close()}/>}
     </section> : null}
   </nav>;
 }

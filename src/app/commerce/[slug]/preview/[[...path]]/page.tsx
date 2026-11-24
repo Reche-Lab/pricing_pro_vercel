@@ -15,6 +15,7 @@ import { readCommerceLibrary } from "@/repositories/commerce-library";
 import { libraryQuerySchema } from "@/domain/commerce/library";
 import { findCommerceProduct, productRedirectUrl } from "@/domain/commerce/product-urls";
 import { readPublicBlog } from "@/repositories/commerce-blog";
+import { blogCard } from "@/domain/commerce/blog";
 import { StoreBlog, StoreBlogTeaser } from "@/components/commerce/blog/StoreBlog";
 
 export const dynamic = "force-dynamic";
@@ -80,6 +81,7 @@ export default async function CommercePreviewPage({
       preview
       blogEnabled={blog.articles.length > 0}
       blogTitle={blog.settings.title}
+      blogArticles={blog.articles.map(blogCard)}
       editorial={path.length === 0 && blog.articles.length > 0 ? <StoreBlogTeaser base={`/commerce/${slug}/preview`} blog={blog}/> : undefined}
       institutionalLinks={storeInstitutionalPages(slug).map(({ slug, title }) => ({ slug, title }))}
     >

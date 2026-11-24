@@ -47,7 +47,7 @@ import { StoreFooter } from "./StoreFooter";
 import { StoreAssistantLauncher } from "./StoreAssistantLauncher";
 import studioStyles from "./studio.module.css";
 import { StoreCategoryNavigation } from "./StoreCategoryNavigation";
-import { storeBlogEnabled } from "@/domain/commerce/blog";
+import { storeBlogEnabled, type BlogCard } from "@/domain/commerce/blog";
 import { StoreProductGallery } from "./StoreProductGallery";
 import { StorePriceBreakdown } from "./StorePriceBreakdown";
 import { StoreDeliveryInquiry } from "./StoreDeliveryInquiry";
@@ -101,6 +101,7 @@ type Props = {
   editorial?: ReactNode;
   blogEnabled?: boolean;
   blogTitle?: string;
+  blogArticles?: BlogCard[];
 };
 
 export function Storefront(props: Props) {
@@ -123,6 +124,7 @@ function StorefrontContent({
   editorial,
   blogEnabled = storeBlogEnabled(slug),
   blogTitle,
+  blogArticles,
 }: Props) {
   const analytics = useStoreAnalytics();
   const router = useRouter();
@@ -326,6 +328,7 @@ function StorefrontContent({
         </div>
         <StoreCategoryNavigation products={products} base={base} preview={preview} view={view}
           blogEnabled={blogEnabled}
+          blogTitle={blogTitle} blogArticles={blogArticles} activeBlogSlug={view === "blog" ? path[1] : undefined}
           activeCategory={selectedProduct?.category ?? (view === "catalogo" ? searchParams.get("categoria") : null)}
           quoteActive={quoting} libraryEnabled={libraryEnabled} libraryApi={`${api}/library`} navigationKey={`${base}/${path.join("/")}?${searchParams.toString()}`}/>
         {showQuoteJourney ? <StoreQuoteJourney base={base} step={savedQuote ? 4 : quoteDetails ? quoteStep === "review" ? 3 : 2 : 1} count={cart?.lines.length ?? 0} totalCents={cart?.calculation?.totalCents ?? 0} identified={Boolean(cart?.customer)} onPurchase={() => { setQuoteMode(false); router.push(`${base}/carrinho`); }}/>: null}

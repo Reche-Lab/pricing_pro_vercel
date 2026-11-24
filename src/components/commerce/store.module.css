@@ -507,6 +507,7 @@
 .categoryProductGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 14px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 .categoryProduct { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 10px; border: 1px solid transparent; border-radius: 6px; color: var(--ink); transition: background .18s, border-color .18s; }
 .categoryProduct:hover, .categoryProduct:focus-visible { background: var(--soft); border-color: var(--line); }
+.categoryProduct[aria-current="page"] { background: var(--soft); border-color: var(--highlight); }
 .categoryProductImage { display: grid; place-items: center; flex-shrink: 0; width: 64px; height: 64px; border-radius: 6px; overflow: hidden; background: var(--product-backdrop); color: var(--muted); box-shadow: inset 0 0 0 1px var(--product-rim); }
 .categoryProductImage img { width: 100%; height: 100%; object-fit: contain; padding: 5px; transition: transform .2s; }
 .categoryProduct:hover .categoryProductImage img { transform: scale(1.06); }

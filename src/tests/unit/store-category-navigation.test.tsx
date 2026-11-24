@@ -2,6 +2,11 @@ import React from "react";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StoreCategoryNavigation } from "@/components/commerce/StoreCategoryNavigation";
+import { blogCard } from "@/domain/commerce/blog";
+import { groundShopArticles } from "@/content/ground-shop-blog";
+import { storeRequest } from "@/components/commerce/store-http";
+
+vi.mock("@/components/commerce/store-http", () => ({ storeRequest: vi.fn(), storeMoney: (value: number) => `R$ ${value / 100}` }));
 
 const products = [
   { id: "small", name: "Botton 2,5 cm", category: "Bottons", imageUrl: "/botton.webp", unitCents: 325, personalized: true },
@@ -10,12 +15,44 @@ const products = [
 ];
 const props = { products, base: "/loja/ground-shop", preview: false, view: "home" };
 beforeEach(() => {
+  vi.mocked(storeRequest).mockReset();
   vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
   vi.stubGlobal("PointerEvent", class extends MouseEvent { pointerType: string; constructor(type: string, options: PointerEventInit = {}) { super(type, options); this.pointerType = options.pointerType ?? "mouse"; } });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("store category navigation", () => {
+  it("opens the blog in the same dropdown pattern without fetching the artwork library", () => {
+    render(<StoreCategoryNavigation {...props} blogEnabled blogTitle="Blog Ground Shop" blogArticles={groundShopArticles.map(blogCard)} libraryEnabled libraryApi="/api/store/ground-shop/library" view="blog" activeBlogSlug={groundShopArticles[0].slug}/>);
+    const trigger = screen.getByRole("button", { name: "Blog" });
+    expect(trigger).toHaveAttribute("aria-current", "true");
+    expect(screen.queryByRole("button", { name: "Artes prontas" })).not.toBeInTheDocument();
+    fireEvent.pointerEnter(trigger, { pointerType: "mouse" });
+    const panel = screen.getByRole("region", { name: "Blog da loja" });
+    expect(within(panel).getByRole("heading", { name: "Blog Ground Shop" })).toBeInTheDocument();
+    expect(within(panel).getAllByRole("link")).toHaveLength(9);
+    const article = within(panel).getByRole("link", { name: new RegExp(groundShopArticles[0].title) });
+    expect(article).toHaveAttribute("href", `/loja/ground-shop/blog/${groundShopArticles[0].slug}`);
+    expect(article).toHaveAttribute("aria-current", "page");
+    expect(within(panel).getByRole("link", { name: "Ver todos os artigos" })).toHaveAttribute("href", "/loja/ground-shop/blog");
+    expect(storeRequest).not.toHaveBeenCalled();
+    article.addEventListener("click", e => e.preventDefault()); fireEvent.click(article);
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+  it("supports blog touch, keyboard focus and preview links, without retaining another tenant's articles", () => {
+    const { rerender } = render(<StoreCategoryNavigation {...props} blogEnabled blogArticles={[blogCard(groundShopArticles[0])]} base="/commerce/ground-shop/preview" preview/>);
+    const trigger = screen.getByRole("button", { name: "Blog" });
+    fireEvent.pointerEnter(trigger, { pointerType: "touch" }); expect(trigger).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(trigger);
+    expect(screen.getByRole("link", { name: "Ver todos os artigos" })).toHaveAttribute("href", "/commerce/ground-shop/preview/blog");
+    fireEvent.keyDown(trigger, { key: "ArrowDown" }); expect(screen.getByRole("region").contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" }); expect(trigger).toHaveFocus();
+    rerender(<StoreCategoryNavigation {...props} blogEnabled blogArticles={[]} base="/loja/other" navigationKey="other"/>);
+    fireEvent.click(screen.getByRole("button", { name: "Blog" }));
+    expect(screen.queryByText(groundShopArticles[0].title)).not.toBeInTheDocument();
+    expect(screen.getByText("Novas histórias estarão disponíveis em breve.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ver todos os artigos" })).toHaveAttribute("href", "/loja/other/blog");
+  });
   it("keeps an empty store navigable without inventing categories", () => {
     render(<StoreCategoryNavigation {...props} products={[]}/>);
     expect(screen.getByRole("link", { name: "Pesquisar produtos" })).toHaveAttribute("href", "/loja/ground-shop/catalogo");
