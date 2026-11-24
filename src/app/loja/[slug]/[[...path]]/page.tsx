@@ -18,12 +18,12 @@ import { libraryQuerySchema } from "@/domain/commerce/library";
 import { findCommerceProduct, productRedirectUrl } from "@/domain/commerce/product-urls";
 import { storeProductMetadata, storeProductStructuredData } from "@/services/commerce/product-seo";
 import { publicAnalyticsSettings } from "@/domain/commerce/analytics";
-import { storeBlogEnabled } from "@/domain/commerce/blog";
-import { findGroundShopArticle } from "@/content/ground-shop-blog";
+import { readPublicBlog } from "@/repositories/commerce-blog";
 import { StoreBlog, StoreBlogTeaser } from "@/components/commerce/blog/StoreBlog";
 import { storeBlogMetadata, storeBlogStructuredData } from "@/services/commerce/blog-seo";
 export const dynamic = "force-dynamic";
 const loadStore = cache(getCommerceStore);
+const loadBlog = cache(readPublicBlog);
 const loadProducts = cache(async (tenantId: string) => (await commerceProducts(tenantId)).map(publicCommerceProduct));
 const loadLibrary = cache(async (tenantId: string, campaign?: string) => readCommerceLibrary(tenantId, libraryQuerySchema.parse({ ...(campaign ? { campaign } : {}) })));
 type Props = { params: Promise<{ slug: string; path?: string[] }>; searchParams?: Promise<Record<string, string | string[] | undefined>> };
@@ -33,8 +33,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!store) return { title: "Loja indisponível", robots: { index: false } };
   const metadata = storePageMetadata(slug, path, store.settings, store.status === "published");
   if (path[0] === "blog") {
-    const article = path.length === 2 ? findGroundShopArticle(path[1]) : undefined;
-    return storeBlogEnabled(slug) && (path.length === 1 || article) ? storeBlogMetadata(slug, store.settings, store.status === "published", article) : { title: "História não encontrada", robots: { index: false, follow: false } };
+    const blog = await loadBlog(store.tenant_id, slug, store.settings.name);
+    const article = path.length === 2 ? blog.articles.find(a => a.slug === path[1]) : undefined;
+    return blog.settings.enabled && blog.articles.length > 0 && (path.length === 1 || article) ? storeBlogMetadata(slug, store.settings, store.status === "published", article, undefined, blog) : { title: "História não encontrada", robots: { index: false, follow: false } };
   }
   if (path[0] === "produto") {
     const product = path.length === 2 ? findCommerceProduct(await loadProducts(store.tenant_id), path[1]) : undefined;
@@ -57,8 +58,10 @@ export default async function StorePage({ params, searchParams }: Props) {
   const store = await loadStore(slug, true);
   if (!store) notFound();
   const customDomain = commerceHostSlug((await headers()).get("host")) === slug;
-  const blogArticle = path.length === 2 && path[0] === "blog" ? findGroundShopArticle(path[1]) : undefined;
-  const blogPath = storeBlogEnabled(slug) && path[0] === "blog" && (path.length === 1 || Boolean(blogArticle));
+  const blog = await loadBlog(store.tenant_id, slug, store.settings.name);
+  const hasBlog = blog.settings.enabled && blog.articles.length > 0;
+  const blogArticle = path.length === 2 && path[0] === "blog" ? blog.articles.find(a => a.slug === path[1]) : undefined;
+  const blogPath = hasBlog && path[0] === "blog" && (path.length === 1 || Boolean(blogArticle));
   const institutional = storeInstitutionalPage(slug, path) ?? (path.length === 1 && path[0] === "condicoes" ? purchaseConditionsPage(slug, store.settings) : undefined);
   const libraryPath = Boolean(store.art_library_enabled) && store.status === "published" && ((path.length === 1 && ["artes", "campanhas"].includes(path[0])) || (path.length === 2 && path[0] === "campanhas" && libraryQuerySchema.safeParse({ campaign: path[1] }).success));
   const supported = blogPath || libraryPath || Boolean(institutional) ||
@@ -99,12 +102,14 @@ export default async function StorePage({ params, searchParams }: Props) {
       path={path}
       paused={store.status !== "published"}
       basePath={customDomain ? "" : undefined}
-      editorial={path.length === 0 && storeBlogEnabled(slug) ? <StoreBlogTeaser base={customDomain ? "" : `/loja/${slug}`}/> : undefined}
+      blogEnabled={hasBlog}
+      blogTitle={blog.settings.title}
+      editorial={path.length === 0 && hasBlog ? <StoreBlogTeaser base={customDomain ? "" : `/loja/${slug}`} blog={blog}/> : undefined}
       institutionalLinks={storeInstitutionalPages(slug).map(({ slug, title }) => ({ slug, title }))}
     >
       {blogPath ? <>
-        {store.status === "published" ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeStructuredData(storeBlogStructuredData(slug, store.settings, blogArticle)) }} /> : null}
-        <StoreBlog base={customDomain ? "" : `/loja/${slug}`} article={blogArticle} products={products}/>
+        {store.status === "published" ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeStructuredData(storeBlogStructuredData(slug, store.settings, blogArticle, undefined, blog)) }} /> : null}
+        <StoreBlog base={customDomain ? "" : `/loja/${slug}`} article={blogArticle} products={products} blog={blog} name={store.settings.name}/>
       </> : institutional ? <>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeStructuredData(institutionalStructuredData(slug, institutional.slug, store.settings)) }} />
         <StoreInstitutionalPage slug={slug} page={institutional} settings={store.settings} basePath={customDomain ? "" : undefined} featuredProduct={products.find(product => Boolean(product.imageUrl))} />

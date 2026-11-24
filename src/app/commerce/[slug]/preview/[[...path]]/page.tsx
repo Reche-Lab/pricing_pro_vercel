@@ -14,8 +14,7 @@ import { purchaseConditionsPage } from "@/domain/commerce/purchase-conditions";
 import { readCommerceLibrary } from "@/repositories/commerce-library";
 import { libraryQuerySchema } from "@/domain/commerce/library";
 import { findCommerceProduct, productRedirectUrl } from "@/domain/commerce/product-urls";
-import { storeBlogEnabled } from "@/domain/commerce/blog";
-import { findGroundShopArticle } from "@/content/ground-shop-blog";
+import { readPublicBlog } from "@/repositories/commerce-blog";
 import { StoreBlog, StoreBlogTeaser } from "@/components/commerce/blog/StoreBlog";
 
 export const dynamic = "force-dynamic";
@@ -41,10 +40,9 @@ export default async function CommercePreviewPage({
 }) {
   const { slug, path = [] } = await params;
   const page = storeInstitutionalPage(slug, path);
-  const blogArticle = path.length === 2 && path[0] === "blog" ? findGroundShopArticle(path[1]) : undefined;
-  const blogPath = storeBlogEnabled(slug) && path[0] === "blog" && (path.length === 1 || Boolean(blogArticle));
+  const blogRequested = path[0] === "blog" && path.length <= 2;
   const libraryPath = (path.length === 1 && ["artes", "campanhas"].includes(path[0])) || (path.length === 2 && path[0] === "campanhas" && libraryQuerySchema.safeParse({ campaign: path[1] }).success);
-  const valid = blogPath || libraryPath || Boolean(page) ||
+  const valid = blogRequested || libraryPath || Boolean(page) ||
     path.length === 0 ||
     (path.length === 1 && ["catalogo", "condicoes", "carrinho", "checkout"].includes(path[0])) ||
     (path.length === 2 && path[0] === "produto");
@@ -57,6 +55,9 @@ export default async function CommercePreviewPage({
     throw error;
   });
   const institutional = page ?? (path.length === 1 && path[0] === "condicoes" ? purchaseConditionsPage(slug, store.settings) : undefined);
+  const blog = await readPublicBlog(store.tenant_id, slug, store.settings.name, true);
+  const blogArticle = path.length === 2 && blogRequested ? blog.articles.find(a => a.slug === path[1]) : undefined;
+  if (blogRequested && (!blog.articles.length || (path.length === 2 && !blogArticle))) notFound();
   const library = libraryPath ? await readCommerceLibrary(store.tenant_id, libraryQuerySchema.parse(path[1] ? { campaign: path[1] } : {}), "preview") : undefined;
   if (libraryPath && path[1] && !library?.campaigns.some(c => c.slug === path[1])) notFound();
   const products = (await commerceProducts(store.tenant_id)).map(
@@ -77,10 +78,12 @@ export default async function CommercePreviewPage({
       path={path}
       paused={false}
       preview
-      editorial={path.length === 0 && storeBlogEnabled(slug) ? <StoreBlogTeaser base={`/commerce/${slug}/preview`}/> : undefined}
+      blogEnabled={blog.articles.length > 0}
+      blogTitle={blog.settings.title}
+      editorial={path.length === 0 && blog.articles.length > 0 ? <StoreBlogTeaser base={`/commerce/${slug}/preview`} blog={blog}/> : undefined}
       institutionalLinks={storeInstitutionalPages(slug).map(({ slug, title }) => ({ slug, title }))}
     >
-      {blogPath ? <StoreBlog base={`/commerce/${slug}/preview`} article={blogArticle} products={products} preview/> : institutional ? <StoreInstitutionalPage slug={slug} page={institutional} settings={store.settings} preview featuredProduct={products.find(product => Boolean(product.imageUrl))} /> : null}
+      {blogRequested ? <StoreBlog base={`/commerce/${slug}/preview`} article={blogArticle} products={products} blog={blog} name={store.settings.name} preview/> : institutional ? <StoreInstitutionalPage slug={slug} page={institutional} settings={store.settings} preview featuredProduct={products.find(product => Boolean(product.imageUrl))} /> : null}
     </Storefront>
   );
 }

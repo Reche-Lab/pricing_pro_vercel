@@ -99,6 +99,8 @@ type Props = {
   libraryInitial?: LibraryResult;
   children?: ReactNode;
   editorial?: ReactNode;
+  blogEnabled?: boolean;
+  blogTitle?: string;
 };
 
 export function Storefront(props: Props) {
@@ -119,6 +121,8 @@ function StorefrontContent({
   libraryInitial,
   children,
   editorial,
+  blogEnabled = storeBlogEnabled(slug),
+  blogTitle,
 }: Props) {
   const analytics = useStoreAnalytics();
   const router = useRouter();
@@ -321,7 +325,7 @@ function StorefrontContent({
           </nav>
         </div>
         <StoreCategoryNavigation products={products} base={base} preview={preview} view={view}
-          blogEnabled={storeBlogEnabled(slug)}
+          blogEnabled={blogEnabled}
           activeCategory={selectedProduct?.category ?? (view === "catalogo" ? searchParams.get("categoria") : null)}
           quoteActive={quoting} libraryEnabled={libraryEnabled} libraryApi={`${api}/library`} navigationKey={`${base}/${path.join("/")}?${searchParams.toString()}`}/>
         {showQuoteJourney ? <StoreQuoteJourney base={base} step={savedQuote ? 4 : quoteDetails ? quoteStep === "review" ? 3 : 2 : 1} count={cart?.lines.length ?? 0} totalCents={cart?.calculation?.totalCents ?? 0} identified={Boolean(cart?.customer)} onPurchase={() => { setQuoteMode(false); router.push(`${base}/carrinho`); }}/>: null}
@@ -619,7 +623,7 @@ function StorefrontContent({
         ) : null}
       </div>
       {view === "home" && editorial ? <div className={styles.wrap}>{editorial}</div> : null}
-      <StoreFooter settings={settings} products={products} base={base} preview={preview} blogEnabled={storeBlogEnabled(slug)} libraryEnabled={libraryEnabled} institutionalLinks={institutionalLinks} payments={cart?.payments} view={view}/>
+      <StoreFooter settings={settings} products={products} base={base} preview={preview} blogEnabled={blogEnabled} blogTitle={blogTitle} libraryEnabled={libraryEnabled} institutionalLinks={institutionalLinks} payments={cart?.payments} view={view}/>
       <StoreAnalyticsConsent/>
       {!preview && !paused ? <StoreAssistantLauncher api={api} base={base} settings={settings} buyerId={cart?.customer?.id} onCartChanged={refresh}/> : null}
     </main>

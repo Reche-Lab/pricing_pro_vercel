@@ -10,8 +10,11 @@ import { storeSettingsSchema } from "@/domain/commerce/schemas";
 import { quoteProduct } from "../fixtures/commerce-quote";
 import { discoverySource } from "../fixtures/commerce-discovery";
 import { commerceQuantityPricing } from "@/domain/commerce/quantity-pricing";
+import { defaultBlogSettings } from "@/domain/commerce/blog-settings";
+import { readPublicBlog } from "@/repositories/commerce-blog";
 
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
+vi.mock("@/repositories/commerce-blog", () => ({ readPublicBlog: vi.fn() }));
 vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("NOT_FOUND"); }, permanentRedirect: (url: string) => { throw new Error(`308:${url}`); }, redirect: (url: string) => { throw new Error(`307:${url}`); } }));
 vi.mock("@/repositories/commerce", () => ({ commerceProducts: vi.fn(), getCommerceStore: vi.fn(), publicCommerceProduct: (p: unknown) => p }));
 vi.mock("@/services/commerce/preview", () => ({ requireCommercePreview: vi.fn() }));
@@ -20,6 +23,7 @@ const settings = storeSettingsSchema.parse({ name: "Loja", description: "Produto
 const product = { ...quoteProduct, slug: "botton-3-5-cm" };
 const props = (reference: string) => ({ params: Promise.resolve({ slug: "ground-shop", path: ["produto", reference] }) });
 beforeEach(() => {
+  vi.mocked(readPublicBlog).mockResolvedValue({ settings: defaultBlogSettings("other", "Loja"), articles: [] });
   vi.stubEnv("COMMERCE_CUSTOM_DOMAINS", "");
   vi.mocked(headers).mockResolvedValue(new Headers() as Awaited<ReturnType<typeof headers>>);
   vi.mocked(getCommerceStore).mockResolvedValue({ tenant_id: "tenant-a", slug: "ground-shop", status: "published", settings } as Awaited<ReturnType<typeof getCommerceStore>>);

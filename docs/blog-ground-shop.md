@@ -5,14 +5,20 @@
 - Público: `/loja/ground-shop/blog` ou `https://groundshop.com.br/blog` quando o domínio estiver autorizado.
 - Preview autenticado: `/commerce/ground-shop/preview/blog`.
 - Atalhos no menu, rodapé e uma seleção de histórias na home.
-- Exclusivo do slug `ground-shop`. Não habilita conteúdo ou identidade da Ground Shop nos demais tenants.
-- Sem migration, chave de API, geração por IA em runtime ou nova dependência.
+- Os oito artigos iniciais são exclusivos de `ground-shop`. Outros tenants começam com blog desativado e vazio, podendo criar seu próprio conteúdo.
+- A edição administrativa exige a migration `0086_commerce_blog.sql`. Sem chave de IA ou nova dependência.
 
 ## Conteúdo editorial
 
 Oito artigos iniciais, versionados em `src/content/ground-shop-blog.ts`, publicados em 24/11/2026. Temas: summits/eventos corporativos, medidas e preparação da arte, casamentos/espelhos, abridores, ímãs, chaveiros/onboarding, campanhas de conscientização e história dos bottons.
 
-Para adicionar uma história: preencher o tipo `BlogArticle` com slug único, título, resumo, imagem/alt, datas com timezone, introdução, síntese, seções com IDs únicos, perguntas e fontes quando aplicável. Atualizar `updated` somente após mudança editorial real. O índice, sitemap e dados estruturados acompanham a lista. Não há CMS administrativo nesta primeira versão.
+Em **Loja online → Blog**, o owner/admin pode editar a apresentação, substituir capas por upload e criar ou editar artigos. O editor inclui título, resumo, categoria, legenda/descrição da imagem, introdução, síntese, seções reordenáveis, dicas, perguntas, fontes e termos dos produtos relacionados. PNG, JPEG e WebP de até 3 MB usam o bucket `commerce-media` já existente.
+
+**Salvar e publicar** aplica as mudanças à loja. **Rascunho** retira o artigo da loja e permite acesso somente pela prévia administrativa; **Arquivado** também retira da prévia. Salvar como rascunho um artigo já publicado o remove do ar, em vez de manter duas versões simultâneas. Os endereços de artigos existentes são preservados. Datas de publicação são preservadas e a atualização é registrada pelo servidor.
+
+Os artigos originais continuam como ponto de partida. Apenas as alterações são gravadas em `commerce_blog_posts`; a apresentação fica em `commerce_blog_settings`. Rascunhos/arquivados sobrescrevem o original sem fazê-lo reaparecer no blog público. Antes da migration, a loja preserva o conteúdo inicial e o painel informa que o salvamento está indisponível.
+
+O servidor verifica sessão administrativa, origem, tenant, tamanho, estrutura e limite de requisições. As tabelas têm RLS e não permitem acesso direto a `anon`/`authenticated`; a API não aceita IDs de outro tenant. Controle de revisão devolve 409 em edições concorrentes, com registro em `audit_logs`. Somente artigos publicados de blogs habilitados aparecem no sitemap e nas páginas públicas. A prévia autenticada inclui rascunhos sem indexá-los.
 
 Não incluir preços estáticos, prazos prometidos, descontos universais, depoimentos inventados ou alegações de saúde. Os produtos relacionados vêm do catálogo real. As condições atuais permanecem na página do produto/pedido. Revisar textos e imagens com a equipe antes da publicação de novas histórias.
 
@@ -62,4 +68,6 @@ Editorial lifestyle product still life landscape 3:2, close photograph of a real
 - `npm run test:local -- src/tests/unit/commerce-blog.test.tsx src/tests/unit/commerce-institutional.test.tsx src/tests/unit/commerce-institutional-routes.test.tsx src/tests/unit/commerce-discovery-seo.test.ts src/tests/unit/store-footer.test.tsx src/tests/unit/store-category-navigation.test.tsx`
 - `npm run typecheck`
 - `node scripts/commerce-blog-browser.mjs` (Playwright instalado ou `COMMERCE_PLAYWRIGHT_PATH` e `COMMERCE_BROWSER_EXECUTABLE`). Fixture isolada usa os componentes reais e as imagens locais; não consulta banco nem serviços externos. Capturas em `/tmp/groundshop-blog-*.png`.
+- `node scripts/commerce-blog-admin-browser.mjs`: editor administrativo real em 1440/768/390/320 px com repositório simulado, upload, salvamento, recarregamento e falha de concorrência. Sem gravações em tenants reais.
+- `node scripts/commerce-blog-db-test.mjs`: exige `BLOG_TEST_PG_SOCKET` de um PostgreSQL descartável em `/tmp/pricing-blog-pg.*`, usuário `codex_blog`, porta 55486. Cria somente tabelas mínimas de teste e valida a migration, SQL real, isolamento, revisões concorrentes e permissões. Nunca usa `DATABASE_URL`; essa variável de teste não precisa ser configurada no deploy.
 

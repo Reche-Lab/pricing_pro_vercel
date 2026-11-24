@@ -9,10 +9,14 @@ import { commerceProducts, getCommerceStore, publishedCommerceSitemapStores } fr
 import { requireCommercePreview } from "@/services/commerce/preview";
 import { storeSettingsSchema } from "@/domain/commerce/schemas";
 import { headers } from "next/headers";
+import { readPublicBlog } from "@/repositories/commerce-blog";
+import { defaultBlogSettings } from "@/domain/commerce/blog-settings";
+import { groundShopArticles } from "@/content/ground-shop-blog";
 
 vi.mock("@/repositories/commerce", () => ({ commerceProducts: vi.fn(), getCommerceStore: vi.fn(), publishedCommerceSitemapStores: vi.fn(), publicCommerceProduct: (product: unknown) => product }));
 vi.mock("@/services/commerce/preview", () => ({ requireCommercePreview: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
+vi.mock("@/repositories/commerce-blog", () => ({ readPublicBlog: vi.fn() }));
 vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("NOT_FOUND"); }, redirect: () => { throw new Error("REDIRECT"); } }));
 vi.mock("@/components/commerce/Storefront", () => ({ Storefront: ({ children }: { children: ReactNode }) => <main>{children}</main> }));
 afterEach(() => { vi.resetAllMocks(); vi.unstubAllEnvs(); });
@@ -24,9 +28,25 @@ function setup(slug = "ground-shop") {
   vi.mocked(getCommerceStore).mockResolvedValue(store);
   vi.mocked(requireCommercePreview).mockResolvedValue(store);
   vi.mocked(commerceProducts).mockResolvedValue([]);
+  vi.mocked(readPublicBlog).mockResolvedValue({ settings: defaultBlogSettings(slug, settings.name), articles: slug === "ground-shop" ? groundShopArticles : [] });
   return store;
 }
 describe("institutional storefront routes", () => {
+  it("uses tenant edits in public HTML, metadata and sitemap and hides withdrawn posts", async () => {
+    setup();
+    const article = { ...groundShopArticles[0], title: "Título editado no painel", image: "https://media.test/nova.webp", intro: "Introdução revisada no painel." };
+    const blog = { settings: { ...defaultBlogSettings("ground-shop", "Ground Shop"), title: "Ideias da loja" }, articles: [article] };
+    vi.mocked(readPublicBlog).mockResolvedValue(blog);
+    const params = Promise.resolve({ slug: "ground-shop", path: ["blog", article.slug] });
+    const html = renderToStaticMarkup(await StorePage({ params }));
+    expect(html).toContain("Título editado no painel"); expect(html).toContain("Introdução revisada no painel.");
+    expect((await generateMetadata({ params })).title).toEqual({ absolute: "Título editado no painel | Ideias da loja" });
+    const xml = await GET(new Request("https://shop.example.test"), { params: Promise.resolve({ slug: "ground-shop" }) });
+    expect(await xml.text()).not.toContain(groundShopArticles[1].slug);
+    vi.mocked(readPublicBlog).mockResolvedValue({ ...blog, articles: [] });
+    await expect(StorePage({ params })).rejects.toThrow("NOT_FOUND");
+    expect((await generateMetadata({ params })).robots).toMatchObject({ index: false });
+  });
   it("serves the blog only to Ground Shop and keeps unknown/deep article URLs as 404", async () => {
     setup();
     const params = Promise.resolve({ slug: "ground-shop", path: ["blog", "bottons-eventos-corporativos-summits"] });

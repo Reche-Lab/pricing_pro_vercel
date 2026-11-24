@@ -4,6 +4,7 @@ import { commerceSitemapEntries } from "@/services/commerce/sitemap";
 import { commerceSiteOrigin } from "@/services/commerce/store-seo";
 import { readCommerceLibrary } from "@/repositories/commerce-library";
 import { libraryQuerySchema } from "@/domain/commerce/library";
+import { readPublicBlog } from "@/repositories/commerce-blog";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     if (!store) continue;
     const products = await commerceProducts(store.tenant_id);
     const library = store.art_library_enabled ? await readCommerceLibrary(store.tenant_id, libraryQuerySchema.parse({})) : undefined;
-    entries.push(...commerceSitemapEntries(slug, products, origin, library ? { campaigns: library.campaigns.map(c => c.slug) } : undefined));
+    const blog = await readPublicBlog(store.tenant_id, slug, store.settings.name);
+    entries.push(...commerceSitemapEntries(slug, products, origin, library ? { campaigns: library.campaigns.map(c => c.slug) } : undefined, blog));
   }
   return entries;
 }

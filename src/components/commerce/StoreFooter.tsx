@@ -13,7 +13,7 @@ type FooterLink = { href: string; label: string };
 type Payments = { mp_enabled?: boolean; manual_enabled?: boolean; payment_environment?: string };
 type Props = {
   settings: StoreSettings; products: StoreProduct[]; base: string; preview?: boolean;
-  libraryEnabled?: boolean; blogEnabled?: boolean; institutionalLinks?: { slug: string; title: string }[];
+  libraryEnabled?: boolean; blogEnabled?: boolean; blogTitle?: string; institutionalLinks?: { slug: string; title: string }[];
   payments?: Payments | null; view?: string;
 };
 
@@ -38,7 +38,7 @@ function phoneLinks(value: string) {
   return /^[1-9]\d{9,14}$/.test(international) ? { tel: `tel:+${international}`, whatsapp: `https://wa.me/${international}` } : null;
 }
 
-export function StoreFooter({ settings, products, base, preview = false, libraryEnabled = false, blogEnabled = false, institutionalLinks = [], payments, view = "home" }: Props) {
+export function StoreFooter({ settings, products, base, preview = false, libraryEnabled = false, blogEnabled = false, blogTitle = "Blog e ideias", institutionalLinks = [], payments, view = "home" }: Props) {
   const [logoFailed, setLogoFailed] = useState(false), [entered, setEntered] = useState(false);
   const footer = useRef<HTMLElement>(null);
   const personalized = products.some(product => product.personalized);
@@ -56,7 +56,7 @@ export function StoreFooter({ settings, products, base, preview = false, library
   }, [canMove]);
   const explore: FooterLink[] = [
     { href: `${base}/catalogo`, label: "Todos os produtos" },
-    ...(blogEnabled ? [{ href: `${base}/blog`, label: "Blog Ground Shop: ideias e histórias" }] : []),
+    ...(blogEnabled ? [{ href: `${base}/blog`, label: blogTitle }] : []),
     ...(libraryEnabled ? [{ href: `${base}/campanhas`, label: "Campanhas" }, { href: `${base}/artes`, label: "Artes prontas" }] : []),
     ...(!preview ? [{ href: `${base}/pedidos`, label: "Acompanhar pedido" }, { href: `${base}/orcamentos`, label: "Meus orçamentos" }] : []),
   ];

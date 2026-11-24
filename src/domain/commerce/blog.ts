@@ -1,7 +1,7 @@
 export type BlogSection = { id: string; title: string; paragraphs: string[]; tips?: string[] };
 export type BlogArticle = {
   slug: string; title: string; description: string; category: string;
-  image: string; imageAlt: string; published: string; updated: string;
+  image: string; imageAlt: string; imageCaption?: string; published: string; updated: string;
   intro: string; takeaway: string; productTerms: string[];
   sections: BlogSection[]; questions: { question: string; answer: string }[];
   sources?: { title: string; url: string }[];

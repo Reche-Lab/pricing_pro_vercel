@@ -24,6 +24,7 @@ import {
   Bot,
   Search,
   BarChart3,
+  BookOpen,
 } from "lucide-react";
 import type { getCommerceAdmin } from "@/repositories/commerce";
 import type { StoreAdminInput, StoreSettings } from "@/domain/commerce/schemas";
@@ -51,6 +52,7 @@ const CommerceGoogleReviewsSettings = dynamic(() => import("./CommerceGoogleRevi
 const CommerceAssistantSettings = dynamic(() => import("./CommerceAssistantSettings").then(m => m.CommerceAssistantSettings));
 const CommerceSearchSettings = dynamic(() => import("./CommerceSearchSettings").then(m => m.CommerceSearchSettings));
 const CommerceAnalytics = dynamic(() => import("./CommerceAnalytics").then(m => m.CommerceAnalytics));
+const CommerceBlogSettings = dynamic(() => import("./CommerceBlogSettings").then(m => m.CommerceBlogSettings));
 const field =
   "min-w-0 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100";
 const button =
@@ -65,7 +67,7 @@ export function CommerceAdmin({
   const [data, setData] = useState(initial);
   const emailReadyChanged = useCallback((ready: boolean) => setData(current => current.readiness ? { ...current, readiness: { ...current.readiness, emailReady: ready } } : current), []);
   const [tab, setTab] = useState("store");
-  useEffect(() => { if (initial.olistConfigured && new URLSearchParams(window.location.search).get("tab") === "olist") setTab("olist"); }, [initial.olistConfigured]);
+  useEffect(() => { const requested = new URLSearchParams(window.location.search).get("tab"); if (requested === "blog" || (requested === "olist" && initial.olistConfigured)) setTab(requested); }, [initial.olistConfigured]);
   const [busy, setBusy] = useState(false);
   const [libraryBusy, setLibraryBusy] = useState(false);
   const [paymentDiagnosisRevision, setPaymentDiagnosisRevision] = useState(0);
@@ -271,6 +273,7 @@ export function CommerceAdmin({
           ["analytics", "Métricas e GA4"],
           ["assistant", "Assistente IA"],
           ["library", "Campanhas e artes"],
+          ["blog", "Blog"],
           ...(data.olistConfigured ? [["olist", "Olist"]] : []),
           ["orders", `Pedidos (${data.orders.length})`],
         ].map(([id, label]) => (
@@ -282,7 +285,7 @@ export function CommerceAdmin({
             onClick={() => setTab(id)}
             className={`${button} shrink-0 whitespace-nowrap ${tab === id ? "border-emerald-500 bg-emerald-500/10 text-emerald-200" : "text-zinc-400"}`}
           >
-            {id === "store" ? <Store size={16} /> : id === "payments" ? <CreditCard size={16} /> : id === "address" ? <Globe size={16}/> : id === "email" ? <Mail size={16}/> : id === "assistant" ? <Bot size={16}/> : id === "google-reviews" ? <Star size={16}/> : id === "search" ? <Search size={16}/> : id === "analytics" ? <BarChart3 size={16}/> : id === "library" ? <Images size={16}/> : id === "olist" ? <Link2 size={16}/> : <Package size={16} />}
+            {id === "store" ? <Store size={16} /> : id === "payments" ? <CreditCard size={16} /> : id === "address" ? <Globe size={16}/> : id === "email" ? <Mail size={16}/> : id === "assistant" ? <Bot size={16}/> : id === "google-reviews" ? <Star size={16}/> : id === "search" ? <Search size={16}/> : id === "analytics" ? <BarChart3 size={16}/> : id === "library" ? <Images size={16}/> : id === "blog" ? <BookOpen size={16}/> : id === "olist" ? <Link2 size={16}/> : <Package size={16} />}
             {label}
           </button>
         ))}
@@ -828,6 +831,7 @@ export function CommerceAdmin({
       {tab === "analytics" ? data.store?.tenant_id ? <CommerceAnalytics/> : <p className="text-sm text-amber-200">Salve o rascunho da loja antes de configurar as métricas.</p> : null}
       {tab === "assistant" ? data.store?.tenant_id ? <CommerceAssistantSettings storeName={settings.name} storeSlug={data.store.slug}/> : <p className="text-sm text-amber-200">Salve a loja antes de configurar o assistente.</p> : null}
       {tab === "library" ? <CommerceLibraryAdmin products={data.products} slug={data.store?.slug} onBusyChange={setLibraryBusy}/> : null}
+      {tab === "blog" ? data.store?.slug ? <CommerceBlogSettings slug={data.store.slug} onBusyChange={setLibraryBusy}/> : <p className="text-sm text-amber-200">Salve a loja antes de configurar o blog.</p> : null}
       {tab === "olist" && data.olistConfigured ? <CommerceOlistSettings/> : null}
       {tab === "orders" ? (
         <section className="space-y-4">
