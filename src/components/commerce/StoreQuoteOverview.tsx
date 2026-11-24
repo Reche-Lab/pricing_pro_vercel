@@ -3,7 +3,7 @@
 import React, { useRef, useState } from "react";
 import Link from "next/link";
 import { commerceProductPath } from "@/domain/commerce/product-urls";
-import { ArrowRight, Check, FileText, Images, Loader2, Plus, Trash2, Undo2 } from "lucide-react";
+import { ArrowRight, Check, Images, Loader2, Plus, Trash2, Undo2 } from "lucide-react";
 import type { cartView, publicCommerceProduct } from "@/repositories/commerce";
 import type { CartLine } from "@/domain/commerce/schemas";
 import { changeQuoteQuantity, quoteCartFingerprint, restoreRemovedQuoteLine, type RemovedQuoteLine } from "@/domain/commerce/quote-cart";
@@ -16,12 +16,13 @@ import q from "./quote.module.css";
 import { StoreQuoteQuantity } from "./StoreQuoteQuantity";
 import { StoreQuoteProductPicker } from "./StoreQuoteProductPicker";
 import { StoreQuoteSummary } from "./StoreQuoteSummary";
+import { StoreQuoteEmptyState } from "./StoreQuoteEmptyState";
 
 export function StoreQuoteOverview({ cart, products, base, storeName, busy, onUpdate, renderArtwork }: {
   cart: Awaited<ReturnType<typeof cartView>>; products: ReturnType<typeof publicCommerceProduct>[];
   base: string; storeName: string; busy: boolean; onUpdate: (lines: CartLine[]) => Promise<void>; renderArtwork?: (line: CartLine, disabled: boolean) => React.ReactNode;
 }) {
-  const [picker, setPicker] = useState(false), [saving, setSaving] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
+  const [picker, setPicker] = useState<{ productId?: string } | null>(null), [saving, setSaving] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [removed, setRemoved] = useState<RemovedQuoteLine | null>(null), lock = useRef(false);
   const disabled = busy || saving;
   const benefits = quoteArtworkBenefits(cart.lines, products, cart.calculation);
@@ -32,11 +33,11 @@ export function StoreQuoteOverview({ cart, products, base, storeName, busy, onUp
     catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível atualizar. Tente novamente."); return false; }
     finally { lock.current = false; setSaving(false); }
   }
-  return <section className={q.page} aria-label="Produtos do seu orçamento" aria-busy={saving}>
-    <div className={q.header}><div><h1 className={styles.title}>Monte seu orçamento</h1><p>Escolha produtos e quantidades. As artes são opcionais nesta etapa.</p></div><button type="button" className={styles.secondary} disabled={disabled} onClick={() => { setError(""); setPicker(true); }}><Plus size={17}/>Adicionar produtos ao orçamento</button></div>
+  return <section className={q.page} data-empty={!cart.lines.length} aria-label="Produtos do seu orçamento" aria-busy={saving}>
+    {cart.lines.length ? <div className={q.header}><div><h1 className={styles.title}>Monte seu orçamento</h1><p>Escolha produtos e quantidades. As artes são opcionais nesta etapa.</p></div><button type="button" className={styles.secondary} disabled={disabled} onClick={() => { setError(""); setPicker({}); }}><Plus size={17}/>Adicionar produtos ao orçamento</button></div> : null}
     <div className={q.status} role="status">{saving ? <><Loader2 size={16} className="animate-spin"/>Atualizando itens e valores…</> : notice ? <><Check size={16}/>{notice}</> : null}{removed && !saving ? <button type="button" disabled={disabled} onClick={() => { try { void apply(restoreRemovedQuoteLine(cart.lines, removed), "Item recuperado. Valores atualizados."); } catch (cause) { setError((cause as Error).message); setRemoved(null); } }}><Undo2 size={15}/>Desfazer remoção</button> : null}</div>
     {error && !picker ? <p className={q.error} role="alert">{error}</p> : null}
-    {!cart.lines.length ? <div className={styles.empty}><FileText size={32}/><h2>Vamos começar pelos produtos?</h2><p>Escolha seus produtos. Você só precisa validar seu e-mail para salvar o PDF na sua conta.</p><button type="button" className={styles.primary} onClick={() => setPicker(true)}>Escolher produtos<ArrowRight size={17}/></button></div> : <div className={q.layout}>
+    {!cart.lines.length ? <StoreQuoteEmptyState products={products} base={base} identified={Boolean(cart.customer)} disabled={disabled} onChoose={productId => { if (!disabled) { setError(""); setPicker({ productId }); } }}/> : <div className={`${q.layout} ${q.populated}`}>
       <div className={q.items}>{[...new Set(cart.lines.map(line => line.productId))].map(productId => {
         const product = products.find(item => item.id === productId), lines = cart.lines.filter(line => line.productId === productId);
         const prices = cart.calculation?.items.filter(item => item.productId === productId) ?? [];
@@ -52,6 +53,6 @@ export function StoreQuoteOverview({ cart, products, base, storeName, busy, onUp
         <p>{cart.customer ? "Confira seus dados para salvar e acessar o PDF." : "Na próxima etapa, valide seu e-mail com um código, sem senha."}</p><p>Sem cobrança ou reserva. Seu orçamento ficará em Meus orçamentos para retomar depois.</p>
       </StoreQuoteSummary>
     </div>}
-    {picker ? <StoreQuoteProductPicker products={products} lines={cart.lines} busy={disabled} error={error} onClose={() => setPicker(false)} onAdd={lines => apply(lines, "Produto adicionado. Valores atualizados.")}/> : null}
+    {picker ? <StoreQuoteProductPicker products={products} initialProductId={picker.productId} lines={cart.lines} busy={disabled} error={error} onClose={() => setPicker(null)} onAdd={lines => apply(lines, "Produto adicionado. Valores atualizados.")}/> : null}
   </section>;
 }

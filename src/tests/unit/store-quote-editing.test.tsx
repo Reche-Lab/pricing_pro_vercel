@@ -33,7 +33,7 @@ describe("quote editing journey", () => {
     await waitFor(() => expect(updated).toHaveBeenCalledWith([{ ...quoteCart.lines[0], quantity: 50 }]));
     expect(screen.queryByRole("link", { name: /Editar quantidades e artes/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Remover Botton/ }));
-    await screen.findByText("Vamos começar pelos produtos?");
+    await screen.findByText("Sua próxima ideia começa aqui.");
     fireEvent.click(screen.getByRole("button", { name: "Desfazer remoção" }));
     await screen.findByRole("textbox", { name: /Quantidade de Botton/ });
     expect(updated).toHaveBeenLastCalledWith([{ ...quoteCart.lines[0], quantity: 50 }]);
