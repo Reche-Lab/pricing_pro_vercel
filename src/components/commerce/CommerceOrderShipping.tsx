@@ -9,7 +9,7 @@ import { MelhorEnvioReconnectBoundary } from "@/components/shipping/MelhorEnvioR
 import { MELHOR_ENVIO_CONNECTED_EVENT, requestMelhorEnvioReconnect } from "@/lib/melhor-envio/browser-request";
 import { isMelhorEnvioReconnectRequired } from "@/lib/melhor-envio/oauth-errors";
 
-export type CommerceOrderShippingProps = { orderId: string; canManage: boolean };
+export type CommerceOrderShippingProps = { orderId: string; canManage: boolean; guided?: boolean; actionTarget?: HTMLElement | null; onStateChange?: (state: CommerceOrderShippingState) => void; onReadError?: (message: string) => void };
 type Action = "review" | "cart" | "checkout" | "generate" | "print" | "refresh" | "retry_notifications";
 type Shipping = {
   id: string; status: string; service_name: string | null;
@@ -25,17 +25,18 @@ type Review = {
   volumes: Array<{ width: number; height: number; length: number; weight: number }>;
   warnings?: string[];
 };
-type State = {
+export type CommerceOrderShippingState = {
   shipping: Shipping | null;
   readiness: { eligible: boolean; reason: string | null };
   contracted: { name: string; priceCents: number } | null;
   notifications?: { pending: number; failed: number };
-  fiscal?: { invoiceKey: string | null; senderStateRegister: string | null; productionReady: boolean };
+  fiscal?: { invoiceKey: string | null; senderStateRegister: string | null; productionReady: boolean; productionSource?: "olist" | "shipping" | null };
 };
+type State = CommerceOrderShippingState;
 type Result = Partial<State> & { review?: Review; error?: unknown; message?: unknown; missingFields?: unknown; ok?: boolean };
 const button = "focus-ring inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40";
 const field = "focus-ring min-h-10 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100";
-const statuses: Record<string, string> = { quoted: "Cotado", cart: "No carrinho", purchased: "Pago", label_ready: "Etiqueta pronta", posted: "Postado", delivered: "Entregue", exception: "Ocorrência no envio", review: "Conferência necessária", processing: "Processando" };
+const statuses: Record<string, string> = { quoted: "Cotado", cart: "No carrinho", purchased: "Etiqueta comprada", label_ready: "Etiqueta pronta", posted: "Postado", delivered: "Entregue", exception: "Ocorrência no envio", review: "Conferência necessária", processing: "Processando" };
 const missingLabels: Record<string, string> = { invoiceKey: "Chave da NF-e", invoice_key: "Chave da NF-e", senderStateRegister: "Inscrição estadual do remetente", sender_state_register: "Inscrição estadual do remetente", productionReady: "Confirmação de produção concluída", production_ready: "Confirmação de produção concluída", postalCode: "CEP", document: "CPF/CNPJ", phone: "Telefone", volumes: "Dimensões e peso dos volumes" };
 function safeUrl(value: string | null | undefined) {
   if (!value) return undefined;
@@ -53,7 +54,7 @@ export function CommerceOrderShipping(props: CommerceOrderShippingProps) {
   return <MelhorEnvioReconnectBoundary><ShippingConsole key={`${props.orderId}:${props.canManage}`} {...props} /></MelhorEnvioReconnectBoundary>;
 }
 
-function ShippingConsole({ orderId, canManage }: CommerceOrderShippingProps) {
+function ShippingConsole({ orderId, canManage, guided = false, actionTarget, onStateChange, onReadError }: CommerceOrderShippingProps) {
   const endpoint = `/api/commerce/admin/orders/${encodeURIComponent(orderId)}/shipping`;
   const [data, setData] = useState<State | null>(null);
   const [review, setReview] = useState<Review | null>(null);
@@ -81,9 +82,11 @@ function ShippingConsole({ orderId, canManage }: CommerceOrderShippingProps) {
   const contractedCost = data?.contracted?.priceCents ?? review?.contractedCents;
   const changed = cost != null && contractedCost != null && cost !== contractedCost;
   const cartChanged = !!review && review.currentCents !== review.contractedCents;
+  useEffect(() => { if (data) onStateChange?.(data); }, [data, onStateChange]);
 
   function apply(result: Result) {
     setData(current => ({ ...current, ...result }) as State);
+    if (result.fiscal?.productionSource === "olist") setProductionReady(true);
     if (result.fiscal && !fiscalDirty.current) {
       setInvoiceKey(result.fiscal.invoiceKey ?? "");
       setRegistration(result.fiscal.senderStateRegister ?? "");
@@ -98,26 +101,31 @@ function ShippingConsole({ orderId, canManage }: CommerceOrderShippingProps) {
     const controller = new AbortController();
     async function load() {
       if (locked.current) return;
-      locked.current = true; setBusy("load"); setReadError("");
+      locked.current = true; setBusy("load"); setReadError(""); onReadError?.("");
       try {
         const response = await fetch(endpoint, { cache: "no-store", signal: controller.signal });
         const result: Result | null = await response.json().catch(() => null);
         if (!active) return;
         if (isMelhorEnvioReconnectRequired(result)) {
-          setReadError("Reconecte o Melhor Envio e atualize a situação. Nenhuma compra será repetida.");
+          const message = "Reconecte o Melhor Envio e atualize a situação. Nenhuma compra será repetida.";
+          setReadError(message); onReadError?.(message);
           if (canManage) requestMelhorEnvioReconnect();
           return;
         }
         if (!response.ok || !result || !("shipping" in result) || !result.readiness) throw new Error(humanError(result, response.status));
         apply(result); setReview(null);
       } catch (caught) {
-        if (active && !controller.signal.aborted) setReadError(caught instanceof Error && caught.name !== "TypeError" ? caught.message : "Não foi possível consultar o envio. Verifique a conexão e tente atualizar.");
+        if (active && !controller.signal.aborted) {
+          const message = caught instanceof Error && caught.name !== "TypeError" ? caught.message : "Não foi possível consultar o envio. Verifique a conexão e tente atualizar.";
+          setReadError(message); onReadError?.(message);
+        }
       } finally { if (active) { locked.current = false; setBusy(null); } }
     }
     readRequest.current = () => { void load(); };
     void load();
     window.addEventListener(MELHOR_ENVIO_CONNECTED_EVENT, load);
-    return () => { active = false; mounted.current = false; locked.current = false; readRequest.current = () => {}; controller.abort(); window.removeEventListener(MELHOR_ENVIO_CONNECTED_EVENT, load); };
+    window.addEventListener("commerce:orders-updated", load);
+    return () => { active = false; mounted.current = false; locked.current = false; readRequest.current = () => {}; controller.abort(); window.removeEventListener(MELHOR_ENVIO_CONNECTED_EVENT, load); window.removeEventListener("commerce:orders-updated", load); };
     // Reconnection only reads state; it never replays an operation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpoint, orderId, canManage]);
@@ -186,6 +194,16 @@ function ShippingConsole({ orderId, canManage }: CommerceOrderShippingProps) {
     </div>;
   }
 
+  const controls = [
+    { key: "review", label: "Revisar envio", icon: ClipboardCheck, disabled: !!busy || blocked || status !== "quoted" || !!review || !productionReady, done: !!review || status !== "quoted" && !blocked, run: () => void run("review") },
+    { key: "cart", label: "Carrinho", icon: PackagePlus, disabled: !!busy || blocked || status !== "quoted" || !review || !data?.readiness?.eligible, done: status !== "quoted" && !blocked, run: () => cartChanged ? setModal("review") : void run("cart") },
+    { key: "checkout", label: "Pagar etiqueta", icon: CreditCard, disabled: !!busy || blocked || status !== "cart" || cost == null || !data?.readiness?.eligible, done: paid, run: () => { setError(""); setAccepted(false); setModal("checkout"); } },
+    { key: "generate", label: "Gerar etiqueta", icon: FileText, disabled: !!busy || blocked || status !== "purchased", done: generated, run: () => void run("generate") },
+    { key: "print", label: "Imprimir etiqueta", icon: Printer, disabled: !!busy || !generated || printed || !!shipping?.label_url, done: !!shipping?.label_url, run: () => void run("print") },
+  ];
+  const primary = controls.find(control => control.key === (status === "quoted" ? review ? "cart" : "review" : status === "cart" ? "checkout" : status === "purchased" ? "generate" : "print"));
+  const guidedButton = canManage && data ? blocked ? <button type="button" className={button} disabled={!!busy} onClick={() => void run("refresh")}><RefreshCw size={16}/>Conferir envio sem repetir compra</button> : primary ? <button type="button" className="focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-emerald-400 px-4 py-3 text-sm font-semibold text-zinc-950 hover:bg-emerald-300 disabled:opacity-40" disabled={primary.disabled} onClick={primary.run}><primary.icon size={16}/>{primary.key === "checkout" ? "Comprar etiqueta de envio" : primary.key === "cart" ? "Preparar etiqueta" : primary.label}</button> : null : readError ? <button type="button" className={button} disabled={!!busy} onClick={readAgain}><RefreshCw size={16}/>Consultar envio novamente</button> : null;
+
   return <section aria-label="Envio do pedido" className="min-w-0 space-y-3 border-y border-zinc-800 bg-zinc-950/40 py-4 text-zinc-200">
     <header className="flex flex-wrap items-center justify-between gap-2">
       <h2 className="flex items-center gap-2 text-sm font-semibold"><Truck size={18} className="text-emerald-300" />Envio · Melhor Envio</h2>
@@ -201,20 +219,14 @@ function ShippingConsole({ orderId, canManage }: CommerceOrderShippingProps) {
       {shipping?.olist_tracking_error ? <p className="break-words text-xs leading-5 text-amber-200">{shipping.olist_tracking_error}</p> : null}
       {blocked ? <p className="text-xs leading-5 text-amber-200">{status === "processing" ? "Operação em andamento." : "O resultado precisa ser conferido."} Atualize o envio para reconciliar a situação. Não faça uma nova compra.</p> : null}
       {!canManage ? <p className="text-xs text-zinc-500">Somente leitura</p> : <>
-        <details className="border-t border-zinc-800 pt-3"><summary className="cursor-pointer text-xs font-medium">Documento fiscal e produção</summary>
+        <details open={guided && !productionReady ? true : undefined} className="border-t border-zinc-800 pt-3"><summary className="cursor-pointer text-xs font-medium">Documento fiscal e produção</summary>
           <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
             <label className="grid min-w-0 gap-1 text-xs text-zinc-400">Chave da NF-e<input className={field} inputMode="numeric" maxLength={44} value={invoiceKey} disabled={!!busy || status !== "quoted" || blocked} onChange={e => { editFiscal(); setInvoiceKey(e.target.value); }} /></label>
             <label className="grid min-w-0 gap-1 text-xs text-zinc-400">Inscrição estadual do remetente<input className={field} maxLength={30} placeholder="Inscrição estadual ou ISENTO" value={registration} disabled={!!busy || status !== "quoted" || blocked} onChange={e => { editFiscal(); setRegistration(e.target.value); }} /></label>
-            <label className="flex items-start gap-2 text-xs leading-5 sm:col-span-2"><input type="checkbox" className="mt-1 shrink-0" checked={productionReady} disabled={!!busy || status !== "quoted" || blocked} onChange={e => { editFiscal(); setProductionReady(e.target.checked); }} /><span>A produção está concluída e o pedido está pronto para embalar</span></label>
+            {data.fiscal?.productionSource === "olist" ? <p className="flex items-center gap-2 text-xs leading-5 text-emerald-200 sm:col-span-2"><Check size={16}/>Produção concluída no pedido. Confirmação reaproveitada para o envio.</p> : <label className="flex items-start gap-2 text-xs leading-5 sm:col-span-2"><input type="checkbox" className="mt-1 shrink-0" checked={productionReady} disabled={!!busy || status !== "quoted" || blocked} onChange={e => { editFiscal(); setProductionReady(e.target.checked); }} /><span>A produção está concluída e o pedido está pronto para embalar</span></label>}
           </div>
         </details>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
-          <button type="button" className={button} title={productionReady ? "Conferir destinatário, documento fiscal, volumes e cotação" : "Produção ainda não confirmada"} disabled={!!busy || blocked || status !== "quoted" || !!review || !productionReady} onClick={() => void run("review")}><ClipboardCheck size={15} className="shrink-0" />{review || status !== "quoted" && !blocked ? <Check size={13} /> : null}Revisar envio</button>
-          <button type="button" className={button} title="Recalcular e adicionar ao carrinho sem cobrar" disabled={!!busy || blocked || status !== "quoted" || !review || !data.readiness?.eligible} onClick={() => cartChanged ? setModal("review") : void run("cart")}><PackagePlus size={15} className="shrink-0" />{status !== "quoted" && !blocked ? <Check size={13} /> : null}Carrinho</button>
-          <button type="button" className={button} title="Conferir e confirmar a cobrança da etiqueta" disabled={!!busy || blocked || status !== "cart" || cost == null || !data.readiness?.eligible} onClick={() => { setError(""); setAccepted(false); setModal("checkout"); }}><CreditCard size={15} className="shrink-0" />{paid ? <Check size={13} /> : null}Pagar etiqueta</button>
-          <button type="button" className={button} title="Gerar etiqueta já paga" disabled={!!busy || blocked || status !== "purchased"} onClick={() => void run("generate")}><FileText size={15} className="shrink-0" />{generated ? <Check size={13} /> : null}Gerar etiqueta</button>
-          <button type="button" className={button} title="Solicitar o link de impressão, sem nova compra" disabled={!!busy || !generated || printed || !!shipping?.label_url} onClick={() => void run("print")}><Printer size={15} className="shrink-0" />Imprimir etiqueta</button>
-        </div>
+        {!guided ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">{controls.map(control => <button key={control.key} type="button" className={button} disabled={control.disabled} onClick={control.run}><control.icon size={15} className="shrink-0"/>{control.done ? <Check size={13}/> : null}{control.label}</button>)}</div> : null}
       </>}
       {shipping ? links("Pedido", shipping.tracking_code, shipping.tracking_url, shipping.label_url) : null}
       {parcels.map((parcel, index) => <div key={parcel.id} className="space-y-1 border-t border-zinc-800 pt-2"><p className="text-xs text-zinc-500">Volume {index + 1} · {statuses[parcel.status] ?? "Em acompanhamento"}</p>{links(`Volume ${index + 1}`, parcel.trackingCode, parcel.trackingUrl, parcel.labelUrl)}</div>)}
@@ -222,6 +234,7 @@ function ShippingConsole({ orderId, canManage }: CommerceOrderShippingProps) {
     </> : null}
     {busy && busy !== "load" ? <p role="status" className="flex items-center gap-2 text-xs"><Loader2 size={14} className="animate-spin" />Processando solicitação…</p> : null}
     {message ? <p role="status" className="break-words text-xs text-emerald-200">{message}</p> : null}
+    {guided && actionTarget ? createPortal(guidedButton, actionTarget) : null}
     {modal ? createPortal(<Modal title={modal === "checkout" ? "Confirmar cobrança da etiqueta" : modal === "review" ? "Revisar envio" : "Não foi possível concluir o envio"} busy={!!busy} onClose={() => { setModal(null); setAccepted(false); }}>
       <div className="min-w-0 space-y-4 text-sm text-zinc-200">
         {modal === "review" && review ? <>

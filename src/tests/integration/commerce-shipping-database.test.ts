@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { createHmac, randomUUID } from "node:crypto";
 import { getPool } from "@/lib/db/client";
 import { encryptTenantSecret } from "@/lib/crypto/secrets";
-import { performCommerceOrderShipping } from "@/services/commerce/order-shipping";
+import { performCommerceOrderShipping, commerceOrderShippingState } from "@/services/commerce/order-shipping";
 import { commerceShippingRequest } from "@/services/commerce/shipping-client";
 import { receiveShippingWebhook } from "@/services/commerce/shipping-webhook";
 import { getOrderShipment, buyerShippingForOrders } from "@/repositories/commerce-shipping";
@@ -67,6 +67,14 @@ describe.skipIf(!url)("commerce shipping in isolated PostgreSQL", () => {
     return { orders, calls: () => vi.mocked(commerceShippingRequest).mock.calls };
   }
   const fiscal = { invoiceKey: "1".repeat(44), senderStateRegister: "ISENTO", productionReady: true };
+  it("reuses Olist production completion before any shipping or label purchase exists, isolated per tenant", async () => {
+    const first = await fixture(), other = await fixture();
+    await getPool().query("insert into commerce_olist_orders(tenant_id,order_id,production_completed_at) values($1,$2,now())", [first.tenantId, first.orderId]);
+    expect((await commerceOrderShippingState(first.tenantId, first.orderId)).fiscal).toMatchObject({ productionReady: true, productionSource: "olist" });
+    expect((await commerceOrderShippingState(other.tenantId, other.orderId)).fiscal).toMatchObject({ productionReady: false, productionSource: null });
+    expect(await getOrderShipment(first.tenantId, first.orderId)).toBeNull();
+    expect(commerceShippingRequest).not.toHaveBeenCalled();
+  });
   const run = (f: { tenantId: string; orderId: string }, action: string, extra = {}) => performCommerceOrderShipping(f.tenantId, f.orderId, actor, { action, ...extra } as Parameters<typeof performCommerceOrderShipping>[3]);
   async function cart(f: { tenantId: string; orderId: string }, count = 1) {
     await run(f, "review", fiscal);

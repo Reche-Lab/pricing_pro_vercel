@@ -19,7 +19,7 @@ const request = (body: unknown, origin = "https://platform.example.test") => new
 beforeEach(() => {
   vi.resetAllMocks(); vi.stubEnv("COMMERCE_ENABLED", "true"); vi.stubEnv("APP_URL", "https://platform.example.test");
   vi.mocked(requireCommerceOrderAccess).mockResolvedValue({ session: { tenantId, userId: id } } as never);
-  vi.mocked(commerceOrderShippingState).mockResolvedValue({ shipping: null, readiness: { eligible: true, reason: null }, contracted: null, notifications: { pending: 0, failed: 0 }, fiscal: { invoiceKey: null, senderStateRegister: null, productionReady: false } });
+  vi.mocked(commerceOrderShippingState).mockResolvedValue({ shipping: null, readiness: { eligible: true, reason: null }, contracted: null, notifications: { pending: 0, failed: 0 }, fiscal: { invoiceKey: null, senderStateRegister: null, productionReady: false, productionSource: null } });
   vi.mocked(performCommerceOrderShipping).mockResolvedValue({ review: undefined });
 });
 describe("commerce shipping API permissions", () => {

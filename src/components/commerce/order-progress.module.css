@@ -1,0 +1,46 @@
+.workspace { min-width: 0; color: #f4f4f5; }
+.overview { min-width: 0; border-block: 1px solid #27272a; padding: 20px 0; margin-bottom: 24px; }
+.identity { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: 16px; }
+.identity > div { min-width: 0; }
+.eyebrow { color: #a1a1aa; font-size: 11px; font-weight: 600; }
+.identity h2 { font-size: 19px; line-height: 1.5; font-weight: 650; overflow-wrap: anywhere; margin: 4px 0; }
+.identity p { font-size: 13px; color: #a1a1aa; }
+.facts { display: grid; gap: 8px; font-size: 12px; }
+.facts > span { display: flex; align-items: center; gap: 6px; color: #fcd891; }
+.facts > span[data-paid="true"] { color: #93e6bf; }
+.facts small { font-size: 12px; color: #a1a1aa; }
+.facts strong { color: #e4e4e7; font-weight: 600; }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: 12px; margin: 22px 0; padding: 0; list-style: none; }
+.steps li { display: flex; align-items: center; gap: 8px; padding-block: 12px; border-top: 2px solid #3f3f46; min-width: 0; }
+.steps li > span { display: grid; place-items: center; width: 26px; height: 26px; flex-shrink: 0; border: 1px solid #52525b; border-radius: 50%; font-size: 11px; color: #a1a1aa; }
+.steps strong { display: block; font-size: 12px; font-weight: 600; color: #d4d4d8; }
+.steps small { display: block; margin-top: 3px; font-size: 10px; color: #a1a1aa; }
+.steps li[data-done="true"] { border-color: #33886a; }
+.steps li[data-done="true"] > span { color: #9de6c5; background: #14362a; border-color: #33886a; }
+.steps li[aria-current="step"] { border-color: #75d3c7; }
+.steps li[aria-current="step"] > span { color: #111; background: #75d3c7; border-color: #75d3c7; }
+.next { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px; border-left: 3px solid #6ed5b0; background: #13221e; }
+.next > div { min-width: 0; }
+.next h3 { font-size: 19px; line-height: 1.4; font-weight: 650; margin: 5px 0 8px; overflow-wrap: anywhere; }
+.next p { color: #bfd0c9; font-size: 13px; line-height: 1.7; max-width: 68ch; }
+.nextAction { flex-shrink: 0; max-width: 340px; min-height: 44px; display: grid; gap: 8px; }
+.nextAction > button { white-space: normal; text-align: center; }
+.primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 16px; min-height: 44px; border-radius: 6px; background: #6ee7b7; color: #111; font-size: 13px; font-weight: 650; }
+.processing { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #bfe9dc; }
+.processing svg { animation: progress-spin 1s linear infinite; }
+@keyframes progress-spin { to { transform: rotate(360deg); } }
+.readOnly { color: #b9c8c2; font-size: 12px; max-width: 30ch; line-height: 1.6; }
+.issue { display: inline-flex; align-items: center; gap: 6px; color: #f5cf8f; font-size: 12px; min-height: 40px; text-decoration: underline; text-underline-offset: 3px; }
+.documents { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin-top: 16px; }
+.documents > a, .documents > button { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; font-size: 12px; color: #a4e2d3; overflow-wrap: anywhere; }
+.documents > span { font-size: 12px; color: #a1a1aa; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; align-items: start; gap: 28px; }
+.content, .summary { min-width: 0; }
+.summary { display: grid; gap: 22px; }
+.anchor { min-width: 0; scroll-margin-top: 24px; }
+.shipping { border-block: 1px solid #27272a; padding-block: 16px; margin-top: 18px; min-width: 0; }
+.shipping > summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.workspace :is(a, button, summary):focus-visible { outline: 2px solid #75d3c7; outline-offset: 4px; }
+@media(max-width: 1050px) { .layout { grid-template-columns: minmax(0, 1fr); } .summary { border-top: 1px solid #27272a; padding-top: 20px; } .next { flex-wrap: wrap; } }
+@media(max-width: 600px) { .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 10px; } .steps li { gap: 6px; } .steps li > span { width: 22px; height: 22px; } .steps strong { font-size: 11px; } .next { padding: 16px; gap: 16px; } .next h3 { font-size: 17px; } .nextAction { width: 100%; max-width: none; } .nextAction > * { width: 100%; } }
+@media(prefers-reduced-motion: reduce) { .processing svg { animation: none; } }

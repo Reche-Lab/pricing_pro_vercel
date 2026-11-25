@@ -17,11 +17,14 @@ import { MelhorEnvioRequestError } from "@/services/melhor-envio/melhor-envio";
 export async function commerceOrderShippingState(tenantId: string, orderId: string) {
   const order = await authorizedCommerceOrder(tenantId, orderId, null);
   const shipping = await getOrderShipment(tenantId, orderId);
+  const olistJob = await getCommerceOlistJob(tenantId, orderId);
   const notifications = (await getPool().query("select count(*) filter(where status in ('pending','sending'))::integer as pending,count(*) filter(where status='failed')::integer as failed from commerce_order_notifications where tenant_id=$1 and order_id=$2", [tenantId, orderId])).rows[0];
   return {
     contracted: order.snapshot.shippingOption ? { name: order.snapshot.shippingOption.name, priceCents: order.shipping_cents } : null,
     readiness: shippingEligibility(order), notifications,
-    fiscal: { invoiceKey: shipping?.snapshot.invoiceKey ?? null, senderStateRegister: shipping?.snapshot.senderStateRegister ?? null, productionReady: Boolean(shipping?.production_ready_at) },
+    fiscal: { invoiceKey: shipping?.snapshot.invoiceKey ?? null, senderStateRegister: shipping?.snapshot.senderStateRegister ?? null,
+      productionReady: Boolean(shipping?.production_ready_at || olistJob?.production_completed_at),
+      productionSource: olistJob?.production_completed_at ? "olist" as const : shipping?.production_ready_at ? "shipping" as const : null },
     shipping: shipping ? { id: shipping.id, status: shipping.operation ? "processing" : shipping.purchase_attempted_at && shipping.status === "cart" ? "review" : shipping.status, service_name: shipping.service_name,
       quoted_cents: shipping.snapshot.review?.currentCents ?? shipping.quoted_cents, purchase_cents: shipping.purchase_cents, tracking_code: shipping.tracking_code,
       tracking_url: safeShippingUrl(shipping.tracking_url), label_url: safeShippingUrl(shipping.label_url), last_error: shipping.last_error,

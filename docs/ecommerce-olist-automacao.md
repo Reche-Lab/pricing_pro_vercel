@@ -61,6 +61,18 @@ No pedido, **Concluir produção** exige pagamento real, produção iniciada e a
 
 As opções de desativar faturamento/expedição automática permitem operação externa ao módulo; não criam um fluxo manual fiscal alternativo dentro da loja. Reativação e **Conferir e retomar** aproveitam os registros já encontrados no ERP.
 
+### Acompanhamento guiado pela equipe
+
+O pedido administrativo reúne pagamento, aprovação das artes, produção, faturamento e envio em uma sequência única. O resumo superior destaca a etapa atual e apresenta somente a próxima ação operacional. PDFs de produção, nota autorizada, etiqueta e rastreio permanecem disponíveis como atalhos; IDs e diagnóstico do ERP ficam em **Integrações e detalhes · Olist**.
+
+- **Iniciar produção** e **Concluir produção e liberar NF-e** continuam exigindo confirmação e observação. A conclusão no Olist é reaproveitada em Melhor Envio, sem uma segunda confirmação de produção.
+- A autorização fiscal e a preparação da expedição aparecem como etapas automáticas. Não há botão para emitir uma segunda nota enquanto a primeira aguarda autorização.
+- **Comprar etiqueta de envio** é uma cobrança separada do pagamento do comprador. O modal mantém a conferência do valor e a aceitação explícita de eventual diferença.
+- Etiqueta gerada não confirma postagem. **Confirmar postagem** e **Confirmar retirada** representam a entrega física do pacote, não apenas a geração de um documento.
+- Retirada e tenants sem automação Olist têm etapas adaptadas. Pedidos encerrados, estornados ou de teste não recebem uma próxima ação operacional. Leitores podem consultar e imprimir documentos, sem executar mutações administrativas.
+
+Esta organização não altera os gates fiscais, permissões, reconciliação ou garantias contra cobranças e emissões duplicadas. Não requer migration adicional.
+
 ## Segurança e recuperação
 
 - O backend resolve tenant e permissões da sessão administrativa; o comprador não chama mutações do ERP.
