@@ -1,11 +1,37 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PDFPage } from "pdf-lib";
+import { PDFPage, PDFDocument, StandardFonts } from "pdf-lib";
 import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 import { generateQuotePdf } from "@/services/pdf/quote-pdf";
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("quote PDF", () => {
+  it("shows negative discounts composing the final total without reducing unit prices", async () => {
+    const draw = vi.spyOn(PDFPage.prototype, "drawText"), input = pdfInput("");
+    input.quote.discount_total = "30"; input.quote.grand_total = "190";
+    await generateQuotePdf({ ...input, discountLabel: "Desconto por arte pronta e aprovada" });
+    const texts = draw.mock.calls.map(([value]) => value);
+    expect(texts).toContain("-R$ 30,00"); expect(texts).toContain("R$ 190,00");
+    expect(texts).toContain("Desconto por arte pronta e aprovada"); expect(texts).toContain("R$ 2,00");
+  });
+  it("wraps long content, repeats item headers and numbers every A4 page without clipping text", async () => {
+    const draw = vi.spyOn(PDFPage.prototype, "drawText"), input = pdfInput("");
+    input.tenant.name = "Empresa de produtos personalizados para eventos corporativos com nome bastante extenso";
+    input.quote.customer_email = `${"cliente".repeat(20)}@example.com`;
+    input.quote.notes = Array.from({ length: 50 }, (_, i) => `Condição ${i}: detalhes completos devem continuar legíveis na proposta sem cortes.`).join("\n");
+    input.items = Array.from({ length: 35 }, (_, i) => ({ ...input.items[0], id: `item-${i}`, description: `Produto ${i} com descrição muito longa, nome da campanha e informações importantes para o comprador.`, artwork_name: "Campanha empresarial com nome longo para conferir quebra de linhas" }));
+    const bytes = await generateQuotePdf(input), pdf = await PDFDocument.load(bytes);
+    expect(pdf.getPageCount()).toBeGreaterThan(2);
+    const font = await pdf.embedFont(StandardFonts.Helvetica), bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    for (const [value, options] of draw.mock.calls) {
+      if (!options) continue;
+      expect(options.y).toBeGreaterThanOrEqual(36);
+      const f = options.font?.name.includes("Bold") ? bold : font;
+      expect((options.x ?? 0) + f.widthOfTextAtSize(value, options.size ?? 10)).toBeLessThanOrEqual(595.28 - 35);
+    }
+    expect(draw.mock.calls.filter(([value]) => value === "Produto / personalização").length).toBeGreaterThan(1);
+    for (let i = 1; i <= pdf.getPageCount(); i++) expect(draw.mock.calls.some(([value]) => value === `${i} / ${pdf.getPageCount()}`)).toBe(true);
+  });
   it.each([
     ["draft", "Orçamento"],
     ["sent", "Enviado"],

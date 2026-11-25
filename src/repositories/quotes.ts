@@ -98,6 +98,8 @@ export type QuoteDetail = {
 
 export type QuoteItemRow = {
   id: string;
+  product_image_url?: string | null;
+  product_mockup?: import("@/domain/commerce/artwork-options").ProductMockup | null;
   product_variant_id?: string | null;
   sku?: string | null;
   external_olist_product_id?: string | null;
@@ -396,6 +398,8 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           qi.id,
           qi.product_variant_id,
           pv.sku,
+          cp.snapshot->>'imageUrl' as product_image_url,
+          cp.snapshot->'artworkOptions'->'mockup' as product_mockup,
           to_jsonb(pv)->>'external_olist_product_id' as external_olist_product_id,
           to_jsonb(pv)->>'print_diameter_mm' as print_diameter_mm,
           to_jsonb(pv)->>'print_shape' as print_shape, to_jsonb(pv)->>'print_width_mm' as print_width_mm,
@@ -424,6 +428,7 @@ export async function getQuoteDetail(userId: string, tenantId: string, quoteId: 
           coalesce((select (to_jsonb(t)->>'artwork_ai_generation_limit')::integer from tenants t where t.id = qi.tenant_id), 3) as artwork_ai_generation_limit
         from quote_items qi
         left join product_variants pv on pv.id = qi.product_variant_id and pv.tenant_id = qi.tenant_id
+        left join commerce_products cp on cp.variant_id=qi.product_variant_id and cp.tenant_id=qi.tenant_id
         left join app_users manual_user on manual_user.id::text = to_jsonb(qi)->>'manual_price_changed_by'
         where qi.tenant_id = $1 and qi.quote_id = $2
         order by qi.created_at asc
@@ -739,6 +744,8 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           qi.description,
           qi.quantity,
           qi.unit_price::text as unit_price,
+          cp.snapshot->>'imageUrl' as product_image_url,
+          cp.snapshot->'artworkOptions'->'mockup' as product_mockup,
           qi.total_price::text as total_price,
           qi.artwork_name,
           qi.pricing_rule,
@@ -759,6 +766,7 @@ export async function getPublicQuoteByToken(token: string): Promise<PublicQuoteD
           coalesce((select (to_jsonb(t)->>'artwork_ai_generation_limit')::integer from tenants t where t.id = qi.tenant_id), 3) as artwork_ai_generation_limit
         from quote_items qi
         left join product_variants pv on pv.id = qi.product_variant_id and pv.tenant_id = qi.tenant_id
+        left join commerce_products cp on cp.variant_id=qi.product_variant_id and cp.tenant_id=qi.tenant_id
         where qi.quote_id = $1
         order by qi.created_at asc
       `,

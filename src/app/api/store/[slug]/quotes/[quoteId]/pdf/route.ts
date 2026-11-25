@@ -4,6 +4,7 @@ import { getBuyerQuote } from "@/repositories/commerce-buyer-quotes";
 import { generateBuyerQuotePdf } from "@/services/pdf/commerce-buyer-quote-pdf";
 import { buyerContext, commerceFailure } from "@/services/commerce/http";
 import { enforcePublicRateLimit } from "@/lib/security/public-rate-limit";
+import { buyerQuotePdfVisuals } from "@/repositories/commerce-quote-pdf";
 export const runtime = "nodejs";
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string; quoteId: string }> }) {
   try {
@@ -13,7 +14,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     if (blocked) return blocked;
     const quote = await getBuyerQuote(store.tenant_id, session, id);
     const tenant = (await getPool().query("select name,logo_url,company_phone,company_site,company_document from tenants where id=$1", [store.tenant_id])).rows[0];
-    const pdf = await generateBuyerQuotePdf(quote, tenant);
+    const visuals = await buyerQuotePdfVisuals(store.tenant_id, session.customer_id!, id);
+    const view = z.enum(["front", "both"]).parse(new URL(request.url).searchParams.get("view") ?? "both");
+    const pdf = await generateBuyerQuotePdf(quote, tenant, { visuals, mockupView: view });
     return new Response(Buffer.from(pdf), { headers: { "content-type": "application/pdf", "content-disposition": `attachment; filename="orcamento-${id}.pdf"`, "cache-control": "private, no-store", "x-robots-tag": "noindex, nofollow", "x-content-type-options": "nosniff" } });
   } catch (error) { return commerceFailure(error, "buyer.quotes.pdf"); }
 }

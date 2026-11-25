@@ -32,11 +32,13 @@ export async function GET(request: Request, context: { params: Promise<{ quoteId
   if (!parsed.success) {
     return failAgentRequest(log, new AgentApiError("invalid_quote_id", "ID de orçamento inválido.", 400));
   }
-  const artworkVariant = z.enum(["original", "edited", "cropped"])
-    .safeParse(new URL(request.url).searchParams.get("artwork") ?? "original");
+  const artworkVariant = z.enum(["product", "original", "edited", "cropped"])
+    .safeParse(new URL(request.url).searchParams.get("artwork") ?? "product");
   if (!artworkVariant.success) {
     return failAgentRequest(log, new AgentApiError("invalid_artwork_variant", "Versão da arte inválida.", 400));
   }
+  const view = z.enum(["front", "both"]).safeParse(new URL(request.url).searchParams.get("view") ?? "both");
+  if (!view.success) return failAgentRequest(log, new AgentApiError("invalid_mockup_view", "Visualização do produto inválida.", 400));
 
   const token = authorizationToken(request);
   if (!token) return failAgentRequest(log, new AgentApiError("unauthorized", "Token de agente ausente.", 401));
@@ -58,7 +60,7 @@ export async function GET(request: Request, context: { params: Promise<{ quoteId
     tenant,
     quote: detail.quote,
     items: detail.items,
-    artworkVariant: artworkVariant.data
+    artworkVariant: artworkVariant.data, mockupView: view.data
   });
   await logAgentAudit(agentContext, "agent.quotes.pdf", { quoteId });
   logAgentBinarySuccess(log, { quoteId, bytes: pdf.length, artworkVariant: artworkVariant.data });

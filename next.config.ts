@@ -15,6 +15,12 @@ const noStoreHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  outputFileTracingIncludes: {
+    "/api/quotes/*/pdf": ["./public/mockups/**/*.png"],
+    "/api/agent/v1/quotes/*/pdf": ["./public/mockups/**/*.png"],
+    "/api/store/*/quotes/*/pdf": ["./public/mockups/**/*.png"],
+    "/q/*/pdf": ["./public/mockups/**/*.png"],
+  },
   webpack(config, { dev }) {
     // Local validation should not retain a large on-disk webpack cache.
     if (!dev && process.env.COMMERCE_LOW_MEMORY === "true") config.cache = false;

@@ -380,12 +380,16 @@ Quando usar:
 Endpoint:
 
 ```txt
-GET /quotes/{{quoteId}}/pdf?artwork=original
+GET /quotes/{{quoteId}}/pdf?artwork=product&view=both
 ```
 
 Este endpoint exige Bearer token e retorna PDF binário. Para o cliente final, prefira o campo `publicPdfUrl` retornado ao criar orçamento com link público.
-O parâmetro opcional `artwork` aceita `original` (padrão), `edited` ou `cropped`. Quando a versão solicitada não
-existir para uma arte, o PDF usa a versão anterior disponível sem remover o item do documento.
+O parâmetro opcional `artwork` aceita `product` (padrão), `original`, `edited` ou `cropped`.
+No padrão, artes aprovadas são aplicadas à simulação do produto respeitando a sangria e o corte. Sem aprovação,
+é usada a arte original; sem arte disponível, a imagem de exemplo cadastrada no catálogo da loja, quando houver.
+O parâmetro `view` aceita `both` (padrão: frente e verso, se houver modelo) ou `front` (somente frente).
+As opções explícitas de original, editada e recortada continuam disponíveis. Valores de desconto são negativos
+no resumo; o benefício por arte pronta e aprovada é uma dedução separada, sem alterar o preço unitário da curva.
 
 ## Fluxo Conversacional Recomendado
 

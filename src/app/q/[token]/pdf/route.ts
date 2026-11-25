@@ -9,9 +9,11 @@ export async function GET(request: Request, context: { params: Promise<{ token: 
   if (!token || token.length < 20) notFound();
   const limited = await enforcePublicRateLimit(request, token, { action: "quote-pdf", limit: 20, windowSeconds: 3600 });
   if (limited) return limited;
-  const artworkVariant = z.enum(["original", "edited", "cropped"])
-    .safeParse(new URL(request.url).searchParams.get("artwork") ?? "original");
+  const artworkVariant = z.enum(["product", "original", "edited", "cropped"])
+    .safeParse(new URL(request.url).searchParams.get("artwork") ?? "product");
   if (!artworkVariant.success) notFound();
+  const view = z.enum(["front", "both"]).safeParse(new URL(request.url).searchParams.get("view") ?? "both");
+  if (!view.success) notFound();
 
   const detail = await getPublicQuoteByToken(token);
   if (!detail) notFound();
@@ -21,7 +23,7 @@ export async function GET(request: Request, context: { params: Promise<{ token: 
     tenant: detail.tenant,
     quote: detail.quote,
     items: detail.items,
-    artworkVariant: artworkVariant.data
+    artworkVariant: artworkVariant.data, mockupView: view.data
   });
 
   return new Response(Buffer.from(pdf), {

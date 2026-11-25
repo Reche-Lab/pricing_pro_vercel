@@ -1,18 +1,15 @@
 import { generateQuotePdf } from "./quote-pdf";
 import type { getBuyerQuote } from "@/repositories/commerce-buyer-quotes";
-import type { QuoteDetail } from "@/repositories/quotes";
-import { formatDeliveryDate } from "@/domain/shipping/production-lead-time";
+import type { QuoteDetail, QuoteItemRow } from "@/repositories/quotes";
 import { quoteArtworkBenefitDescription } from "@/domain/commerce/quote-artwork-benefit";
 
-export async function generateBuyerQuotePdf(quote: Awaited<ReturnType<typeof getBuyerQuote>>, tenant: { name: string; logo_url: string | null; company_phone: string | null; company_site: string | null; company_document: string | null }) {
+export async function generateBuyerQuotePdf(quote: Awaited<ReturnType<typeof getBuyerQuote>>, tenant: { name: string; logo_url: string | null; company_phone: string | null; company_site: string | null; company_document: string | null }, options?: { visuals?: Map<string, Partial<QuoteItemRow>>; mockupView?: "front" | "both" }) {
   const { billing, address } = quote.contact, production = quote.snapshot.production;
-  const shippingNote = quote.shipping_cents === null ? "Frete nao incluido. Calcule a entrega antes de comprar." : quote.snapshot.delivery === "pickup" ? "Retirada no local." : `Frete: ${quote.snapshot.shippingOption?.name ?? "Entrega da loja"}.`;
-  const notes = [shippingNote, `Producao: ${production.productionDays} dias uteis apos pagamento e aprovacao das artes.`,
-    production.transportDays !== null ? `Transporte: ${production.transportDays} dias uteis.` : "Prazo de transporte a confirmar.",
-    production.deliveryDate ? `Recebimento estimado se confirmado na data do orcamento: ${formatDeliveryDate(production.deliveryDate)}.` : "",
+  const shippingNote = quote.shipping_cents === null ? "Frete não incluído. Calcule a entrega antes de comprar." : quote.snapshot.delivery === "pickup" ? "Retirada no local." : `Entrega: ${quote.snapshot.shippingOption?.name ?? "Entrega da loja"}.`;
+  const notes = [shippingNote,
     ...(quote.snapshot.artworkBenefits ?? []).map(quoteArtworkBenefitDescription),
     quote.snapshot.artworkBenefits?.length ? `Benefício condicional, não incluído no total: envie, enquadre e aprove as artes conforme o guia do produto e as especificações da equipe da ${quote.snapshot.storeName}, prontas para impressão, sem ajustes da equipe. Não incide sobre frete. Elegibilidade e valores serão conferidos na compra.` : "",
-    "Este orcamento nao e um pedido, nao reserva estoque e nao gera cobranca. Precos, disponibilidade, artes e frete serao conferidos antes da compra."].filter(Boolean).join("\n");
+    "Este orçamento não é um pedido, não reserva estoque e não gera cobrança. Preços, disponibilidade, artes e frete serão conferidos antes da compra."].filter(Boolean).join("\n");
   const detail: QuoteDetail = {
     id: quote.id, status: new Date(quote.valid_until).getTime() <= Date.now() ? "expired" : "draft", valid_until: quote.valid_until,
     created_at: quote.created_at, subtotal: String(quote.subtotal_cents / 100), shipping_total: String((quote.shipping_cents ?? 0) / 100),
@@ -24,5 +21,8 @@ export async function generateBuyerQuotePdf(quote: Awaited<ReturnType<typeof get
     customer_district: address?.district ?? billing.district, customer_city: address?.city ?? billing.city, customer_state: address?.state ?? billing.state,
     delivery_attention_to: address?.attention ?? null, customer_external_olist_id: null, external_crm_id: null, created_by_name: null,
   };
-  return generateQuotePdf({ tenantName: tenant.name, tenant, quote: detail, productionEstimate: production, items: quote.snapshot.items.map(item => ({ id: item.id, description: item.name, quantity: item.quantity, unit_price: String(item.unitCents / 100), total_price: String((item.totalCents + (item.artworkDiscountCents ?? 0)) / 100), artwork_name: item.artworkName })) });
+  return generateQuotePdf({ tenantName: tenant.name, tenant, quote: detail, productionEstimate: production,
+    artworkVariant: "product", mockupView: options?.mockupView ?? "both", discountLabel: "Desconto por arte pronta e aprovada",
+    items: quote.snapshot.items.map(item => ({ ...options?.visuals?.get(item.id), id: item.id, description: item.name, quantity: item.quantity,
+      unit_price: String(item.unitCents / 100), total_price: String((item.totalCents + (item.artworkDiscountCents ?? 0)) / 100), artwork_name: item.artworkName })) });
 }

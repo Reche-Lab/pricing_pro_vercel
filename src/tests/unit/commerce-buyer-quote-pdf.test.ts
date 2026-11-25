@@ -1,13 +1,23 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generateBuyerQuotePdf } from "@/services/pdf/commerce-buyer-quote-pdf";
 import { generateQuotePdf } from "@/services/pdf/quote-pdf";
 import { deliveryEstimate } from "@/domain/shipping/production-lead-time";
 import { testCommerceBilling } from "../fixtures/commerce-checkout";
 
 vi.mock("@/services/pdf/quote-pdf", () => ({ generateQuotePdf: vi.fn(async () => new Uint8Array()) }));
+beforeEach(() => vi.clearAllMocks());
 
 describe("buyer quote PDF totals", () => {
+  it("restores full line prices and displays the ready-artwork benefit as a separate deduction", async () => {
+    await generateBuyerQuotePdf({
+      id: "quote", tenant_id: "tenant", customer_id: "buyer", valid_until: "2027-01-01", created_at: "2026-11-11", subtotal_cents: 15000, shipping_cents: 2200, total_cents: 15700,
+      contact: { billing: testCommerceBilling, address: null, deliveryAddressSameAsBilling: true },
+      snapshot: { items: [{ id: "line", productId: "p", name: "Botton", quantity: 50, unitCents: 300, totalCents: 13500, artworkDiscountCents: 1500, artworkName: "Campanha" }], lines: [], delivery: "delivery", storeName: "Loja teste", artworkDiscountCents: 1500, shippingOption: null, production: deliveryEstimate(50, 2) },
+    }, { name: "Loja teste", logo_url: null, company_document: null, company_phone: null, company_site: null });
+    expect(generateQuotePdf).toHaveBeenLastCalledWith(expect.objectContaining({ discountLabel: "Desconto por arte pronta e aprovada", artworkVariant: "product",
+      items: [expect.objectContaining({ unit_price: "3", total_price: "150" })], quote: expect.objectContaining({ subtotal: "150", discount_total: "15", shipping_total: "22", grand_total: "157" }) }));
+  });
   it("prints persisted shipping and the full total without exposing insurance details", async () => {
     await generateBuyerQuotePdf({
       id: "quote", tenant_id: "tenant", customer_id: "buyer", valid_until: "2027-01-01", created_at: "2026-11-11",

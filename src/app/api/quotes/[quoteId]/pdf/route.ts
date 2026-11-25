@@ -8,7 +8,7 @@ import { generateQuotePdf } from "@/services/pdf/quote-pdf";
 import { listQuoteShipments } from "@/repositories/shipments";
 import { deliveryEstimate, transportDaysFromQuote } from "@/domain/shipping/production-lead-time";
 
-const artworkVariantSchema = z.enum(["original", "edited", "cropped"]);
+const artworkVariantSchema = z.enum(["product", "original", "edited", "cropped"]);
 
 export async function GET(request: Request, context: { params: Promise<{ quoteId: string }> }) {
   const session = await getCurrentSession();
@@ -19,10 +19,12 @@ export async function GET(request: Request, context: { params: Promise<{ quoteId
   if (!quoteIdParsed.success) {
     return NextResponse.json({ ok: false, error: "Invalid quote id." }, { status: 400 });
   }
-  const artworkVariant = artworkVariantSchema.safeParse(new URL(request.url).searchParams.get("artwork") ?? "original");
+  const artworkVariant = artworkVariantSchema.safeParse(new URL(request.url).searchParams.get("artwork") ?? "product");
   if (!artworkVariant.success) {
     return NextResponse.json({ ok: false, error: "Seleção de arte inválida." }, { status: 400 });
   }
+  const view = z.enum(["front", "both"]).safeParse(new URL(request.url).searchParams.get("view") ?? "both");
+  if (!view.success) return NextResponse.json({ ok: false, error: "Visualização do produto inválida." }, { status: 400 });
 
   const [profile, detail, tenant, shipments] = await Promise.all([
     getSessionProfile(session.userId, session.tenantId),
@@ -40,6 +42,7 @@ export async function GET(request: Request, context: { params: Promise<{ quoteId
     quote: detail.quote,
     items: detail.items,
     artworkVariant: artworkVariant.data,
+    mockupView: view.data,
     productionEstimate: detail.items.length ? deliveryEstimate(detail.items.reduce((sum, item) => sum + item.quantity, 0), detail.quote.delivery_method === "pickup" ? 0 : transportDaysFromQuote(shipments[0]?.selected_quote), tenant?.production_settings) : undefined
   });
 

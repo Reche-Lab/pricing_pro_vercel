@@ -9,6 +9,15 @@ const edited = artwork({
 });
 
 describe("quote PDF artwork selection", () => {
+  it("uses approved prepared artwork for the finished product, never the original crop coordinates", () => {
+    expect(resolveQuotePdfArtworkAsset({ ...edited, approval_status: "approved" }, [original, edited], "product")).toMatchObject({ effectiveVariant: "product", dataUrl: edited.prepared_data_url });
+  });
+  it("falls back to the original when the artwork is not approved even if a crop exists", () => {
+    expect(resolveQuotePdfArtworkAsset({ ...edited, approval_status: "pending" }, [original, edited], "product")).toMatchObject({ effectiveVariant: "original", dataUrl: original.data_url });
+  });
+  it("does not mislabel a retouched asset as original when its parent is missing", () => {
+    expect(resolveQuotePdfArtworkAsset(edited, [edited], "product")).toMatchObject({ effectiveVariant: "original", dataUrl: null, storagePath: null });
+  });
   it("uses the root artwork by default even when a retouched version is active", () => {
     expect(resolveQuotePdfArtworkAsset(edited, [original, edited])).toMatchObject({
       dataUrl: original.data_url, fileName: "original.png", effectiveVariant: "original"
