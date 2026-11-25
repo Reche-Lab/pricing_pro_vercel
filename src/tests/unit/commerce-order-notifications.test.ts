@@ -55,6 +55,54 @@ function trackingKey(code: string) {
 }
 
 describe("transactional order email delivery", () => {
+  it("includes the frozen receipt, store identity, destination and original estimate without exposing tax IDs", async () => {
+    jobs[0].event_type = "payment.paid";
+    Object.assign(state!, {
+      logo_url: "https://cdn.example.com/store-logo.png", accent: "#26bfe8", contact_email: "loja@example.com", contact_phone: "+55 11 99999-0000",
+      created_at: "2026-11-25T12:30:00Z", subtotal_cents: 13500, shipping_cents: 2000, total_cents: 15500, artwork_discount_cents: 1500,
+      order_items: [{ name: "Botton <3,5 cm>", quantity: 50, unitCents: 300, totalCents: 13500, artworkDiscountCents: 1500, artworkName: "Campanha & Evento" }],
+      delivery_address: { name: "Destinatária", street: "Rua A", number: "123", complement: "Sala 2", district: "Centro", city: "São Paulo", state: "SP", postalCode: "01001000", attention: "Equipe de eventos", document: "12345678901", email: "private@example.com" },
+      production: { productionDays: 3, transportDays: 2, deliveryDate: "2026-12-02" },
+    });
+    await processCommerceOrderNotifications();
+    const { text, html } = vi.mocked(sendStoreEmail).mock.calls[0][1];
+    expect(html).toContain('src="https://cdn.example.com/store-logo.png"');
+    expect(html).toContain("Campanha &amp; Evento"); expect(text).toContain("50 un. × R$ 3,00 = R$ 150,00");
+    expect(text).toContain("Produtos: R$ 150,00"); expect(text).toContain("Desconto por arte pronta: −R$ 15,00");
+    expect(text).toContain("Entrega: R$ 20,00"); expect(text).toContain("Total do pedido: R$ 155,00");
+    expect(text).toContain("25/11/2026, 09:30"); expect(text).toContain("Pagamento: Confirmado");
+    expect(text).toContain("Rua A, 123 · Sala 2"); expect(text).toContain("Aos cuidados de: Equipe de eventos");
+    expect(text).toContain("Produção: 3 dias úteis"); expect(text).toContain("Transporte: 2 dias úteis");
+    expect(text).toContain("Previsão registrada na compra:"); expect(text).toContain("aprovação das artes");
+    expect(text).toContain("Atendimento: loja@example.com");
+    expect(`${html}${text}`).not.toContain("12345678901"); expect(`${html}${text}`).not.toContain("private@example.com");
+    expect(html).not.toContain("Rastrear entrega");
+  });
+
+  it.each([{ total_cents: 999 }, { shipping_cents: null }, { order_items: [] }, { order_items: [{ name: "Bad", quantity: 0 }] }, { artwork_discount_cents: "invalid" }, { artwork_discount_cents: 50 }, { order_items: [{ name: "Wrong subtotal", quantity: 1, unitCents: 101, totalCents: 101 }] }])("omits incomplete/corrupt receipts instead of inventing prices: %j", async patch => {
+    Object.assign(state!, { subtotal_cents: 100, shipping_cents: 50, total_cents: 150, order_items: [{ name: "Botton", quantity: 1, unitCents: 100, totalCents: 100 }] }, patch);
+    await processCommerceOrderNotifications();
+    const { text } = vi.mocked(sendStoreEmail).mock.calls[0][1];
+    expect(text).not.toContain("Resumo do pedido"); expect(text).toContain("Pedido: #20000000");
+  });
+
+  it("does not let an invalid historical estimate prevent notification delivery", async () => {
+    state!.production = { productionDays: 3, transportDays: 2, deliveryDate: "2026-99-99" };
+    await processCommerceOrderNotifications();
+    expect(sendStoreEmail).toHaveBeenCalledOnce();
+    expect(vi.mocked(sendStoreEmail).mock.calls[0][1].text).not.toContain("2026-99-99");
+    expect(settlements()[0][1][3]).toBe("sent");
+  });
+
+  it("confirms actual pickup without incorrectly announcing readiness or carrier shipment", async () => {
+    jobs[0].event_type = "fulfillment.shipped";
+    Object.assign(state!, { delivery: "pickup", pickup_address: "Rua da Loja, 10" });
+    await processCommerceOrderNotifications();
+    const { text, subject } = vi.mocked(sendStoreEmail).mock.calls[0][1];
+    expect(subject).toContain("Retirada confirmada"); expect(text).toContain("retirada do seu pedido foi registrada");
+    expect(text).toContain("Rua da Loja, 10"); expect(text).not.toContain("Pedido pronto para retirada"); expect(text).not.toContain("Código de rastreio");
+  });
+
   it("re-reads tenant-scoped live state, escapes HTML, and sends through the store sender", async () => {
     expect(await processCommerceOrderNotifications(tenantId, 5, orderId)).toBe(1);
     expect(query).toHaveBeenCalledWith(expect.stringContaining("c.tenant_id=o.tenant_id and c.id=o.customer_id"), [tenantId, job.id, job.claim_token]);

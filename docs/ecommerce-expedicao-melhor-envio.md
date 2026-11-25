@@ -38,6 +38,16 @@ Retirada pessoal, pedido de teste, estorno, encerramento ou falta de pagamento i
 
 Os e-mails cobrem pedido recebido, pagamento confirmado/estornado, produção, prova de arte disponível, postagem, código disponibilizado, ocorrência e conclusão. Eventos técnicos, como criar carrinho de etiquetas, não geram e-mail ao comprador. A área administrativa mostra pendências/falhas e permite solicitar nova tentativa das falhas.
 
+### Apresentação dos e-mails
+
+As mensagens usam um modelo responsivo compartilhado, com logo, nome, cor e contatos cadastrados na loja. O botão de acompanhamento usa apenas o domínio autorizado da loja. O conteúdo continua legível sem imagens; a versão em texto contém as mesmas informações essenciais. Códigos de acesso ficam destacados no corpo, não na prévia da mensagem.
+
+Quando o pedido possui os dados necessários, as atualizações apresentam produtos, quantidades, nomes das artes, valores, benefício por arte pronta, frete, total e endereço de entrega ou local de retirada. Os prazos são os registrados na compra, não uma nova promessa de entrega. Rastreios são apresentados por volume nos eventos correspondentes. CPF/CNPJ e documentos fiscais não são incluídos nesses e-mails. Dados históricos inconsistentes não geram valores inventados: a mensagem mantém o acesso ao pedido para conferência.
+
+O mesmo padrão visual atende códigos de login da loja, confirmação de orçamento público, convites, recuperação de senha, solicitações de acesso, comprovantes de aceite e teste de SMTP. O remetente e as regras de envio não mudam. E-mails enviados diretamente pelo Olist ou pelo provedor de pagamento continuam usando os modelos desses serviços.
+
+Prévia isolada com dados fictícios, sem banco ou envio SMTP: `node scripts/transactional-email-preview.mjs --serve`. Sem `--serve`, o script executa as verificações visuais com Playwright. Não é necessário iniciar o Next nem aplicar outra migration para alterar a apresentação dos e-mails.
+
 A fila é gravada na mesma transação da mudança de estado, sem envio SMTP dentro da transação. Há tentativas limitadas e deduplicação por marco/código. SMTP não oferece garantia de entrega exatamente uma vez: uma queda após aceitação do e-mail e antes do registro final pode ocasionar repetição. Falhas de e-mail não desfazem compra, postagem ou entrega.
 
 Para tenants com Olist habilitado e NF-e autorizada, o código principal é enviado ao pedido de venda e à nota fiscal. Todos os códigos continuam disponíveis na loja. Uma falha Olist fica pendente e não apaga a etiqueta nem bloqueia seu rastreio. O schedule reenvia apenas atualizações de despacho idempotentes, nunca cria outro pedido ou outra nota.

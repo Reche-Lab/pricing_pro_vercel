@@ -2,6 +2,8 @@ import { randomInt } from "node:crypto";
 import { getPool } from "@/lib/db/client";
 import { sendStoreEmail } from "@/services/email/store-email";
 import { CommerceError } from "@/domain/commerce/commerce";
+import { commerceStoreUrl } from "@/domain/commerce/domains";
+import { renderTransactionalEmail } from "@/services/email/email-layout";
 import {
   commerceTransaction,
   hashCommerceToken,
@@ -29,13 +31,20 @@ export async function requestBuyerCode(
       hashCommerceToken(`${id}:${code}`),
     ],
   );
-  const text = `Seu código para acessar ${store.settings.name}: ${code}.\nVálido por 10 minutos. Não compartilhe este código. Se não solicitou o acesso, ignore esta mensagem.`;
-  const safeName = store.settings.name.replace(/[&<>"']/g, value => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[value]!);
+  const content = renderTransactionalEmail({
+    brand: { ...store.settings, url: commerceStoreUrl(store.slug) },
+    title: "Seu acesso está quase pronto", eyebrow: "Acesso à sua conta",
+    preheader: "Use seu código para acessar a loja. Ele é válido por 10 minutos.",
+    greeting: name.trim() ? `Olá, ${name.trim()}.` : "Olá!",
+    paragraphs: ["Digite o código abaixo na tela em que solicitou o acesso para consultar seus pedidos e orçamentos."],
+    code: { label: "Seu código de acesso", value: code, note: "Válido por 10 minutos · uso único" },
+    notice: "Não compartilhe este código. Nossa equipe nunca pedirá seu código de acesso por telefone ou mensagem.",
+    footerNote: "Se você não solicitou este acesso, ignore esta mensagem. Nenhuma ação é necessária.",
+  });
   const delivery = await sendStoreEmail(store.tenant_id, {
     to: email,
     subject: `Seu código de acesso - ${store.settings.name.replace(/[\r\n]/g, " ")}`,
-    text,
-    html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#202c31"><h1 style="font-size:22px">${safeName}</h1><p>Seu código para acessar a loja e seus orçamentos:</p><p style="font-size:30px;font-weight:bold">${code}</p><p>Válido por 10 minutos. Não compartilhe este código. Se não solicitou o acesso, ignore esta mensagem.</p></div>`,
+    ...content,
   });
   if (!delivery.sent) {
     await getPool().query(

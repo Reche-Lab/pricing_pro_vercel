@@ -3,6 +3,7 @@ import { storeEmailSchema } from "@/domain/commerce/store-email";
 import { CommerceError } from "@/domain/commerce/commerce";
 import { getStoreEmailSettings, saveStoreEmail, loadStoreEmailConnection, markStoreEmailTested, setStoreEmailEnabled } from "@/repositories/commerce-store-email";
 import { sendCustomStoreEmail } from "@/services/email/store-email";
+import { renderTransactionalEmail } from "@/services/email/email-layout";
 import { requireCommerceAdmin, checkCommerceOrigin, commerceJson, commerceFailure, readCommerceBody } from "@/services/commerce/http";
 import { enforcePublicRateLimit } from "@/lib/security/public-rate-limit";
 const actionSchema = z.discriminatedUnion("action", [
@@ -34,7 +35,13 @@ export async function POST(request: Request) {
     }
     const row = await loadStoreEmailConnection(session.tenantId);
     if (!row || row.revision !== input.revision) throw new CommerceError("Salve a configuração atual antes de testar.", 409);
-    const result = await sendCustomStoreEmail(row, { to: profile.email, subject: "Teste do e-mail da sua loja", text: "Este é um teste do remetente da sua loja. Se recebeu esta mensagem, volte ao painel e ative o SMTP próprio para os códigos de acesso dos clientes.", html: "<p>Este é um teste do remetente da sua loja.</p><p>Se recebeu esta mensagem, volte ao painel e ative o SMTP próprio para os códigos de acesso dos clientes.</p>" });
+    const result = await sendCustomStoreEmail(row, { to: profile.email, subject: "Teste do e-mail da sua loja", ...renderTransactionalEmail({
+      brand: { name: row.from_name || "Sua loja", contactEmail: row.reply_to || row.from_email },
+      title: "O e-mail da sua loja está em teste", eyebrow: "Configuração do remetente",
+      preheader: "Confirme o recebimento antes de ativar o e-mail da empresa.",
+      paragraphs: ["Este é um teste do remetente da sua loja. Se recebeu esta mensagem, volte ao painel e confirme o recebimento para ativar o SMTP próprio.", "Após a ativação, os códigos de acesso e as atualizações dos pedidos serão enviados pelo e-mail da sua empresa."],
+      notice: "O aceite do envio pelo servidor não garante a entrega na caixa de entrada. Confira também as pastas de spam e promoções.",
+    }) });
     if (!result.sent) throw new CommerceError(result.message, 502);
     return commerceJson({ settings: await markStoreEmailTested(session.userId, session.tenantId, row.revision), message: result.message });
   } catch (error) { return commerceFailure(error, "admin.email.action"); }

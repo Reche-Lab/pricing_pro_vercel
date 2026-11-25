@@ -3,6 +3,8 @@ import { z } from "zod";
 import { getPool } from "@/lib/db/client";
 import { commerceStoreUrl } from "@/domain/commerce/domains";
 import { sendStoreEmail } from "@/services/email/store-email";
+import { renderTransactionalEmail, type EmailOrderSummary } from "@/services/email/email-layout";
+import { formatDeliveryDate } from "@/domain/shipping/production-lead-time";
 
 const MAX_ATTEMPTS = 5;
 type Notification = {
@@ -16,6 +18,9 @@ type DeliveryState = {
   shipment_status: string | null; service_name: string | null; tracking_code: string | null;
   tracking_url: string | null; proof_ready: boolean; delivery: string | null;
   tracking_parcels: Array<{ code: string | null; url: string | null }>;
+  logo_url?: string | null; accent?: string | null; contact_email?: string | null; contact_phone?: string | null;
+  pickup_address?: string | null; created_at?: string; subtotal_cents?: number; shipping_cents?: number; total_cents?: number;
+  order_items?: unknown; delivery_address?: unknown; production?: unknown; artwork_discount_cents?: number | null;
 };
 const copy: Record<string, [string, string]> = {
   "order.created": ["Pedido recebido", "Recebemos seu pedido. Acompanhe os detalhes e as próximas etapas na sua conta."],
@@ -38,8 +43,60 @@ function httpsUrl(value: string | null) {
     return url.protocol === "https:" && !url.username && !url.password ? url.toString() : null;
   } catch { return null; }
 }
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
+const cents = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+const receiptSchema = z.object({
+  subtotal_cents: cents, shipping_cents: cents, total_cents: cents,
+  order_items: z.array(z.object({
+    name: z.string().max(300), quantity: z.number().int().positive(), unitCents: cents, totalCents: cents,
+    artworkDiscountCents: cents.optional().default(0), artworkName: z.string().max(200).nullish(),
+  })).min(1).max(40),
+});
+const productionSnapshotSchema = z.object({
+  productionDays: z.number().int().nonnegative(), transportDays: z.number().int().nonnegative().nullable(),
+  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
+    const date = new Date(`${value}T12:00:00Z`);
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  }).nullable(),
+});
+const deliveryAddressSchema = z.object({
+  name: z.string(), street: z.string(), number: z.string(), complement: z.string().optional(),
+  district: z.string(), city: z.string(), state: z.string(), postalCode: z.string(), attention: z.string().optional(),
+});
+function orderSummary(state: DeliveryState, code: string): EmailOrderSummary | undefined {
+  const parsed = receiptSchema.safeParse(state);
+  if (!parsed.success || parsed.data.subtotal_cents + parsed.data.shipping_cents !== parsed.data.total_cents) return;
+  const lineBenefit = parsed.data.order_items.reduce((sum, item) => sum + item.artworkDiscountCents, 0);
+  const benefit = cents.safeParse(state.artwork_discount_cents ?? lineBenefit);
+  if (!benefit.success || benefit.data !== lineBenefit || parsed.data.order_items.reduce((sum, item) => sum + item.totalCents, 0) !== parsed.data.subtotal_cents) return;
+  const date = state.created_at ? new Date(state.created_at) : null;
+  return { code, date: date && Number.isFinite(date.getTime()) ? date.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" }) : undefined,
+    // Line totals before the artwork benefit match the products subtotal below.
+    items: parsed.data.order_items.map(item => ({ ...item, totalCents: item.totalCents + item.artworkDiscountCents, artworkName: item.artworkName ?? undefined })),
+    subtotalCents: parsed.data.subtotal_cents, shippingCents: parsed.data.shipping_cents, totalCents: parsed.data.total_cents,
+    artworkDiscountCents: benefit.data };
+}
+function deliverySections(state: DeliveryState, includeTiming: boolean) {
+  const timing = productionSnapshotSchema.safeParse(state.production);
+  const businessDays = (days: number) => days === 1 ? "1 dia útil" : `${days} dias úteis`;
+  const deadlines = includeTiming && timing.success ? [{ title: "Prazos informados na compra", lines: [
+    `Produção: ${businessDays(timing.data.productionDays)}`,
+    ...(state.delivery !== "pickup" ? [`Transporte: ${timing.data.transportDays === null ? "a confirmar" : businessDays(timing.data.transportDays)}`] : []),
+    ...(timing.data.deliveryDate ? [`Previsão registrada na compra: ${formatDeliveryDate(timing.data.deliveryDate)}`] : []),
+    "A previsão depende da confirmação do pagamento, da aprovação das artes e do transporte. Confira o andamento atualizado no seu pedido.",
+  ] }] : [];
+  if (state.delivery === "pickup") return [{
+    title: "Retirada na loja", lines: [state.pickup_address || "Combine o local e o horário com a loja pelo seu pedido."],
+  }, ...deadlines];
+  const address = deliveryAddressSchema.safeParse(state.delivery_address);
+  return [{ title: "Entrega do pedido", lines: [
+    state.service_name || "Entrega conforme escolhida na compra",
+    ...(address.success ? [
+      address.data.name,
+      `${address.data.street}, ${address.data.number}${address.data.complement ? ` · ${address.data.complement}` : ""}`,
+      `${address.data.district} · ${address.data.city}/${address.data.state}`, `CEP ${address.data.postalCode}`,
+      ...(address.data.attention ? [`Aos cuidados de: ${address.data.attention}`] : []),
+    ] : []),
+  ] }, ...deadlines];
 }
 function trackingDetails(job: Notification, state: DeliveryState) {
   const entries = [{ code: state.tracking_code, url: state.tracking_url }, ...(state.tracking_parcels ?? [])];
@@ -80,8 +137,12 @@ function skipReason(job: Notification, state: DeliveryState | undefined) {
 async function deliveryState(job: Notification) {
   return (await getPool().query<DeliveryState>(`select o.payment_environment,o.payment_status,o.fulfillment_status,o.cancelled_at,o.deleted_at,o.snapshot->>'delivery' as delivery,
     s.enabled as store_enabled,s.settings->>'name' as store_name,t.status as tenant_status,t.slug,
+    s.settings->>'logoUrl' as logo_url,s.settings->>'accent' as accent,s.settings->>'contactEmail' as contact_email,
+    s.settings->>'contactPhone' as contact_phone,s.settings->>'pickupAddress' as pickup_address,
+    o.created_at::text,o.subtotal_cents,o.shipping_cents,o.total_cents,o.snapshot->'items' as order_items,
+    o.snapshot->'address' as delivery_address,o.snapshot->'production' as production,o.snapshot->'artworkDiscountCents' as artwork_discount_cents,
     c.name as customer_name,c.email::text as customer_email,
-    sh.status as shipment_status,sh.service_name,sh.tracking_code,sh.tracking_url,
+    sh.status as shipment_status,coalesce(sh.service_name,o.snapshot->'shippingOption'->>'name') as service_name,sh.tracking_code,sh.tracking_url,
     coalesce((select jsonb_agg(jsonb_build_object('code',sp.tracking_code,'url',sp.tracking_url) order by sp.parcel_index)
       from commerce_order_shipment_parcels sp where sp.tenant_id=o.tenant_id and sp.shipment_id=sh.id),'[]'::jsonb) as tracking_parcels,
     exists(select 1 from commerce_artwork_proofs p
@@ -115,9 +176,10 @@ async function deliver(job: Notification) {
   if (reason || !state) { await settle(job, "skipped", reason ?? "order_ineligible"); return; }
   const email = z.string().email().max(254).safeParse(state.customer_email?.trim());
   if (!email.success) { await settle(job, "failed", "invalid_recipient"); return; }
-  let orderUrl: string;
+  let orderUrl: string, storeUrl: string;
   try {
     const base = commerceStoreUrl(state.slug);
+    storeUrl = base;
     orderUrl = `${base}/pedidos/${encodeURIComponent(job.order_id)}`;
     if (!httpsUrl(orderUrl)) throw new Error("Unsafe store URL");
   } catch {
@@ -126,24 +188,30 @@ async function deliver(job: Notification) {
   const [title, body] = job.event_type === "fulfillment.completed" && state.delivery !== "pickup"
     ? ["Pedido entregue", "A entrega do seu pedido foi concluída. Obrigado por comprar conosco!"]
     : job.event_type === "fulfillment.shipped" && state.delivery === "pickup"
-      ? ["Pedido pronto para retirada", "Seu pedido está pronto para retirada na loja. Acesse os detalhes para combinar o recebimento."]
+      ? ["Retirada confirmada", "A retirada do seu pedido foi registrada pela loja. Obrigado por comprar conosco!"]
       : copy[job.event_type];
   const shipping = state.delivery !== "pickup" && (job.event_type.startsWith("shipping.") || ["fulfillment.shipped", "fulfillment.completed"].includes(job.event_type));
   const tracking = shipping ? trackingDetails(job, state) : [];
-  const details = shipping ? [state.service_name && `Entrega: ${state.service_name}`,
-    ...tracking.map(entry => entry.code && `Código de rastreio: ${entry.code}`)].filter((value): value is string => Boolean(value)) : [];
-  const links = tracking.map(entry => entry.url).filter((url): url is string => Boolean(url));
   const store = state.store_name || "Sua loja";
   const orderCode = job.order_id.slice(0, 8).toUpperCase();
   const greeting = `Olá, ${state.customer_name}.`;
-  // The tenant SMTP spreads this extra Nodemailer option. The platform fallback
-  // currently drops it. Message-ID is correlation, not provider idempotency.
+  const actionLabel = job.event_type === "artwork.publish" ? "Revisar e aprovar arte" : "Acompanhar pedido";
+  const summary = orderSummary(state, orderCode);
+  const content = renderTransactionalEmail({
+    brand: { name: store, url: storeUrl, logoUrl: state.logo_url, accent: state.accent, contactEmail: state.contact_email, contactPhone: state.contact_phone },
+    title, preheader: `Pedido #${orderCode} · ${body}`, eyebrow: `Pedido #${orderCode} · Atualização da compra`, greeting, paragraphs: [body],
+    facts: [...(summary ? [] : [{ label: "Pedido", value: `#${orderCode}` }]), { label: "Pagamento", value: state.payment_status === "paid" ? "Confirmado" : state.payment_status === "refunded" ? "Estornado" : "Aguardando confirmação" }],
+    summary, sections: deliverySections(state, !["fulfillment.completed", "shipping.delivered", "payment.refunded"].includes(job.event_type)), tracking,
+    action: { label: actionLabel, url: orderUrl },
+    notice: job.event_type === "payment.paid" ? "Se houver artes para aprovação, revise-as na sua conta para liberar a produção. Acompanhe as próximas etapas pelo pedido." : job.event_type === "artwork.publish" ? "Confira o enquadramento e os detalhes da arte antes de aprovar. A aprovação libera a preparação para produção." : undefined,
+    footerNote: "Você recebeu esta mensagem por uma atualização do seu pedido. Para conferir os dados ou falar com a loja, acesse sua conta pelo site oficial.",
+  });
+  // Message-ID allows correlation across transports, not provider idempotency.
   const input = {
     to: email.data,
     messageId: `<commerce-order-${job.id}@commerce-notifications.invalid>`,
     subject: `${title} - Pedido #${orderCode} - ${store}`.replace(/[\r\n]/g, " "),
-    text: [greeting, "", `Pedido #${orderCode}`, body, ...details, ...links.map(url => `Rastrear entrega: ${url}`), `Acompanhar pedido: ${orderUrl}`, "", store].join("\n"),
-    html: `<div style="font-family:Arial,sans-serif;line-height:1.5;color:#18181b"><h1 style="font-size:20px">${escapeHtml(title)}</h1><p><strong>Pedido #${escapeHtml(orderCode)}</strong></p><p>${escapeHtml(greeting)}</p><p>${escapeHtml(body)}</p>${details.map(detail => `<p>${escapeHtml(detail)}</p>`).join("")}${links.map(url => `<p><a href="${escapeHtml(url)}">Rastrear entrega</a></p>`).join("")}<p><a style="display:inline-block;padding:12px 18px;background:#047857;color:#fff;border-radius:6px;text-decoration:none" href="${escapeHtml(orderUrl)}">Acompanhar pedido</a></p><p>${escapeHtml(store)}</p></div>`,
+    ...content,
   };
   const lease = await getPool().query(`update commerce_order_notifications set claim_expires_at=now()+interval '2 minutes',updated_at=now()
     where tenant_id=$1 and id=$2 and claim_token=$3 and status='sending' and claim_expires_at>now() returning id`,

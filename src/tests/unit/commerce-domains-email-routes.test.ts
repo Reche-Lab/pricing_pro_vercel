@@ -49,12 +49,15 @@ describe("domain/email handler permissions", () => {
     expect(requestStoreDomains).not.toHaveBeenCalled();
   });
   it("tests SMTP only to the verified administrator and records the exact revision", async () => {
-    const row = { revision: 2, tenant_id: id };
+    const row = { revision: 2, tenant_id: id, from_name: "Loja & Companhia", from_email: "store@example.com", reply_to: "help@example.com" };
     vi.mocked(loadStoreEmailConnection).mockResolvedValue(row as never);
     vi.mocked(sendCustomStoreEmail).mockResolvedValue({ sent: true, provider: "smtp", message: "accepted" });
     vi.mocked(markStoreEmailTested).mockResolvedValue({ tested: true } as never);
     expect((await emailAction(request("/api/commerce/admin/email", { action: "test", revision: 2 }))).status).toBe(200);
     expect(sendCustomStoreEmail).toHaveBeenCalledWith(row, expect.objectContaining({ to: "verified-admin@example.com" }));
+    const mail = vi.mocked(sendCustomStoreEmail).mock.calls[0][1];
+    expect(mail.html).toContain("<!doctype html>"); expect(mail.html).toContain("Loja &amp; Companhia");
+    expect(mail.html).toContain('href="mailto:help@example.com"'); expect(mail.text).toContain("confirme o recebimento");
     expect(markStoreEmailTested).toHaveBeenCalledWith(session.userId, session.tenantId, 2);
     expect((await emailAction(request("/api/commerce/admin/email", { action: "test", revision: 2, to: "victim@example.com" }))).status).toBe(400);
     expect(sendCustomStoreEmail).toHaveBeenCalledTimes(1);
