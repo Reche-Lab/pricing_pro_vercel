@@ -46,8 +46,8 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
     if (input.paid !== false) await pool.query("update commerce_orders set payment_status='paid' where tenant_id=$1 and id=$2", [tenantId, orderId]);
     return { tenantId, orderId, snapshot, variantId };
   }
-  function provider() {
-    let contact = false, externalOrder: Record<string, unknown> | null = null, invoice = false, authorized = false, expedition = false;
+  function provider(options: { existingContact?: boolean; hideContact?: boolean; wrappedList?: boolean; detailDocument?: string; failDetailOnce?: boolean } = {}) {
+    let contact = Boolean(options.existingContact), detailFailed = false, externalOrder: Record<string, unknown> | null = null, invoice = false, authorized = false, expedition = false;
     let loseOrder = false, loseWithoutCreating = false, authInvalid = false, emailMismatch = false, rejectInvoice = false, pendingAuthorization = false;
     const calls: { path: string; method: string; body: Record<string, unknown> }[] = [];
     const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -57,8 +57,18 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
       const body = init?.body && typeof init.body === "string" && init.body.startsWith("{") ? JSON.parse(init.body) : {};
       calls.push({ path, method, body });
       if (authInvalid) return Response.json(url.hostname === "accounts.tiny.com.br" ? { error: "invalid_grant" } : {}, { status: url.hostname === "accounts.tiny.com.br" ? 400 : 401 });
-      if (path === "/contatos" && method === "GET") return Response.json({ itens: contact ? [{ id: 11, cpfCnpj: testCommerceBilling.document }] : [] });
-      if (path === "/contatos" && method === "POST") { contact = true; return Response.json({ id: 11 }, { status: 201 }); }
+      if (path === "/contatos" && method === "GET") {
+        const data = { itens: contact && !options.hideContact ? [{ id: 11, cpfCnpj: testCommerceBilling.document }] : [] };
+        return Response.json(options.wrappedList ? { data } : data);
+      }
+      if (path === "/contatos/11" && method === "GET") {
+        if (options.failDetailOnce && !detailFailed) { detailFailed = true; return Response.json({ mensagem: "Indisponível" }, { status: 503 }); }
+        return Response.json({ id: 11, cpfCnpj: options.detailDocument ?? testCommerceBilling.document });
+      }
+      if (path === "/contatos" && method === "POST") {
+        if (contact) return Response.json({ mensagem: "Contato já cadastrado", detalhes: [{ campo: "cpfCnpj", mensagem: "Contato já existe" }, { campo: "idContatoExistente", mensagem: "11" }] }, { status: 409 });
+        contact = true; return Response.json({ id: 11 }, { status: 201 });
+      }
       if (path === "/pedidos" && method === "GET") return Response.json({ itens: externalOrder ? [{ id: 22 }] : [] });
       if (path === "/pedidos/22" && method === "GET") return Response.json({ id: 22, ecommerce: externalOrder?.ecommerce, cliente: { id: 11 }, valor: 28.9 });
       if (path === "/pedidos" && method === "POST") { if (!loseWithoutCreating) externalOrder = body; if (loseOrder || loseWithoutCreating) throw new Error("Simulated connection lost after submission"); return Response.json({ id: 22 }, { status: 201 }); }
@@ -99,6 +109,41 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
     expect(api.writes("/pedidos")[0].body).toMatchObject({ idContato: 11, valorFrete: 5, valorDesconto: 0.1, enderecoEntrega: { nomeDestinatario: testCommerceBilling.name, complemento: "A/C: Maria" }, pagamento: { formaRecebimento: { id: 101 } } });
     expect(api.writes("/pedidos/22/gerar-nota-fiscal")).toHaveLength(0);
     await processCommerceOlistOrder(tenantId, orderId); expect(api.writes("/pedidos")).toHaveLength(1);
+  });
+  it("links an existing billing customer without posting a duplicate, including wrapped lists", async () => {
+    const { tenantId, orderId } = await fixture(), api = provider({ existingContact: true, wrappedList: true });
+    await processCommerceOlistOrder(tenantId, orderId);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ customer_id: "11", sales_order_id: "22", status: "waiting" });
+    expect(api.writes("/contatos")).toHaveLength(0);
+    expect(api.writes("/pedidos")).toHaveLength(1);
+  });
+  it("recovers a 409 by verifying the existing contact, persists the link and completes the fiscal workflow once", async () => {
+    const { tenantId, orderId } = await fixture(), api = provider({ existingContact: true, hideContact: true });
+    await processCommerceOlistOrder(tenantId, orderId);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ customer_id: "11", sales_order_id: "22", status: "waiting", attempt_stage: null, last_error: null });
+    expect(api.calls.some(call => call.path === "/contatos/11" && call.method === "GET")).toBe(true);
+    expect((await getPool().query("select external_id,create_attempted from commerce_olist_customers where tenant_id=$1", [tenantId])).rows).toEqual([{ external_id: "11", create_attempted: false }]);
+    expect((await productionReady(tenantId, orderId)).status).toBe(200);
+    await processCommerceOlistOrder(tenantId, orderId, 6);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ invoice_id: "33", invoice_status: 6, expedition_id: "44", status: "done" });
+    await processCommerceOlistOrder(tenantId, orderId, 6);
+    for (const path of ["/contatos", "/pedidos", "/pedidos/22/gerar-nota-fiscal", "/notas/33/emitir", "/expedicao"]) expect(api.writes(path)).toHaveLength(1);
+  });
+  it("does not link a duplicate-contact ID belonging to a different billing document", async () => {
+    const { tenantId, orderId } = await fixture(), api = provider({ existingContact: true, hideContact: true, detailDocument: "11144477735" });
+    await processCommerceOlistOrder(tenantId, orderId);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ customer_id: null, sales_order_id: null, status: "review", error_code: "olist_review_required" });
+    expect(api.writes("/pedidos")).toHaveLength(0);
+    expect((await getPool().query("select external_id from commerce_olist_customers where tenant_id=$1", [tenantId])).rows[0].external_id).toBeNull();
+  });
+  it("retries a read failure after a definitively rejected creation without marking the mutation uncertain", async () => {
+    const { tenantId, orderId } = await fixture(), api = provider({ existingContact: true, hideContact: true, failDetailOnce: true });
+    await processCommerceOlistOrder(tenantId, orderId);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ status: "pending", attempt_stage: null, error_code: "olist_temporarily_unavailable" });
+    await queueCommerceOlistOrder(tenantId, orderId, actor);
+    await processCommerceOlistOrder(tenantId, orderId);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ customer_id: "11", sales_order_id: "22", status: "waiting" });
+    expect(api.writes("/pedidos")).toHaveLength(1);
   });
   it("only invoices after production completion and authorizes with email before real ERP dispatch", async () => {
     const { tenantId, orderId } = await fixture(), api = provider();

@@ -10,6 +10,7 @@ import type { CommerceOrder } from "@/repositories/commerce";
 import { OlistRequestError } from "@/services/olist/olist";
 import { commerceOlistConnection, commerceOlistRequest } from "./olist-client";
 import { isOlistReconnectRequired } from "@/lib/olist/oauth-errors";
+import { findCommerceOlistCustomer, recoverCommerceOlistCustomer, OlistCustomerReviewRequired, type CommerceOlistCustomerLookup } from "./olist-customer";
 
 class ReviewRequired extends CommerceError {}
 class RetryLater extends Error {}
@@ -82,24 +83,30 @@ export async function processCommerceOlistOrder(tenantId: string, orderId: strin
           try {
             const mapped = (await client.query("select external_id,create_attempted from commerce_olist_customers where tenant_id=$1 and document_hash=$2", [tenantId, hash])).rows[0];
             let externalId = id(mapped?.external_id);
+            let source = "saved_mapping";
             if (!externalId) {
-              const found = await request(`/contatos?${new URLSearchParams({ cpfCnpj: document, limit: "100", offset: "0" })}`);
-              const matches = rows(found).filter(row => String(row.cpfCnpj ?? "").replace(/\D/g, "") === document);
-              if (matches.length > 1) throw new ReviewRequired("Há mais de um contato Olist com o CPF/CNPJ de faturamento. Corrija a duplicidade antes de retomar.", 409);
-              externalId = id(matches[0]?.id);
+              const lookupLog = (details: CommerceOlistCustomerLookup) => console.info("Commerce Olist customer lookup completed.", { tenantId, orderId, debugId, ...details });
+              externalId = await findCommerceOlistCustomer(request, document, lookupLog);
+              source = "document_lookup";
               if (!externalId) {
                 if (job.attempt_stage || mapped?.create_attempted) throw uncertain();
                 await client.query("insert into commerce_olist_customers(tenant_id,document_hash,create_attempted) values($1,$2,true) on conflict(tenant_id,document_hash) do update set create_attempted=true", [tenantId, hash]);
-                try { externalId = id((await mutate("/contatos", buildCommerceOlistCustomer(order))).id); }
+                try { externalId = id((await mutate("/contatos", buildCommerceOlistCustomer(order))).id); source = "created"; }
                 catch (error) {
-                  if (error instanceof OlistRequestError && error.status >= 400 && error.status < 500) await client.query("update commerce_olist_customers set create_attempted=false where tenant_id=$1 and document_hash=$2", [tenantId, hash]);
-                  throw error;
+                  if (error instanceof OlistRequestError && error.status >= 400 && error.status < 500) {
+                    await client.query("update commerce_olist_customers set create_attempted=false where tenant_id=$1 and document_hash=$2", [tenantId, hash]);
+                    await client.query("update commerce_olist_orders set attempt_stage=null where tenant_id=$1 and order_id=$2", [tenantId, orderId]);
+                    attempted = false;
+                  }
+                  externalId = await recoverCommerceOlistCustomer(error, request, document, lookupLog);
+                  source = "verified_create_conflict";
                 }
               }
               if (!externalId) throw uncertain();
               await client.query("insert into commerce_olist_customers(tenant_id,document_hash,external_id) values($1,$2,$3) on conflict(tenant_id,document_hash) do update set external_id=excluded.external_id,create_attempted=false", [tenantId, hash, externalId]);
             }
             changes = { customer_id: externalId };
+            console.info("Commerce Olist customer resolved.", { tenantId, orderId, debugId, externalCustomerId: externalId, source });
           } finally { await client.query("delete from commerce_olist_leases where lock_key=$1 and token=$2", [customerLock, lockToken]); }
         } else if (stage === "sales_order") {
           const found = await request(`/pedidos?${new URLSearchParams({ numeroPedidoEcommerce: order.id, limit: "100", offset: "0" })}`);
@@ -200,7 +207,7 @@ export async function processCommerceOlistOrder(tenantId: string, orderId: strin
       } catch (error) {
         const reconnect = isOlistReconnectRequired(error instanceof OlistRequestError ? { status: error.status, message: error.message } : error instanceof Error ? error.message : error);
         const rejected = error instanceof OlistRequestError && error.status >= 400 && error.status < 500;
-        const review = error instanceof ReviewRequired || (attempted && stage !== "shipping" && !rejected && !(error instanceof CommerceError));
+        const review = error instanceof ReviewRequired || error instanceof OlistCustomerReviewRequired || (attempted && stage !== "shipping" && !rejected && !(error instanceof CommerceError));
         const retry = !reconnect && !review && (error instanceof OlistRequestError ? error.status >= 500 || error.status === 429 : !(error instanceof CommerceError));
         const code = reconnect ? "olist_oauth_invalid" : review ? "olist_review_required" : retry ? "olist_temporarily_unavailable" : "olist_data_required";
         const message = reconnect ? "Reconecte o Olist para continuar. As etapas concluídas foram preservadas." : review && !(error instanceof ReviewRequired) ? uncertain().message : error instanceof Error ? error.message.slice(0, 600) : "Não foi possível concluir esta etapa Olist.";
@@ -209,7 +216,9 @@ export async function processCommerceOlistOrder(tenantId: string, orderId: strin
           next_attempt_at=now()+interval '5 minutes',updated_at=now() where tenant_id=$1 and order_id=$2 and status<>'stopped'`,
         [tenantId, orderId, review ? "review" : retry ? "pending" : "blocked", code, message, debugId, rejected || !attempted || stage === "shipping"]);
         await client.query("insert into commerce_order_events(tenant_id,order_id,type,metadata) values($1,$2,'olist.error',$3)", [tenantId, orderId, JSON.stringify({ stage, code, debugId, note: message })]);
-        console.error("Commerce Olist stage failed.", { tenantId, orderId, stage, debugId, code, httpStatus: error instanceof OlistRequestError ? error.status : undefined, uncertainMutation: review });
+        const validationFields = error instanceof OlistRequestError && Array.isArray(record(error.data).detalhes)
+          ? (record(error.data).detalhes as unknown[]).map(item => record(item).campo).filter(value => typeof value === "string") : undefined;
+        console.error("Commerce Olist stage failed.", { tenantId, orderId, stage, debugId, code, httpStatus: error instanceof OlistRequestError ? error.status : undefined, uncertainMutation: review, errorType: error instanceof Error ? error.name : "Unknown", validationFields });
         return;
       }
     }

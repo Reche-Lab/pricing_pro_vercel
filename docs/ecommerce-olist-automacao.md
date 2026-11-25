@@ -69,9 +69,19 @@ As opções de desativar faturamento/expedição automática permitem operação
 - Cada criação registra uma intenção antes da chamada. Timeout, resposta sem ID ou falha ao persistir retorno bloqueiam repetição cega. A retomada consulta documento, referência do e-commerce, nota vinculada e expedição existente antes de continuar.
 - Uma intenção cujo registro ainda não é encontrado permanece **Revisão necessária**. Não limpe marcadores ou envie POST novamente sem conferência técnica: o ERP pode ter executado a operação sem a resposta ter chegado.
 - Falhas de consulta e respostas temporárias rejeitadas são retomadas pelo agendador; falhas de dados/permissão exigem correção. `invalid_grant` preserva progresso e oferece reconexão.
+- A consulta de contatos compara o CPF/CNPJ normalizado, tenta também a versão formatada quando necessário e verifica a paginação. Se a listagem omitir o documento, consulta o detalhe antes de vincular. Formatos inesperados, resultados incompletos ou contatos ambíguos não liberam criação automática.
+- Um conflito HTTP 409 com `idContatoExistente` permite recuperar o contato somente após consultar `/contatos/{id}` e confirmar o CPF/CNPJ de faturamento. Sem esse ID, a consulta por documento é repetida uma vez. O vínculo fica persistido por tenant/documento, sem sobrescrever o cadastro do ERP ou repetir a criação do pedido. Uma falha temporária nessa conferência não transforma uma criação explicitamente recusada em mutação incerta.
 - Estorno ou exclusão administrativa interrompe novas etapas; não cancela documentos, pagamentos ou expedições já criados. Uma chamada externa já em andamento pode terminar: sua referência deve ser revisada antes de estornar/cancelar.
 - Não damos baixa financeira, não lançamos contas/estoque em duplicidade e não compramos etiquetas neste módulo. Configurações automáticas do próprio ERP devem ser revisadas para evitar duplicidade financeira. A emissão de etiquetas da loja e a integração automática com seu rastreio continuam uma entrega própria; nesta entrega o rastreio pode ser informado pela equipe.
 - O agrupamento é criado em `/expedicao`; não concluímos automaticamente o despacho físico nem utilizamos One Step Shipping, evitando compra/postagem involuntária.
+
+### Retomar pedidos bloqueados por cliente já existente
+
+Após publicar a correção, abra **Loja online > Pedidos**, selecione o pedido e use **Olist > Conferir e retomar**. O deploy não desbloqueia automaticamente pedidos que exigiam revisão. Não é necessário excluir o cliente, refazer o pagamento nem limpar IDs no banco.
+
+O pedido de venda é criado após resolver o cliente. A geração e autorização da NF-e continuam dependendo de **Concluir produção** e das configurações de automação. A expedição depende da autorização fiscal e não se aplica à retirada.
+
+Os logs `Commerce Olist customer lookup completed` informam formato de busca, paginação e contagens, sem CPF/CNPJ ou e-mail. `Commerce Olist customer resolved` registra o ID e a origem do vínculo (`saved_mapping`, `document_lookup`, `created` ou `verified_create_conflict`). Falhas do worker incluem tipo de erro e campos recusados pelo Olist.
 
 ## Verificação local
 
