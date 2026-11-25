@@ -16,7 +16,7 @@ function loadImage(url: string): Promise<HTMLImageElement | null> {
   });
 }
 
-export async function drawProductMockup(canvas: HTMLCanvasElement, sourceUrl: string, geometry: PrintGeometry, margins: PrintMargins, model: ProductMockup, side: "front" | "back", frame?: ArtworkFrame, highResolution = false) {
+export async function drawProductMockup(canvas: HTMLCanvasElement, sourceUrl: string, geometry: PrintGeometry, margins: PrintMargins, model: ProductMockup, side: "front" | "back", frame?: ArtworkFrame, highResolution = false, thumbnailSize?: number) {
   const face = model[side];
   const loaded = await loadImage(sourceUrl);
   const base = await loadImage(face.baseUrl), mask = await loadImage(face.maskUrl), overlay = geometry.shape === "circle" && side === "front" ? null : await loadImage(face.overlayUrl);
@@ -30,7 +30,7 @@ export async function drawProductMockup(canvas: HTMLCanvasElement, sourceUrl: st
     drawArtworkFrame(framedContext, loaded, loaded.width, loaded.height, framed.width, framed.height, frame); source = framed;
   }
   const aspect = base ? base.width / base.height : geometry.widthMm / geometry.heightMm;
-  const resolution = highResolution ? 640 : frame ? 256 : 640;
+  const resolution = thumbnailSize ? Math.max(80, Math.min(256, Math.round(thumbnailSize))) : highResolution ? 640 : frame ? 256 : 640;
   canvas.width = Math.round(resolution * Math.min(1, aspect)); canvas.height = Math.round(resolution / Math.max(1, aspect));
   const context = canvas.getContext("2d")!; context.clearRect(0, 0, canvas.width, canvas.height);
   // Front photo highlights create a white rim. The artwork itself defines the front edge.

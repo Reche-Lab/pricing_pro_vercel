@@ -22,6 +22,7 @@ export type StoreArtwork = {
   product_id: string;
   file_name: string;
   approved_at: string | null;
+  preview_approved?: boolean;
   initial_crop?: LibraryCrop | null;
   editing_allowed?: boolean;
   crop?: {

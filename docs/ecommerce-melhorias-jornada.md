@@ -74,6 +74,14 @@ Migration: **0075_commerce_buyer_journey.sql**. Aplicar no Supabase correto **an
 6. Use **Solicitar orçamento** ou **Gerar orçamento sem comprar** no carrinho. Monte os produtos sem login e avance para **Dados e entrega**; nesse momento, valide o e-mail se necessário. Confira os dados, inclua frete se desejar, revise e salve para acessar o PDF. Nenhuma arte ou pagamento é obrigatório para o orçamento.
 7. Em **Minha conta → Meus orçamentos** (também pelo ícone de documento do cabeçalho), baixe o PDF e continue uma compra. O PDF mantém preços, benefício por arte e estimativas registrados. Ao recuperar o carrinho, revalidamos produtos/quantidades e pedimos nova conferência de preços/frete. Artes continuam vinculadas somente quando pertencem à sessão atual e não estão congeladas em outro pedido; em outra sessão, é necessário anexá-las novamente.
 
+## Miniaturas e validade do orçamento
+
+Carrinho, resumo de finalização, orçamento em edição e orçamento salvo usam a mesma prioridade de miniatura: frente do produto com a arte aprovada, arte original sem aprovação e imagem de exemplo do produto. Cada grupo tem sua própria imagem. Aprovações incompatíveis com a geometria atual não geram simulação aprovada. Uma falha no modelo ou no arquivo recua para a alternativa disponível sem impedir a revisão dos valores.
+
+As imagens privadas exigem a sessão do comprador. No orçamento salvo, o vínculo de tenant, cliente, orçamento, sessão de origem e produto permite a consulta também após um novo login, sem transferir permissão de edição da arte. Caminhos do Storage não são enviados nas informações de miniatura. O servidor entrega WebP limitado a 384 px; o navegador carrega sob demanda e desenha a miniatura aprovada em resolução reduzida.
+
+Novos orçamentos e pedidos pendentes convertidos em orçamento gravam explicitamente validade de **três dias**, mesmo quando o banco possui outro padrão. Isso não prolonga os 15 minutos da consulta temporária de frete usada para salvar uma seleção: a interface distingue os dois prazos e a compra continua exigindo revalidação. Não há nova migration para esta alteração.
+
 ## Segurança e testes
 
 - Orçamentos não possuem links públicos: listagem, detalhe e PDF exigem a sessão autenticada do comprador e o tenant correto.

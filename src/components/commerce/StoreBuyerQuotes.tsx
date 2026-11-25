@@ -15,11 +15,13 @@ import { StoreBuyerQuoteList } from "./StoreBuyerQuoteList";
 import styles from "./store.module.css";
 import q from "./quote.module.css";
 import { useStoreAnalytics } from "./StoreAnalytics";
+import type { StoreItemPreview } from "@/domain/commerce/item-preview";
+import { StoreItemThumbnail } from "./StoreItemThumbnail";
 
 export function StoreBuyerQuotes({ api, base, quoteId, revision, hasCart, onRestored }: { api: string; base: string; quoteId?: string; revision: number; hasCart: boolean; onRestored: (mode: "quote" | "purchase") => Promise<void> }) {
   const analytics = useStoreAnalytics();
   const [quotes, setQuotes] = useState<Awaited<ReturnType<typeof listBuyerQuotes>>>([]);
-  const [quote, setQuote] = useState<Awaited<ReturnType<typeof getBuyerQuote>> | null>(null);
+  const [quote, setQuote] = useState<(Awaited<ReturnType<typeof getBuyerQuote>> & { itemPreviews?: Record<string, StoreItemPreview> }) | null>(null);
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [intent, setIntent] = useState<"quote" | "purchase" | null>(null), [replaceConfirmed, setReplaceConfirmed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -42,7 +44,7 @@ export function StoreBuyerQuotes({ api, base, quoteId, revision, hasCart, onRest
       <div className={q.layout}>
         <section className={q.items} aria-label="Itens do orçamento salvo">
           <div><h2 className="font-semibold">Orçamento {quote.id.slice(0, 8).toUpperCase()}</h2><p className={q.muted}>Criado em {new Date(quote.created_at).toLocaleDateString("pt-BR")} · Válido até {new Date(quote.valid_until).toLocaleDateString("pt-BR")}</p></div>
-          {quote.snapshot.items.map(item => <article className={q.savedRow} key={item.id}><div><strong>{item.name}</strong><small>{item.quantity} un. × {storeMoney(item.unitCents)}{item.artworkName ? ` · ${item.artworkName}` : ""}</small></div><strong>{storeMoney(item.totalCents)}</strong></article>)}
+          {quote.snapshot.items.map(item => <article className={q.savedRow} key={item.id}>{quote.itemPreviews?.[item.id] ? <StoreItemThumbnail name={item.name} preview={quote.itemPreviews[item.id]} api={api} quoteId={quote.id}/> : null}<div><strong>{item.name}</strong><small>{item.quantity} un. × {storeMoney(item.unitCents)}{item.artworkName ? ` · ${item.artworkName}` : ""}</small></div><strong>{storeMoney(item.totalCents)}</strong></article>)}
           <details className={q.details}><summary><UserRound size={17}/>Dados e endereço deste orçamento</summary><StoreOrderContactDetails billing={{ ...quote.contact.billing, personType: quote.contact.billing.document.length === 14 ? "J" : "F" }} address={quote.snapshot.delivery === "pickup" ? null : quote.contact.address} same={quote.contact.deliveryAddressSameAsBilling} shippingOption={quote.snapshot.shippingOption}/>{quote.snapshot.delivery === "not_included" ? <p className={q.muted}>O endereço foi registrado, mas o frete não está incluído neste orçamento.</p> : null}</details>
           <div className={q.actions}><button className={styles.secondary} type="button" disabled={busy} onClick={() => prepare("quote")}><Copy size={17}/>Editar uma cópia</button><button className={styles.secondary} type="button" disabled={busy} onClick={() => prepare("purchase")}><ArrowRight size={17}/>Continuar compra com estes produtos</button></div>
           <p className={q.muted}>Editar uma cópia preserva este documento. Antes de comprar, você poderá revisar os preços atuais, o frete e as artes.</p>

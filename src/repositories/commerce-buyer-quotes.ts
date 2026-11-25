@@ -70,8 +70,8 @@ export async function createBuyerQuote(store: CommerceStore, session: BuyerSessi
       production: deliveryEstimate(current.cart.reduce((sum, line) => sum + line.quantity, 0), input.delivery === "pickup" ? 0 : option?.transitDays ?? null, lockedStore.settings.production), storeName: lockedStore.settings.name, artworkDiscountCents: calculated.artworkDiscountCents,
       artworkBenefits: quoteArtworkBenefits(current.cart, products, calculated) };
     const contact: QuoteContact = { billing: input.billing, address: { ...address, document: address.document || input.billing.document }, deliveryAddressSameAsBilling: input.deliveryAddressSameAsBilling };
-    const result = await client.query<{ id: string }>(`insert into commerce_buyer_quotes(tenant_id,customer_id,session_id,request_id,request_hash,snapshot,contact_encrypted,subtotal_cents,shipping_cents,total_cents)
-      values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) on conflict(tenant_id,customer_id,request_id) do nothing returning id`, [store.tenant_id, customerId, session.id, input.requestId, requestHash, JSON.stringify(snapshot), encryptTenantSecret(contact), calculated.baseSubtotalCents, shipping, total]);
+    const result = await client.query<{ id: string }>(`insert into commerce_buyer_quotes(tenant_id,customer_id,session_id,request_id,request_hash,snapshot,contact_encrypted,subtotal_cents,shipping_cents,total_cents,valid_until)
+      values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()+interval '3 days') on conflict(tenant_id,customer_id,request_id) do nothing returning id`, [store.tenant_id, customerId, session.id, input.requestId, requestHash, JSON.stringify(snapshot), encryptTenantSecret(contact), calculated.baseSubtotalCents, shipping, total]);
     if (!result.rows[0]) {
       const duplicate = (await client.query<{ id: string; request_hash: string }>("select id,request_hash from commerce_buyer_quotes where tenant_id=$1 and customer_id=$2 and request_id=$3", [store.tenant_id, customerId, input.requestId])).rows[0];
       if (!duplicate || duplicate.request_hash !== requestHash) throw new CommerceError("Solicitação duplicada com outros dados. Reabra a página antes de continuar.", 409);

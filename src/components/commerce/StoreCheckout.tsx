@@ -2,7 +2,7 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, Copy, Loader2, MapPin, Search, Truck, Save, RefreshCw } from "lucide-react";
-import type { cartView } from "@/repositories/commerce";
+import type { cartView, publicCommerceProduct } from "@/repositories/commerce";
 import { addressSchema, billingSchema, checkoutSchema, type StoreSettings } from "@/domain/commerce/schemas";
 import { formatCheckoutDocument, formatCheckoutPhone } from "@/domain/commerce/checkout";
 import { fetchCepAddress, formatCep, normalizeCep } from "@/lib/cep";
@@ -22,6 +22,8 @@ import { StoreQuoteSummary } from "./StoreQuoteSummary";
 import q from "./quote.module.css";
 import { useStoreAnalytics } from "./StoreAnalytics";
 import { analyticsCommercePayload } from "@/domain/commerce/analytics";
+import { StoreItemThumbnail } from "./StoreItemThumbnail";
+import { cartItemPreview } from "@/domain/commerce/item-preview";
 
 function CheckoutSummary({ quoting, total, totalLabel, children, action }: { quoting: boolean; total: number; totalLabel: string; children: React.ReactNode; action: React.ReactNode }) {
   return quoting ? <StoreQuoteSummary totalCents={total} totalLabel={totalLabel} action={action}>{children}</StoreQuoteSummary> : <aside className={styles.summary}><h2 className="mb-4 text-lg font-semibold">4. Revise seu pedido</h2>{children}{action}</aside>;
@@ -111,8 +113,9 @@ function ContactFields({ value, onChange, billing, errors, onBusyChange }: {
   </div>;
 }
 
-export function StoreCheckout({ cart, settings, base, disabled, onSubmit, preview = false, api, artworkIssues = [], intent = "purchase", quoteBenefits = [], onQuoteStepChange }: {
+export function StoreCheckout({ cart, products = [], settings, base, disabled, onSubmit, preview = false, api, artworkIssues = [], intent = "purchase", quoteBenefits = [], onQuoteStepChange }: {
   cart: Cart; settings: StoreSettings; base: string; disabled: boolean; onSubmit: (input: unknown) => Promise<void>; preview?: boolean; api?: string;
+  products?: ReturnType<typeof publicCommerceProduct>[];
   artworkIssues?: { lineId: string; name: string; artworkName: string; reason: string }[];
   intent?: "purchase" | "quote";
   quoteBenefits?: QuoteArtworkBenefit[];
@@ -269,7 +272,7 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
             <StoreShippingOptions options={freight?.key === freightKey ? freight.options : settings.deliveryEnabled ? [{ id: "delivery", name: settings.deliveryDescription || "Entrega da loja", priceCents: settings.deliveryCents, transitDays: settings.deliveryTransitDays }] : []}
               selectedId={serviceId} quantity={cart.lines.reduce((sum, line) => sum + line.quantity, 0)} production={settings.production} disabled={shippingBusy}
               onSelect={option => { setServiceId(option.id); if (quoting) setIncludeQuoteShipping(true); }}/>
-            {freight?.key === freightKey ? <p className={styles.muted}>Cotação válida por 15 minutos. Mudanças no carrinho ou CEP exigem novo cálculo.</p> : null}
+            {freight?.key === freightKey ? <p className={styles.muted}>Esta consulta de frete precisa ser recalculada após 15 minutos antes de confirmar. Mudanças no carrinho ou CEP também exigem novo cálculo.</p> : null}
           </div> : null}
         </> : null}
       </section>
@@ -284,12 +287,18 @@ export function StoreCheckout({ cart, settings, base, disabled, onSubmit, previe
       </section> : null}
     </div>
     <CheckoutSummary quoting={quoting} total={(cart.calculation?.totalCents ?? 0) + shipping} totalLabel={quoting && !includeQuoteShipping ? "Sem frete" : missingFreight ? "Frete a calcular" : "Total"} action={<button className={`${styles.primary} w-full`} disabled={!persistence.ready || submitting || disabled || shippingBusy || missingFreight || billingCepBusy || deliveryCepBusy || (!quoting && !accepted) || !cart.calculation || (!quoting && !cart.payments.mp_enabled && !cart.payments.manual_enabled)}>{submitting ? <Loader2 className="animate-spin" size={17}/> : <Check size={17}/>} {submitting ? "Conferindo e salvando…" : quoting ? quoteReview ? "Salvar orçamento e acessar PDF" : "Revisar orçamento" : preview ? "Concluir simulação" : "Confirmar pedido"}</button>}>
-      {cart.calculation?.items.map(item => <div className="mb-3 flex justify-between gap-3 text-sm" key={item.id}><span>{item.quantity} × {item.name}<small className="block text-zinc-500">{item.artworkName}</small></span><span>{storeMoney(item.totalCents)}</span></div>)}
+      {cart.calculation?.items.map(item => {
+        const product = products.find(p => p.id === item.productId), line = cart.lines.find(l => l.id === item.id);
+        return <div className="mb-3 flex min-w-0 items-center gap-3 text-sm" key={item.id}>
+          {product ? <StoreItemThumbnail name={item.name} size={48} api={api ?? ""} preview={cartItemPreview(product, cart.artworks.find(art => art.id === line?.artworkId))}/> : null}
+          <span className="min-w-0 flex-1 break-words">{item.quantity} × {item.name}<small className="block text-zinc-500">{item.artworkName}</small></span><span className="shrink-0">{storeMoney(item.totalCents)}</span>
+        </div>;
+      })}
       <StoreOrderSummary subtotal={cart.calculation?.totalCents ?? 0} shipping={shipping} shippingPending={Boolean(missingFreight)} shippingExcluded={quoting && !includeQuoteShipping} artworkDiscountCents={cart.calculation?.artworkDiscountCents}/>
       {quoting ? <StoreQuoteArtworkBenefit benefits={quoteBenefits} storeName={settings.name}/> : null}
       <DeliveryTimeline quantity={cart.lines.reduce((sum, line) => sum + line.quantity, 0)} settings={settings.production} transportDays={quoting && !includeQuoteShipping ? null : selectedFreight?.transitDays ?? (serviceId === "delivery" ? settings.deliveryTransitDays : null)} pickup={(!quoting || includeQuoteShipping) && delivery === "pickup"}/>
       {missingFreight ? <p role="status" className="mt-2 text-sm text-amber-700">Frete a calcular. O total acima ainda não inclui a entrega.</p> : null}
-      {quoting ? <p className="my-5 text-sm">{includeQuoteShipping ? "Frete incluído conforme sua seleção." : "Frete não incluído no total."} Preços e frete serão conferidos novamente antes da compra.</p> : <label className="my-5 flex items-start gap-3"><input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} required/><span>Li e aceito as <Link target="_blank" href={`${base}/condicoes`} className="underline">condições de compra</Link>.</span></label>}
+      {quoting ? <p className="my-5 text-sm"><strong>Validade do orçamento: 3 dias após salvar.</strong> {includeQuoteShipping ? "Frete incluído conforme sua seleção." : "Frete não incluído no total."} Preços e frete serão conferidos novamente antes da compra.</p> : <label className="my-5 flex items-start gap-3"><input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} required/><span>Li e aceito as <Link target="_blank" href={`${base}/condicoes`} className="underline">condições de compra</Link>.</span></label>}
       <p className="mt-3 text-sm text-zinc-500">{quoting ? "Nenhum pagamento ou pedido será criado. O orçamento fica disponível somente na sua conta." : preview ? "Prévia privada. Nenhum pedido real será criado." : cart.payments.payment_environment === "test" ? "Pedido de teste: utilize apenas os dados e cartões de teste do Mercado Pago. Não haverá liberação de produção ou envio." : provider === "mercado_pago" ? "Após confirmar, escolha como pagar no detalhe do pedido." : "A produção começa após pagamento e aprovação das artes."}</p>
     </CheckoutSummary>
   </form>;

@@ -424,7 +424,7 @@ export async function cartView(store: CommerceStore, session: BuyerSession) {
   ).rows[0];
   const artworks = (
     await getPool().query(
-      `select id,product_id,file_name,crop,initial_crop,editing_allowed,approved_at::text from commerce_artworks where tenant_id=$1 and session_id=$2 order by created_at`,
+      `select id,product_id,file_name,crop,initial_crop,editing_allowed,approved_at::text,prepared_path is not null as prepared from commerce_artworks where tenant_id=$1 and session_id=$2 order by created_at`,
       [store.tenant_id, session.id],
     )
   ).rows;
@@ -442,7 +442,10 @@ export async function cartView(store: CommerceStore, session: BuyerSession) {
     revision: session.revision,
     calculation,
     customer,
-    artworks,
+    artworks: artworks.map(art => {
+      const product = products.find(item => item.id === art.product_id);
+      return { ...art, preview_approved: Boolean(art.prepared && art.approved_at && product?.geometry && matchesOrderGeometryHash(product, art.crop?.geometryHash)) };
+    }),
     payments: payments ?? {
       manual_enabled: false,
       mp_enabled: false,

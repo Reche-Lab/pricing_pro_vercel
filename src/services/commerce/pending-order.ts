@@ -55,8 +55,8 @@ export async function changePendingOrder(tenantId: string, session: BuyerSession
         artworkDiscountCents: discount, artworkBenefits: quoteArtworkBenefits(order.snapshot.lines, order.snapshot.products, { items: order.snapshot.items }) };
       const billing = billingSchema.strip().parse(order.snapshot.billing);
       const contact = { billing, address: addressSchema.strip().parse(order.snapshot.address ?? { ...billing, attention: "" }), deliveryAddressSameAsBilling: order.snapshot.deliveryAddressSameAsBilling ?? true };
-      await client.query(`insert into commerce_buyer_quotes(id,tenant_id,customer_id,session_id,request_id,request_hash,snapshot,contact_encrypted,subtotal_cents,shipping_cents,total_cents,environment)
-        values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      await client.query(`insert into commerce_buyer_quotes(id,tenant_id,customer_id,session_id,request_id,request_hash,snapshot,contact_encrypted,subtotal_cents,shipping_cents,total_cents,environment,valid_until)
+        values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now()+interval '3 days')`,
       [quoteId, tenantId, session.customer_id, current.id, order.id, `order:${order.id}`, JSON.stringify(snapshot), encryptTenantSecret(contact), order.subtotal_cents + discount, order.shipping_cents, order.total_cents, order.payment_environment ?? "production"]);
     }
     await client.query("update commerce_orders set cancelled_at=now(),cancellation_reason=$3,converted_quote_id=$4::uuid,updated_at=now() where tenant_id=$1 and id=$2", [tenantId, order.id, input.action, quoteId]);

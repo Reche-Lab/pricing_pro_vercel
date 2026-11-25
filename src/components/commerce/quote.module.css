@@ -68,6 +68,7 @@
 .productTotal { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .line { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-block: 14px; margin-top: 12px; border-top: 1px solid var(--line); }
 .line > div { min-width: 0; }
+.lineInfo{display:flex;align-items:center;gap:12px;flex:1 1 240px;min-width:0}.lineInfo>div{flex:1;min-width:0;overflow-wrap:anywhere}
 .line strong { font-size: 13px; }
 .line small { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
 .lineTools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -104,9 +105,9 @@
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; font-size: 12px; border: 1px solid var(--line); border-radius: 5px; color: var(--highlight); background: var(--soft); }
 .savedHeader { margin-bottom: 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .savedHeader p { color: var(--muted); font-size: 12px; }
-.savedRow { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding-block: 16px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.savedRow { display: flex; align-items:center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding-block: 16px; border-bottom: 1px solid var(--line); font-size: 14px; }
 .savedRow small { display: block; color: var(--muted); margin-top: 4px; }
-.savedRow > div { min-width: 0; overflow-wrap: anywhere; }
+.savedRow > div { flex:1; min-width: 0; overflow-wrap: anywhere; }
 .actions { display: grid; gap: 10px; margin-block: 14px; }
 .confirmation { display: grid; gap: 16px; font-size: 14px; line-height: 1.7; }
 .confirmation label { display: flex; align-items: flex-start; gap: 10px; }

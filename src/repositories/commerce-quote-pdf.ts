@@ -23,7 +23,7 @@ export async function buyerQuotePdfVisuals(tenantId: string, customerId: string,
       print_shape_rotation_degrees: g ? String(g.rotationDegrees) : null, print_bleed_mm: m ? String(m.bleedMm) : null, print_safe_margin_mm: m ? String(m.safeMarginMm) : null };
     const artworks: QuoteItemArtworkRow[] = row.artwork_id ? [{ id: row.artwork_id, quote_item_id: row.item_id, artwork_name: null,
       file_name: row.file_name || "arte.png", mime_type: "image/png", file_size: 0, data_url: null, storage_path: row.storage_path,
-      prepared_storage_path: row.prepared_path, approval_status: approved ? "approved" : "pending", is_active: true,
+      prepared_storage_path: row.prepared_path, approval_status: approved ? "approved" : "pending", approved_at: row.approved_at, is_active: true,
     }] : [];
     return [row.item_id, { ...geometry, product_image_url: p?.imageUrl, product_mockup: p?.artworkOptions?.mockup, artworks }];
   }));

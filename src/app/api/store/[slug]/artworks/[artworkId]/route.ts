@@ -1,4 +1,5 @@
 import { z } from "zod";
+import sharp from "sharp";
 import { getPool } from "@/lib/db/client";
 import {
   downloadArtworkObject,
@@ -44,10 +45,13 @@ export async function GET(request: Request, { params }: Params) {
     if (!z.string().uuid().safeParse(artworkId).success)
       throw new CommerceError("Arte não encontrada.", 404);
     const { store, session } = await buyerContext(slug, false, true);
+    const quote = z.string().uuid().safeParse(new URL(request.url).searchParams.get("quoteId"));
     const row = (
       await getPool().query(
-        `select storage_path,prepared_path from commerce_artworks a where a.tenant_id=$1 and a.id=$2 and (a.session_id=$3 or exists(select 1 from commerce_orders o where o.tenant_id=a.tenant_id and o.customer_id=$4 and exists(select 1 from jsonb_array_elements(o.snapshot->'lines') l where l->>'artworkId'=a.id::text)))`,
-        [store.tenant_id, artworkId, session.id, session.customer_id],
+        `select storage_path,prepared_path from commerce_artworks a where a.tenant_id=$1 and a.id=$2 and (a.session_id=$3 or exists(select 1 from commerce_orders o where o.tenant_id=a.tenant_id and o.customer_id=$4 and exists(select 1 from jsonb_array_elements(o.snapshot->'lines') l where l->>'artworkId'=a.id::text)) or exists(
+          select 1 from commerce_buyer_quotes q where q.tenant_id=a.tenant_id and q.customer_id=$4 and q.session_id=a.session_id and q.id=$5
+          and exists(select 1 from jsonb_array_elements(q.snapshot->'lines') l where l->>'artworkId'=a.id::text and l->>'productId'=a.product_id::text)))`,
+        [store.tenant_id, artworkId, session.id, session.customer_id, quote.success ? quote.data : null],
       )
     ).rows[0];
     if (!row) throw new CommerceError("Arte não encontrada.", 404);
@@ -57,9 +61,11 @@ export async function GET(request: Request, { params }: Params) {
         : row.storage_path,
     );
     if (!file) throw new CommerceError("Arquivo indisponível.", 404);
-    return new Response(Buffer.from(file.bytes), {
+    const thumbnail = new URL(request.url).searchParams.get("thumbnail") === "1";
+    const bytes = thumbnail ? await sharp(Buffer.from(file.bytes), { limitInputPixels: 20_000_000, animated: false }).rotate().resize({ width: 384, height: 384, fit: "inside", withoutEnlargement: true }).webp({ quality: 85 }).toBuffer() : Buffer.from(file.bytes);
+    return new Response(bytes, {
       headers: {
-        "content-type": file.contentType,
+        "content-type": thumbnail ? "image/webp" : file.contentType,
         "cache-control": "private, no-store",
         "x-content-type-options": "nosniff",
         "content-security-policy": "default-src 'none'",

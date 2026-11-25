@@ -1,9 +1,16 @@
 import { z } from "zod";
 import { deleteBuyerQuote, getBuyerQuote, restoreBuyerQuote } from "@/repositories/commerce-buyer-quotes";
 import { buyerContext, checkCommerceOrigin, commerceFailure, commerceJson, readCommerceBody } from "@/services/commerce/http";
+import { buyerQuoteItemPreviews } from "@/repositories/commerce-quote-previews";
 type Context = { params: Promise<{ slug: string; quoteId: string }> };
 export async function GET(_request: Request, { params }: Context) {
-  try { const { slug, quoteId } = await params; const id = z.string().uuid().parse(quoteId); const { store, session } = await buyerContext(slug, false, true); return commerceJson({ quote: await getBuyerQuote(store.tenant_id, session, id) }); }
+  try {
+    const { slug, quoteId } = await params; const id = z.string().uuid().parse(quoteId);
+    const { store, session } = await buyerContext(slug, false, true);
+    const quote = await getBuyerQuote(store.tenant_id, session, id);
+    const itemPreviews = await buyerQuoteItemPreviews(store.tenant_id, session.customer_id!, id);
+    return commerceJson({ quote: { ...quote, itemPreviews } });
+  }
   catch (error) { return commerceFailure(error, "buyer.quotes.read"); }
 }
 export async function POST(request: Request, { params }: Context) {

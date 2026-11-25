@@ -70,6 +70,8 @@ import { findCommerceProduct } from "@/domain/commerce/product-urls";
 import { quantitySelection } from "@/domain/commerce/quantity-pricing";
 import { StoreQuantityPricing, StoreProductQuestions } from "./StoreQuantityPricing";
 import { StoreQuoteOverview } from "./StoreQuoteOverview";
+import { StoreItemThumbnail } from "./StoreItemThumbnail";
+import { cartItemPreview } from "@/domain/commerce/item-preview";
 import { StoreAnalyticsConsent, StoreAnalyticsProvider, useStoreAnalytics } from "./StoreAnalytics";
 import { StoreAnalyticsScreen } from "./StoreAnalyticsScreen";
 import { analyticsCartChanges, analyticsCommercePayload, type AnalyticsSettings } from "@/domain/commerce/analytics";
@@ -437,11 +439,7 @@ function StorefrontContent({
                       <div key={line.id} id={`item-${line.id}`} tabIndex={-1} className={`${styles.line} scroll-mt-24 ${focusedItem === line.id ? "rounded-md ring-2 ring-amber-400 ring-offset-4" : ""}`}>
                         <div className="flex gap-4">
                           {product ? (
-                            <img
-                              alt={product.name}
-                              src={product.imageUrl}
-                              className={`${styles.productThumbnail} h-20 w-20 shrink-0 rounded-md object-contain`}
-                            />
+                            <StoreItemThumbnail name={product.name} api={api} size={80} preview={cartItemPreview(product, cart.artworks.find(art => art.id === line.artworkId))}/>
                           ) : null}
                           <div className="min-w-0 flex-1">
                             <h2 className="font-semibold">
@@ -568,7 +566,7 @@ function StorefrontContent({
             )}
           </>
         ) : null}
-        {view === "orcamento" && !quoteDetails ? cart ? <StoreQuoteOverview cart={cart} products={products} base={base} storeName={settings.name} busy={busy || paused || Boolean(cart.pendingOrder)} onUpdate={update} renderArtwork={(line, disabled) => {
+        {view === "orcamento" && !quoteDetails ? cart ? <StoreQuoteOverview cart={cart} products={products} base={base} api={api} storeName={settings.name} busy={busy || paused || Boolean(cart.pendingOrder)} onUpdate={update} renderArtwork={(line, disabled) => {
           const product = products.find(item => item.id === line.productId);
           return product ? <ArtworkTools slug={slug} storeName={settings.name} product={product} disabled={disabled} libraryEnabled={libraryEnabled} pricingLines={cart.lines} benefitContext="cart" preparation={line.preparation ?? "customer"} artwork={cart.artworks.find(art => art.id === line.artworkId)} artworks={cart.artworks.filter(art => art.product_id === product.id)} onRefresh={refresh} onPreparationChange={preparation => update(cart.lines.map(item => item.id === line.id ? { ...item, preparation } : item))} onSelect={(id, title) => update(cart.lines.map(item => item.id === line.id ? { ...item, artworkId: id, ...(title ? { artworkName: title, preparation: "customer" as const } : {}) } : item))}/>: null;
         }}/> : <p role="status">Recuperando seu orçamento…</p> : null}
@@ -594,6 +592,7 @@ function StorefrontContent({
               />
             ) : (
               <Checkout
+                products={products}
                 intent={view === "orcamento" ? "quote" : "purchase"}
                 onQuoteStepChange={setQuoteStep}
                 quoteBenefits={quoteDetails ? quoteArtworkBenefits(cart.lines, products, cart.calculation) : []}
@@ -1060,6 +1059,7 @@ function PreviewCheckout({
         </p>
       ) : null}
       <Checkout
+        products={products}
         cart={cart}
         api={`/api${base}`}
         settings={settings}
