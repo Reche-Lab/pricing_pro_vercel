@@ -41,7 +41,9 @@ export const publicPriceMoney = (cents: number) => money.format(cents / 100);
 export function quantityPriceDescription(product: { personalized?: boolean; quantityPricing?: PublicQuantityPricing }) {
   const pricing = product.quantityPricing;
   if (!pricing) return "";
-  const best = pricing.bestPrice, artwork = product.personalized ? " com uma mesma arte" : "";
-  const discount = best.discountPercent > 0 ? ` Até ${best.discountPercent}% de economia por quantidade.` : "";
-  return `A partir de ${publicPriceMoney(best.unitCents)}/un. em ${best.quantity.toLocaleString("pt-BR")} unidades${artwork}.${discount} Compra mínima: ${pricing.minimumPurchase.quantity.toLocaleString("pt-BR")} un. por ${publicPriceMoney(pricing.minimumPurchase.totalCents)}. Frete à parte.`;
+  const discount = pricing.bestPrice.discountPercent > 0
+    ? `Desconto progressivo por quantidade: até ${pricing.bestPrice.discountPercent}% de desconto, dependendo da quantidade selecionada.`
+    : "Confira os preços para a quantidade desejada.";
+  const artwork = product.personalized ? " Para produtos personalizados, considere a quantidade de uma mesma arte." : "";
+  return `${discount}${artwork} Compra mínima: ${pricing.minimumPurchase.quantity.toLocaleString("pt-BR")} un. por ${publicPriceMoney(pricing.minimumPurchase.totalCents)}. Frete à parte.`;
 }

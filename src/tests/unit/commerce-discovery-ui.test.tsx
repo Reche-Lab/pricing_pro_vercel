@@ -16,9 +16,20 @@ describe("public quantity table", () => {
     expect(doc.querySelector("caption")?.textContent).toContain(product.name);
     expect(doc.querySelector("tbody tr[data-best=true]")?.textContent).toContain("60%");
     expect(doc.querySelector("details[open]")).toBeNull();
-    expect(doc.body.textContent).toContain("com uma mesma arte");
+    expect(doc.body.textContent).toContain("Até 60% de desconto");
+    expect(doc.body.textContent).toContain("Desconto progressivo por quantidade");
+    expect(doc.body.textContent).toContain("Dependendo da quantidade de uma mesma arte");
+    expect(doc.body.textContent).not.toMatch(/a partir de/i);
     expect(doc.body.textContent).toContain("quantidade de cada arte");
     expect(doc.body.textContent).toContain("Compra mínima");
+  });
+  it("does not promise a quantity discount on flat prices", () => {
+    const flat = { ...product, quantityPricing: { ...product.quantityPricing!, bestPrice: { ...product.quantityPricing!.bestPrice, discountPercent: 0 } } };
+    render(<StoreQuantityPricing product={flat} disabled={false} onSelect={() => {}}/>);
+    expect(screen.getByRole("heading", { name: "Preços por quantidade" })).toBeVisible();
+    expect(screen.getByText("Confira os valores para a quantidade desejada.")).toBeVisible();
+    expect(screen.queryByText(/Até .*%/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/A partir de/i)).not.toBeInTheDocument();
   });
   it("offers accessible quantity shortcuts that do not trigger cart mutations", () => {
     const select = vi.fn(); render(<StoreQuantityPricing product={product} disabled={false} onSelect={select}/>);

@@ -10,13 +10,20 @@ import { discoveryProduct as product, discoverySettings as settings, discoverySo
 const enabled = { enabled: true, identifiersAbsent: true, brand: "", gtin: "", mpn: "" };
 afterEach(() => vi.unstubAllEnvs());
 describe("discoverable real price conditions", () => {
-  it("states the lowest unit price, its quantity, minimum total and discount in metadata", () => {
+  it("describes progressive discounts without advertising a conditional starting unit price", () => {
     const metadata = storeProductMetadata("shop", product, settings, true);
     expect(metadata.title).toEqual({ absolute: "Botton - 3,5 cm com desconto por quantidade | Ground Shop" });
-    expect(metadata.description).toContain("2,00/un. em 1.000 unidades com uma mesma arte");
+    expect(metadata.description).toContain("Desconto progressivo por quantidade");
+    expect(metadata.description).toContain("dependendo da quantidade selecionada");
+    expect(metadata.description).toContain("quantidade de uma mesma arte");
+    expect(metadata.description).not.toMatch(/a partir de|2,00\/un/i);
     expect(metadata.description).toContain("60%");
     expect(metadata.description).toContain("10 un. por R$");
     expect(metadata.description).toContain("50,00");
+  });
+  it("does not invent a discount percentage in flat-price product descriptions", () => {
+    const flat = { ...product, quantityPricing: { ...product.quantityPricing!, bestPrice: { ...product.quantityPricing!.bestPrice, discountPercent: 0 } } };
+    expect(storeProductMetadata("shop", flat, settings, true).description).not.toMatch(/Até|0%|desconto progressivo/i);
   });
   it("identifies the real store with only its public contact data", () => {
     const data = storeIdentityStructuredData("shop", settings, "https://platform.example.test");

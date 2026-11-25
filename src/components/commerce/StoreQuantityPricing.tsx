@@ -15,8 +15,8 @@ export function StoreQuantityPricing({ product, disabled, onSelect }: {
   if (!pricing) return null;
   const { bestPrice: best, minimumPurchase: minimum } = pricing;
   return <section className={s.pricing} aria-label="Preços por quantidade">
-    <div className={s.heading}><BadgePercent size={19}/><h2>{best.discountPercent > 0 ? "Economia por quantidade" : "Preços por quantidade"}</h2>{best.discountPercent > 0 ? <span>Até {best.discountPercent}%</span> : null}</div>
-    <p className={s.lowest}>A partir de <strong>{publicPriceMoney(best.unitCents)}<small>/un.</small></strong><span>em {best.quantity.toLocaleString("pt-BR")} unidades{product.personalized ? " com uma mesma arte" : ""}</span></p>
+    <div className={s.heading}><BadgePercent size={19}/><h2>{best.discountPercent > 0 ? "Desconto progressivo por quantidade" : "Preços por quantidade"}</h2></div>
+    {best.discountPercent > 0 ? <p className={s.benefit}><strong>Até {best.discountPercent}% de desconto</strong><span>Dependendo da quantidade{product.personalized ? " de uma mesma arte" : ""}.</span></p> : <p className={s.note}>Confira os valores para a quantidade desejada.</p>}
     <p className={s.note}>Compra mínima: <strong>{minimum.quantity.toLocaleString("pt-BR")} un. · {publicPriceMoney(minimum.totalCents)}</strong>. Frete à parte.</p>
     <details className={s.tableDetails}><summary>Ver tabela de preços<ChevronDown size={16}/></summary>
       <p className={s.note}>Referência de 1 unidade: {publicPriceMoney(pricing.originalUnitCents)}{product.minQuantity > 1 ? " (não vendida avulsa)" : ""}.{product.personalized ? " Valores para uma única arte; distribuir entre artes pode alterar o preço." : ""} Benefícios condicionais não incluídos.</p>
