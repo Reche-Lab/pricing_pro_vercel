@@ -10,6 +10,7 @@ import type {
   ArtworkStudioAsset,
   ArtworkStudioCrop,
   ArtworkStudioStep,
+  ArtworkPreviewCallbacks,
 } from "./artwork-studio-types";
 const CropEditor = dynamic(
   () => import("./ArtworkCropEditor").then((m) => m.ArtworkCropEditor),
@@ -45,7 +46,7 @@ export function ArtworkGuidedStudio({
   ) => Promise<ArtworkStudioAsset>;
   onApprove: (asset: ArtworkStudioAsset, confirmation?: { acceptUncovered: boolean }) => Promise<void>;
   onClose: () => void;
-  renderProductPreview?: (asset: ArtworkStudioAsset) => React.ReactNode;
+  renderProductPreview?: (asset: ArtworkStudioAsset, callbacks: ArtworkPreviewCallbacks) => React.ReactNode;
   renderFramingPreview?: (asset: ArtworkStudioAsset, frame: ArtworkStudioCrop) => React.ReactNode;
   renderApprovalSuccess?: (asset: ArtworkStudioAsset) => React.ReactNode;
   proofMode?: boolean;
@@ -55,6 +56,7 @@ export function ArtworkGuidedStudio({
   const [step, setStep] = useState(initialStep === "retouch" && !allowRetouch ? "crop" : initialStep);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [previewError, setPreviewError] = useState("");
   const [accepted, setAccepted] = useState(false);
   const [imageReady, setImageReady] = useState(false);
   const [complete, setComplete] = useState(false);
@@ -91,6 +93,7 @@ export function ArtworkGuidedStudio({
   function navigate(next: ArtworkStudioStep) {
     setStep(next);
     setError("");
+    setPreviewError("");
     setAccepted(false);
     setImageReady(false);
     setCoveragePrompt(null);
@@ -135,6 +138,10 @@ export function ArtworkGuidedStudio({
       ))}
     </ol>
   );
+  const productPreview = asset.preparedUrl && renderProductPreview ? renderProductPreview(asset, {
+    onReady: () => { setImageReady(true); setPreviewError(""); },
+    onError: (message) => { setImageReady(false); setAccepted(false); setPreviewError(message); },
+  }) : null;
   return createPortal(
     <div
       ref={root}
@@ -259,8 +266,7 @@ export function ArtworkGuidedStudio({
               </button>
             </header>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-              {asset.preparedUrl && renderProductPreview ? renderProductPreview(asset) : null}
-              {asset.preparedUrl ? (
+              {productPreview || (asset.preparedUrl ? (
                 <img
                   key={asset.preparedUrl}
                   alt="Arte final para aprovação"
@@ -280,7 +286,7 @@ export function ArtworkGuidedStudio({
                     ? "Prepare o enquadramento antes de aprovar."
                     : "Este produto precisa ter as medidas de corte configuradas antes de prosseguir."}
                 </p>
-              )}
+              ))}
               {asset.notes ? (
                 <p className="text-sm text-amber-200">{asset.notes}</p>
               ) : null}
@@ -305,9 +311,9 @@ export function ArtworkGuidedStudio({
                   </span>
                 </label>
               )}
-              {error ? (
+              {error || previewError ? (
                 <p role="alert" className="text-sm text-red-300">
-                  {error}
+                  {error || previewError}
                 </p>
               ) : null}
             </div>

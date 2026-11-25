@@ -84,7 +84,7 @@ export async function drawProductMockup(canvas: HTMLCanvasElement, sourceUrl: st
   }
 }
 
-export function StoreProductMockup({ sourceUrl, geometry, margins, model, name, frame, fixedSide, compact = false, expandable = false, onRenderSettled, transitionMs = 0 }: { sourceUrl: string; geometry: PrintGeometry; margins: PrintMargins; model?: ProductMockup; name: string; frame?: ArtworkFrame; fixedSide?: "front" | "back"; compact?: boolean; expandable?: boolean; onRenderSettled?: (sourceUrl: string) => void; transitionMs?: number }) {
+export function StoreProductMockup({ sourceUrl, geometry, margins, model, name, frame, fixedSide, compact = false, expandable = false, onRenderSettled, onRenderReady, onRenderError, transitionMs = 0 }: { sourceUrl: string; geometry: PrintGeometry; margins: PrintMargins; model?: ProductMockup; name: string; frame?: ArtworkFrame; fixedSide?: "front" | "back"; compact?: boolean; expandable?: boolean; onRenderSettled?: (sourceUrl: string) => void; onRenderReady?: (sourceUrl: string) => void; onRenderError?: (message: string) => void; transitionMs?: number }) {
   const disclaimerId = useId();
   const [side, setSide] = useState<"front" | "back">("front");
   const [expanded, setExpanded] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -93,6 +93,8 @@ export function StoreProductMockup({ sourceUrl, geometry, margins, model, name, 
   const zoomButton = useRef<HTMLButtonElement>(null);
   const settled = useRef(onRenderSettled);
   settled.current = onRenderSettled;
+  const feedback = useRef({ onRenderReady, onRenderError });
+  feedback.current = { onRenderReady, onRenderError };
   const duration = useRef(transitionMs), transition = useRef<MockupTransition | null>(null), painted = useRef(false);
   duration.current = transitionMs;
   // Closing the portal recreates the inline trigger, so focus must use its current node.
@@ -101,12 +103,18 @@ export function StoreProductMockup({ sourceUrl, geometry, margins, model, name, 
   useEffect(() => {
     let active = true, completed = false; setBusy(true); setError("");
     const output = document.createElement("canvas");
-    const finish = () => { if (active && !completed) { completed = true; setBusy(false); settled.current?.(sourceUrl); } };
+    const finish = (failure?: string) => {
+      if (active && !completed) {
+        completed = true; setBusy(false); settled.current?.(sourceUrl);
+        if (failure) feedback.current.onRenderError?.(failure);
+        else feedback.current.onRenderReady?.(sourceUrl);
+      }
+    };
     const timer = window.setTimeout(() => { void drawProductMockup(output, sourceUrl, geometry, margins, model ?? defaultMockup(), fixedSide ?? side, frame, expanded).then(() => {
       if (!active || !canvas.current) return;
       transition.current = crossfadeMockupCanvas(canvas.current, output, painted.current ? duration.current : 0, finish);
       painted.current = true;
-    }).catch(e => { if (active) { setError(e.message); finish(); } }); }, frame ? 90 : 0);
+    }).catch(e => { if (active) { const message = e instanceof Error ? e.message : "Não foi possível carregar o produto."; setError(message); finish(message); } }); }, frame ? 90 : 0);
     return () => { active = false; window.clearTimeout(timer); transition.current?.cancel(); transition.current = null; };
   }, [sourceUrl, geometry, margins, model, side, expanded, frame, fixedSide]);
   useEffect(() => { if (transitionMs <= 0) transition.current?.finish(); }, [transitionMs]);

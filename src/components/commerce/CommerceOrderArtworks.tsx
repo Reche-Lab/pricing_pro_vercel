@@ -74,7 +74,7 @@ export function CommerceOrderArtworks({ endpoint, admin = false }: { endpoint: s
       {error ? <p role="alert" className="text-sm text-rose-500">{error}</p> : null}
     </div> : null}
     {selected ? <Studio initialAsset={asset(selected)} initialStep="crop" proofMode onClose={() => setSelected(null)}
-      renderProductPreview={art => art.geometry && art.preparedUrl ? <StoreProductMockup name={selected.product.name} sourceUrl={art.preparedUrl} geometry={art.geometry} margins={art.margins} model={selected.product.artworkOptions?.mockup} /> : null}
+      renderProductPreview={(art, preview) => art.geometry && art.preparedUrl ? <StoreProductMockup name={selected.product.name} sourceUrl={art.preparedUrl} geometry={art.geometry} margins={art.margins} model={selected.product.artworkOptions?.mockup} onRenderReady={preview.onReady} onRenderError={preview.onError} /> : null}
       onRetouch={async (art, file) => { const p = await mutate("source", file); return { ...art, sourceUrl: url(p!, "source"), preparedUrl: undefined, approved: false, crop: { scale: 1, offsetX: 0, offsetY: 0, rotationDegrees: 0 } }; }}
       onPrepare={async (art, crop) => { const p = await mutate("prepare", crop); return { ...art, crop, approved: false, preparedUrl: url(p!, "prepared") }; }}
       onApprove={async () => { await mutate("publish"); setMessage("Prova disponível na conta do cliente para aprovação. Nenhum preço foi alterado."); }} /> : null}

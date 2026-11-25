@@ -3,6 +3,7 @@ import type { ArtworkFrame } from "@/domain/artwork/framing";
 
 export type ArtworkStudioStep = "retouch" | "crop" | "review";
 export type ArtworkStudioCrop = ArtworkFrame;
+export type ArtworkPreviewCallbacks = { onReady: () => void; onError: (message: string) => void };
 export type ArtworkStudioAsset = {
   id: string;
   name: string;

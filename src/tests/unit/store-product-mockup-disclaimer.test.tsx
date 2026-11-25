@@ -18,15 +18,18 @@ describe("illustrative product preview notice", () => {
       onerror: (() => void) | null = null;
       set src(url: string) { pending.push({ url, fail: () => this.onerror?.() }); }
     });
-    const first = vi.fn(), second = vi.fn(), latest = vi.fn();
-    const view = render(<StoreProductMockup {...props} onRenderSettled={first}/>);
+    const first = vi.fn(), second = vi.fn(), latest = vi.fn(), ready = vi.fn(), failed = vi.fn();
+    const view = render(<StoreProductMockup {...props} onRenderSettled={first} onRenderReady={ready} onRenderError={failed}/>);
     await waitFor(() => expect(pending).toHaveLength(1));
-    view.rerender(<StoreProductMockup {...props} sourceUrl="/nova.png" onRenderSettled={second}/>);
+    view.rerender(<StoreProductMockup {...props} sourceUrl="/nova.png" onRenderSettled={second} onRenderReady={ready} onRenderError={failed}/>);
     await waitFor(() => expect(pending).toHaveLength(2));
     await act(async () => pending[0].fail());
     expect(first).not.toHaveBeenCalled(); expect(second).not.toHaveBeenCalled();
+    expect(failed).not.toHaveBeenCalled(); expect(ready).not.toHaveBeenCalled();
     await act(async () => pending[1].fail());
     expect(second).toHaveBeenCalledTimes(1); expect(second).toHaveBeenCalledWith("/nova.png");
+    expect(failed).toHaveBeenCalledOnce(); expect(failed).toHaveBeenCalledWith(expect.stringContaining("Não foi possível carregar"));
+    expect(ready).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("Não foi possível carregar");
     view.rerender(<StoreProductMockup {...props} sourceUrl="/nova.png" onRenderSettled={latest}/>);
     expect(pending).toHaveLength(2); expect(latest).not.toHaveBeenCalled();

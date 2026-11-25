@@ -1,9 +1,9 @@
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ArtworkGuidedStudio } from "@/components/quotes/ArtworkGuidedStudio";
 import { ArtworkCropEditor } from "@/components/quotes/ArtworkCropEditor";
-import type { ArtworkStudioAsset } from "@/components/quotes/artwork-studio-types";
+import type { ArtworkStudioAsset, ArtworkPreviewCallbacks } from "@/components/quotes/artwork-studio-types";
 import type { ArtworkRetouchEditor } from "@/components/quotes/ArtworkRetouchEditor";
 import { inspectArtworkCoverage } from "@/components/quotes/artwork-coverage";
 vi.mock("@/components/quotes/artwork-coverage", () => ({ inspectArtworkCoverage: vi.fn(async () => ({ warning: false, uncoveredPercent: 0 })) }));
@@ -27,6 +27,34 @@ function callbacks() {
     onApprove: vi.fn().mockResolvedValue(undefined), onClose: vi.fn() };
 }
 describe("guided artwork workflow", () => {
+  it("shows only the finished-product preview and requires its successful render before approval", async () => {
+    const handlers = callbacks(); let preview!: ArtworkPreviewCallbacks;
+    render(<ArtworkGuidedStudio initialAsset={{ ...asset, preparedUrl: "/prepared.png" }} initialStep="review" {...handlers}
+      renderProductPreview={(_art, status) => { preview = status; return <div role="img" aria-label="Produto: frente e verso" />; }} />);
+    expect(screen.getByRole("img", { name: "Produto: frente e verso" })).toBeVisible();
+    expect(screen.queryByAltText("Arte final para aprovação")).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox")).toBeDisabled();
+    act(() => preview.onReady());
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.getByRole("button", { name: "Aprovar arte" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Aprovar arte" }));
+    await screen.findByText("Esta versão está aprovada.");
+    expect(handlers.onApprove).toHaveBeenCalledOnce();
+  });
+  it("blocks confirmation if the finished product fails to load and requires a new check after recovery", () => {
+    const handlers = callbacks(); let preview!: ArtworkPreviewCallbacks;
+    render(<ArtworkGuidedStudio initialAsset={{ ...asset, preparedUrl: "/prepared.png" }} initialStep="review" {...handlers}
+      renderProductPreview={(_art, status) => { preview = status; return <div role="img" aria-label="Produto" />; }} />);
+    act(() => preview.onReady()); fireEvent.click(screen.getByRole("checkbox"));
+    act(() => preview.onError("Não foi possível carregar o produto."));
+    expect(screen.getByRole("checkbox")).not.toBeChecked(); expect(screen.getByRole("checkbox")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Aprovar arte" })).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Não foi possível carregar o produto.");
+    act(() => preview.onReady());
+    expect(screen.getByRole("checkbox")).toBeEnabled(); expect(screen.getByRole("button", { name: "Aprovar arte" })).toBeDisabled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(handlers.onApprove).not.toHaveBeenCalled();
+  });
   it("takes an uncovered artwork straight to reversible background completion", async () => {
     vi.mocked(inspectArtworkCoverage).mockResolvedValueOnce({ warning: true, uncoveredPercent: 18 });
     const handlers = callbacks();
