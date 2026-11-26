@@ -55,7 +55,7 @@ Ativar não importa pedidos históricos. Abra um pedido pago anterior e use **Si
 
 O pedido conserva preços e descontos da compra; não usa a curva atual. Quando um total não é divisível pela quantidade em centavos, a linha é desdobrada em duas faixas de preço centesimal para manter exatamente quantidade e total pago. O benefício de arte é enviado uma única vez como desconto do pedido.
 
-O nome/documento/endereço de faturamento não se confundem com a identidade de login. A entrega pode ter outro destinatário e A/C. Contatos já existentes são reutilizados por documento, não alterados silenciosamente. Se o e-mail da nota divergir do faturamento, use **Atualizar e-mail no Olist** para conferir e autorizar a atualização do cadastro antes de retomar.
+O nome/documento/endereço de faturamento não se confundem com a identidade de login. A entrega pode ter outro destinatário e A/C. Contatos já existentes são reutilizados por documento, não alterados silenciosamente. Se o e-mail da nota divergir do faturamento, use **Conferir e-mails da nota** para atualizar o cadastro com o e-mail da compra ou autorizar explicitamente os endereços já registrados no Olist.
 
 No pedido, **Concluir produção** exige pagamento real, produção iniciada e artes aprovadas, quando houver. A embalagem calculada fica congelada para faturamento. A alteração de etapa para enviado exige NF-e autorizada e expedição quando essas automações estiverem habilitadas. Gerar nota não significa autorização: estados rejeitado, cancelado ou denegado não liberam expedição. Olist HTTP 200 não significa que o e-mail foi entregue.
 
@@ -111,7 +111,7 @@ Não há migration nova nem desbloqueio automático de pedidos existentes no dep
 
 ### E-mail da compra diferente do cadastro Olist
 
-O destinatário fiscal é o e-mail de **faturamento congelado na compra**, não o login do comprador nem o endereço antigo do ERP. O worker confere o cadastro antes de gerar a primeira nota e confere novamente o destinatário antes de autorizar. Uma divergência fica com código `olist_email_update_required` e oferece **Atualizar e-mail no Olist**, inclusive em pedidos com o erro genérico antigo.
+O destinatário fiscal padrão é o e-mail de **faturamento congelado na compra**, não o login do comprador. O worker confere o cadastro antes de gerar a primeira nota e confere novamente o destinatário antes de autorizar. Uma divergência fica com código `olist_email_update_required` e oferece **Conferir e-mails da nota**, inclusive em pedidos com o erro genérico antigo. A equipe pode manter os endereços do ERP por confirmação explícita, conforme descrito abaixo.
 
 1. Abra a ação no pedido administrativo. O modal consulta o contato vinculado e a nota pendente e compara e-mail da compra, e-mail geral do contato, e-mail de NF-e do contato e e-mail da nota.
 2. Confirme a autorização de atualizar o cadastro compartilhado do ERP e informe o motivo. O navegador não escolhe nem envia um novo endereço: o servidor deriva o destino da compra e recusa campos extras.
@@ -123,6 +123,20 @@ O destinatário fiscal é o e-mail de **faturamento congelado na compra**, não 
 As operações exigem permissão `commerce:orders:manage`, pagamento real confirmado, pedido ativo e nota pendente sem autorização em andamento ou resultado incerto. Leases por pedido e por tenant/documento serializam a atualização com o worker fiscal; pagamento, IDs e configurações são conferidos novamente na transação. A confirmação possui hash do comparativo para impedir alterações sobre uma leitura antiga. Após perda de resposta, uma nova consulta pode confirmar a atualização já realizada sem repetir o PUT. E-mails anteriores ficam cifrados no histórico; logs operacionais não incluem endereços.
 
 Sem nova migration. Após o deploy, pedidos já bloqueados precisam da confirmação da equipe nessa ação. Homologue a atualização do contato e a leitura do destinatário da nota na conta Olist antes de confiar no envio automático; os testes locais simulam os dois comportamentos do ERP.
+
+#### Manter Os E-mails Do Olist
+
+No mesmo modal, selecione **Manter os e-mails do Olist**, confira a lista, autorize explicitamente a emissão/envio e informe o motivo. Se cadastro geral, campo de NF-e e nota apresentarem endereços diferentes, todos são exibidos: o ERP determina a entrega conforme seus campos; a confirmação autoriza somente os endereços apresentados. Não enviamos um parâmetro de destinatário inventado para `/notas/{id}/emitir`.
+
+- A ação `email_use_olist` não faz PUT no contato nem altera e-mail de faturamento da compra. Exige origem/permissão administrativa, pagamento confirmado, nota pendente e conferência atual, assim como a atualização de cadastro.
+- O consentimento é cifrado no evento durável `olist.email_recipient_approved`, com tenant, pedido, contato, nota, documento, total, e-mail de faturamento, endereços do ERP, responsável e data. O worker relê esse evento a cada retomada; não depende do navegador ou de estado em memória.
+- Antes da primeira nota, o consentimento pode referenciar `invoiceId=null`. A criação vincula a autorização ao ID retornado e grava `olist.email_recipient_bound` na mesma transação que confirma o ID da nota. A aprovação não libera outra nota ou outro pedido.
+- Antes da emissão, o worker confere novamente identidade, total e endereços. Uma mudança exige nova confirmação, não autoriza um destinatário novo silenciosamente. E-mails inválidos/ausentes desabilitam a alternativa.
+- Uma solicitação posterior de usar o e-mail da compra (`olist.email_update_requested`) revoga o consentimento anterior. CPF/CNPJ, valor, produção, autorizações em andamento e demais proteções fiscais nunca são dispensados.
+
+Falhas na atualização passaram a informar a fase (`update_contact_emails`, `verify_contact_and_invoice` etc.), método/path, status original, campos de validação e mensagem sanitizada no log `Commerce Olist email update failed`. Recusas 400/404/409/422 retornam erro de conferência, não um 503 genérico; problemas de comunicação continuam pedindo nova consulta. O debugId interno aparece na mensagem para correlacionar o diagnóstico. Endereços/documentos são removidos das mensagens registradas.
+
+O 503 isolado da interface não identifica se o PUT falhou ou se a leitura posterior falhou. Não tratamos a mensagem genérica como prova de credencial expirada ou cadastro não atualizado. O fluxo mantém a reconciliação e oferece a alternativa sem repetir uma emissão.
 
 ## Verificação local
 

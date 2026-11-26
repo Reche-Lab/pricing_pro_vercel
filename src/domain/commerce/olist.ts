@@ -21,6 +21,7 @@ export type CommerceOlistEmailReview = {
   customerId: string; customerName: string; targetEmail: string; contactEmail: string; contactNfeEmail: string;
   invoiceId: string | null; invoiceNumber: string | null; invoiceEmail: string | null;
   contactMatches: boolean; invoiceMatches: boolean; reviewToken: string;
+  olistRecipients: string[]; canUseOlistEmail: boolean;
 };
 export type CommerceOlistStage = "customer" | "sales_order" | "shipping" | "invoice_create" | "invoice_authorize" | "invoice_status" | "dispatch" | "tracking";
 export type CommerceOlistJob = {

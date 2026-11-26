@@ -10,9 +10,15 @@ const row = (value: unknown): Row => value && typeof value === "object" && !Arra
 const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
 const digits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
 export const sameOlistEmail = (left: string, right: string) => left.trim().toLowerCase() === right.trim().toLowerCase();
+export function olistEmailRecipients(contactEmail: string, contactNfeEmail: string, invoiceEmail: string | null) {
+  const values = [contactEmail, contactNfeEmail, invoiceEmail ?? ""].filter(Boolean);
+  const valid = values.every(value => z.string().email().max(254).safeParse(value).success);
+  const recipients = [...new Set(values.map(value => value.toLowerCase()))];
+  return { olistRecipients: recipients, canUseOlistEmail: valid && recipients.length > 0 && (invoiceEmail === null || Boolean(invoiceEmail)) };
+}
 
 export function requireCommerceInvoiceEmail() {
-  return new CommerceError("O e-mail de faturamento desta compra difere do destinatário no Olist. Use Atualizar e-mail no Olist para conferir e autorizar a correção antes de continuar.", 409, { code: "olist_email_update_required" });
+  return new CommerceError("O e-mail de faturamento desta compra difere do destinatário no Olist. Confira os e-mails para corrigir o cadastro ou autorizar explicitamente o uso dos endereços já cadastrados no Olist.", 409, { code: "olist_email_update_required" });
 }
 
 export async function readCommerceOlistEmailReview(request: Request, order: CommerceOrder, job: Pick<CommerceOlistJob, "customer_id" | "invoice_id">, knownInvoice?: Row): Promise<CommerceOlistEmailReview> {
@@ -34,6 +40,7 @@ export async function readCommerceOlistEmailReview(request: Request, order: Comm
     invoiceId: job.invoice_id, invoiceNumber: invoice?.numero != null ? String(invoice.numero) : null, invoiceEmail,
     contactMatches: sameOlistEmail(contactEmail, target.data) && (!contactNfeEmail || sameOlistEmail(contactNfeEmail, target.data)),
     invoiceMatches: invoiceEmail === null || sameOlistEmail(invoiceEmail, target.data),
+    ...olistEmailRecipients(contactEmail, contactNfeEmail, invoiceEmail),
   };
   return { ...result, reviewToken: createHash("sha256").update(JSON.stringify(result)).digest("hex") };
 }

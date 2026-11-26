@@ -13,6 +13,8 @@ import { isOlistReconnectRequired } from "@/lib/olist/oauth-errors";
 import { findCommerceOlistCustomer, recoverCommerceOlistCustomer, OlistCustomerReviewRequired, type CommerceOlistCustomerLookup } from "./olist-customer";
 import { acquireCommerceOlistLease as acquireLease } from "./olist-lease";
 import { readCommerceOlistEmailReview, requireCommerceInvoiceEmail } from "./olist-email";
+import { consentAllowsOlistEmail, latestOlistEmailConsent, type OlistEmailConsent } from "./olist-email-consent";
+import { encryptTenantSecret } from "@/lib/crypto/secrets";
 
 class ReviewRequired extends CommerceError {}
 class RetryLater extends Error {}
@@ -78,6 +80,7 @@ export async function processCommerceOlistOrder(tenantId: string, orderId: strin
           if (!await acquireLease(client, fiscalCustomerLock, lockToken)) { fiscalCustomerLock = null; throw new RetryLater("O cadastro do cliente está em conferência. Aguardando conclusão."); }
         }
         let changes: Row = {};
+        let boundEmailConsent: OlistEmailConsent | undefined;
         if (stage === "customer") {
           const billing = billingSchema.extend({ personType: z.enum(["F", "J"]).optional() }).safeParse(order.snapshot.billing);
           if (!billing.success || !billing.data.document) throw new CommerceError("Confira CPF/CNPJ e dados de faturamento antes de cadastrar o cliente Olist.", 409);
@@ -162,13 +165,18 @@ export async function processCommerceOlistOrder(tenantId: string, orderId: strin
           const matches = rows(found);
           if (matches.length > 1) throw new ReviewRequired("Há várias notas vinculadas a este pedido Olist. Confira antes de faturar.", 409);
           let invoice = matches[0];
+          let prospectiveConsent: OlistEmailConsent | null = null;
           if (!invoice) {
             if (job.attempt_stage) throw uncertain();
             const emails = await readCommerceOlistEmailReview(request, order, job);
-            if (!emails.contactMatches) throw requireCommerceInvoiceEmail();
+            const consent = await latestOlistEmailConsent(client, tenantId, orderId);
+            const approved = consentAllowsOlistEmail(consent, order, emails);
+            if (consent ? !approved : !emails.contactMatches) throw requireCommerceInvoiceEmail();
+            if (approved) prospectiveConsent = consent;
             invoice = await mutate(`/pedidos/${job.sales_order_id}/gerar-nota-fiscal`, { modelo: 55 });
           }
           if (!id(invoice.id)) throw uncertain();
+          if (prospectiveConsent) boundEmailConsent = { ...prospectiveConsent, invoiceId: id(invoice.id) };
           changes = { invoice_id: id(invoice.id), invoice_number: invoice.numero != null ? String(invoice.numero) : null, invoice_series: invoice.serie != null ? String(invoice.serie) : null, invoice_status: numeric(invoice.situacao) };
         } else if (stage === "invoice_authorize" || stage === "invoice_status") {
           let invoice = await request(`/notas/${job.invoice_id}`);
@@ -178,7 +186,10 @@ export async function processCommerceOlistOrder(tenantId: string, orderId: strin
             if (Math.round(Number(invoice.valor) * 100) !== order.total_cents || String(record(invoice.cliente).cpfCnpj ?? "").replace(/\D/g, "") !== order.snapshot.billing?.document.replace(/\D/g, ""))
               throw new ReviewRequired("O cliente ou o total da nota no Olist diverge da compra paga. Confira a nota antes de autorizar.", 409);
             const emails = await readCommerceOlistEmailReview(request, order, job, invoice);
-            if (!emails.contactMatches || !emails.invoiceMatches) throw requireCommerceInvoiceEmail();
+            const consent = await latestOlistEmailConsent(client, tenantId, orderId);
+            const approved = consentAllowsOlistEmail(consent, order, emails);
+            if (consent ? !approved : !emails.contactMatches || !emails.invoiceMatches) throw requireCommerceInvoiceEmail();
+            if (approved) console.info("Commerce Olist fiscal email consent verified.", { tenantId, orderId, debugId, invoiceId: job.invoice_id, recipientCount: emails.olistRecipients.length });
             if (job.attempt_stage) throw uncertain();
             invoice = await mutate(`/notas/${job.invoice_id}/emitir`, { enviarEmail: settings.sendInvoiceEmail });
             status = numeric(invoice.situacao);
@@ -212,7 +223,7 @@ export async function processCommerceOlistOrder(tenantId: string, orderId: strin
           if (!externalId) throw uncertain();
           changes = { expedition_id: externalId, status: "done" };
         }
-        await persistStage(client, tenantId, orderId, stage, debugId, changes);
+        await persistStage(client, tenantId, orderId, stage, debugId, changes, boundEmailConsent);
         console.info("Commerce Olist stage completed.", { tenantId, orderId, stage, debugId });
       } catch (error) {
         const reconnect = isOlistReconnectRequired(error instanceof OlistRequestError ? { status: error.status, message: error.message } : error instanceof Error ? error.message : error);
@@ -242,12 +253,13 @@ export async function processCommerceOlistOrder(tenantId: string, orderId: strin
 }
 
 const patchColumns = new Set(["customer_id", "sales_order_id", "shipping_synced_at", "invoice_id", "invoice_number", "invoice_series", "invoice_status", "invoice_link", "authorization_requested_at", "email_requested_at", "expedition_id", "payment_kind", "status", "next_attempt_at"]);
-async function persistStage(client: PoolClient, tenantId: string, orderId: string, stage: CommerceOlistStage, debugId: string, patch: Row) {
+async function persistStage(client: PoolClient, tenantId: string, orderId: string, stage: CommerceOlistStage, debugId: string, patch: Row, emailConsent?: OlistEmailConsent) {
   const entries = Object.entries(patch).filter(([key]) => patchColumns.has(key));
   await client.query("begin");
   try {
     await client.query(`update commerce_olist_orders set ${entries.length ? entries.map(([key], index) => `${key}=$${index + 3}`).join(",") + "," : ""}attempt_stage=null,last_error=null,error_code=null,updated_at=now() where tenant_id=$1 and order_id=$2 and status<>'stopped'`, [tenantId, orderId, ...entries.map(([, value]) => value)]);
     await client.query("insert into commerce_order_events(tenant_id,order_id,type,metadata) values($1,$2,$3,$4)", [tenantId, orderId, `olist.${stage}`, JSON.stringify({ debugId, note: stage === "invoice_status" && ![6, 7].includes(Number(patch.invoice_status)) ? "Olist processando a autorização fiscal." : `Etapa Olist concluída: ${stage}.`, ...patch })]);
+    if (emailConsent) await client.query("insert into commerce_order_events(tenant_id,order_id,type,metadata) values($1,$2,'olist.email_recipient_bound',$3)", [tenantId, orderId, JSON.stringify({ debugId, actor: emailConsent.actorId, customer_id: emailConsent.customerId, invoice_id: emailConsent.invoiceId, note: "Autorização de destinatário vinculada à nota gerada.", consent_encrypted: encryptTenantSecret(emailConsent) })]);
     await client.query("commit");
   } catch (error) { await client.query("rollback"); throw error; }
 }

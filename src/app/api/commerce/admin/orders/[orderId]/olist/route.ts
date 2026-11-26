@@ -15,8 +15,9 @@ import { commerceOlistCustomerChoices, linkCommerceOlistCustomer } from "@/servi
 import { commerceOlistEmailReview, updateCommerceOlistEmail } from "@/services/commerce/olist-email-review";
 
 export const maxDuration = 60;
-const schema = z.object({ action: z.enum(["retry", "production_ready", "tracking", "customer_lookup", "customer_link", "email_review", "email_update"]), note: z.string().trim().min(5).max(500),
+const schema = z.object({ action: z.enum(["retry", "production_ready", "tracking", "customer_lookup", "customer_link", "email_review", "email_update", "email_use_olist"]), note: z.string().trim().min(5).max(500),
   reviewToken: z.string().regex(/^[a-f0-9]{64}$/).optional(), confirmEmailUpdate: z.boolean().optional(),
+  confirmOlistEmail: z.boolean().optional(),
   customerId: z.string().regex(/^[1-9]\d{0,14}$/).optional(),
   trackingCode: z.string().trim().max(100).optional(), trackingUrl: z.string().url().max(1000).refine(value => value.startsWith("https://"), "Use uma URL HTTPS.").optional() }).strict();
 function parseOrderId(value: string) {
@@ -51,9 +52,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
     await commerceOlistConnection(session.tenantId);
     if (input.action === "email_review") {
       return commerceJson({ ok: true, emailReview: await commerceOlistEmailReview(session.tenantId, orderId) });
-    } else if (input.action === "email_update") {
-      if (!input.confirmEmailUpdate || !input.reviewToken) throw new CommerceError("Confira os e-mails e confirme a atualização do cadastro Olist.");
-      const result = await updateCommerceOlistEmail(session.tenantId, orderId, session.userId, input.reviewToken, input.note);
+    } else if (input.action === "email_update" || input.action === "email_use_olist") {
+      const useOlist = input.action === "email_use_olist";
+      if (!(useOlist ? input.confirmOlistEmail : input.confirmEmailUpdate) || !input.reviewToken) throw new CommerceError("Confira os destinatários e confirme explicitamente a opção escolhida.");
+      const result = await updateCommerceOlistEmail(session.tenantId, orderId, session.userId, input.reviewToken, input.note, useOlist ? "olist" : "purchase");
       if (result.resumed) scheduleCommerceOlist(session.tenantId, orderId);
       return commerceJson({ ok: true, ...result, ...(await state(session.tenantId, orderId)) });
     } else if (input.action === "customer_lookup") {

@@ -9,6 +9,14 @@ import { commerceOlistRequest } from "./olist-client";
 import { acquireCommerceOlistLease } from "./olist-lease";
 import { readCommerceOlistEmailReview, sameOlistEmail } from "./olist-email";
 import { OlistRequestError } from "@/services/olist/olist";
+import { consentForOlistEmail } from "./olist-email-consent";
+
+function providerMessage(value: string) {
+  return value.replace(/(https?:\/\/)[^\s/@]+@/gi, "$1[credentials]@")
+    .replace(/[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+/gi, "[email]")
+    .replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, "[document]")
+    .replace(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g, "[document]").slice(0, 600);
+}
 
 function validate(order: CommerceOrder | undefined, job: CommerceOlistJob | null | undefined) {
   if (!order || order.deleted_at || order.cancelled_at || order.payment_status !== "paid" || order.payment_environment !== "production")
@@ -29,10 +37,12 @@ export async function commerceOlistEmailReview(tenantId: string, orderId: string
   return readCommerceOlistEmailReview(path => commerceOlistRequest(tenantId, path, "GET", undefined, signal), order, job);
 }
 
-export async function updateCommerceOlistEmail(tenantId: string, orderId: string, actorId: string, reviewToken: string, note: string) {
+export async function updateCommerceOlistEmail(tenantId: string, orderId: string, actorId: string, reviewToken: string, note: string, strategy: "purchase" | "olist" = "purchase") {
   const original = await context(tenantId, orderId), pool = getPool(), debugId = randomUUID();
   const document = original.order.snapshot.billing!.document.replace(/\D/g, "");
   const locks: string[] = [], keys = [`commerce-olist:${tenantId}:${orderId}`, `commerce-olist-customer:${tenantId}:${createHash("sha256").update(`${tenantId}:${document}`).digest("hex")}`];
+  let phase = "acquire_locks";
+  let lastRequest: { method: string; path: string } | undefined;
   const assertCurrent = async (client: PoolClient) => {
     const order = (await client.query<CommerceOrder>("select * from commerce_orders where tenant_id=$1 and id=$2 for update", [tenantId, orderId])).rows[0];
     const job = (await client.query<CommerceOlistJob>("select * from commerce_olist_orders where tenant_id=$1 and order_id=$2 for update", [tenantId, orderId])).rows[0];
@@ -49,9 +59,23 @@ export async function updateCommerceOlistEmail(tenantId: string, orderId: string
       locks.push(key);
     }
     const signal = AbortSignal.timeout(40000);
-    const request = (path: string) => commerceOlistRequest(tenantId, path, "GET", undefined, signal);
+    const request = (path: string) => { lastRequest = { method: "GET", path }; return commerceOlistRequest(tenantId, path, "GET", undefined, signal); };
+    phase = "review_current_emails";
     const before = await readCommerceOlistEmailReview(request, original.order, original.job);
     if (before.reviewToken !== reviewToken) throw new CommerceError("Os e-mails no Olist mudaram desde a conferência. Consulte novamente antes de confirmar.", 409);
+    if (strategy === "olist") {
+      if (!before.canUseOlistEmail) throw new CommerceError("O Olist não possui destinatários válidos para esta confirmação. Confira os e-mails do cadastro e da nota.", 409);
+      phase = "approve_existing_recipients";
+      const consent = consentForOlistEmail(original.order, before, actorId);
+      await commerceTransaction(async client => {
+        await assertCurrent(client);
+        await client.query("insert into commerce_order_events(tenant_id,order_id,type,metadata) values($1,$2,'olist.email_recipient_approved',$3)", [tenantId, orderId, JSON.stringify({ actor: actorId, debugId, note, customer_id: original.job.customer_id, invoice_id: original.job.invoice_id, consent_encrypted: encryptTenantSecret(consent) })]);
+        await client.query("update commerce_olist_orders set status='pending',error_code=null,last_error=null,debug_id=$3,next_attempt_at=now(),updated_at=now() where tenant_id=$1 and order_id=$2", [tenantId, orderId, debugId]);
+      });
+      console.info("Commerce Olist existing email recipients approved.", { tenantId, orderId, debugId, customerId: before.customerId, invoiceId: before.invoiceId, recipientCount: before.olistRecipients.length, actorId });
+      return { emailReview: before, resumed: true, recipientSource: "olist" as const };
+    }
+    phase = "record_update_intent";
     await commerceTransaction(async client => {
       await assertCurrent(client);
       await client.query("insert into commerce_order_events(tenant_id,order_id,type,metadata) values($1,$2,'olist.email_update_requested',$3)", [tenantId, orderId, JSON.stringify({ actor: actorId, debugId, note, customer_id: original.job.customer_id, invoice_id: original.job.invoice_id, emails_encrypted: encryptTenantSecret({ previousEmail: before.contactEmail, previousNfeEmail: before.contactNfeEmail, invoiceEmail: before.invoiceEmail, targetEmail: before.targetEmail }) })]);
@@ -60,10 +84,14 @@ export async function updateCommerceOlistEmail(tenantId: string, orderId: string
     if (!before.contactMatches) {
       // Only the two documented email fields are sent; purchase data and the
       // remaining contact fields are not copied over the ERP registration.
+      phase = "update_contact_emails";
+      lastRequest = { method: "PUT", path: `/contatos/${original.job.customer_id}` };
       await commerceOlistRequest(tenantId, `/contatos/${original.job.customer_id}`, "PUT", { email: before.targetEmail, emailNfe: before.targetEmail }, signal);
     }
+    phase = "verify_contact_and_invoice";
     const after = await readCommerceOlistEmailReview(request, original.order, original.job);
     const resumed = after.contactMatches && after.invoiceMatches;
+    phase = "record_update_result";
     await commerceTransaction(async client => {
       await assertCurrent(client);
       await client.query(`update commerce_olist_orders set status=$3,error_code=$4,last_error=$5,debug_id=$6,next_attempt_at=now(),updated_at=now()
@@ -71,12 +99,16 @@ export async function updateCommerceOlistEmail(tenantId: string, orderId: string
       await client.query("insert into commerce_order_events(tenant_id,order_id,type,metadata) values($1,$2,'olist.email_update_checked',$3)", [tenantId, orderId, JSON.stringify({ actor: actorId, debugId, note, customer_id: original.job.customer_id, invoice_id: original.job.invoice_id, contactConfirmed: after.contactMatches, invoiceConfirmed: after.invoiceMatches, resumed })]);
     });
     console.info("Commerce Olist email update checked.", { tenantId, orderId, debugId, customerId: original.job.customer_id, invoiceId: original.job.invoice_id, contactConfirmed: after.contactMatches, invoiceConfirmed: after.invoiceMatches, resumed });
-    return { emailReview: after, resumed };
+    return { emailReview: after, resumed, recipientSource: "purchase" as const };
   } catch (error) {
-    console.error("Commerce Olist email update failed.", { tenantId, orderId, debugId, status: error instanceof CommerceError || error instanceof OlistRequestError ? error.status : undefined, errorType: error instanceof Error ? error.name : "Unknown" });
+    const details = error instanceof OlistRequestError && error.data && typeof error.data === "object" && "detalhes" in error.data && Array.isArray(error.data.detalhes) ? error.data.detalhes : [];
+    const validationFields = details.flatMap(item => item && typeof item === "object" && "campo" in item && typeof item.campo === "string" ? [item.campo.slice(0, 100)] : []);
+    console.error("Commerce Olist email update failed.", { tenantId, orderId, debugId, phase, strategy, ...lastRequest, status: error instanceof CommerceError || error instanceof OlistRequestError ? error.status : undefined, errorType: error instanceof Error ? error.name : "Unknown", message: error instanceof Error ? providerMessage(error.message) : undefined, errorCode: error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code.slice(0, 80) : undefined, providerMessage: error instanceof OlistRequestError ? providerMessage(error.message) : undefined, validationFields });
     if (error instanceof OlistRequestError && error.status === 403) throw new CommerceError("O Olist não permitiu atualizar o contato. Confira a permissão de edição de Contatos da integração.", 409);
+    if (error instanceof OlistRequestError && [400, 404, 409, 422].includes(error.status))
+      throw new CommerceError(`O Olist recusou a correção de e-mail (HTTP ${error.status}).${validationFields.length ? ` Confira os campos: ${validationFields.join(", ")}.` : " Confira o cadastro e consulte novamente."} Referência: ${debugId}`, 409, { code: "olist_email_update_rejected" });
     if (!(error instanceof CommerceError) && !(error instanceof OlistRequestError && error.status === 401))
-      throw new CommerceError("Não foi possível confirmar a atualização no Olist. Consulte novamente os e-mails antes de repetir; nenhuma nota será recriada.", 503);
+      throw new CommerceError(`Não foi possível confirmar a atualização no Olist. Consulte novamente os e-mails antes de repetir ou escolha manter os e-mails do Olist. Referência: ${debugId}`, 503, { code: "olist_email_update_failed" });
     throw error;
   } finally {
     if (locks.length) await pool.query("delete from commerce_olist_leases where lock_key=any($1::text[]) and token=$2", [locks, debugId]);
