@@ -2,7 +2,7 @@
 import { afterAll, beforeAll, afterEach, describe, expect, it, vi } from "vitest";
 import { createHash, randomUUID } from "node:crypto";
 import { getPool } from "@/lib/db/client";
-import { encryptTenantSecret } from "@/lib/crypto/secrets";
+import { encryptTenantSecret, decryptTenantSecret } from "@/lib/crypto/secrets";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getCommerceOlistJob, queueCommerceOlistOrder, saveCommerceOlistSettings } from "@/repositories/commerce-olist";
 import { processCommerceOlistOrder } from "@/services/commerce/olist-worker";
@@ -46,9 +46,10 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
     if (input.paid !== false) await pool.query("update commerce_orders set payment_status='paid' where tenant_id=$1 and id=$2", [tenantId, orderId]);
     return { tenantId, orderId, snapshot, variantId };
   }
-  function provider(options: { existingContact?: boolean; hideContact?: boolean; wrappedList?: boolean; detailDocument?: string; failDetailOnce?: boolean; duplicateContacts?: boolean; inactiveDetail?: boolean; onDetail?: () => Promise<void> } = {}) {
+  function provider(options: { existingContact?: boolean; hideContact?: boolean; wrappedList?: boolean; detailDocument?: string; failDetailOnce?: boolean; duplicateContacts?: boolean; inactiveDetail?: boolean; onDetail?: () => Promise<void>; frozenInvoiceEmail?: boolean; ignoreEmailUpdate?: boolean; loseEmailUpdateOnce?: boolean } = {}) {
     let contact = Boolean(options.existingContact), detailFailed = false, externalOrder: Record<string, unknown> | null = null, invoice = false, authorized = false, expedition = false;
     let loseOrder = false, loseWithoutCreating = false, authInvalid = false, emailMismatch = false, rejectInvoice = false, pendingAuthorization = false;
+    let contactEmail = testCommerceBilling.email, contactNfeEmail = "", emailUpdateLost = false;
     const calls: { path: string; method: string; body: Record<string, unknown> }[] = [];
     const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input));
@@ -65,7 +66,12 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
       if ((path === "/contatos/11" || path === "/contatos/12") && method === "GET") {
         await options.onDetail?.();
         if (options.failDetailOnce && !detailFailed) { detailFailed = true; return Response.json({ mensagem: "Indisponível" }, { status: 503 }); }
-        return Response.json({ id: path.endsWith("/12") ? 12 : 11, cpfCnpj: options.detailDocument ?? testCommerceBilling.document, situacao: options.inactiveDetail ? "I" : "B" });
+        return Response.json({ id: path.endsWith("/12") ? 12 : 11, nome: "Cliente Olist", cpfCnpj: options.detailDocument ?? testCommerceBilling.document, situacao: options.inactiveDetail ? "I" : "B", email: contactEmail, emailNfe: contactNfeEmail });
+      }
+      if ((path === "/contatos/11" || path === "/contatos/12") && method === "PUT") {
+        if (!options.ignoreEmailUpdate) { contactEmail = body.email as string; contactNfeEmail = body.emailNfe as string; if (!options.frozenInvoiceEmail) emailMismatch = false; }
+        if (options.loseEmailUpdateOnce && !emailUpdateLost) { emailUpdateLost = true; throw new Error("Connection lost after contact email update"); }
+        return new Response(null, { status: 204 });
       }
       if (path === "/contatos" && method === "POST") {
         if (contact) return Response.json({ mensagem: "Contato já cadastrado", detalhes: [{ campo: "cpfCnpj", mensagem: "Contato já existe" }, { campo: "idContatoExistente", mensagem: "11" }] }, { status: 409 });
@@ -85,7 +91,7 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
       throw new Error(`Unexpected mocked ERP request ${method} ${path}`);
     });
     vi.stubGlobal("fetch", fetcher);
-    return { calls, setLose: (value: boolean, absent = false) => { loseOrder = value; loseWithoutCreating = absent; }, setAuthInvalid: (value: boolean) => { authInvalid = value; }, setEmailMismatch: () => { emailMismatch = true; }, setReject: () => { rejectInvoice = true; }, setPending: () => { pendingAuthorization = true; }, authorize: () => { authorized = true; }, writes: (path: string) => calls.filter(call => call.method === "POST" && call.path === path) };
+    return { calls, setLose: (value: boolean, absent = false) => { loseOrder = value; loseWithoutCreating = absent; }, setAuthInvalid: (value: boolean) => { authInvalid = value; }, setEmailMismatch: () => { emailMismatch = true; contactEmail = "previous@example.test"; contactNfeEmail = "fiscal-previous@example.test"; }, clearInvoiceEmailMismatch: () => { emailMismatch = false; }, setReject: () => { rejectInvoice = true; }, setPending: () => { pendingAuthorization = true; }, authorize: () => { authorized = true; }, writes: (path: string) => calls.filter(call => call.method === "POST" && call.path === path) };
   }
   function login(tenantId: string) {
     vi.stubEnv("APP_URL", "https://panel.example.test");
@@ -94,6 +100,88 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
   function customerAction(orderId: string, operation: "customer_lookup" | "customer_link", customerId?: string) {
     return action(new Request(`https://panel.example.test/api/commerce/admin/orders/${orderId}/olist`, { method: "POST", headers: { origin: "https://panel.example.test" }, body: JSON.stringify({ action: operation, note: "Cadastro principal conferido pela equipe", ...(customerId ? { customerId } : {}) }) }), { params: Promise.resolve({ orderId }) });
   }
+  function emailAction(orderId: string, operation: "email_review" | "email_update", extra: Record<string, unknown> = {}) {
+    return action(new Request(`https://panel.example.test/api/commerce/admin/orders/${orderId}/olist`, { method: "POST", headers: { origin: "https://panel.example.test" }, body: JSON.stringify({ action: operation, note: "E-mail de faturamento informado pelo cliente confirmado", ...extra }) }), { params: Promise.resolve({ orderId }) });
+  }
+  async function blockedEmailOrder(options: Parameters<typeof provider>[0] = {}) {
+    const data = await fixture(), api = provider(options);
+    await processCommerceOlistOrder(data.tenantId, data.orderId); await productionReady(data.tenantId, data.orderId);
+    await processCommerceOlistOrder(data.tenantId, data.orderId, 2);
+    expect((await getCommerceOlistJob(data.tenantId, data.orderId))?.invoice_id).toBe("33");
+    api.setEmailMismatch(); await processCommerceOlistOrder(data.tenantId, data.orderId, 1);
+    expect(await getCommerceOlistJob(data.tenantId, data.orderId)).toMatchObject({ status: "blocked", error_code: "olist_email_update_required", attempt_stage: null, authorization_requested_at: null });
+    return { ...data, api };
+  }
+  it("updates only the consented email fields, audits encrypted previous values and resumes the existing invoice exactly once", async () => {
+    const { tenantId, orderId, api } = await blockedEmailOrder();
+    const reviewed = await emailAction(orderId, "email_review"); expect(reviewed.status).toBe(200);
+    const { emailReview } = await reviewed.json();
+    expect(emailReview).toMatchObject({ targetEmail: testCommerceBilling.email, contactEmail: "previous@example.test", invoiceId: "33", invoiceMatches: false });
+    expect(api.calls.filter(call => call.method === "PUT" && call.path === "/contatos/11")).toHaveLength(0);
+    expect((await emailAction(orderId, "email_update", { reviewToken: emailReview.reviewToken })).status).toBe(400);
+    const updated = await emailAction(orderId, "email_update", { reviewToken: emailReview.reviewToken, confirmEmailUpdate: true });
+    expect(updated.status).toBe(200); expect(await updated.json()).toMatchObject({ resumed: true, emailReview: { contactMatches: true, invoiceMatches: true } });
+    expect(api.calls.filter(call => call.method === "PUT" && call.path === "/contatos/11").map(call => call.body)).toEqual([{ email: testCommerceBilling.email, emailNfe: testCommerceBilling.email }]);
+    const audit = (await getPool().query("select metadata from commerce_order_events where tenant_id=$1 and order_id=$2 and type='olist.email_update_requested'", [tenantId, orderId])).rows[0].metadata;
+    expect(audit.actor).toBe(actor); expect(JSON.stringify(audit)).not.toContain("previous@example.test");
+    expect(decryptTenantSecret(audit.emails_encrypted)).toMatchObject({ previousEmail: "previous@example.test", targetEmail: testCommerceBilling.email });
+    await processCommerceOlistOrder(tenantId, orderId, 6); await processCommerceOlistOrder(tenantId, orderId, 6);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ invoice_id: "33", invoice_status: 6, expedition_id: "44", status: "done" });
+    expect(api.writes("/pedidos/22/gerar-nota-fiscal")).toHaveLength(1); expect(api.writes("/notas/33/emitir")).toHaveLength(1);
+    expect(api.calls.some(call => call.method === "PUT" && call.path === "/notas/33")).toBe(false);
+  });
+  it("keeps issuance blocked if the existing invoice retains its old address, then resumes after that same invoice is corrected", async () => {
+    const { tenantId, orderId, api } = await blockedEmailOrder({ frozenInvoiceEmail: true });
+    const before = (await (await emailAction(orderId, "email_review")).json()).emailReview;
+    const update = await emailAction(orderId, "email_update", { reviewToken: before.reviewToken, confirmEmailUpdate: true });
+    expect(await update.json()).toMatchObject({ resumed: false, emailReview: { contactMatches: true, invoiceMatches: false } });
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ status: "blocked", error_code: "olist_invoice_email_required", invoice_id: "33" });
+    await processCommerceOlistOrder(tenantId, orderId, 6); expect(api.writes("/notas/33/emitir")).toHaveLength(0);
+    api.clearInvoiceEmailMismatch();
+    const after = (await (await emailAction(orderId, "email_review")).json()).emailReview;
+    expect((await (await emailAction(orderId, "email_update", { reviewToken: after.reviewToken, confirmEmailUpdate: true })).json()).resumed).toBe(true);
+    await processCommerceOlistOrder(tenantId, orderId, 6);
+    expect(api.writes("/pedidos/22/gerar-nota-fiscal")).toHaveLength(1); expect(api.writes("/notas/33/emitir")).toHaveLength(1);
+    expect(api.calls.filter(call => call.method === "PUT" && call.path === "/contatos/11")).toHaveLength(1);
+  });
+  it("rejects stale email confirmation and safely reconciles a lost update response without repeating the PUT", async () => {
+    const { tenantId, orderId, api } = await blockedEmailOrder({ loseEmailUpdateOnce: true });
+    const first = (await (await emailAction(orderId, "email_review")).json()).emailReview;
+    expect((await emailAction(orderId, "email_update", { reviewToken: "0".repeat(64), confirmEmailUpdate: true })).status).toBe(409);
+    const lost = await emailAction(orderId, "email_update", { reviewToken: first.reviewToken, confirmEmailUpdate: true }); expect(lost.status).toBe(503);
+    expect((await getCommerceOlistJob(tenantId, orderId))?.status).toBe("blocked");
+    const fresh = (await (await emailAction(orderId, "email_review")).json()).emailReview;
+    expect(fresh).toMatchObject({ contactMatches: true, invoiceMatches: true });
+    expect((await (await emailAction(orderId, "email_update", { reviewToken: fresh.reviewToken, confirmEmailUpdate: true })).json()).resumed).toBe(true);
+    expect(api.calls.filter(call => call.method === "PUT" && call.path === "/contatos/11")).toHaveLength(1);
+    await processCommerceOlistOrder(tenantId, orderId, 6); expect(api.writes("/notas/33/emitir")).toHaveLength(1);
+  });
+  it("does not release an invoice if the provider ignores the email change or if confirmation is forged", async () => {
+    const { tenantId, orderId, api } = await blockedEmailOrder({ ignoreEmailUpdate: true });
+    const before = (await (await emailAction(orderId, "email_review")).json()).emailReview;
+    expect((await emailAction(orderId, "email_update", { reviewToken: before.reviewToken, confirmEmailUpdate: true, targetEmail: "attacker@example.test" })).status).toBe(400);
+    const response = await emailAction(orderId, "email_update", { reviewToken: before.reviewToken, confirmEmailUpdate: true });
+    expect(await response.json()).toMatchObject({ resumed: false, emailReview: { contactMatches: false } });
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ status: "blocked", invoice_id: "33", authorization_requested_at: null });
+    await processCommerceOlistOrder(tenantId, orderId, 6);
+    expect(api.writes("/notas/33/emitir")).toHaveLength(0);
+  });
+  it("checks email before first invoice generation and never changes an authorized or another tenant's document", async () => {
+    const { tenantId, orderId } = await fixture(), api = provider();
+    await processCommerceOlistOrder(tenantId, orderId); await productionReady(tenantId, orderId);
+    api.setEmailMismatch(); await processCommerceOlistOrder(tenantId, orderId, 6);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ invoice_id: null, error_code: "olist_email_update_required", status: "blocked" });
+    expect(api.writes("/pedidos/22/gerar-nota-fiscal")).toHaveLength(0);
+    const before = (await (await emailAction(orderId, "email_review")).json()).emailReview; expect(before.invoiceId).toBeNull();
+    const other = await fixture(); login(other.tenantId);
+    expect((await emailAction(orderId, "email_review")).status).toBe(404);
+    expect((await emailAction(orderId, "email_update", { reviewToken: before.reviewToken, confirmEmailUpdate: true })).status).toBe(404);
+    login(tenantId); expect((await emailAction(orderId, "email_update", { reviewToken: before.reviewToken, confirmEmailUpdate: true })).status).toBe(200);
+    await processCommerceOlistOrder(tenantId, orderId, 6);
+    expect(api.writes("/pedidos/22/gerar-nota-fiscal")).toHaveLength(1);
+    expect((await emailAction(orderId, "email_review")).status).toBe(409);
+    expect((await emailAction(orderId, "email_update", { reviewToken: before.reviewToken, confirmEmailUpdate: true })).status).toBe(409);
+  });
   it("surfaces two exact document matches without an uncertain mutation and lets the team resume all stages with a verified choice", async () => {
     const { tenantId, orderId } = await fixture(), api = provider({ duplicateContacts: true }); login(tenantId);
     const log = vi.spyOn(console, "error");

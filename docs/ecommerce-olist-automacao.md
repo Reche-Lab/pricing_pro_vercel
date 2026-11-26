@@ -55,7 +55,7 @@ Ativar não importa pedidos históricos. Abra um pedido pago anterior e use **Si
 
 O pedido conserva preços e descontos da compra; não usa a curva atual. Quando um total não é divisível pela quantidade em centavos, a linha é desdobrada em duas faixas de preço centesimal para manter exatamente quantidade e total pago. O benefício de arte é enviado uma única vez como desconto do pedido.
 
-O nome/documento/endereço de faturamento não se confundem com a identidade de login. A entrega pode ter outro destinatário e A/C. Contatos já existentes são reutilizados por documento, não alterados silenciosamente. Se o e-mail da nota divergir do faturamento, corrija-o no Olist antes de autorizar e retome a etapa.
+O nome/documento/endereço de faturamento não se confundem com a identidade de login. A entrega pode ter outro destinatário e A/C. Contatos já existentes são reutilizados por documento, não alterados silenciosamente. Se o e-mail da nota divergir do faturamento, use **Atualizar e-mail no Olist** para conferir e autorizar a atualização do cadastro antes de retomar.
 
 No pedido, **Concluir produção** exige pagamento real, produção iniciada e artes aprovadas, quando houver. A embalagem calculada fica congelada para faturamento. A alteração de etapa para enviado exige NF-e autorizada e expedição quando essas automações estiverem habilitadas. Gerar nota não significa autorização: estados rejeitado, cancelado ou denegado não liberam expedição. Olist HTTP 200 não significa que o e-mail foi entregue.
 
@@ -109,6 +109,21 @@ A fila continua da etapa pendente, preservando as liberações de produção, no
 
 Não há migration nova nem desbloqueio automático de pedidos existentes no deploy. A escolha do cadastro é explícita pela equipe. Testes usam banco local descartável e respostas Olist simuladas, sem emissão fiscal real.
 
+### E-mail da compra diferente do cadastro Olist
+
+O destinatário fiscal é o e-mail de **faturamento congelado na compra**, não o login do comprador nem o endereço antigo do ERP. O worker confere o cadastro antes de gerar a primeira nota e confere novamente o destinatário antes de autorizar. Uma divergência fica com código `olist_email_update_required` e oferece **Atualizar e-mail no Olist**, inclusive em pedidos com o erro genérico antigo.
+
+1. Abra a ação no pedido administrativo. O modal consulta o contato vinculado e a nota pendente e compara e-mail da compra, e-mail geral do contato, e-mail de NF-e do contato e e-mail da nota.
+2. Confirme a autorização de atualizar o cadastro compartilhado do ERP e informe o motivo. O navegador não escolhe nem envia um novo endereço: o servidor deriva o destino da compra e recusa campos extras.
+3. O backend compara o estado atual com a conferência apresentada, registra intenção e valores anteriores cifrados e envia somente `email` e `emailNfe` em `PUT /contatos/{id}`. Nome, CPF/CNPJ, endereço e condições da compra não são copiados sobre o cadastro.
+4. Uma nova leitura verifica o resultado. Apenas se cadastro e nota tiverem o destinatário correto a fila retoma a nota existente. A autorização e o envio por e-mail seguem as configurações do tenant.
+
+**Nota já gerada:** atualizar o contato não é tratado como garantia de alteração do destinatário da nota. Se o ERP mantiver o e-mail antigo, o painel informa que o cadastro foi atualizado, mas mantém a emissão bloqueada com `olist_invoice_email_required`, oferece **Abrir Olist** e permite consultar novamente após corrigir **essa mesma nota**. Não inventamos `PUT /notas/{id}`, não recriamos/cancelamos a nota e não removemos a verificação do destinatário. A autorização documentada recebe `enviarEmail`, não um endereço substituto.
+
+As operações exigem permissão `commerce:orders:manage`, pagamento real confirmado, pedido ativo e nota pendente sem autorização em andamento ou resultado incerto. Leases por pedido e por tenant/documento serializam a atualização com o worker fiscal; pagamento, IDs e configurações são conferidos novamente na transação. A confirmação possui hash do comparativo para impedir alterações sobre uma leitura antiga. Após perda de resposta, uma nova consulta pode confirmar a atualização já realizada sem repetir o PUT. E-mails anteriores ficam cifrados no histórico; logs operacionais não incluem endereços.
+
+Sem nova migration. Após o deploy, pedidos já bloqueados precisam da confirmação da equipe nessa ação. Homologue a atualização do contato e a leitura do destinatário da nota na conta Olist antes de confiar no envio automático; os testes locais simulam os dois comportamentos do ERP.
+
 ## Verificação local
 
 - Todas as 74 migrations aplicadas em banco local vazio, sem usar o projeto Supabase real.
@@ -123,6 +138,8 @@ Para repetir a integração, crie um banco local novo com `scripts/setup-commerc
 
 - [Listar contatos](https://api-docs.erp.olist.com/api-reference/contatos/listar-contatos)
 - [Obter contato](https://api-docs.erp.olist.com/api-reference/contatos/obter-contato)
+- [Atualizar contato: e-mail e e-mail de NF-e](https://api-docs.erp.olist.com/api-reference/contatos/atualizar-contato)
+- [Obter nota fiscal e destinatário](https://api-docs.erp.olist.com/api-reference/notas/obter-nota-fiscal)
 - [Criar pedido](https://api-docs.erp.olist.com/api-reference/pedidos/criar-pedido)
 - [Gerar nota fiscal do pedido](https://api-docs.erp.olist.com/api-reference/pedidos/gerar-nota-fiscal-do-pedido)
 - [Autorizar nota fiscal e solicitar e-mail](https://api-docs.erp.olist.com/api-reference/notas/autorizar-nota-fiscal)

@@ -12,9 +12,11 @@ import { commerceOlistConnection, commerceOlistRequest } from "@/services/commer
 import { isOlistReconnectRequired } from "@/lib/olist/oauth-errors";
 import { OlistRequestError } from "@/services/olist/olist";
 import { commerceOlistCustomerChoices, linkCommerceOlistCustomer } from "@/services/commerce/olist-customer-review";
+import { commerceOlistEmailReview, updateCommerceOlistEmail } from "@/services/commerce/olist-email-review";
 
 export const maxDuration = 60;
-const schema = z.object({ action: z.enum(["retry", "production_ready", "tracking", "customer_lookup", "customer_link"]), note: z.string().trim().min(5).max(500),
+const schema = z.object({ action: z.enum(["retry", "production_ready", "tracking", "customer_lookup", "customer_link", "email_review", "email_update"]), note: z.string().trim().min(5).max(500),
+  reviewToken: z.string().regex(/^[a-f0-9]{64}$/).optional(), confirmEmailUpdate: z.boolean().optional(),
   customerId: z.string().regex(/^[1-9]\d{0,14}$/).optional(),
   trackingCode: z.string().trim().max(100).optional(), trackingUrl: z.string().url().max(1000).refine(value => value.startsWith("https://"), "Use uma URL HTTPS.").optional() }).strict();
 function parseOrderId(value: string) {
@@ -47,7 +49,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
     const settings = await getCommerceOlistSettings(session.tenantId);
     if (!settings.enabled) throw new CommerceError("Ative esta integração em Loja online > Olist.", 409);
     await commerceOlistConnection(session.tenantId);
-    if (input.action === "customer_lookup") {
+    if (input.action === "email_review") {
+      return commerceJson({ ok: true, emailReview: await commerceOlistEmailReview(session.tenantId, orderId) });
+    } else if (input.action === "email_update") {
+      if (!input.confirmEmailUpdate || !input.reviewToken) throw new CommerceError("Confira os e-mails e confirme a atualização do cadastro Olist.");
+      const result = await updateCommerceOlistEmail(session.tenantId, orderId, session.userId, input.reviewToken, input.note);
+      if (result.resumed) scheduleCommerceOlist(session.tenantId, orderId);
+      return commerceJson({ ok: true, ...result, ...(await state(session.tenantId, orderId)) });
+    } else if (input.action === "customer_lookup") {
       return commerceJson({ ok: true, ...(await commerceOlistCustomerChoices(session.tenantId, orderId)) });
     } else if (input.action === "customer_link") {
       if (!input.customerId) throw new CommerceError("Selecione o cliente Olist que deseja vincular.");

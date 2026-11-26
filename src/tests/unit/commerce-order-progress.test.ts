@@ -39,6 +39,7 @@ describe("guided order progress", () => {
     expect(orderProgress({ ...input, olist: { ...olist, job: { ...job, status: "blocked", error_code: "olist_oauth_invalid" } } })).toMatchObject({ owner: "olist", olistAction: "reconnect" });
     expect(orderProgress({ ...input, olist: { ...olist, job: { ...job, status: "review" } } })).toMatchObject({ owner: "olist", olistAction: "retry" });
     expect(orderProgress({ ...input, olist: { ...olist, job: { ...job, customer_id: null, sales_order_id: null, status: "review", error_code: "olist_customer_ambiguous" } } })).toMatchObject({ owner: "olist", olistAction: "retry", title: "Escolha o cadastro do cliente no Olist" });
+    expect(orderProgress({ ...input, olist: { ...olist, job: { ...job, status: "blocked", error_code: "olist_email_update_required" } } })).toMatchObject({ owner: "olist", olistAction: "retry", title: "Confira o e-mail de faturamento no Olist" });
   });
   it("keeps ERP optional, with no fiscal step or forced OAuth for unconfigured tenants", () => {
     const manual = { ...input, olist: { ...olist, configured: false }, melhorEnvio: false };

@@ -33,7 +33,7 @@ export function orderProgress({ order, olist, shipping, pickup, melhorEnvio }: I
   } else if (erp && job && ["blocked", "review"].includes(job.status)) {
     stage = !job.sales_order_id ? "production" : !authorized ? "fiscal" : "shipping";
     owner = "olist"; olistAction = job.error_code === "olist_oauth_invalid" ? "reconnect" : "retry";
-    title = olistAction === "reconnect" ? "Reconecte o Olist para continuar" : job.error_code === "olist_customer_ambiguous" ? "Escolha o cadastro do cliente no Olist" : "A integração precisa de conferência";
+    title = olistAction === "reconnect" ? "Reconecte o Olist para continuar" : ["olist_email_update_required", "olist_invoice_email_required"].includes(job.error_code ?? "") ? "Confira o e-mail de faturamento no Olist" : job.error_code === "olist_customer_ambiguous" ? "Escolha o cadastro do cliente no Olist" : "A integração precisa de conferência";
     description = job.error_code === "olist_customer_ambiguous" ? "O CPF/CNPJ retornou mais de um cadastro. Confira os dados e selecione o contato correto; nenhum novo cliente será criado." : "O progresso foi preservado. Confira a pendência antes de continuar; registros já concluídos não serão recriados.";
   } else if (order.fulfillment_status === "received") {
     stage = "production"; owner = "production"; title = "Tudo pronto para produzir";
