@@ -172,6 +172,9 @@
   .productImage { max-width: 300px; }
   .demoInner { gap: 26px; }
 }
+@media (max-width: 700px) {
+  .hero .selectors, .hero .motionButton { display: none; }
+}
 @media (max-width: 600px) {
   .inner { min-height: 0; height: auto; grid-template-columns: 1fr; padding: 26px 20px 18px; gap: 16px; }
   .copy { max-width: none; }
