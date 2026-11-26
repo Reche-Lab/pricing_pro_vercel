@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { commerceProductPath } from "@/domain/commerce/product-urls";
-import { ArrowRight, BookOpen, ChevronDown, FileText, Grid2X2, Megaphone, Package, X } from "lucide-react";
+import { ArrowRight, BookOpen, ChevronDown, ChevronLeft, FileText, Grid2X2, Megaphone, Package, X } from "lucide-react";
 import { blogPath, type BlogCard } from "@/domain/commerce/blog";
 import type { publicCommerceProduct } from "@/repositories/commerce";
 import { campaignIsVisible } from "@/domain/commerce/library";
@@ -16,10 +16,11 @@ type MenuProduct = Pick<ReturnType<typeof publicCommerceProduct>, "id" | "slug" 
 type MenuGroup = { key: string; name: string; kind: "products"; items: MenuProduct[] } | { key: string; name: string; kind: "campaigns" } | { key: string; name: string; kind: "blog"; items: BlogCard[] };
 const noArticles: BlogCard[] = [];
 
-export function StoreCategoryNavigation({ products, base, preview, view, activeCategory, libraryEnabled = false, libraryApi = "", navigationKey = "", quoteActive = false, blogEnabled = false, blogArticles = noArticles, blogTitle = "Blog", activeBlogSlug }: {
+export function StoreCategoryNavigation({ products, base, preview, view, activeCategory, libraryEnabled = false, libraryApi = "", navigationKey = "", quoteActive = false, blogEnabled = false, blogArticles = noArticles, blogTitle = "Blog", activeBlogSlug, layout = "bar" }: {
   products: MenuProduct[]; base: string; preview: boolean; view: string; activeCategory?: string | null;
   libraryEnabled?: boolean; libraryApi?: string; navigationKey?: string; quoteActive?: boolean;
   blogEnabled?: boolean; blogArticles?: BlogCard[]; blogTitle?: string; activeBlogSlug?: string;
+  layout?: "bar" | "drawer";
 }) {
   const categories = useMemo(() => {
     const grouped = new Map<string, MenuProduct[]>();
@@ -77,31 +78,31 @@ export function StoreCategoryNavigation({ products, base, preview, view, activeC
     return () => { document.removeEventListener("pointerdown", outside); window.removeEventListener("resize", resize); window.removeEventListener("scroll", resize); };
   }, [selected, cancelClose]);
 
-  return <nav ref={root} aria-label="Categorias de produtos" className={styles.categoryNav}
-    onPointerEnter={cancelClose} onPointerLeave={scheduleClose}
+  return <nav ref={root} aria-label="Categorias de produtos" className={`${styles.categoryNav} ${layout === "drawer" ? styles.categoryDrawer : ""}`} data-expanded={Boolean(selected)}
+    onPointerEnter={cancelClose} onPointerLeave={layout === "drawer" ? undefined : scheduleClose}
     onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) close(); }}
     onKeyDown={event => { if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); close(true); } }}>
     <div className={styles.categoryNavInner}><div className={styles.categoryNavBar}>
       <Link className={styles.categoryCatalogLink} href={`${base}/catalogo`} aria-label="Pesquisar produtos" aria-current={view === "catalogo" && !activeCategory ? "page" : undefined} onClick={() => close()}><Grid2X2 size={16} aria-hidden="true"/>Todos os produtos</Link>
       {categories.map((category, index) => <button key={category.key} type="button"
         ref={element => { if (element) triggers.current.set(category.key, element); else triggers.current.delete(category.key); }}
-        id={`${id}-trigger-${index}`} className={styles.categoryTrigger} title={category.name} aria-expanded={open === category.key}
+        id={`${id}-trigger-${index}`} className={styles.categoryTrigger} title={layout === "drawer" && open === category.key ? "Voltar às categorias" : category.name} aria-expanded={open === category.key}
         aria-controls={`${id}-panel-${index}`} aria-current={isActive(category) ? "true" : undefined}
         data-active={open === category.key || isActive(category)}
         onClick={() => { if (open === category.key) close(); else openCategory(category.key); }}
-        onPointerEnter={event => { if (event.pointerType === "mouse" && window.matchMedia?.("(hover: hover) and (pointer: fine)").matches) openCategory(category.key); }}
+        onPointerEnter={event => { if (layout !== "drawer" && event.pointerType === "mouse" && window.matchMedia?.("(hover: hover) and (pointer: fine)").matches) openCategory(category.key); }}
         onKeyDown={event => {
           if (event.key === "ArrowDown") { event.preventDefault(); if (open === category.key) panel.current?.querySelector<HTMLAnchorElement>("a[href]")?.focus(); else openCategory(category.key, true); }
-          if (["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) {
+          if (layout !== "drawer" && ["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) {
             event.preventDefault();
             const next = event.key === "Home" ? 0 : event.key === "End" ? categories.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + categories.length) % categories.length;
             triggers.current.get(categories[next].key)?.focus(); if (open) openCategory(categories[next].key);
           }
         }}>
-        {category.kind === "blog" ? <BookOpen size={15} aria-hidden="true"/> : category.kind === "campaigns" ? <Megaphone size={15} aria-hidden="true"/> : null}<span>{category.name}</span><ChevronDown size={14} aria-hidden="true"/>
+        {layout === "drawer" && open === category.key ? <><ChevronLeft size={17} aria-hidden="true"/><span>Voltar às categorias</span></> : <>{category.kind === "blog" ? <BookOpen size={15} aria-hidden="true"/> : category.kind === "campaigns" ? <Megaphone size={15} aria-hidden="true"/> : null}<span>{category.name}</span><ChevronDown size={14} aria-hidden="true"/></>}
       </button>)}
     </div>
-      {!preview ? <Link className={styles.categoryUtilityLink} href={`${base}/orcamento`} aria-current={view === "orcamento" ? "page" : undefined} data-quote-active={quoteActive} onClick={() => close()}><FileText size={16} aria-hidden="true"/><span>Solicitar orçamento</span><ArrowRight size={14} aria-hidden="true"/></Link> : null}
+      {!preview && layout !== "drawer" ? <Link className={styles.categoryUtilityLink} href={`${base}/orcamento`} aria-current={view === "orcamento" ? "page" : undefined} data-quote-active={quoteActive} onClick={() => close()}><FileText size={16} aria-hidden="true"/><span>Solicitar orçamento</span><ArrowRight size={14} aria-hidden="true"/></Link> : null}
     </div>
     {selected ? <section ref={panel} id={`${id}-panel-${categories.indexOf(selected)}`} aria-label={selected.kind === "products" ? `Produtos de ${selected.name}` : `${selected.name} da loja`} className={styles.categoryDropdown}>
       <div className={styles.categoryDropdownHeading}>

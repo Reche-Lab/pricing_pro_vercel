@@ -368,6 +368,7 @@
   gap: 12px;
   flex-shrink: 0;
 }
+div.desktopUtility { display: contents; }
 .navigation > a {
   min-width: 36px;
   min-height: 40px;
@@ -523,6 +524,23 @@
 .categoryLibraryStatus .secondary { min-height: 40px; padding: 8px 12px; font-size: 12px; }
 .categoryCampaignImage { width: 96px; }
 .categoryCampaignImage img { padding: 0; object-fit: cover; }
+.categoryNav.categoryDrawer { width: 100%; padding: 0; margin: 0; }
+.categoryDrawer .categoryNavInner { display: block; }
+.categoryDrawer .categoryNavBar { display: flex; flex-direction: column; align-items: stretch; gap: 4px; min-height: 0; overflow: visible; padding: 0; }
+.categoryDrawer .categoryNavBar > a, .categoryDrawer .categoryTrigger { justify-content: flex-start; width: 100%; max-width: none; min-height: 46px; padding: 10px 12px; font-size: 14px; text-align: left; }
+.categoryDrawer .categoryTrigger > span { flex: 1; white-space: normal; overflow-wrap: anywhere; }
+.categoryDrawer .categoryNavInner > .categoryUtilityLink { display: none; }
+.categoryDrawer[data-expanded="true"] .categoryNavBar > a, .categoryDrawer[data-expanded="true"] .categoryTrigger[aria-expanded="false"] { display: none; }
+.categoryDrawer .categoryTrigger[aria-expanded="true"] > svg { transform: none; }
+.categoryDrawer .categoryDropdown { position: static; inset: auto; max-height: none; margin-top: 10px; border: 0; border-top: 1px solid var(--line); border-radius: 0; box-shadow: none; background: transparent; animation: none; }
+.categoryDrawer .categoryDropdownHeading { padding: 14px 4px 8px; }
+.categoryDrawer .categoryDropdownHeading h2 { font-size: 17px; }
+.categoryDrawer .categoryClose { display: none; }
+.categoryDrawer .categoryViewAll { flex-basis: 100%; order: 2; min-height: 44px; font-size: 13px; }
+.categoryDrawer .categoryProductGrid, .categoryDrawer .categoryLibraryLayout[data-categories="false"] .categoryProductGrid { grid-template-columns: minmax(0, 1fr); padding: 8px 0; overflow: visible; }
+.categoryDrawer .categoryProductText > strong { font-size: 14px; }
+.categoryDrawer .categoryProductImage { width: 56px; height: 56px; }
+.categoryDrawer .categoryLibraryLayout { grid-template-columns: minmax(0, 1fr); overflow: visible; }
 .categoryLibraryLayout { display: grid; grid-template-columns: 210px minmax(0, 1fr); min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 .categoryLibraryLayout[data-categories="false"] { grid-template-columns: minmax(0, 1fr); }
 .categoryArtCategories { min-width: 0; padding: 18px 14px; border-right: 1px solid var(--line); background: var(--soft); }
@@ -1251,6 +1269,7 @@
   }
 }
 @media (max-width: 700px) {
+  .desktopCategories, .navigation .desktopUtility { display: none; }
   .headerInner {
     padding: 14px 20px 10px;
     grid-template-columns: minmax(0, 1fr) auto;

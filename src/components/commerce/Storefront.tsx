@@ -57,6 +57,7 @@ import { StoreCheckout as Checkout } from "./StoreCheckout";
 import { BuyerLogin } from "./StoreBuyerLogin";
 import { BuyerSessionBoundary } from "./BuyerSessionBoundary";
 import { StoreAccountMenu } from "./StoreAccountMenu";
+import { StoreMobileMenu } from "./StoreMobileMenu";
 import { useBuyerCart } from "./use-buyer-cart";
 import accountStyles from "./buyer-account.module.css";
 import { useStoreTheme, accentForeground } from "./use-store-theme";
@@ -222,6 +223,10 @@ function StorefrontContent({
   }
   const selectedProduct =
     view === "produto" ? findCommerceProduct(products, path[1]) : undefined;
+  const categoryNavigation = (layout: "bar" | "drawer") => <StoreCategoryNavigation products={products} base={base} preview={preview} view={view}
+    blogEnabled={blogEnabled} blogTitle={blogTitle} blogArticles={blogArticles} activeBlogSlug={view === "blog" ? path[1] : undefined}
+    activeCategory={selectedProduct?.category ?? (view === "catalogo" ? searchParams.get("categoria") : null)}
+    quoteActive={quoting} libraryEnabled={libraryEnabled} libraryApi={`${api}/library`} navigationKey={`${base}/${path.join("/")}?${searchParams.toString()}`} layout={layout}/>;
   const pendingCartControls = !preview && cart?.pendingOrder ? <StoreCartControls api={api} base={base} revision={cart.revision} orderId={cart.pendingOrder.id} onChanged={async () => { setQuoteMode(false); await refresh(); }} disabled={busy} showPaymentLink analyticsPayload={cart.payments.payment_environment === "test" ? undefined : analyticsCommercePayload(cart.calculation?.items ?? [])}/> : null;
   return (
     <main
@@ -304,7 +309,7 @@ function StorefrontContent({
           </form>
           <nav aria-label="Loja" className={styles.navigation}>
             <button
-              className={styles.iconButton}
+              className={`${styles.iconButton} ${styles.desktopUtility}`}
               type="button"
               onClick={toggle}
               title={
@@ -325,14 +330,13 @@ function StorefrontContent({
               {quoting ? <FileText size={21}/> : <ShoppingBag size={21} />}
               <span className="text-sm">{cart?.lines.length ?? 0}</span>
             </Link>
-            {!preview ? <StoreAccountMenu key={api} base={base} customer={cart?.customer ?? null} loading={!cart && !cartError && !children} busy={busy} navigationKey={`${base}/${path.join("/")}`} onLogout={logout}/> : null}
+            {!preview ? <div className={styles.desktopUtility}><StoreAccountMenu key={api} base={base} customer={cart?.customer ?? null} loading={!cart && !cartError && !children} busy={busy} navigationKey={`${base}/${path.join("/")}`} onLogout={logout}/></div> : null}
+            <StoreMobileMenu name={settings.name} logoUrl={settings.logoUrl} base={base} preview={preview} customer={cart?.customer ?? null}
+              loading={!cart && !cartError && !children} busy={busy} theme={theme} onToggleTheme={toggle} onLogout={logout}
+              navigationKey={`${base}/${path.join("/")}?${searchParams.toString()}`}>{categoryNavigation("drawer")}</StoreMobileMenu>
           </nav>
         </div>
-        <StoreCategoryNavigation products={products} base={base} preview={preview} view={view}
-          blogEnabled={blogEnabled}
-          blogTitle={blogTitle} blogArticles={blogArticles} activeBlogSlug={view === "blog" ? path[1] : undefined}
-          activeCategory={selectedProduct?.category ?? (view === "catalogo" ? searchParams.get("categoria") : null)}
-          quoteActive={quoting} libraryEnabled={libraryEnabled} libraryApi={`${api}/library`} navigationKey={`${base}/${path.join("/")}?${searchParams.toString()}`}/>
+        <div className={styles.desktopCategories}>{categoryNavigation("bar")}</div>
         {showQuoteJourney ? <StoreQuoteJourney base={base} step={savedQuote ? 4 : quoteDetails ? quoteStep === "review" ? 3 : 2 : 1} count={cart?.lines.length ?? 0} totalCents={cart?.calculation?.totalCents ?? 0} identified={Boolean(cart?.customer)} onPurchase={() => { setQuoteMode(false); router.push(`${base}/carrinho`); }}/>: null}
       </header>
       {view === "home" ? (
