@@ -39,9 +39,11 @@ describe("commerce Olist authorization boundaries", () => {
   it("does not permit readers to run mutations or accept an injected tenant", async () => {
     const params = { params: Promise.resolve({ orderId: "11111111-1111-4111-8111-111111111111" }) };
     vi.mocked(getSessionProfile).mockResolvedValue({ ...profile, role: "viewer" });
-    expect((await POST(request({ action: "retry", note: "Tentativa indevida" }), params)).status).toBe(403);
+    for (const action of ["retry", "customer_lookup", "customer_link"])
+      expect((await POST(request({ action, note: "Tentativa indevida", customerId: "11" }), params)).status).toBe(403);
     vi.mocked(getSessionProfile).mockResolvedValue(profile);
-    expect((await POST(request({ action: "retry", note: "Conferir etapas", tenantId: "another" }), params)).status).toBe(400);
+    for (const action of ["retry", "customer_lookup", "customer_link"])
+      expect((await POST(request({ action, note: "Conferir etapas", customerId: "11", tenantId: "another" }), params)).status).toBe(400);
     expect(authorizedCommerceOrder).not.toHaveBeenCalled();
   });
 });

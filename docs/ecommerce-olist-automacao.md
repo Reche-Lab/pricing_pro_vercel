@@ -95,6 +95,20 @@ O pedido de venda é criado após resolver o cliente. A geração e autorizaçã
 
 Os logs `Commerce Olist customer lookup completed` informam formato de busca, paginação e contagens, sem CPF/CNPJ ou e-mail. `Commerce Olist customer resolved` registra o ID e a origem do vínculo (`saved_mapping`, `document_lookup`, `created` ou `verified_create_conflict`). Falhas do worker incluem tipo de erro e campos recusados pelo Olist.
 
+### Mais de um cadastro para o mesmo CPF/CNPJ
+
+Dois IDs diferentes com o mesmo documento interrompem a associação automática, não a consulta. O erro é `olist_customer_ambiguous`, com orientação específica; não é classificado como mutação incerta quando nenhuma criação foi tentada.
+
+1. No pedido administrativo, abra **Integrações e detalhes · Olist > Conferir cliente Olist**. A ação fica disponível também quando o destaque superior estiver em outra etapa e para pedidos antigos com o erro genérico de revisão.
+2. Confira os contatos retornados pelo CPF/CNPJ do faturamento: nome, ID, documento, e-mail, telefone e cidade. Nenhum contato vem pré-selecionado; inativos/excluídos não podem ser escolhidos.
+3. Selecione o cadastro correto, informe o motivo e confirme **Vincular cliente e continuar**.
+
+O backend consulta novamente `/contatos/{id}` e exige o documento exato e situação não inativa/excluída. O vínculo usa os mesmos leases do worker por pedido e por tenant/documento, revalida pagamento e progresso e grava o responsável/motivo no histórico. Não altera cadastros no ERP nem os dados congelados da compra. O mapeamento fica disponível para próximos pedidos desse documento no mesmo tenant.
+
+A fila continua da etapa pendente, preservando as liberações de produção, nota e expedição e os marcadores de operações incertas. Um vínculo não pode substituir outro mapeamento confirmado ou modificar pedido de venda já criado. Sem candidatos, é possível consultar novamente ou usar **Conferir e retomar** após corrigir o cadastro. Erros permanecem no modal; OAuth inválido oferece reconexão.
+
+Não há migration nova nem desbloqueio automático de pedidos existentes no deploy. A escolha do cadastro é explícita pela equipe. Testes usam banco local descartável e respostas Olist simuladas, sem emissão fiscal real.
+
 ## Verificação local
 
 - Todas as 74 migrations aplicadas em banco local vazio, sem usar o projeto Supabase real.
@@ -107,6 +121,8 @@ Para repetir a integração, crie um banco local novo com `scripts/setup-commerc
 
 ## Referências oficiais
 
+- [Listar contatos](https://api-docs.erp.olist.com/api-reference/contatos/listar-contatos)
+- [Obter contato](https://api-docs.erp.olist.com/api-reference/contatos/obter-contato)
 - [Criar pedido](https://api-docs.erp.olist.com/api-reference/pedidos/criar-pedido)
 - [Gerar nota fiscal do pedido](https://api-docs.erp.olist.com/api-reference/pedidos/gerar-nota-fiscal-do-pedido)
 - [Autorizar nota fiscal e solicitar e-mail](https://api-docs.erp.olist.com/api-reference/notas/autorizar-nota-fiscal)

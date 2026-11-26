@@ -11,6 +11,7 @@ import { OlistRequestError } from "@/services/olist/olist";
 import { commerceOlistConnection, commerceOlistRequest } from "./olist-client";
 import { isOlistReconnectRequired } from "@/lib/olist/oauth-errors";
 import { findCommerceOlistCustomer, recoverCommerceOlistCustomer, OlistCustomerReviewRequired, type CommerceOlistCustomerLookup } from "./olist-customer";
+import { acquireCommerceOlistLease as acquireLease } from "./olist-lease";
 
 class ReviewRequired extends CommerceError {}
 class RetryLater extends Error {}
@@ -22,10 +23,6 @@ const numeric = (value: unknown) => value === null || value === undefined ? null
 const safeLink = (value: unknown) => { try { const url = new URL(String(value)); return url.protocol === "https:" && !url.username && !url.password ? url.toString() : null; } catch { return null; } };
 const uncertain = () => new ReviewRequired("Uma chamada anterior pode ter sido concluída no Olist. Não será repetida sem localizar o registro. Confira o Olist e use Conferir e retomar; se não houver retorno, solicite revisão técnica.", 409);
 
-async function acquireLease(client: PoolClient, key: string, token: string) {
-  return Boolean((await client.query(`insert into commerce_olist_leases(lock_key,token,expires_at) values($1,$2,now()+interval '2 minutes')
-    on conflict(lock_key) do update set token=excluded.token,expires_at=excluded.expires_at where commerce_olist_leases.expires_at<now() returning token`, [key, token])).rowCount);
-}
 // Durable leases work with both session and transaction poolers. No transaction
 // stays open across ERP requests; uncertain mutations must be reconciled, not replayed.
 export async function processCommerceOlistOrder(tenantId: string, orderId: string, maxSteps = 4) {
@@ -209,8 +206,8 @@ export async function processCommerceOlistOrder(tenantId: string, orderId: strin
         const rejected = error instanceof OlistRequestError && error.status >= 400 && error.status < 500;
         const review = error instanceof ReviewRequired || error instanceof OlistCustomerReviewRequired || (attempted && stage !== "shipping" && !rejected && !(error instanceof CommerceError));
         const retry = !reconnect && !review && (error instanceof OlistRequestError ? error.status >= 500 || error.status === 429 : !(error instanceof CommerceError));
-        const code = reconnect ? "olist_oauth_invalid" : review ? "olist_review_required" : retry ? "olist_temporarily_unavailable" : "olist_data_required";
-        const message = reconnect ? "Reconecte o Olist para continuar. As etapas concluídas foram preservadas." : review && !(error instanceof ReviewRequired) ? uncertain().message : error instanceof Error ? error.message.slice(0, 600) : "Não foi possível concluir esta etapa Olist.";
+        const code = reconnect ? "olist_oauth_invalid" : error instanceof OlistCustomerReviewRequired && error.ambiguous ? "olist_customer_ambiguous" : review ? "olist_review_required" : retry ? "olist_temporarily_unavailable" : "olist_data_required";
+        const message = reconnect ? "Reconecte o Olist para continuar. As etapas concluídas foram preservadas." : review && !(error instanceof ReviewRequired) && !(error instanceof OlistCustomerReviewRequired) ? uncertain().message : error instanceof Error ? error.message.slice(0, 600) : "Não foi possível concluir esta etapa Olist.";
         await client.query(`update commerce_olist_orders set status=$3,error_code=$4,last_error=$5,debug_id=$6,
           attempt_stage=case when $7::boolean then null else attempt_stage end,
           next_attempt_at=now()+interval '5 minutes',updated_at=now() where tenant_id=$1 and order_id=$2 and status<>'stopped'`,
@@ -218,7 +215,7 @@ export async function processCommerceOlistOrder(tenantId: string, orderId: strin
         await client.query("insert into commerce_order_events(tenant_id,order_id,type,metadata) values($1,$2,'olist.error',$3)", [tenantId, orderId, JSON.stringify({ stage, code, debugId, note: message })]);
         const validationFields = error instanceof OlistRequestError && Array.isArray(record(error.data).detalhes)
           ? (record(error.data).detalhes as unknown[]).map(item => record(item).campo).filter(value => typeof value === "string") : undefined;
-        console.error("Commerce Olist stage failed.", { tenantId, orderId, stage, debugId, code, httpStatus: error instanceof OlistRequestError ? error.status : undefined, uncertainMutation: review, errorType: error instanceof Error ? error.name : "Unknown", validationFields });
+        console.error("Commerce Olist stage failed.", { tenantId, orderId, stage, debugId, code, httpStatus: error instanceof OlistRequestError || error instanceof CommerceError ? error.status : undefined, uncertainMutation: attempted && !rejected && stage !== "shipping", errorType: error instanceof Error ? error.name : "Unknown", validationFields, ...(error instanceof OlistCustomerReviewRequired ? { reason: error.message } : {}) });
         return;
       }
     }

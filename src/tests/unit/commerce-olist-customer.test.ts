@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import { existingCommerceOlistCustomerId, findCommerceOlistCustomer, recoverCommerceOlistCustomer, OlistCustomerReviewRequired } from "@/services/commerce/olist-customer";
+import { existingCommerceOlistCustomerId, findCommerceOlistCustomer, recoverCommerceOlistCustomer, OlistCustomerReviewRequired, listCommerceOlistCustomerChoices, verifyCommerceOlistCustomer } from "@/services/commerce/olist-customer";
 import { OlistRequestError } from "@/services/olist/olist";
 
 const document = "52998224725";
@@ -10,6 +10,23 @@ const duplicate = () => new OlistRequestError("Contato já cadastrado.", 409, {
 });
 
 describe("commerce Olist billing contact resolution", () => {
+  it("identifies ambiguity explicitly and lists choices without choosing one or exposing arbitrary fields", async () => {
+    const request = vi.fn(async () => ({ itens: [{ id: 11, cpfCnpj: document, nome: "Principal", email: "buyer@example.test", observacoes: "private notes" }, { id: 12, cpfCnpj: formatted, nome: "Antigo", situacao: "I" }, { id: 13, cpfCnpj: "11144477735" }] }));
+    await expect(findCommerceOlistCustomer(request, document)).rejects.toMatchObject({ ambiguous: true, name: "OlistCustomerReviewRequired", status: 409 });
+    const choices = await listCommerceOlistCustomerChoices(request, document);
+    expect(choices).toHaveLength(2);
+    expect(choices[0]).toMatchObject({ id: "11", name: "Principal", inactive: false });
+    expect(choices[1]).toMatchObject({ id: "12", inactive: true });
+    expect(JSON.stringify(choices)).not.toContain("private notes");
+  });
+  it("deduplicates repeated IDs, returns all exact matches and rechecks selection against the current ERP record", async () => {
+    const request = vi.fn(async (path: string) => path.startsWith("/contatos?") ? { itens: [{ id: 11, cpfCnpj: document }, { id: 11, cpfCnpj: formatted }] } : { id: 11, cpfCnpj: document, situacao: "B" });
+    expect(await listCommerceOlistCustomerChoices(request, document)).toHaveLength(1);
+    expect(await verifyCommerceOlistCustomer(request, "11", document)).toBe("11");
+    for (const detail of [{ id: 11, cpfCnpj: "11144477735" }, { id: 12, cpfCnpj: document }, { id: 11, cpfCnpj: document, situacao: "I" }, { id: 11, cpfCnpj: document, situacao: "E" }])
+      await expect(verifyCommerceOlistCustomer(vi.fn(async () => detail), "11", document)).rejects.toThrow();
+    await expect(verifyCommerceOlistCustomer(request, "../11", document)).rejects.toThrow(/válido/);
+  });
   it.each([
     { itens: [{ id: 11, cpfCnpj: formatted }] },
     { data: { itens: [{ id: "11", cpfCnpj: document }] } },

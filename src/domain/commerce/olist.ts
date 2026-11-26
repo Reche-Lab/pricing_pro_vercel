@@ -16,6 +16,7 @@ export const commerceOlistSettingsSchema = z.object({
   categoryId: externalId,
 }).strict();
 export type CommerceOlistSettings = z.infer<typeof commerceOlistSettingsSchema>;
+export type CommerceOlistCustomerChoice = { id: string; name: string; document: string; email: string; phone: string; city: string; state: string; inactive: boolean };
 export type CommerceOlistStage = "customer" | "sales_order" | "shipping" | "invoice_create" | "invoice_authorize" | "invoice_status" | "dispatch" | "tracking";
 export type CommerceOlistJob = {
   tenant_id: string; order_id: string; customer_id: string | null; sales_order_id: string | null;

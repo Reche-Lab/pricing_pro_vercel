@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterAll, beforeAll, afterEach, describe, expect, it, vi } from "vitest";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { getPool } from "@/lib/db/client";
 import { encryptTenantSecret } from "@/lib/crypto/secrets";
 import { getCurrentSession } from "@/lib/auth/session";
@@ -46,7 +46,7 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
     if (input.paid !== false) await pool.query("update commerce_orders set payment_status='paid' where tenant_id=$1 and id=$2", [tenantId, orderId]);
     return { tenantId, orderId, snapshot, variantId };
   }
-  function provider(options: { existingContact?: boolean; hideContact?: boolean; wrappedList?: boolean; detailDocument?: string; failDetailOnce?: boolean } = {}) {
+  function provider(options: { existingContact?: boolean; hideContact?: boolean; wrappedList?: boolean; detailDocument?: string; failDetailOnce?: boolean; duplicateContacts?: boolean; inactiveDetail?: boolean; onDetail?: () => Promise<void> } = {}) {
     let contact = Boolean(options.existingContact), detailFailed = false, externalOrder: Record<string, unknown> | null = null, invoice = false, authorized = false, expedition = false;
     let loseOrder = false, loseWithoutCreating = false, authInvalid = false, emailMismatch = false, rejectInvoice = false, pendingAuthorization = false;
     const calls: { path: string; method: string; body: Record<string, unknown> }[] = [];
@@ -58,19 +58,21 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
       calls.push({ path, method, body });
       if (authInvalid) return Response.json(url.hostname === "accounts.tiny.com.br" ? { error: "invalid_grant" } : {}, { status: url.hostname === "accounts.tiny.com.br" ? 400 : 401 });
       if (path === "/contatos" && method === "GET") {
+        if (options.duplicateContacts) return Response.json({ itens: url.searchParams.get("cpfCnpj")?.includes(".") ? [{ id: 11, nome: "Cadastro antigo", cpfCnpj: testCommerceBilling.document }, { id: 12, nome: "Cadastro principal", cpfCnpj: testCommerceBilling.document, email: testCommerceBilling.email }] : [] });
         const data = { itens: contact && !options.hideContact ? [{ id: 11, cpfCnpj: testCommerceBilling.document }] : [] };
         return Response.json(options.wrappedList ? { data } : data);
       }
-      if (path === "/contatos/11" && method === "GET") {
+      if ((path === "/contatos/11" || path === "/contatos/12") && method === "GET") {
+        await options.onDetail?.();
         if (options.failDetailOnce && !detailFailed) { detailFailed = true; return Response.json({ mensagem: "Indisponível" }, { status: 503 }); }
-        return Response.json({ id: 11, cpfCnpj: options.detailDocument ?? testCommerceBilling.document });
+        return Response.json({ id: path.endsWith("/12") ? 12 : 11, cpfCnpj: options.detailDocument ?? testCommerceBilling.document, situacao: options.inactiveDetail ? "I" : "B" });
       }
       if (path === "/contatos" && method === "POST") {
         if (contact) return Response.json({ mensagem: "Contato já cadastrado", detalhes: [{ campo: "cpfCnpj", mensagem: "Contato já existe" }, { campo: "idContatoExistente", mensagem: "11" }] }, { status: 409 });
         contact = true; return Response.json({ id: 11 }, { status: 201 });
       }
       if (path === "/pedidos" && method === "GET") return Response.json({ itens: externalOrder ? [{ id: 22 }] : [] });
-      if (path === "/pedidos/22" && method === "GET") return Response.json({ id: 22, ecommerce: externalOrder?.ecommerce, cliente: { id: 11 }, valor: 28.9 });
+      if (path === "/pedidos/22" && method === "GET") return Response.json({ id: 22, ecommerce: externalOrder?.ecommerce, cliente: { id: externalOrder?.idContato ?? 11 }, valor: 28.9 });
       if (path === "/pedidos" && method === "POST") { if (!loseWithoutCreating) externalOrder = body; if (loseOrder || loseWithoutCreating) throw new Error("Simulated connection lost after submission"); return Response.json({ id: 22 }, { status: 201 }); }
       if (path.endsWith("/despacho")) return Response.json({});
       if (path === "/notas" && method === "GET") return Response.json({ itens: invoice ? [{ id: 33, numero: 7, serie: "1" }] : [] });
@@ -89,6 +91,70 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
     vi.stubEnv("APP_URL", "https://panel.example.test");
     vi.mocked(getCurrentSession).mockResolvedValue({ userId: actor, tenantId, email: "olist@example.test", role: "owner" });
   }
+  function customerAction(orderId: string, operation: "customer_lookup" | "customer_link", customerId?: string) {
+    return action(new Request(`https://panel.example.test/api/commerce/admin/orders/${orderId}/olist`, { method: "POST", headers: { origin: "https://panel.example.test" }, body: JSON.stringify({ action: operation, note: "Cadastro principal conferido pela equipe", ...(customerId ? { customerId } : {}) }) }), { params: Promise.resolve({ orderId }) });
+  }
+  it("surfaces two exact document matches without an uncertain mutation and lets the team resume all stages with a verified choice", async () => {
+    const { tenantId, orderId } = await fixture(), api = provider({ duplicateContacts: true }); login(tenantId);
+    const log = vi.spyOn(console, "error");
+    try {
+      await processCommerceOlistOrder(tenantId, orderId);
+      expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ status: "review", error_code: "olist_customer_ambiguous", attempt_stage: null, customer_id: null, sales_order_id: null, last_error: expect.stringContaining("mais de um contato") });
+      expect(log).toHaveBeenCalledWith("Commerce Olist stage failed.", expect.objectContaining({ uncertainMutation: false, httpStatus: 409 }));
+    } finally { log.mockRestore(); }
+    expect(api.writes("/contatos")).toHaveLength(0);
+    const choices = await customerAction(orderId, "customer_lookup"); expect(choices.status).toBe(200);
+    expect((await choices.json()).customers).toEqual([expect.objectContaining({ id: "11", name: "Cadastro antigo" }), expect.objectContaining({ id: "12", name: "Cadastro principal" })]);
+    await productionReady(tenantId, orderId);
+    const link = await customerAction(orderId, "customer_link", "12"); expect(link.status).toBe(200);
+    expect((await getCommerceOlistJob(tenantId, orderId))?.customer_id).toBe("12");
+    expect((await getPool().query("select external_id,create_attempted from commerce_olist_customers where tenant_id=$1", [tenantId])).rows).toEqual([{ external_id: "12", create_attempted: false }]);
+    expect((await getPool().query("select metadata from commerce_order_events where tenant_id=$1 and order_id=$2 and type='olist.customer_linked'", [tenantId, orderId])).rows[0].metadata).toMatchObject({ actor, customer_id: "12", note: "Cadastro principal conferido pela equipe" });
+    await processCommerceOlistOrder(tenantId, orderId, 6);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ customer_id: "12", sales_order_id: "22", invoice_status: 6, expedition_id: "44", status: "done" });
+    await processCommerceOlistOrder(tenantId, orderId, 6);
+    expect(api.writes("/contatos")).toHaveLength(0);
+    expect(api.writes("/pedidos")[0].body.idContato).toBe(12);
+    for (const path of ["/pedidos", "/pedidos/22/gerar-nota-fiscal", "/notas/33/emitir", "/expedicao"]) expect(api.writes(path)).toHaveLength(1);
+    expect((await customerAction(orderId, "customer_link", "11")).status).toBe(409);
+  });
+  it("refuses a changed document or inactive ERP contact and never clears the original review state", async () => {
+    for (const invalid of [{ detailDocument: "11144477735" }, { inactiveDetail: true }]) {
+      const { tenantId, orderId } = await fixture(), api = provider({ duplicateContacts: true, ...invalid }); login(tenantId);
+      await processCommerceOlistOrder(tenantId, orderId);
+      expect((await customerAction(orderId, "customer_link", "12")).status).toBe(409);
+      expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ customer_id: null, status: "review" });
+      expect(api.writes("/pedidos")).toHaveLength(0);
+      expect((await getPool().query("select * from commerce_olist_leases where lock_key like $1", [`%${tenantId}%`])).rowCount).toBe(0);
+    }
+  });
+  it("rejects cross-tenant review, active worker locks and conflicting durable customer mappings", async () => {
+    const { tenantId, orderId } = await fixture(), api = provider({ duplicateContacts: true }); login(tenantId);
+    await processCommerceOlistOrder(tenantId, orderId);
+    const other = await fixture(); login(other.tenantId);
+    expect((await customerAction(orderId, "customer_lookup")).status).toBe(404);
+    expect((await customerAction(orderId, "customer_link", "12")).status).toBe(404);
+    login(tenantId);
+    const lock = `commerce-olist:${tenantId}:${orderId}`;
+    await getPool().query("insert into commerce_olist_leases(lock_key,token,expires_at) values($1,$2,now()+interval '1 minute')", [lock, randomUUID()]);
+    expect((await customerAction(orderId, "customer_link", "12")).status).toBe(409);
+    await getPool().query("delete from commerce_olist_leases where lock_key=$1", [lock]);
+    const hash = createHash("sha256").update(`${tenantId}:${testCommerceBilling.document.replace(/\D/g, "")}`).digest("hex");
+    await getPool().query("insert into commerce_olist_customers(tenant_id,document_hash,external_id) values($1,$2,'99')", [tenantId, hash]);
+    expect((await customerAction(orderId, "customer_link", "12")).status).toBe(409);
+    expect((await getPool().query("select external_id from commerce_olist_customers where tenant_id=$1", [tenantId])).rows[0].external_id).toBe("99");
+    expect(api.writes("/pedidos")).toHaveLength(0);
+    expect((await getCommerceOlistJob(tenantId, orderId))?.customer_id).toBeNull();
+  });
+  it("rechecks payment after the ERP verification and rolls back a link if the order was refunded concurrently", async () => {
+    const { tenantId, orderId } = await fixture(); login(tenantId);
+    provider({ duplicateContacts: true, onDetail: async () => { await getPool().query("update commerce_orders set payment_status='refunded' where tenant_id=$1 and id=$2", [tenantId, orderId]); } });
+    await processCommerceOlistOrder(tenantId, orderId);
+    expect((await customerAction(orderId, "customer_link", "12")).status).toBe(409);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ customer_id: null, status: "stopped" });
+    expect((await getPool().query("select * from commerce_olist_customers where tenant_id=$1", [tenantId])).rowCount).toBe(0);
+    expect((await getPool().query("select * from commerce_order_events where tenant_id=$1 and order_id=$2 and type='olist.customer_linked'", [tenantId, orderId])).rowCount).toBe(0);
+  });
   async function productionReady(tenantId: string, orderId: string) {
     login(tenantId);
     await getPool().query("update commerce_orders set fulfillment_status='production' where tenant_id=$1 and id=$2", [tenantId, orderId]);

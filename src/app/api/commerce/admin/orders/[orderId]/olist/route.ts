@@ -11,9 +11,11 @@ import { estimatePackagingWithClient } from "@/repositories/packaging";
 import { commerceOlistConnection, commerceOlistRequest } from "@/services/commerce/olist-client";
 import { isOlistReconnectRequired } from "@/lib/olist/oauth-errors";
 import { OlistRequestError } from "@/services/olist/olist";
+import { commerceOlistCustomerChoices, linkCommerceOlistCustomer } from "@/services/commerce/olist-customer-review";
 
 export const maxDuration = 60;
-const schema = z.object({ action: z.enum(["retry", "production_ready", "tracking"]), note: z.string().trim().min(5).max(500),
+const schema = z.object({ action: z.enum(["retry", "production_ready", "tracking", "customer_lookup", "customer_link"]), note: z.string().trim().min(5).max(500),
+  customerId: z.string().regex(/^[1-9]\d{0,14}$/).optional(),
   trackingCode: z.string().trim().max(100).optional(), trackingUrl: z.string().url().max(1000).refine(value => value.startsWith("https://"), "Use uma URL HTTPS.").optional() }).strict();
 function parseOrderId(value: string) {
   const parsed = z.string().uuid().safeParse(value);
@@ -45,7 +47,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
     const settings = await getCommerceOlistSettings(session.tenantId);
     if (!settings.enabled) throw new CommerceError("Ative esta integração em Loja online > Olist.", 409);
     await commerceOlistConnection(session.tenantId);
-    if (input.action === "production_ready") {
+    if (input.action === "customer_lookup") {
+      return commerceJson({ ok: true, ...(await commerceOlistCustomerChoices(session.tenantId, orderId)) });
+    } else if (input.action === "customer_link") {
+      if (!input.customerId) throw new CommerceError("Selecione o cliente Olist que deseja vincular.");
+      await linkCommerceOlistCustomer(session.tenantId, orderId, session.userId, input.customerId, input.note);
+    } else if (input.action === "production_ready") {
       if (order.fulfillment_status !== "production") throw new CommerceError("Inicie a produção antes de concluí-la.", 409);
       await commerceTransaction(async client => {
         const fresh = (await client.query("select * from commerce_orders where tenant_id=$1 and id=$2 and deleted_at is null for update", [session.tenantId, orderId])).rows[0];
