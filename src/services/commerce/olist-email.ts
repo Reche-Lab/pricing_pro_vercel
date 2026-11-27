@@ -22,6 +22,11 @@ export function requireCommerceInvoiceEmail() {
 }
 
 export async function readCommerceOlistEmailReview(request: Request, order: CommerceOrder, job: Pick<CommerceOlistJob, "customer_id" | "invoice_id">, knownInvoice?: Row): Promise<CommerceOlistEmailReview> {
+  return (await readCommerceOlistEmailSnapshot(request, order, job, knownInvoice)).review;
+}
+
+// The full contact is server-side only; public responses use the review DTO.
+export async function readCommerceOlistEmailSnapshot(request: Request, order: CommerceOrder, job: Pick<CommerceOlistJob, "customer_id" | "invoice_id">, knownInvoice?: Row) {
   const target = z.string().trim().email().max(254).safeParse(order.snapshot.billing?.email);
   if (!target.success || !job.customer_id || !/^[1-9]\d{0,14}$/.test(job.customer_id)) throw new CommerceError("Confira o cliente e o e-mail de faturamento desta compra.", 409);
   const document = digits(order.snapshot.billing?.document);
@@ -42,5 +47,5 @@ export async function readCommerceOlistEmailReview(request: Request, order: Comm
     invoiceMatches: invoiceEmail === null || sameOlistEmail(invoiceEmail, target.data),
     ...olistEmailRecipients(contactEmail, contactNfeEmail, invoiceEmail),
   };
-  return { ...result, reviewToken: createHash("sha256").update(JSON.stringify(result)).digest("hex") };
+  return { contact, review: { ...result, reviewToken: createHash("sha256").update(JSON.stringify(result)).digest("hex") } };
 }

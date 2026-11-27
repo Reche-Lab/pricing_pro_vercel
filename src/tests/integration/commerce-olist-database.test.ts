@@ -46,7 +46,7 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
     if (input.paid !== false) await pool.query("update commerce_orders set payment_status='paid' where tenant_id=$1 and id=$2", [tenantId, orderId]);
     return { tenantId, orderId, snapshot, variantId };
   }
-  function provider(options: { existingContact?: boolean; hideContact?: boolean; wrappedList?: boolean; detailDocument?: string; failDetailOnce?: boolean; duplicateContacts?: boolean; inactiveDetail?: boolean; onDetail?: () => Promise<void>; frozenInvoiceEmail?: boolean; ignoreEmailUpdate?: boolean; loseEmailUpdateOnce?: boolean; rejectEmailUpdate?: boolean; invoiceEmailFromContact?: boolean } = {}) {
+  function provider(options: { existingContact?: boolean; hideContact?: boolean; wrappedList?: boolean; detailDocument?: string; contactName?: string | null; failDetailOnce?: boolean; duplicateContacts?: boolean; inactiveDetail?: boolean; onDetail?: () => Promise<void>; frozenInvoiceEmail?: boolean; ignoreEmailUpdate?: boolean; loseEmailUpdateOnce?: boolean; rejectEmailUpdate?: boolean; invoiceEmailFromContact?: boolean } = {}) {
     let contact = Boolean(options.existingContact), detailFailed = false, externalOrder: Record<string, unknown> | null = null, invoice = false, authorized = false, expedition = false;
     let loseOrder = false, loseWithoutCreating = false, authInvalid = false, emailMismatch = false, rejectInvoice = false, pendingAuthorization = false;
     let contactEmail = testCommerceBilling.email, contactNfeEmail = "", emailUpdateLost = false;
@@ -66,9 +66,11 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
       if ((path === "/contatos/11" || path === "/contatos/12") && method === "GET") {
         await options.onDetail?.();
         if (options.failDetailOnce && !detailFailed) { detailFailed = true; return Response.json({ mensagem: "Indisponível" }, { status: 503 }); }
-        return Response.json({ id: path.endsWith("/12") ? 12 : 11, nome: "Cliente Olist", cpfCnpj: options.detailDocument ?? testCommerceBilling.document, situacao: options.inactiveDetail ? "I" : "B", email: contactEmail, emailNfe: contactNfeEmail });
+        return Response.json({ id: path.endsWith("/12") ? 12 : 11, nome: options.contactName === undefined ? "Cliente Olist" : options.contactName, codigo: "CLI-11", tipoPessoa: "F", cpfCnpj: options.detailDocument ?? testCommerceBilling.document, situacao: options.inactiveDetail ? "I" : "B", email: contactEmail, emailNfe: contactNfeEmail,
+          endereco: { endereco: "Rua do ERP", numero: "12", municipio: "São Paulo", uf: "SP" }, vendedor: { id: 5, nome: "Vendedor" }, tipos: [{ id: 2, descricao: "Cliente" }], dataCriacao: "2020-01-01" });
       }
       if ((path === "/contatos/11" || path === "/contatos/12") && method === "PUT") {
+        if (typeof body.nome !== "string" || !body.nome.trim()) return Response.json({ mensagem: "Ocorreram erros de validação", detalhes: [{ campo: "nome", mensagem: "Este valor não deve ser vazio" }] }, { status: 400 });
         if (options.rejectEmailUpdate) return Response.json({ mensagem: "Não foi possível alterar previous@example.test", detalhes: [{ campo: "codigo", mensagem: "O campo é obrigatório" }] }, { status: 400 });
         if (!options.ignoreEmailUpdate) { contactEmail = body.email as string; contactNfeEmail = body.emailNfe as string; if (!options.frozenInvoiceEmail) emailMismatch = false; }
         if (options.loseEmailUpdateOnce && !emailUpdateLost) { emailUpdateLost = true; throw new Error("Connection lost after contact email update"); }
@@ -137,6 +139,18 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
     expect(api.calls.filter(call => call.method === "PUT" && call.path === "/contatos/11")).toHaveLength(1);
     expect(api.writes("/pedidos/22/gerar-nota-fiscal")).toHaveLength(1);
   });
+  it("blocks an incomplete ERP contact before PUT and still allows explicit use of its existing emails", async () => {
+    const { tenantId, orderId, api } = await blockedEmailOrder({ contactName: null });
+    const before = (await (await emailAction(orderId, "email_review")).json()).emailReview;
+    const rejected = await emailAction(orderId, "email_update", { reviewToken: before.reviewToken, confirmEmailUpdate: true });
+    expect(rejected.status).toBe(409); expect((await rejected.json()).error).toContain("campos: nome");
+    expect(api.calls.filter(call => call.method === "PUT" && call.path.startsWith("/contatos/"))).toHaveLength(0);
+    expect((await getPool().query("select id from commerce_order_events where tenant_id=$1 and order_id=$2 and type='olist.email_update_requested'", [tenantId, orderId])).rowCount).toBe(0);
+    expect((await emailAction(orderId, "email_use_olist", { reviewToken: before.reviewToken, confirmOlistEmail: true })).status).toBe(200);
+    await processCommerceOlistOrder(tenantId, orderId, 6);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ invoice_id: "33", invoice_status: 6, status: "done" });
+    expect(api.writes("/pedidos/22/gerar-nota-fiscal")).toHaveLength(1);
+  });
   it("requires fresh approval if an ERP recipient changes before fiscal emission", async () => {
     const { tenantId, orderId, api } = await blockedEmailOrder();
     const before = (await (await emailAction(orderId, "email_review")).json()).emailReview;
@@ -162,7 +176,7 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
     expect(api.calls.filter(call => call.method === "PUT" && call.path === "/contatos/11")).toHaveLength(0);
     expect(api.writes("/pedidos/22/gerar-nota-fiscal")).toHaveLength(1); expect(api.writes("/notas/33/emitir")).toHaveLength(1);
   });
-  it("updates only the consented email fields, audits encrypted previous values and resumes the existing invoice exactly once", async () => {
+  it("preserves the ERP contact including required name, changes the consented emails and resumes the existing invoice exactly once", async () => {
     const { tenantId, orderId, api } = await blockedEmailOrder();
     const reviewed = await emailAction(orderId, "email_review"); expect(reviewed.status).toBe(200);
     const { emailReview } = await reviewed.json();
@@ -171,7 +185,12 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
     expect((await emailAction(orderId, "email_update", { reviewToken: emailReview.reviewToken })).status).toBe(400);
     const updated = await emailAction(orderId, "email_update", { reviewToken: emailReview.reviewToken, confirmEmailUpdate: true });
     expect(updated.status).toBe(200); expect(await updated.json()).toMatchObject({ resumed: true, emailReview: { contactMatches: true, invoiceMatches: true } });
-    expect(api.calls.filter(call => call.method === "PUT" && call.path === "/contatos/11").map(call => call.body)).toEqual([{ email: testCommerceBilling.email, emailNfe: testCommerceBilling.email }]);
+    expect(api.calls.filter(call => call.method === "PUT" && call.path === "/contatos/11").map(call => call.body)).toEqual([{
+      nome: "Cliente Olist", codigo: "CLI-11", tipoPessoa: "F", cpfCnpj: testCommerceBilling.document, situacao: "B",
+      endereco: { endereco: "Rua do ERP", numero: "12", municipio: "São Paulo", uf: "SP" }, vendedor: { id: 5 }, tipos: [2],
+      email: testCommerceBilling.email, emailNfe: testCommerceBilling.email,
+    }]);
+    expect(emailReview).not.toHaveProperty("contact"); expect(emailReview).not.toHaveProperty("endereco");
     const audit = (await getPool().query("select metadata from commerce_order_events where tenant_id=$1 and order_id=$2 and type='olist.email_update_requested'", [tenantId, orderId])).rows[0].metadata;
     expect(audit.actor).toBe(actor); expect(JSON.stringify(audit)).not.toContain("previous@example.test");
     expect(decryptTenantSecret(audit.emails_encrypted)).toMatchObject({ previousEmail: "previous@example.test", targetEmail: testCommerceBilling.email });

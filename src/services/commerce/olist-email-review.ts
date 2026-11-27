@@ -7,7 +7,8 @@ import type { CommerceOlistJob } from "@/domain/commerce/olist";
 import { commerceTransaction, type CommerceOrder } from "@/repositories/commerce";
 import { commerceOlistRequest } from "./olist-client";
 import { acquireCommerceOlistLease } from "./olist-lease";
-import { readCommerceOlistEmailReview, sameOlistEmail } from "./olist-email";
+import { readCommerceOlistEmailReview, readCommerceOlistEmailSnapshot, sameOlistEmail } from "./olist-email";
+import { buildOlistContactEmailUpdate } from "./olist-contact-update";
 import { OlistRequestError } from "@/services/olist/olist";
 import { consentForOlistEmail } from "./olist-email-consent";
 
@@ -61,7 +62,7 @@ export async function updateCommerceOlistEmail(tenantId: string, orderId: string
     const signal = AbortSignal.timeout(40000);
     const request = (path: string) => { lastRequest = { method: "GET", path }; return commerceOlistRequest(tenantId, path, "GET", undefined, signal); };
     phase = "review_current_emails";
-    const before = await readCommerceOlistEmailReview(request, original.order, original.job);
+    const { review: before, contact } = await readCommerceOlistEmailSnapshot(request, original.order, original.job);
     if (before.reviewToken !== reviewToken) throw new CommerceError("Os e-mails no Olist mudaram desde a conferência. Consulte novamente antes de confirmar.", 409);
     if (strategy === "olist") {
       if (!before.canUseOlistEmail) throw new CommerceError("O Olist não possui destinatários válidos para esta confirmação. Confira os e-mails do cadastro e da nota.", 409);
@@ -75,18 +76,19 @@ export async function updateCommerceOlistEmail(tenantId: string, orderId: string
       console.info("Commerce Olist existing email recipients approved.", { tenantId, orderId, debugId, customerId: before.customerId, invoiceId: before.invoiceId, recipientCount: before.olistRecipients.length, actorId });
       return { emailReview: before, resumed: true, recipientSource: "olist" as const };
     }
+    phase = "prepare_contact_update";
+    const payload = before.contactMatches ? null : buildOlistContactEmailUpdate(contact, before.targetEmail);
     phase = "record_update_intent";
     await commerceTransaction(async client => {
       await assertCurrent(client);
       await client.query("insert into commerce_order_events(tenant_id,order_id,type,metadata) values($1,$2,'olist.email_update_requested',$3)", [tenantId, orderId, JSON.stringify({ actor: actorId, debugId, note, customer_id: original.job.customer_id, invoice_id: original.job.invoice_id, emails_encrypted: encryptTenantSecret({ previousEmail: before.contactEmail, previousNfeEmail: before.contactNfeEmail, invoiceEmail: before.invoiceEmail, targetEmail: before.targetEmail }) })]);
       await client.query("update commerce_olist_orders set status='blocked',error_code='olist_email_update_required',last_error='A atualização do e-mail está em conferência. Use Atualizar e-mail no Olist antes de retomar.',debug_id=$3,updated_at=now() where tenant_id=$1 and order_id=$2", [tenantId, orderId, debugId]);
     });
-    if (!before.contactMatches) {
-      // Only the two documented email fields are sent; purchase data and the
-      // remaining contact fields are not copied over the ERP registration.
+    if (payload) {
       phase = "update_contact_emails";
       lastRequest = { method: "PUT", path: `/contatos/${original.job.customer_id}` };
-      await commerceOlistRequest(tenantId, `/contatos/${original.job.customer_id}`, "PUT", { email: before.targetEmail, emailNfe: before.targetEmail }, signal);
+      console.info("Commerce Olist contact email update prepared.", { tenantId, orderId, debugId, ...lastRequest, customerId: before.customerId, preservedFields: Object.keys(payload).filter(field => field !== "email" && field !== "emailNfe") });
+      await commerceOlistRequest(tenantId, `/contatos/${original.job.customer_id}`, "PUT", payload, signal);
     }
     phase = "verify_contact_and_invoice";
     const after = await readCommerceOlistEmailReview(request, original.order, original.job);
