@@ -46,8 +46,8 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
     if (input.paid !== false) await pool.query("update commerce_orders set payment_status='paid' where tenant_id=$1 and id=$2", [tenantId, orderId]);
     return { tenantId, orderId, snapshot, variantId };
   }
-  function provider(options: { existingContact?: boolean; hideContact?: boolean; wrappedList?: boolean; detailDocument?: string; contactName?: string | null; creditLimit?: number | null; contactEnums?: { regimeTributario?: unknown; estadoCivil?: unknown; sexo?: unknown }; failDetailOnce?: boolean; duplicateContacts?: boolean; inactiveDetail?: boolean; onDetail?: () => Promise<void>; frozenInvoiceEmail?: boolean; ignoreEmailUpdate?: boolean; loseEmailUpdateOnce?: boolean; rejectEmailUpdate?: boolean; invoiceEmailFromContact?: boolean } = {}) {
-    let contact = Boolean(options.existingContact), detailFailed = false, externalOrder: Record<string, unknown> | null = null, invoice = false, authorized = false, expedition = false;
+  function provider(options: { existingContact?: boolean; hideContact?: boolean; wrappedList?: boolean; detailDocument?: string; contactName?: string | null; creditLimit?: number | null; contactEnums?: { regimeTributario?: unknown; estadoCivil?: unknown; sexo?: unknown }; failDetailOnce?: boolean; duplicateContacts?: boolean; inactiveDetail?: boolean; onDetail?: () => Promise<void>; frozenInvoiceEmail?: boolean; ignoreEmailUpdate?: boolean; loseEmailUpdateOnce?: boolean; rejectEmailUpdate?: boolean; invoiceEmailFromContact?: boolean; existingDispatch?: boolean; hideDispatchUntilConflict?: boolean; hideDispatchAlways?: boolean; loseDispatchResponse?: boolean; failDispatchRecovery?: boolean; dispatchSaleId?: number } = {}) {
+    let contact = Boolean(options.existingContact), detailFailed = false, externalOrder: Record<string, unknown> | null = null, invoice = false, authorized = false, expedition = Boolean(options.existingDispatch), dispatchConflict = false;
     let loseOrder = false, loseWithoutCreating = false, authInvalid = false, emailMismatch = false, rejectInvoice = false, pendingAuthorization = false;
     let contactEmail = testCommerceBilling.email, contactNfeEmail = "", emailUpdateLost = false;
     const calls: { path: string; method: string; body: Record<string, unknown> }[] = [];
@@ -93,8 +93,18 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
       if (path === "/notas/33" && method === "GET") return Response.json({ id: 33, numero: 7, serie: "1", valor: 28.9, cliente: { cpfCnpj: testCommerceBilling.document, email: emailMismatch ? options.invoiceEmailFromContact ? contactNfeEmail || contactEmail : "different@example.test" : testCommerceBilling.email }, situacao: rejectInvoice ? 5 : authorized ? 6 : 1, linkAcesso: authorized ? "https://erp.tiny.com.br/doc/nota-test" : undefined });
       if (path === "/notas/33/emitir") { authorized = !pendingAuthorization; return Response.json({ id: 33, situacao: authorized ? 6 : 4 }); }
       if (path === "/notas/33/link") return Response.json({ link: "https://erp.tiny.com.br/doc/nota-test" });
-      if (path === "/expedicao" && method === "GET") return Response.json({ itens: expedition ? [{ id: 44 }] : [] });
-      if (path === "/expedicao" && method === "POST") { expedition = true; return Response.json({ id: 44 }); }
+      if (path === "/expedicao" && method === "GET") {
+        if (options.failDispatchRecovery && dispatchConflict) return Response.json({ mensagem: "Indisponível" }, { status: 503 });
+        const visible = expedition && !options.hideDispatchAlways && (!options.hideDispatchUntilConflict || dispatchConflict);
+        return Response.json({ itens: visible ? [{ id: 44 }] : [], paginacao: { total: visible ? 1 : 0 } });
+      }
+      if (path === "/expedicao/44" && method === "GET") return Response.json({ id: 44, expedicoes: [{ id: 441, tipoObjeto: "notafiscal", idObjeto: 33, notaFiscal: { id: 33 }, venda: { id: options.dispatchSaleId ?? 22 } }] });
+      if (path === "/expedicao" && method === "POST") {
+        if (expedition) { dispatchConflict = true; return Response.json({ mensagem: "Ocorreram erros de validação", detalhes: [{ campo: "idsNotasFiscais[0]", mensagem: "Nota fiscal com id '33' já foi expedida" }] }, { status: 400 }); }
+        expedition = true;
+        if (options.loseDispatchResponse) throw new Error("Connection lost after dispatch creation");
+        return Response.json({ id: 44, idsExpedicao: [441] });
+      }
       throw new Error(`Unexpected mocked ERP request ${method} ${path}`);
     });
     vi.stubGlobal("fetch", fetcher);
@@ -444,6 +454,61 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
     api.authorize(); await getPool().query("update commerce_olist_orders set next_attempt_at=now() where tenant_id=$1 and order_id=$2", [tenantId, orderId]);
     await processCommerceOlistOrder(tenantId, orderId, 6);
     expect((await getCommerceOlistJob(tenantId, orderId))?.expedition_id).toBe("44"); expect(api.writes("/notas/33/emitir")).toHaveLength(1);
+  });
+  it("reuses an existing verified expedition group without posting another one or confusing group and shipment IDs", async () => {
+    const { tenantId, orderId } = await fixture(), api = provider({ existingDispatch: true });
+    await processCommerceOlistOrder(tenantId, orderId); await productionReady(tenantId, orderId);
+    await processCommerceOlistOrder(tenantId, orderId, 6);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ invoice_id: "33", invoice_status: 6, expedition_id: "44", status: "done", attempt_stage: null });
+    expect(api.writes("/expedicao")).toHaveLength(0);
+    expect(api.calls.some(call => call.path === "/expedicao/44")).toBe(true);
+  });
+  it("recovers a duplicate expedition rejection by verification and persists completion without reissuing the note", async () => {
+    const { tenantId, orderId } = await fixture(), api = provider({ existingDispatch: true, hideDispatchUntilConflict: true });
+    await processCommerceOlistOrder(tenantId, orderId); await productionReady(tenantId, orderId);
+    const log = vi.spyOn(console, "info"), errors = vi.spyOn(console, "error");
+    try {
+      await processCommerceOlistOrder(tenantId, orderId, 6);
+      expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ invoice_id: "33", invoice_status: 6, expedition_id: "44", status: "done", last_error: null, error_code: null, attempt_stage: null });
+      expect(log).toHaveBeenCalledWith("Commerce Olist dispatch resolved.", expect.objectContaining({ tenantId, orderId, invoiceId: "33", groupId: "44", source: "verified_create_conflict" }));
+      expect(errors).not.toHaveBeenCalledWith("Commerce Olist stage failed.", expect.anything());
+      await processCommerceOlistOrder(tenantId, orderId, 6);
+      for (const path of ["/pedidos/22/gerar-nota-fiscal", "/notas/33/emitir", "/expedicao"]) expect(api.writes(path)).toHaveLength(1);
+      expect((await getPool().query("select count(*)::int as count from commerce_order_events where tenant_id=$1 and order_id=$2 and type='olist.dispatch'", [tenantId, orderId])).rows[0].count).toBe(1);
+    } finally { log.mockRestore(); errors.mockRestore(); }
+  });
+  it.each([{ hideDispatchAlways: true }, { failDispatchRecovery: true }])("keeps a known duplicate in specific review without falsely reporting an uncertain mutation: %j", async scenario => {
+    const { tenantId, orderId } = await fixture(), api = provider({ existingDispatch: true, hideDispatchUntilConflict: true, ...scenario });
+    await processCommerceOlistOrder(tenantId, orderId); await productionReady(tenantId, orderId);
+    const log = vi.spyOn(console, "error");
+    try {
+      await processCommerceOlistOrder(tenantId, orderId, 6);
+      expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ invoice_id: "33", invoice_status: 6, expedition_id: null, status: "review", error_code: "olist_dispatch_review_required", attempt_stage: "dispatch" });
+      expect(log).toHaveBeenCalledWith("Commerce Olist stage failed.", expect.objectContaining({ stage: "dispatch", uncertainMutation: false, dispatchAlreadyExists: true, code: "olist_dispatch_review_required" }));
+      if (scenario.hideDispatchAlways) {
+        await queueCommerceOlistOrder(tenantId, orderId, actor); await processCommerceOlistOrder(tenantId, orderId, 6);
+        expect((await getCommerceOlistJob(tenantId, orderId))?.status).toBe("review");
+      }
+      expect(api.writes("/expedicao")).toHaveLength(1);
+      expect(api.writes("/pedidos/22/gerar-nota-fiscal")).toHaveLength(1);
+    } finally { log.mockRestore(); }
+  });
+  it("reconciles a lost dispatch response without posting a second group", async () => {
+    const { tenantId, orderId } = await fixture(), api = provider({ loseDispatchResponse: true });
+    await processCommerceOlistOrder(tenantId, orderId); await productionReady(tenantId, orderId);
+    await processCommerceOlistOrder(tenantId, orderId, 6);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ status: "review", attempt_stage: "dispatch", invoice_id: "33", expedition_id: null });
+    await queueCommerceOlistOrder(tenantId, orderId, actor); await processCommerceOlistOrder(tenantId, orderId, 6);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ status: "done", attempt_stage: null, expedition_id: "44" });
+    expect(api.writes("/expedicao")).toHaveLength(1);
+    expect(api.writes("/notas/33/emitir")).toHaveLength(1);
+  });
+  it("refuses to link a matching invoice group whose sale belongs to a different order", async () => {
+    const { tenantId, orderId } = await fixture(), api = provider({ existingDispatch: true, dispatchSaleId: 99 });
+    await processCommerceOlistOrder(tenantId, orderId); await productionReady(tenantId, orderId);
+    await processCommerceOlistOrder(tenantId, orderId, 6);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ invoice_id: "33", invoice_status: 6, expedition_id: null, status: "review", error_code: "olist_dispatch_review_required" });
+    expect(api.writes("/expedicao")).toHaveLength(0);
   });
   it("reconciles an uncertain external order without creating another one", async () => {
     const { tenantId, orderId } = await fixture(), api = provider(); api.setLose(true);
