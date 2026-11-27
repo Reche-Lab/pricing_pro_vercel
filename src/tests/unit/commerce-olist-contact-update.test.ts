@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { buildOlistContactEmailUpdate } from "@/services/commerce/olist-contact-update";
+import { buildOlistContactEmailUpdate, OlistContactUpdateValidationError } from "@/services/commerce/olist-contact-update";
 
 describe("Olist contact email update payload", () => {
   it("preserves the current ERP fields and translates GET relationships into documented PUT fields", () => {
@@ -54,5 +54,32 @@ describe("Olist contact email update payload", () => {
 
   it("does not accept malformed target emails", () => {
     expect(() => buildOlistContactEmailUpdate({ nome: "Cliente" }, "invalid")).toThrow(/e-mail de faturamento/);
+  });
+
+  it.each(["", "   ", 0, "0", " 0 "])("omits unset enum placeholder %j instead of blocking an email-only update", value => {
+    const existing = { nome: "Cliente ERP", regimeTributario: value, estadoCivil: value, sexo: value };
+    const payload = buildOlistContactEmailUpdate(existing, "purchase@example.test");
+    expect(payload).toEqual({ nome: "Cliente ERP", email: "purchase@example.test", emailNfe: "purchase@example.test" });
+    for (const field of ["regimeTributario", "estadoCivil", "sexo"]) expect(payload).not.toHaveProperty(field);
+    expect(existing).toEqual({ nome: "Cliente ERP", regimeTributario: value, estadoCivil: value, sexo: value });
+  });
+
+  it.each([["1", "2", " Masculino ", 1, 2, "masculino"], ["4", "5", "F", 4, 5, "feminino"], [2, 3, "m", 2, 3, "masculino"]])("normalizes equivalent codes %j/%j/%j without guessing classifications", (regimeTributario, estadoCivil, sexo, tax, marital, sex) => {
+    expect(buildOlistContactEmailUpdate({ nome: "Cliente ERP", regimeTributario, estadoCivil, sexo }, "purchase@example.test"))
+      .toMatchObject({ regimeTributario: tax, estadoCivil: marital, sexo: sex });
+  });
+
+  it.each([{ regimeTributario: 9 }, { estadoCivil: true }, { sexo: "private-unknown-value" }, { regimeTributario: [] }, { estadoCivil: {} }, { sexo: 1 }])("rejects unknown populated classifications instead of erasing or guessing values: %j", fields => {
+    try {
+      buildOlistContactEmailUpdate({ nome: "Private ERP name", ...fields }, "private-email@example.test");
+      expect.fail("Expected populated invalid classification to be rejected");
+    } catch (error) {
+      expect(error).toBeInstanceOf(OlistContactUpdateValidationError);
+      const diagnostic = error as OlistContactUpdateValidationError;
+      expect(diagnostic.validationFields).toEqual(Object.keys(fields));
+      expect(diagnostic.details?.code).toBe("olist_contact_update_invalid");
+      expect(diagnostic.validationIssues).toHaveLength(1);
+      expect(JSON.stringify(diagnostic.validationIssues)).not.toMatch(/Private|private-email|private-unknown-value/);
+    }
   });
 });

@@ -3,6 +3,29 @@ import { CommerceError } from "@/domain/commerce/commerce";
 
 const optionalText = z.string().nullish();
 const id = z.number().int().positive().safe();
+function optionalEnumNumber(value: unknown) {
+  if (value === 0) return undefined;
+  if (typeof value !== "string") return value;
+  const normalized = value.trim();
+  if (!normalized || normalized === "0") return undefined;
+  return /^[1-9]\d*$/.test(normalized) ? Number(normalized) : value;
+}
+function optionalSex(value: unknown) {
+  if (value === 0) return undefined;
+  if (typeof value !== "string") return value;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized === "0") return undefined;
+  if (normalized === "m") return "masculino";
+  if (normalized === "f") return "feminino";
+  return normalized;
+}
+
+export class OlistContactUpdateValidationError extends CommerceError {
+  constructor(public validationFields: string[], public validationIssues: { field: string; inputType: string; reason: string }[]) {
+    super(`O cadastro retornado pelo Olist precisa de conferência nos campos: ${validationFields.join(", ")}. Corrija o cadastro ou escolha manter os e-mails do Olist. Nenhuma atualização foi enviada.`, 409, { code: "olist_contact_update_invalid" });
+    this.name = "OlistContactUpdateValidationError";
+  }
+}
 const address = z.object({
   endereco: optionalText, numero: optionalText, complemento: optionalText,
   bairro: optionalText, municipio: optionalText, cep: optionalText,
@@ -19,9 +42,11 @@ const writableContact = z.object({
   telefone: optionalText, celular: optionalText,
   endereco: address.nullish(), enderecoCobranca: address.nullish(),
   inscricaoMunicipal: optionalText, telefoneAdicional: optionalText,
-  site: optionalText, regimeTributario: z.number().int().min(1).max(4).nullish(),
-  estadoCivil: z.number().int().min(1).max(5).nullish(), profissao: optionalText,
-  sexo: z.enum(["masculino", "feminino"]).nullish(), dataNascimento: optionalText,
+  // Legacy contacts can return unset enums as blank strings or zero. Do not
+  // invent tax/personal classifications or send those placeholders back in PUT.
+  site: optionalText, regimeTributario: z.preprocess(optionalEnumNumber, z.number().int().min(1).max(4).nullish()),
+  estadoCivil: z.preprocess(optionalEnumNumber, z.number().int().min(1).max(5).nullish()), profissao: optionalText,
+  sexo: z.preprocess(optionalSex, z.enum(["masculino", "feminino"]).nullish()), dataNascimento: optionalText,
   naturalidade: optionalText, nomePai: optionalText, nomeMae: optionalText,
   cpfPai: optionalText, cpfMae: optionalText, limiteCredito: z.number().finite().nullish(),
   situacao: z.enum(["B", "A", "I", "E"]).nullish(),
@@ -35,16 +60,20 @@ export function buildOlistContactEmailUpdate(contact: Record<string, unknown>, t
   const parsed = writableContact.safeParse(contact);
   if (!parsed.success) {
     const fields = [...new Set(parsed.error.issues.map(issue => String(issue.path[0])))];
-    throw new CommerceError(`O cadastro retornado pelo Olist precisa de conferência nos campos: ${fields.join(", ")}. Corrija o cadastro ou escolha manter os e-mails do Olist. Nenhuma atualização foi enviada.`, 409, { code: "olist_contact_update_invalid" });
+    throw new OlistContactUpdateValidationError(fields, parsed.error.issues.map(issue => {
+      const field = String(issue.path[0]), value = contact[field];
+      return { field, inputType: value === null ? "null" : Array.isArray(value) ? "array" : typeof value, reason: issue.code };
+    }));
   }
   const email = z.string().trim().email().max(254).safeParse(targetEmail);
   if (!email.success) throw new CommerceError("Confira o e-mail de faturamento antes de atualizar o contato Olist.", 409);
   const { endereco, enderecoCobranca, vendedor, ...fields } = parsed.data;
-  return {
+  const payload = {
     ...fields,
     ...(endereco ? { endereco } : {}),
     ...(enderecoCobranca ? { enderecoCobranca } : {}),
     ...(vendedor ? { vendedor } : {}),
     email: email.data, emailNfe: email.data,
   };
+  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
 }

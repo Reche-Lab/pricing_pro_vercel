@@ -8,7 +8,7 @@ import { commerceTransaction, type CommerceOrder } from "@/repositories/commerce
 import { commerceOlistRequest } from "./olist-client";
 import { acquireCommerceOlistLease } from "./olist-lease";
 import { readCommerceOlistEmailReview, readCommerceOlistEmailSnapshot, sameOlistEmail } from "./olist-email";
-import { buildOlistContactEmailUpdate } from "./olist-contact-update";
+import { buildOlistContactEmailUpdate, OlistContactUpdateValidationError } from "./olist-contact-update";
 import { OlistRequestError } from "@/services/olist/olist";
 import { consentForOlistEmail } from "./olist-email-consent";
 
@@ -77,6 +77,7 @@ export async function updateCommerceOlistEmail(tenantId: string, orderId: string
       return { emailReview: before, resumed: true, recipientSource: "olist" as const };
     }
     phase = "prepare_contact_update";
+    lastRequest = undefined;
     const payload = before.contactMatches ? null : buildOlistContactEmailUpdate(contact, before.targetEmail);
     phase = "record_update_intent";
     await commerceTransaction(async client => {
@@ -104,8 +105,8 @@ export async function updateCommerceOlistEmail(tenantId: string, orderId: string
     return { emailReview: after, resumed, recipientSource: "purchase" as const };
   } catch (error) {
     const details = error instanceof OlistRequestError && error.data && typeof error.data === "object" && "detalhes" in error.data && Array.isArray(error.data.detalhes) ? error.data.detalhes : [];
-    const validationFields = details.flatMap(item => item && typeof item === "object" && "campo" in item && typeof item.campo === "string" ? [item.campo.slice(0, 100)] : []);
-    console.error("Commerce Olist email update failed.", { tenantId, orderId, debugId, phase, strategy, ...lastRequest, status: error instanceof CommerceError || error instanceof OlistRequestError ? error.status : undefined, errorType: error instanceof Error ? error.name : "Unknown", message: error instanceof Error ? providerMessage(error.message) : undefined, errorCode: error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code.slice(0, 80) : undefined, providerMessage: error instanceof OlistRequestError ? providerMessage(error.message) : undefined, validationFields });
+    const validationFields = error instanceof OlistContactUpdateValidationError ? error.validationFields : details.flatMap(item => item && typeof item === "object" && "campo" in item && typeof item.campo === "string" ? [item.campo.slice(0, 100)] : []);
+    console.error("Commerce Olist email update failed.", { tenantId, orderId, debugId, phase, strategy, ...lastRequest, failureSource: error instanceof OlistRequestError ? "provider" : "local", status: error instanceof CommerceError || error instanceof OlistRequestError ? error.status : undefined, errorType: error instanceof Error ? error.name : "Unknown", message: error instanceof Error ? providerMessage(error.message) : undefined, errorCode: error instanceof CommerceError ? error.details?.code : error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code.slice(0, 80) : undefined, providerMessage: error instanceof OlistRequestError ? providerMessage(error.message) : undefined, validationFields, validationIssues: error instanceof OlistContactUpdateValidationError ? error.validationIssues : undefined });
     if (error instanceof OlistRequestError && error.status === 403) throw new CommerceError("O Olist não permitiu atualizar o contato. Confira a permissão de edição de Contatos da integração.", 409);
     if (error instanceof OlistRequestError && [400, 404, 409, 422].includes(error.status))
       throw new CommerceError(`O Olist recusou a correção de e-mail (HTTP ${error.status}).${validationFields.length ? ` Confira os campos: ${validationFields.join(", ")}.` : " Confira o cadastro e consulte novamente."} Referência: ${debugId}`, 409, { code: "olist_email_update_rejected" });

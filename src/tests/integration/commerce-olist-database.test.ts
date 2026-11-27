@@ -46,7 +46,7 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
     if (input.paid !== false) await pool.query("update commerce_orders set payment_status='paid' where tenant_id=$1 and id=$2", [tenantId, orderId]);
     return { tenantId, orderId, snapshot, variantId };
   }
-  function provider(options: { existingContact?: boolean; hideContact?: boolean; wrappedList?: boolean; detailDocument?: string; contactName?: string | null; failDetailOnce?: boolean; duplicateContacts?: boolean; inactiveDetail?: boolean; onDetail?: () => Promise<void>; frozenInvoiceEmail?: boolean; ignoreEmailUpdate?: boolean; loseEmailUpdateOnce?: boolean; rejectEmailUpdate?: boolean; invoiceEmailFromContact?: boolean } = {}) {
+  function provider(options: { existingContact?: boolean; hideContact?: boolean; wrappedList?: boolean; detailDocument?: string; contactName?: string | null; contactEnums?: { regimeTributario?: unknown; estadoCivil?: unknown; sexo?: unknown }; failDetailOnce?: boolean; duplicateContacts?: boolean; inactiveDetail?: boolean; onDetail?: () => Promise<void>; frozenInvoiceEmail?: boolean; ignoreEmailUpdate?: boolean; loseEmailUpdateOnce?: boolean; rejectEmailUpdate?: boolean; invoiceEmailFromContact?: boolean } = {}) {
     let contact = Boolean(options.existingContact), detailFailed = false, externalOrder: Record<string, unknown> | null = null, invoice = false, authorized = false, expedition = false;
     let loseOrder = false, loseWithoutCreating = false, authInvalid = false, emailMismatch = false, rejectInvoice = false, pendingAuthorization = false;
     let contactEmail = testCommerceBilling.email, contactNfeEmail = "", emailUpdateLost = false;
@@ -67,10 +67,12 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
         await options.onDetail?.();
         if (options.failDetailOnce && !detailFailed) { detailFailed = true; return Response.json({ mensagem: "Indisponível" }, { status: 503 }); }
         return Response.json({ id: path.endsWith("/12") ? 12 : 11, nome: options.contactName === undefined ? "Cliente Olist" : options.contactName, codigo: "CLI-11", tipoPessoa: "F", cpfCnpj: options.detailDocument ?? testCommerceBilling.document, situacao: options.inactiveDetail ? "I" : "B", email: contactEmail, emailNfe: contactNfeEmail,
-          endereco: { endereco: "Rua do ERP", numero: "12", municipio: "São Paulo", uf: "SP" }, vendedor: { id: 5, nome: "Vendedor" }, tipos: [{ id: 2, descricao: "Cliente" }], dataCriacao: "2020-01-01" });
+          endereco: { endereco: "Rua do ERP", numero: "12", municipio: "São Paulo", uf: "SP" }, vendedor: { id: 5, nome: "Vendedor" }, tipos: [{ id: 2, descricao: "Cliente" }], dataCriacao: "2020-01-01", ...options.contactEnums });
       }
       if ((path === "/contatos/11" || path === "/contatos/12") && method === "PUT") {
         if (typeof body.nome !== "string" || !body.nome.trim()) return Response.json({ mensagem: "Ocorreram erros de validação", detalhes: [{ campo: "nome", mensagem: "Este valor não deve ser vazio" }] }, { status: 400 });
+        for (const [field, allowed] of [["regimeTributario", [1, 2, 3, 4]], ["estadoCivil", [1, 2, 3, 4, 5]], ["sexo", ["masculino", "feminino"]]] as const)
+          if (body[field] != null && !(allowed as readonly unknown[]).includes(body[field])) return Response.json({ mensagem: "Enum inválido", detalhes: [{ campo: field, mensagem: "Valor não permitido" }] }, { status: 400 });
         if (options.rejectEmailUpdate) return Response.json({ mensagem: "Não foi possível alterar previous@example.test", detalhes: [{ campo: "codigo", mensagem: "O campo é obrigatório" }] }, { status: 400 });
         if (!options.ignoreEmailUpdate) { contactEmail = body.email as string; contactNfeEmail = body.emailNfe as string; if (!options.frozenInvoiceEmail) emailMismatch = false; }
         if (options.loseEmailUpdateOnce && !emailUpdateLost) { emailUpdateLost = true; throw new Error("Connection lost after contact email update"); }
@@ -150,6 +152,39 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
     await processCommerceOlistOrder(tenantId, orderId, 6);
     expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ invoice_id: "33", invoice_status: 6, status: "done" });
     expect(api.writes("/pedidos/22/gerar-nota-fiscal")).toHaveLength(1);
+  });
+  it.each([
+    { regimeTributario: "", estadoCivil: "", sexo: "" },
+    { regimeTributario: 0, estadoCivil: "0", sexo: " " },
+    { regimeTributario: "1", estadoCivil: "2", sexo: "F" },
+  ])("updates contact emails and resumes the same invoice for legacy optional enums %j", async contactEnums => {
+    const { tenantId, orderId, api } = await blockedEmailOrder({ contactEnums });
+    const before = (await (await emailAction(orderId, "email_review")).json()).emailReview;
+    const response = await emailAction(orderId, "email_update", { reviewToken: before.reviewToken, confirmEmailUpdate: true });
+    expect(response.status).toBe(200); expect(await response.json()).toMatchObject({ resumed: true });
+    const updates = api.calls.filter(call => call.method === "PUT" && call.path === "/contatos/11");
+    expect(updates).toHaveLength(1);
+    if (contactEnums.regimeTributario === "1") expect(updates[0].body).toMatchObject({ regimeTributario: 1, estadoCivil: 2, sexo: "feminino" });
+    else for (const field of ["regimeTributario", "estadoCivil", "sexo"]) expect(updates[0].body).not.toHaveProperty(field);
+    expect(updates[0].body).toMatchObject({ nome: "Cliente Olist", email: testCommerceBilling.email, emailNfe: testCommerceBilling.email });
+    await processCommerceOlistOrder(tenantId, orderId, 6);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ invoice_id: "33", invoice_status: 6, status: "done" });
+    expect(api.writes("/pedidos/22/gerar-nota-fiscal")).toHaveLength(1);
+    expect(api.writes("/notas/33/emitir")).toHaveLength(1);
+  });
+  it("diagnoses local classification errors without blaming the last invoice GET or logging personal data", async () => {
+    const { orderId, api } = await blockedEmailOrder({ contactEnums: { sexo: "private-unknown-value" } });
+    const before = (await (await emailAction(orderId, "email_review")).json()).emailReview;
+    const log = vi.spyOn(console, "error");
+    try {
+      const response = await emailAction(orderId, "email_update", { reviewToken: before.reviewToken, confirmEmailUpdate: true });
+      expect(response.status).toBe(409);
+      const diagnostic = log.mock.calls.find(call => call[0] === "Commerce Olist email update failed.")?.[1];
+      expect(diagnostic).toMatchObject({ phase: "prepare_contact_update", failureSource: "local", errorCode: "olist_contact_update_invalid", validationFields: ["sexo"], validationIssues: [{ field: "sexo", inputType: "string", reason: "invalid_enum_value" }] });
+      expect(diagnostic.method).toBeUndefined(); expect(diagnostic.path).toBeUndefined();
+      expect(JSON.stringify(diagnostic)).not.toMatch(/private-unknown-value|@example.test/);
+      expect(api.calls.filter(call => call.method === "PUT" && call.path.startsWith("/contatos/"))).toHaveLength(0);
+    } finally { log.mockRestore(); }
   });
   it("requires fresh approval if an ERP recipient changes before fiscal emission", async () => {
     const { tenantId, orderId, api } = await blockedEmailOrder();
