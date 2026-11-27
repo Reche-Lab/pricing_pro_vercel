@@ -13,7 +13,7 @@ describe("Olist contact email update payload", () => {
       inscricaoMunicipal: "123", telefoneAdicional: null, site: "https://example.test",
       regimeTributario: 1, estadoCivil: 2, profissao: null, sexo: "feminino",
       dataNascimento: "1990-01-01", naturalidade: "São Paulo", nomePai: null, nomeMae: null,
-      cpfPai: null, cpfMae: null, limiteCredito: 0, situacao: "B",
+      cpfPai: null, cpfMae: null, limiteCredito: 325.75, situacao: "B",
       observacoes: "Não alterar", observacoesDoContato: "Cadastro do ERP",
       email: "old@example.test", emailNfe: "old-fiscal@example.test",
       vendedor: { id: 5, nome: "Responsável" }, tipos: [{ id: 2, descricao: "Cliente" }, { id: 3, descricao: "Fornecedor" }],
@@ -29,7 +29,7 @@ describe("Olist contact email update payload", () => {
       enderecoCobranca: existing.enderecoCobranca, inscricaoMunicipal: "123", telefoneAdicional: null,
       site: existing.site, regimeTributario: 1, estadoCivil: 2, profissao: null, sexo: "feminino",
       dataNascimento: "1990-01-01", naturalidade: "São Paulo", nomePai: null, nomeMae: null,
-      cpfPai: null, cpfMae: null, limiteCredito: 0, situacao: "B", observacoes: "Não alterar", observacoesDoContato: "Cadastro do ERP",
+      cpfPai: null, cpfMae: null, limiteCredito: 325.75, situacao: "B", observacoes: "Não alterar", observacoesDoContato: "Cadastro do ERP",
       vendedor: { id: 5 }, tipos: [2, 3],
       contatos: [{ nome: "Financeiro", telefone: "1122223333", ramal: "10", email: "finance@example.test", setor: "Financeiro" }],
       email: "purchase@example.test", emailNfe: "purchase@example.test",
@@ -43,7 +43,7 @@ describe("Olist contact email update payload", () => {
 
   it("keeps optional nulls, empty lists and absent values without inventing ERP data", () => {
     expect(buildOlistContactEmailUpdate({ nome: "Cliente", codigo: null, limiteCredito: 0, tipos: [], contatos: [], vendedor: null, endereco: null }, "purchase@example.test"))
-      .toEqual({ nome: "Cliente", codigo: null, limiteCredito: 0, tipos: [], contatos: [], email: "purchase@example.test", emailNfe: "purchase@example.test" });
+      .toEqual({ nome: "Cliente", codigo: null, tipos: [], contatos: [], email: "purchase@example.test", emailNfe: "purchase@example.test" });
     expect(buildOlistContactEmailUpdate({ nome: "Cliente" }, "purchase@example.test"))
       .toEqual({ nome: "Cliente", email: "purchase@example.test", emailNfe: "purchase@example.test" });
   });
@@ -54,6 +54,21 @@ describe("Olist contact email update payload", () => {
 
   it("does not accept malformed target emails", () => {
     expect(() => buildOlistContactEmailUpdate({ nome: "Cliente" }, "invalid")).toThrow(/e-mail de faturamento/);
+  });
+
+  it.each([undefined, null, 0, "", " ", "0", "0.00", " 0 "])("omits unset credit limit %j rather than sending an invalid zero or inventing credit", limiteCredito => {
+    const contact = { nome: "Cliente ERP", limiteCredito };
+    expect(buildOlistContactEmailUpdate(contact, "purchase@example.test"))
+      .toEqual({ nome: "Cliente ERP", email: "purchase@example.test", emailNfe: "purchase@example.test" });
+    expect(contact.limiteCredito).toBe(limiteCredito);
+  });
+
+  it.each([[0.01, 0.01], [325.75, 325.75], [1000, 1000], ["325.75", 325.75]])("preserves positive ERP credit limit %j as %j", (limiteCredito, expected) => {
+    expect(buildOlistContactEmailUpdate({ nome: "Cliente ERP", limiteCredito }, "purchase@example.test")).toHaveProperty("limiteCredito", expected);
+  });
+
+  it.each([-1, NaN, Infinity, false, [], {}, "-1", "1.000,50"])("rejects invalid populated credit limit %j instead of changing a financial condition", limiteCredito => {
+    expect(() => buildOlistContactEmailUpdate({ nome: "Cliente ERP", limiteCredito }, "purchase@example.test")).toThrow(/campos: limiteCredito/);
   });
 
   it.each(["", "   ", 0, "0", " 0 "])("omits unset enum placeholder %j instead of blocking an email-only update", value => {

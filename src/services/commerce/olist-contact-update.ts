@@ -19,6 +19,15 @@ function optionalSex(value: unknown) {
   if (normalized === "f") return "feminino";
   return normalized;
 }
+function optionalCreditLimit(value: unknown) {
+  if (value == null || value === 0) return undefined;
+  if (typeof value !== "string") return value;
+  const normalized = value.trim();
+  if (!normalized) return undefined;
+  if (!/^\d+(?:\.\d+)?$/.test(normalized)) return value;
+  const amount = Number(normalized);
+  return amount === 0 ? undefined : amount;
+}
 
 export class OlistContactUpdateValidationError extends CommerceError {
   constructor(public validationFields: string[], public validationIssues: { field: string; inputType: string; reason: string }[]) {
@@ -48,7 +57,9 @@ const writableContact = z.object({
   estadoCivil: z.preprocess(optionalEnumNumber, z.number().int().min(1).max(5).nullish()), profissao: optionalText,
   sexo: z.preprocess(optionalSex, z.enum(["masculino", "feminino"]).nullish()), dataNascimento: optionalText,
   naturalidade: optionalText, nomePai: optionalText, nomeMae: optionalText,
-  cpfPai: optionalText, cpfMae: optionalText, limiteCredito: z.number().finite().nullish(),
+  // GET may return zero for no credit limit, while PUT requires a positive
+  // amount when supplied. Omit unset limits; never invent a financial value.
+  cpfPai: optionalText, cpfMae: optionalText, limiteCredito: z.preprocess(optionalCreditLimit, z.number().finite().positive().optional()),
   situacao: z.enum(["B", "A", "I", "E"]).nullish(),
   observacoes: optionalText, observacoesDoContato: optionalText,
   vendedor: z.object({ id }).nullish(),

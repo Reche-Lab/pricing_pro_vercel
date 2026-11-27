@@ -46,7 +46,7 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
     if (input.paid !== false) await pool.query("update commerce_orders set payment_status='paid' where tenant_id=$1 and id=$2", [tenantId, orderId]);
     return { tenantId, orderId, snapshot, variantId };
   }
-  function provider(options: { existingContact?: boolean; hideContact?: boolean; wrappedList?: boolean; detailDocument?: string; contactName?: string | null; contactEnums?: { regimeTributario?: unknown; estadoCivil?: unknown; sexo?: unknown }; failDetailOnce?: boolean; duplicateContacts?: boolean; inactiveDetail?: boolean; onDetail?: () => Promise<void>; frozenInvoiceEmail?: boolean; ignoreEmailUpdate?: boolean; loseEmailUpdateOnce?: boolean; rejectEmailUpdate?: boolean; invoiceEmailFromContact?: boolean } = {}) {
+  function provider(options: { existingContact?: boolean; hideContact?: boolean; wrappedList?: boolean; detailDocument?: string; contactName?: string | null; creditLimit?: number | null; contactEnums?: { regimeTributario?: unknown; estadoCivil?: unknown; sexo?: unknown }; failDetailOnce?: boolean; duplicateContacts?: boolean; inactiveDetail?: boolean; onDetail?: () => Promise<void>; frozenInvoiceEmail?: boolean; ignoreEmailUpdate?: boolean; loseEmailUpdateOnce?: boolean; rejectEmailUpdate?: boolean; invoiceEmailFromContact?: boolean } = {}) {
     let contact = Boolean(options.existingContact), detailFailed = false, externalOrder: Record<string, unknown> | null = null, invoice = false, authorized = false, expedition = false;
     let loseOrder = false, loseWithoutCreating = false, authInvalid = false, emailMismatch = false, rejectInvoice = false, pendingAuthorization = false;
     let contactEmail = testCommerceBilling.email, contactNfeEmail = "", emailUpdateLost = false;
@@ -67,10 +67,12 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
         await options.onDetail?.();
         if (options.failDetailOnce && !detailFailed) { detailFailed = true; return Response.json({ mensagem: "Indisponível" }, { status: 503 }); }
         return Response.json({ id: path.endsWith("/12") ? 12 : 11, nome: options.contactName === undefined ? "Cliente Olist" : options.contactName, codigo: "CLI-11", tipoPessoa: "F", cpfCnpj: options.detailDocument ?? testCommerceBilling.document, situacao: options.inactiveDetail ? "I" : "B", email: contactEmail, emailNfe: contactNfeEmail,
-          endereco: { endereco: "Rua do ERP", numero: "12", municipio: "São Paulo", uf: "SP" }, vendedor: { id: 5, nome: "Vendedor" }, tipos: [{ id: 2, descricao: "Cliente" }], dataCriacao: "2020-01-01", ...options.contactEnums });
+          endereco: { endereco: "Rua do ERP", numero: "12", municipio: "São Paulo", uf: "SP" }, vendedor: { id: 5, nome: "Vendedor" }, tipos: [{ id: 2, descricao: "Cliente" }], dataCriacao: "2020-01-01", limiteCredito: options.creditLimit === undefined ? 0 : options.creditLimit, ...options.contactEnums });
       }
       if ((path === "/contatos/11" || path === "/contatos/12") && method === "PUT") {
         if (typeof body.nome !== "string" || !body.nome.trim()) return Response.json({ mensagem: "Ocorreram erros de validação", detalhes: [{ campo: "nome", mensagem: "Este valor não deve ser vazio" }] }, { status: 400 });
+        if (Object.hasOwn(body, "limiteCredito") && (typeof body.limiteCredito !== "number" || !Number.isFinite(body.limiteCredito) || body.limiteCredito <= 0))
+          return Response.json({ mensagem: "Ocorreram erros de validação", detalhes: [{ campo: "limiteCredito", mensagem: "Este valor deve ser positivo" }] }, { status: 400 });
         for (const [field, allowed] of [["regimeTributario", [1, 2, 3, 4]], ["estadoCivil", [1, 2, 3, 4, 5]], ["sexo", ["masculino", "feminino"]]] as const)
           if (body[field] != null && !(allowed as readonly unknown[]).includes(body[field])) return Response.json({ mensagem: "Enum inválido", detalhes: [{ campo: field, mensagem: "Valor não permitido" }] }, { status: 400 });
         if (options.rejectEmailUpdate) return Response.json({ mensagem: "Não foi possível alterar previous@example.test", detalhes: [{ campo: "codigo", mensagem: "O campo é obrigatório" }] }, { status: 400 });
@@ -168,6 +170,20 @@ describe.skipIf(!url)("commerce Olist durable workflow in isolated Postgres", ()
     else for (const field of ["regimeTributario", "estadoCivil", "sexo"]) expect(updates[0].body).not.toHaveProperty(field);
     expect(updates[0].body).toMatchObject({ nome: "Cliente Olist", email: testCommerceBilling.email, emailNfe: testCommerceBilling.email });
     await processCommerceOlistOrder(tenantId, orderId, 6);
+    expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ invoice_id: "33", invoice_status: 6, status: "done" });
+    expect(api.writes("/pedidos/22/gerar-nota-fiscal")).toHaveLength(1);
+    expect(api.writes("/notas/33/emitir")).toHaveLength(1);
+  });
+  it.each([0, null, 325.75])("handles ERP credit limit %j during email correction without recreating the invoice or changing credit conditions", async creditLimit => {
+    const { tenantId, orderId, api } = await blockedEmailOrder({ creditLimit });
+    const before = (await (await emailAction(orderId, "email_review")).json()).emailReview;
+    const response = await emailAction(orderId, "email_update", { reviewToken: before.reviewToken, confirmEmailUpdate: true });
+    expect(response.status).toBe(200); expect(await response.json()).toMatchObject({ resumed: true });
+    const updates = api.calls.filter(call => call.method === "PUT" && call.path === "/contatos/11");
+    expect(updates).toHaveLength(1);
+    if (creditLimit) expect(updates[0].body.limiteCredito).toBe(creditLimit);
+    else expect(updates[0].body).not.toHaveProperty("limiteCredito");
+    await processCommerceOlistOrder(tenantId, orderId, 6); await processCommerceOlistOrder(tenantId, orderId, 6);
     expect(await getCommerceOlistJob(tenantId, orderId)).toMatchObject({ invoice_id: "33", invoice_status: 6, status: "done" });
     expect(api.writes("/pedidos/22/gerar-nota-fiscal")).toHaveLength(1);
     expect(api.writes("/notas/33/emitir")).toHaveLength(1);
